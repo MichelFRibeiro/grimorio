@@ -116,7 +116,7 @@ export function destroySession(token) {
  * Get configured Google Client ID
  */
 export function getGoogleClientId() {
-  return GOOGLE_CLIENT_ID;
+  return process.env.GOOGLE_CLIENT_ID || '';
 }
 
 /**

@@ -3,13 +3,13 @@
     "id": "hero-1",
     "name": "Mestre do Foco",
     "level": 3,
-    "xp": 219,
+    "xp": 239,
     "xpToNextLevel": 507,
-    "coins": 172,
+    "coins": 177,
     "title": "Aprendiz das Chamas",
     "avatar": "🧙‍♂️",
     "stats": {
-      "wisdom": 102,
+      "wisdom": 112,
       "focus": 70,
       "willpower": 55,
       "consistency": 15
@@ -549,6 +549,22 @@
   ],
   "actionLogs": [
     {
+      "id": "log-1787141384358-3dyf",
+      "type": "book_quote",
+      "entityId": "quo-1787141384357-ryyxd3",
+      "title": "Citação: Livro de Citações Teste 1787141384355 (pág. 45)",
+      "xp": 20,
+      "coins": 5,
+      "details": {
+        "quote": "Primeira versão da citação filosófica.",
+        "bossDefeated": false
+      },
+      "timestamp": "2026-08-19T12:09:44.358Z",
+      "hour": 9,
+      "dayOfWeek": 3,
+      "date": "2026-08-19"
+    },
+    {
       "id": "log-1787139969549-ze4m",
       "type": "book_quote",
       "entityId": "quo-1787139969549-tyyvar",
@@ -813,16 +829,16 @@
       "picture": "",
       "googleId": null,
       "createdAt": "2026-08-19T11:34:01.114Z",
-      "lastLogin": "2026-08-19T11:46:09.507Z"
+      "lastLogin": "2026-08-19T12:11:01.231Z"
     },
     {
       "id": "usr-1787139469364-d14p9",
       "email": "1985michelfernandes@gmail.com",
-      "name": "1985michelfernandes",
-      "picture": "",
-      "googleId": null,
+      "name": "MICHEL FERNANDES",
+      "picture": "https://lh3.googleusercontent.com/a/ACg8ocIzkJ7sultQZMaQb79kyzx8AWeJAfM0yRnacvj_X0A_idHwUReT=s96-c",
+      "googleId": "112536446834190114351",
       "createdAt": "2026-08-19T11:37:49.364Z",
-      "lastLogin": "2026-08-19T11:46:42.484Z"
+      "lastLogin": "2026-08-19T12:11:34.165Z"
     }
   ],
   "questCategories": [
