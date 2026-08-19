@@ -1,0 +1,872 @@
+{
+  "userProfile": {
+    "id": "hero-1",
+    "name": "Mestre do Foco",
+    "level": 3,
+    "xp": 219,
+    "xpToNextLevel": 507,
+    "coins": 172,
+    "title": "Aprendiz das Chamas",
+    "avatar": "🧙‍♂️",
+    "stats": {
+      "wisdom": 102,
+      "focus": 70,
+      "willpower": 55,
+      "consistency": 15
+    },
+    "streak": 3,
+    "lastActiveDate": "2026-08-19",
+    "theme": "dark-fantasy",
+    "email": "convidado@grimorio.app"
+  },
+  "bossRaid": {
+    "id": "boss-1",
+    "name": "O Dragão da Procrastinação",
+    "subtitle": "Chefe Semanal - Derrote-o até domingo!",
+    "maxHp": 500,
+    "currentHp": 72,
+    "defeated": false,
+    "rewardCoins": 150,
+    "rewardXp": 400,
+    "weekStartDate": "2026-08-17"
+  },
+  "quests": [
+    {
+      "id": "q-1787139262691-4xs36w",
+      "title": "Missão Teste Estorno 1787139262691 [Atualizada]",
+      "description": "Descrição atualizada com sucesso",
+      "category": "INSS",
+      "priority": "alta",
+      "difficulty": 3,
+      "xpReward": 80,
+      "coinReward": 25,
+      "dueDate": null,
+      "dueTime": null,
+      "subtasks": [],
+      "completed": true,
+      "completedAt": "2026-08-19T11:34:22.698Z",
+      "createdAt": "2026-08-19T11:34:22.691Z"
+    },
+    {
+      "id": "q-1787139241166-9piduk",
+      "title": "Missão Teste Estorno 1787139241163 [Atualizada]",
+      "description": "Descrição atualizada com sucesso",
+      "category": "INSS",
+      "priority": "alta",
+      "difficulty": 3,
+      "xpReward": 80,
+      "coinReward": 25,
+      "dueDate": null,
+      "dueTime": null,
+      "subtasks": [],
+      "completed": true,
+      "completedAt": "2026-08-19T11:34:01.177Z",
+      "createdAt": "2026-08-19T11:34:01.166Z"
+    },
+    {
+      "id": "q-1787138012088-p1b2jz",
+      "title": "Limpar PROJUD",
+      "description": "",
+      "category": "Advocacia",
+      "priority": "media",
+      "difficulty": 2,
+      "xpReward": 45,
+      "coinReward": 12,
+      "dueDate": null,
+      "dueTime": null,
+      "subtasks": [],
+      "completed": false,
+      "completedAt": null,
+      "createdAt": "2026-08-19T11:13:32.088Z"
+    },
+    {
+      "id": "q-1787137992359-qnlpc8",
+      "title": "Peticionar na execução da Jamirys",
+      "description": "",
+      "category": "Advocacia",
+      "priority": "media",
+      "difficulty": 2,
+      "xpReward": 45,
+      "coinReward": 12,
+      "dueDate": null,
+      "dueTime": null,
+      "subtasks": [],
+      "completed": false,
+      "completedAt": null,
+      "createdAt": "2026-08-19T11:13:12.359Z"
+    },
+    {
+      "id": "q-1787137954591-htvtld",
+      "title": "Limpar PAT",
+      "description": "",
+      "category": "INSS",
+      "priority": "media",
+      "difficulty": 2,
+      "xpReward": 45,
+      "coinReward": 12,
+      "dueDate": null,
+      "dueTime": null,
+      "subtasks": [],
+      "completed": false,
+      "completedAt": null,
+      "createdAt": "2026-08-19T11:12:34.591Z"
+    },
+    {
+      "id": "q-1787062196930-2bdkuj",
+      "title": "Estudar PNL",
+      "description": "",
+      "category": "Estudos",
+      "priority": "media",
+      "difficulty": 2,
+      "xpReward": 45,
+      "coinReward": 12,
+      "dueDate": null,
+      "dueTime": null,
+      "subtasks": [],
+      "completed": true,
+      "completedAt": "2026-08-18T14:09:58.988Z",
+      "createdAt": "2026-08-18T14:09:56.930Z"
+    },
+    {
+      "id": "q-1786996761398-e73xpw",
+      "title": "Produzir banner de seleção de novo estagiário",
+      "description": "",
+      "category": "INSS",
+      "priority": "media",
+      "difficulty": 2,
+      "xpReward": 45,
+      "coinReward": 12,
+      "dueDate": "2026-08-18",
+      "dueTime": null,
+      "subtasks": [],
+      "completed": false,
+      "completedAt": null,
+      "createdAt": "2026-08-17T19:59:21.398Z"
+    },
+    {
+      "id": "q-1786995530043-t02q9g",
+      "title": "Pedir materiais",
+      "description": "",
+      "category": "INSS",
+      "priority": "media",
+      "difficulty": 2,
+      "xpReward": 45,
+      "coinReward": 12,
+      "dueDate": null,
+      "dueTime": null,
+      "subtasks": [],
+      "completed": false,
+      "completedAt": null,
+      "createdAt": "2026-08-17T19:38:50.043Z"
+    },
+    {
+      "id": "q-1786994335975-b29h0s",
+      "title": "Limpar LUPA",
+      "description": "",
+      "category": "INSS",
+      "priority": "media",
+      "difficulty": 2,
+      "xpReward": 45,
+      "coinReward": 12,
+      "dueDate": null,
+      "dueTime": null,
+      "subtasks": [],
+      "completed": true,
+      "completedAt": "2026-08-17T20:06:43.979Z",
+      "createdAt": "2026-08-17T19:18:55.975Z"
+    },
+    {
+      "id": "q-1786990566060-gk8rq2",
+      "title": "Limpar SEI",
+      "description": "",
+      "category": "INSS",
+      "priority": "baixa",
+      "difficulty": 1,
+      "xpReward": 20,
+      "coinReward": 5,
+      "dueDate": null,
+      "dueTime": null,
+      "subtasks": [],
+      "completed": true,
+      "completedAt": "2026-08-17T20:04:24.574Z",
+      "createdAt": "2026-08-17T18:16:06.060Z"
+    },
+    {
+      "id": "q-1786990550116-qhnxeg",
+      "title": "Limpar e-mail",
+      "description": "",
+      "category": "INSS",
+      "priority": "baixa",
+      "difficulty": 1,
+      "xpReward": 20,
+      "coinReward": 5,
+      "dueDate": null,
+      "dueTime": null,
+      "subtasks": [],
+      "completed": true,
+      "completedAt": "2026-08-17T19:56:33.584Z",
+      "createdAt": "2026-08-17T18:15:50.116Z"
+    },
+    {
+      "id": "q-1786990536579-6f9nfg",
+      "title": "Limpar PAT",
+      "description": "",
+      "category": "INSS",
+      "priority": "media",
+      "difficulty": 2,
+      "xpReward": 45,
+      "coinReward": 12,
+      "dueDate": null,
+      "dueTime": null,
+      "subtasks": [],
+      "completed": true,
+      "completedAt": "2026-08-17T19:52:50.282Z",
+      "createdAt": "2026-08-17T18:15:36.579Z"
+    }
+  ],
+  "books": [
+    {
+      "id": "b-1786990821442-04f52n",
+      "title": "Manual de Programação Neurolinguística - PNL",
+      "author": "Joseph O'Connor",
+      "totalPages": 329,
+      "currentPage": 12,
+      "category": "Produtividade",
+      "coverColor": "gradient-purple",
+      "status": "reading",
+      "startedAt": "2026-08-17T18:20:21.442Z",
+      "completedAt": null,
+      "notes": "",
+      "createdAt": "2026-08-17T18:20:21.442Z",
+      "quotes": [
+        {
+          "id": "temp-1787057308838-xpv1",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Incongruência é a sensação de que a ação tem consequências incertas ou negativas. (...) Uma reação incongruente típica é uma sensação desagradável no estômago ou de que as peças não se encaixam. Uma frase típica de incongruência é \"Sim, mas...\"",
+          "page": 9,
+          "note": "",
+          "createdAt": "2026-08-18T12:48:28.838Z"
+        },
+        {
+          "id": "temp-1787057512989-4ng3",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Toda mudança ocorre primeiro no nível inconsciente. Só depois nos conscientizamos dela.",
+          "page": 10,
+          "note": "",
+          "createdAt": "2026-08-18T12:51:52.989Z"
+        },
+        {
+          "id": "temp-1787057619992-zpu3",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Só podemos conscientemente reter cerca de sete informações separadas em um determinado momento. Um número de telefone (com 9 dígitos) é somente uma informação.",
+          "page": 11,
+          "note": "",
+          "createdAt": "2026-08-18T12:53:39.992Z"
+        },
+        {
+          "id": "temp-1787057726348-j3ss",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Inconsciente é tudo o que não seja consciente. Se colocamos atenção naquilo, se torna consciente.",
+          "page": 11,
+          "note": "",
+          "createdAt": "2026-08-18T12:55:26.348Z"
+        },
+        {
+          "id": "temp-1787057748596-9ng7",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "O inconsciente guia a sua vida sem que você perceba quão poderoso é.",
+          "page": 11,
+          "note": "",
+          "createdAt": "2026-08-18T12:55:48.596Z"
+        },
+        {
+          "id": "temp-1787057916129-gq78",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "A mente consciente é como o cavaleiro - dirige, guia, determina metas e direcionamentos. A mente inconsciente é como o cavalo que corre (faz o trabalho) todo o caminho. Não é boa ideia permitir que o cavalo decida para onde ir, nem que o cavaleiro determine onde o cavalo deve colocar suas patas. Consciente e inconsciente fazem uma parceria equilibrada.",
+          "page": 11,
+          "note": "",
+          "createdAt": "2026-08-18T12:58:36.129Z"
+        },
+        {
+          "id": "temp-1787058000972-yw9e",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Todas as experiências que já tivemos estão armazenadas em algum lugar e podem ser acessadas nas circunstâncias certas.",
+          "page": 11,
+          "note": "",
+          "createdAt": "2026-08-18T13:00:00.972Z"
+        },
+        {
+          "id": "quo-1787056542736-yz12",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Com algumas palavras mudar o que alguém sente. Isso é PNL;",
+          "page": 3,
+          "note": "",
+          "createdAt": "2026-08-18T12:35:42.736Z"
+        },
+        {
+          "id": "quo-1787056597841-c918",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Quanto mais congruente alguém for, mais sucesso terá. Congruência é quando suas metas, crenças e valores se alinham com suas ações e palavras. Quando você faz o que diz e diz o que faz;",
+          "page": 4,
+          "note": "",
+          "createdAt": "2026-08-18T12:36:37.841Z"
+        },
+        {
+          "id": "quo-1787056624265-7mif",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Agir com propósito: pensar sempre nos resultados desejados em qualquer situação;",
+          "page": 4,
+          "note": "",
+          "createdAt": "2026-08-18T12:37:04.265Z"
+        },
+        {
+          "id": "quo-1787056652443-at5v",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Quanto mais souber sobre você mesmo, mais poderá ajudar os outros;",
+          "page": 4,
+          "note": "",
+          "createdAt": "2026-08-18T12:37:32.443Z"
+        },
+        {
+          "id": "quo-1787056955060-o65p",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "13 Pressuposições:\n\n1 - As pessoas respondem às suas experiências, não à realidade em si;\n2 - Ter opções é melhor do que não ter;\n3 - As pessoas fazem a melhor escolha que podem no momento (se relaciona com a 1 e a 4);\n4 - As pessoas funcionam perfeitamente;\n5 - Todas as ações têm um propósito (mesmo que inconsciente);\n6 - Todo comportamento possui uma intenção positiva (mesmo os comportamentos ruins);\n7 - A mente inconsciente contrabalanceia a consciente; Ela não é maliciosa;\n8 - A responsabilidade pela comunicação é sua;\n9 - Já temos todos os recursos de que necessitamos;\n10 - Mente e Corpo são um sistema autoalimentado;\n11 - Desenvolver os sentidos gera melhores informações, melhores informações geram melhores ações;\n12 - Modelar desempenho gera excelência (Fake it, until you make it);\n13 - Se quiser compreender, aja; (Só se aprende fazendo);",
+          "page": 6,
+          "note": "(da pág. 5 a 7)",
+          "createdAt": "2026-08-18T12:42:35.060Z"
+        }
+      ]
+    }
+  ],
+  "readingSessions": [
+    {
+      "id": "rs-1787058316363-8ao4p9",
+      "bookId": "b-1786990821442-04f52n",
+      "bookTitle": "Manual de Programação Neurolinguística - PNL",
+      "startPage": 8,
+      "endPage": 12,
+      "pagesRead": 4,
+      "durationMinutes": 18,
+      "notes": "Plano de Ação:\n\n1 - Memorize todas as Pressuposições da PNL e as utilize sempre que tiver uma dificuldade com alguma pessoa;\n2 - \n",
+      "quotes": [
+        {
+          "id": "temp-1787057308838-xpv1",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Incongruência é a sensação de que a ação tem consequências incertas ou negativas. (...) Uma reação incongruente típica é uma sensação desagradável no estômago ou de que as peças não se encaixam. Uma frase típica de incongruência é \"Sim, mas...\"",
+          "page": 9,
+          "note": "",
+          "createdAt": "2026-08-18T12:48:28.838Z"
+        },
+        {
+          "id": "temp-1787057512989-4ng3",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Toda mudança ocorre primeiro no nível inconsciente. Só depois nos conscientizamos dela.",
+          "page": 10,
+          "note": "",
+          "createdAt": "2026-08-18T12:51:52.989Z"
+        },
+        {
+          "id": "temp-1787057619992-zpu3",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Só podemos conscientemente reter cerca de sete informações separadas em um determinado momento. Um número de telefone (com 9 dígitos) é somente uma informação.",
+          "page": 11,
+          "note": "",
+          "createdAt": "2026-08-18T12:53:39.992Z"
+        },
+        {
+          "id": "temp-1787057726348-j3ss",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Inconsciente é tudo o que não seja consciente. Se colocamos atenção naquilo, se torna consciente.",
+          "page": 11,
+          "note": "",
+          "createdAt": "2026-08-18T12:55:26.348Z"
+        },
+        {
+          "id": "temp-1787057748596-9ng7",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "O inconsciente guia a sua vida sem que você perceba quão poderoso é.",
+          "page": 11,
+          "note": "",
+          "createdAt": "2026-08-18T12:55:48.596Z"
+        },
+        {
+          "id": "temp-1787057916129-gq78",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "A mente consciente é como o cavaleiro - dirige, guia, determina metas e direcionamentos. A mente inconsciente é como o cavalo que corre (faz o trabalho) todo o caminho. Não é boa ideia permitir que o cavalo decida para onde ir, nem que o cavaleiro determine onde o cavalo deve colocar suas patas. Consciente e inconsciente fazem uma parceria equilibrada.",
+          "page": 11,
+          "note": "",
+          "createdAt": "2026-08-18T12:58:36.129Z"
+        },
+        {
+          "id": "temp-1787058000972-yw9e",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Todas as experiências que já tivemos estão armazenadas em algum lugar e podem ser acessadas nas circunstâncias certas.",
+          "page": 11,
+          "note": "",
+          "createdAt": "2026-08-18T13:00:00.972Z"
+        }
+      ],
+      "xpEarned": 113,
+      "coinsEarned": 19,
+      "wisdomEarned": 39,
+      "timestamp": "2026-08-18T13:05:16.363Z"
+    },
+    {
+      "id": "rs-1786992797896-4um3f6",
+      "bookId": "b-1786990821442-04f52n",
+      "bookTitle": "Manual de Programação Neurolinguística - PNL",
+      "startPage": 0,
+      "endPage": 8,
+      "pagesRead": 8,
+      "durationMinutes": 33,
+      "notes": "",
+      "xpEarned": 91,
+      "wisdomEarned": 33,
+      "timestamp": "2026-08-17T18:53:17.896Z",
+      "quotes": [
+        {
+          "id": "quo-1787056542736-yz12",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Com algumas palavras mudar o que alguém sente. Isso é PNL;",
+          "page": 3,
+          "note": "",
+          "createdAt": "2026-08-18T12:35:42.736Z"
+        },
+        {
+          "id": "quo-1787056597841-c918",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Quanto mais congruente alguém for, mais sucesso terá. Congruência é quando suas metas, crenças e valores se alinham com suas ações e palavras. Quando você faz o que diz e diz o que faz;",
+          "page": 4,
+          "note": "",
+          "createdAt": "2026-08-18T12:36:37.841Z"
+        },
+        {
+          "id": "quo-1787056624265-7mif",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Agir com propósito: pensar sempre nos resultados desejados em qualquer situação;",
+          "page": 4,
+          "note": "",
+          "createdAt": "2026-08-18T12:37:04.265Z"
+        },
+        {
+          "id": "quo-1787056652443-at5v",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "Quanto mais souber sobre você mesmo, mais poderá ajudar os outros;",
+          "page": 4,
+          "note": "",
+          "createdAt": "2026-08-18T12:37:32.443Z"
+        },
+        {
+          "id": "quo-1787056955060-o65p",
+          "bookId": "b-1786990821442-04f52n",
+          "bookTitle": "Manual de Programação Neurolinguística - PNL",
+          "quote": "13 Pressuposições:\n\n1 - As pessoas respondem às suas experiências, não à realidade em si;\n2 - Ter opções é melhor do que não ter;\n3 - As pessoas fazem a melhor escolha que podem no momento (se relaciona com a 1 e a 4);\n4 - As pessoas funcionam perfeitamente;\n5 - Todas as ações têm um propósito (mesmo que inconsciente);\n6 - Todo comportamento possui uma intenção positiva (mesmo os comportamentos ruins);\n7 - A mente inconsciente contrabalanceia a consciente; Ela não é maliciosa;\n8 - A responsabilidade pela comunicação é sua;\n9 - Já temos todos os recursos de que necessitamos;\n10 - Mente e Corpo são um sistema autoalimentado;\n11 - Desenvolver os sentidos gera melhores informações, melhores informações geram melhores ações;\n12 - Modelar desempenho gera excelência (Fake it, until you make it);\n13 - Se quiser compreender, aja; (Só se aprende fazendo);",
+          "page": 6,
+          "note": "(da pág. 5 a 7)",
+          "createdAt": "2026-08-18T12:42:35.060Z"
+        }
+      ],
+      "coinsEarned": 15
+    }
+  ],
+  "processes": [],
+  "processSteps": [],
+  "habits": [
+    {
+      "id": "h-1786990698272-sa92pb",
+      "title": "Rezar o Terço da Divina Misericórdia",
+      "icon": "Flame",
+      "frequency": "daily",
+      "currentStreak": 1,
+      "bestStreak": 1,
+      "history": [
+        "2026-08-17"
+      ],
+      "xpReward": 30,
+      "coinReward": 8,
+      "createdAt": "2026-08-17T18:18:18.272Z"
+    }
+  ],
+  "rewards": [
+    {
+      "id": "r-1787052101915-bn7qum",
+      "title": "1 Epsódio",
+      "description": "",
+      "cost": 30,
+      "icon": "Tv",
+      "category": "custom",
+      "timesRedeemed": 3,
+      "isVirtual": false,
+      "unlocked": true,
+      "createdAt": "2026-08-18T11:21:41.915Z"
+    }
+  ],
+  "rewardRedemptions": [
+    {
+      "id": "red-1787064040163-6na4vh",
+      "rewardId": "r-1787052101915-bn7qum",
+      "rewardTitle": "1 Epsódio",
+      "cost": 30,
+      "timestamp": "2026-08-18T14:40:40.163Z"
+    },
+    {
+      "id": "red-1787062523215-9hjqq1",
+      "rewardId": "r-1787052101915-bn7qum",
+      "rewardTitle": "1 Epsódio",
+      "cost": 30,
+      "timestamp": "2026-08-18T14:15:23.215Z"
+    },
+    {
+      "id": "red-1787052114566-saouh4",
+      "rewardId": "r-1787052101915-bn7qum",
+      "rewardTitle": "1 Epsódio",
+      "cost": 30,
+      "timestamp": "2026-08-18T11:21:54.566Z"
+    }
+  ],
+  "actionLogs": [
+    {
+      "id": "log-1787139969549-ze4m",
+      "type": "book_quote",
+      "entityId": "quo-1787139969549-tyyvar",
+      "title": "Citação: Livro de Citações Teste 1787139969547 (pág. 45)",
+      "xp": 20,
+      "coins": 5,
+      "details": {
+        "quote": "Primeira versão da citação filosófica.",
+        "bossDefeated": false
+      },
+      "timestamp": "2026-08-19T11:46:09.549Z",
+      "hour": 8,
+      "dayOfWeek": 3,
+      "date": "2026-08-19"
+    },
+    {
+      "id": "log-1787139304527-smue",
+      "type": "book_quote",
+      "entityId": "quo-1787139304527-7b5qit",
+      "title": "Citação: Livro de Citações Teste 1787139304524 (pág. 45)",
+      "xp": 20,
+      "coins": 5,
+      "details": {
+        "quote": "Primeira versão da citação filosófica.",
+        "bossDefeated": false
+      },
+      "timestamp": "2026-08-19T11:35:04.527Z",
+      "hour": 8,
+      "dayOfWeek": 3,
+      "date": "2026-08-19"
+    },
+    {
+      "id": "log-1787139262698-dldy",
+      "type": "quest_complete",
+      "entityId": "q-1787139262691-4xs36w",
+      "title": "Missão Teste Estorno 1787139262691 [Atualizada]",
+      "xp": 80,
+      "coins": 25,
+      "details": {
+        "category": "Trabalho",
+        "priority": "alta"
+      },
+      "timestamp": "2026-08-19T11:34:22.698Z",
+      "hour": 8,
+      "dayOfWeek": 3,
+      "date": "2026-08-19"
+    },
+    {
+      "id": "log-1787139241178-306z",
+      "type": "quest_complete",
+      "entityId": "q-1787139241166-9piduk",
+      "title": "Missão Teste Estorno 1787139241163 [Atualizada]",
+      "xp": 80,
+      "coins": 25,
+      "details": {
+        "category": "Trabalho",
+        "priority": "alta"
+      },
+      "timestamp": "2026-08-19T11:34:01.178Z",
+      "hour": 8,
+      "dayOfWeek": 3,
+      "date": "2026-08-19"
+    },
+    {
+      "id": "log-1787064040163-ojr7i3",
+      "type": "reward_redeem",
+      "entityId": "r-1787052101915-bn7qum",
+      "title": "Resgatou: 1 Epsódio",
+      "xp": 0,
+      "coins": -30,
+      "details": {
+        "cost": 30
+      },
+      "timestamp": "2026-08-18T14:40:40.163Z",
+      "hour": 11,
+      "dayOfWeek": 2,
+      "date": "2026-08-18"
+    },
+    {
+      "id": "log-1787062517151-c1hf7x",
+      "type": "reward_redeem",
+      "entityId": "r-1787052101915-bn7qum",
+      "title": "Resgatou: 1 Epsódio",
+      "xp": 0,
+      "coins": -30,
+      "details": {
+        "cost": 30
+      },
+      "timestamp": "2026-08-18T14:15:17.151Z",
+      "hour": 11,
+      "dayOfWeek": 2,
+      "date": "2026-08-18"
+    },
+    {
+      "id": "log-1787062198988-yaim",
+      "type": "quest_complete",
+      "entityId": "q-1787062196930-2bdkuj",
+      "title": "Estudar PNL",
+      "xp": 45,
+      "coins": 12,
+      "details": {
+        "category": "Estudos",
+        "priority": "media"
+      },
+      "timestamp": "2026-08-18T14:09:58.988Z",
+      "hour": 11,
+      "dayOfWeek": 2,
+      "date": "2026-08-18"
+    },
+    {
+      "id": "log-1787058316363-yfoi",
+      "type": "reading_session",
+      "entityId": "b-1786990821442-04f52n",
+      "title": "Manual de Programação Neurolinguística - PNL (+4 págs, 7 citação(ões))",
+      "xp": 113,
+      "coins": 19,
+      "details": {
+        "pagesRead": 4,
+        "durationMinutes": 18,
+        "finishedBook": false,
+        "quotesCount": 7
+      },
+      "timestamp": "2026-08-18T13:05:16.363Z",
+      "hour": 10,
+      "dayOfWeek": 2,
+      "date": "2026-08-18"
+    },
+    {
+      "id": "log-1787054866976-f7ff",
+      "type": "book_quote",
+      "entityId": "quo-1787054866976-lg47wh",
+      "title": "Citação: Manual de Programação Neurolinguística - PNL (pág. 50)",
+      "xp": 20,
+      "coins": 5,
+      "details": {
+        "quote": "O sucesso deixa pistas."
+      },
+      "timestamp": "2026-08-18T12:07:46.976Z",
+      "hour": 9,
+      "dayOfWeek": 2,
+      "date": "2026-08-18"
+    },
+    {
+      "id": "log-1787052114566-55yirr",
+      "type": "reward_redeem",
+      "entityId": "r-1787052101915-bn7qum",
+      "title": "Resgatou: 1 Epsódio",
+      "xp": 0,
+      "coins": -30,
+      "details": {
+        "cost": 30
+      },
+      "timestamp": "2026-08-18T11:21:54.566Z",
+      "hour": 8,
+      "dayOfWeek": 2,
+      "date": "2026-08-18"
+    },
+    {
+      "id": "log-1786997203979-u4gg",
+      "type": "quest_complete",
+      "entityId": "q-1786994335975-b29h0s",
+      "title": "Limpar LUPA",
+      "xp": 45,
+      "coins": 12,
+      "details": {
+        "category": "Trabalho",
+        "priority": "media"
+      },
+      "timestamp": "2026-08-17T20:06:43.979Z",
+      "hour": 17,
+      "dayOfWeek": 1,
+      "date": "2026-08-17"
+    },
+    {
+      "id": "log-1786997064574-appj",
+      "type": "quest_complete",
+      "entityId": "q-1786990566060-gk8rq2",
+      "title": "Limpar SEI",
+      "xp": 20,
+      "coins": 5,
+      "details": {
+        "category": "Trabalho",
+        "priority": "baixa"
+      },
+      "timestamp": "2026-08-17T20:04:24.574Z",
+      "hour": 17,
+      "dayOfWeek": 1,
+      "date": "2026-08-17"
+    },
+    {
+      "id": "log-1786996593584-b2uf",
+      "type": "quest_complete",
+      "entityId": "q-1786990550116-qhnxeg",
+      "title": "Limpar e-mail",
+      "xp": 20,
+      "coins": 5,
+      "details": {
+        "category": "Trabalho",
+        "priority": "baixa"
+      },
+      "timestamp": "2026-08-17T19:56:33.584Z",
+      "hour": 16,
+      "dayOfWeek": 1,
+      "date": "2026-08-17"
+    },
+    {
+      "id": "log-1786996370282-8so9",
+      "type": "quest_complete",
+      "entityId": "q-1786990536579-6f9nfg",
+      "title": "Limpar PAT",
+      "xp": 45,
+      "coins": 12,
+      "details": {
+        "category": "Trabalho",
+        "priority": "media"
+      },
+      "timestamp": "2026-08-17T19:52:50.282Z",
+      "hour": 16,
+      "dayOfWeek": 1,
+      "date": "2026-08-17"
+    },
+    {
+      "id": "log-1786995052816-x3wd",
+      "type": "habit_complete",
+      "entityId": "h-1786990698272-sa92pb",
+      "title": "Rezar o Terço da Divina Misericórdia (Sequência 🔥 1)",
+      "xp": 33,
+      "coins": 8,
+      "details": {
+        "streak": 1
+      },
+      "timestamp": "2026-08-17T19:30:52.816Z",
+      "hour": 16,
+      "dayOfWeek": 1,
+      "date": "2026-08-17"
+    },
+    {
+      "id": "log-1786992797896-kzh5",
+      "type": "reading_session",
+      "entityId": "b-1786990821442-04f52n",
+      "title": "Manual de Programação Neurolinguística - PNL (+8 págs, 5 citação(ões))",
+      "xp": 91,
+      "coins": 15,
+      "details": {
+        "pagesRead": 8,
+        "durationMinutes": 33,
+        "finishedBook": false,
+        "quotesCount": 5
+      },
+      "timestamp": "2026-08-17T18:53:17.896Z",
+      "hour": 15,
+      "dayOfWeek": 1,
+      "date": "2026-08-17"
+    }
+  ],
+  "examQuestions": [],
+  "users": [
+    {
+      "id": "usr-1787139241114-p3p78",
+      "email": "convidado@grimorio.app",
+      "name": "Mestre do Foco",
+      "picture": "",
+      "googleId": null,
+      "createdAt": "2026-08-19T11:34:01.114Z",
+      "lastLogin": "2026-08-19T11:46:09.507Z"
+    },
+    {
+      "id": "usr-1787139469364-d14p9",
+      "email": "1985michelfernandes@gmail.com",
+      "name": "1985michelfernandes",
+      "picture": "",
+      "googleId": null,
+      "createdAt": "2026-08-19T11:37:49.364Z",
+      "lastLogin": "2026-08-19T11:46:42.484Z"
+    }
+  ],
+  "questCategories": [
+    {
+      "id": "cat-1",
+      "name": "INSS",
+      "color": "#38bdf8",
+      "icon": "Briefcase"
+    },
+    {
+      "id": "cat-2",
+      "name": "Estudos",
+      "color": "#a855f7",
+      "icon": "GraduationCap"
+    },
+    {
+      "id": "cat-3",
+      "name": "Pessoal",
+      "color": "#10b981",
+      "icon": "User"
+    },
+    {
+      "id": "cat-4",
+      "name": "Projetos",
+      "color": "#f59e0b",
+      "icon": "FolderGit2"
+    },
+    {
+      "id": "cat-5",
+      "name": "Saúde",
+      "color": "#f43f5e",
+      "icon": "Heart"
+    },
+    {
+      "id": "cat-6",
+      "name": "Finanças",
+      "color": "#eab308",
+      "icon": "Coins"
+    },
+    {
+      "id": "cat-1787140031912-1pe1po",
+      "name": "Advocacia",
+      "color": "#f43f5e",
+      "icon": "Tag"
+    }
+  ]
+}

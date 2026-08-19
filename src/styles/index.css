@@ -1,0 +1,201 @@
+:root {
+  --font-heading: 'Cinzel', serif, system-ui;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Theme: Dark Fantasy / Obsidian Gold */
+  --bg-main: #0c0e14;
+  --bg-card: #131722;
+  --bg-card-hover: #1a2030;
+  --bg-card-active: #222a3f;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-bright: rgba(234, 179, 8, 0.35);
+
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+
+  --accent-gold: #f59e0b;
+  --accent-gold-glow: rgba(245, 158, 11, 0.25);
+  --accent-cyan: #06b6d4;
+  --accent-emerald: #10b981;
+  --accent-purple: #a855f7;
+  --accent-rose: #f43f5e;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  overflow-x: hidden;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(245, 158, 11, 0.05) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.05) 0px, transparent 50%),
+    radial-gradient(at 50% 100%, rgba(6, 182, 212, 0.05) 0px, transparent 50%);
+  background-attachment: fixed;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0c0e14;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27314a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #384666;
+}
+
+/* Typography Utility */
+.font-cinzel {
+  font-family: var(--font-heading);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Glass & Card Styles */
+.glass-panel {
+  background: rgba(19, 23, 34, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+}
+
+.glass-panel-gold {
+  background: rgba(23, 22, 18, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 16px;
+}
+
+.rpg-card {
+  background: #131722;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.rpg-card:hover {
+  border-color: rgba(245, 158, 11, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 15px rgba(245, 158, 11, 0.08);
+}
+
+/* Gradients for Book Covers */
+.gradient-amber {
+  background: linear-gradient(135deg, #b45309 0%, #78350f 100%);
+}
+
+.gradient-emerald {
+  background: linear-gradient(135deg, #047857 0%, #064e3b 100%);
+}
+
+.gradient-blue {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%);
+}
+
+.gradient-purple {
+  background: linear-gradient(135deg, #7e22ce 0%, #581c87 100%);
+}
+
+.gradient-rose {
+  background: linear-gradient(135deg, #be123c 0%, #881337 100%);
+}
+
+.gradient-cyan {
+  background: linear-gradient(135deg, #0e7490 0%, #164e63 100%);
+}
+
+/* Shimmer & Glow Animations */
+@keyframes goldPulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(245, 158, 11, 0.45);
+  }
+}
+
+.gold-glow-pulse {
+  animation: goldPulse 3s infinite ease-in-out;
+}
+
+@keyframes floatUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+.animate-float-reward {
+  animation: floatUp 1.8s forwards ease-out;
+}
+
+/* Custom Progress Bars */
+.progress-container {
+  background: #0a0c10;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.progress-fill-xp {
+  background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+}
+
+.progress-fill-boss {
+  background: linear-gradient(90deg, #e11d48 0%, #f43f5e 100%);
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease-out;
+  box-shadow: 0 0 12px rgba(225, 29, 72, 0.4);
+}
+
+.progress-fill-book {
+  background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease-out;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+}
+
+.progress-fill-process {
+  background: linear-gradient(90deg, #06b6d4 0%, #38bdf8 100%);
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease-out;
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.4);
+}
