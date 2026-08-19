@@ -22,7 +22,7 @@ const getNowDateTimeLocal = () => {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
-export function ProcessesView({ processes, processSteps, questCategories = [], onAddProcess, onStepProcess, onDeleteProcess }) {
+export function ProcessesView({ processes, processSteps, questCategories = [], rankings, onAddProcess, onStepProcess, onDeleteProcess }) {
   const defaultCategoryList = [
     { id: 'cat-1', name: 'Trabalho', color: '#38bdf8' },
     { id: 'cat-2', name: 'Estudos', color: '#a855f7' },
@@ -225,10 +225,28 @@ export function ProcessesView({ processes, processSteps, questCategories = [], o
                           background: `${catColor}18`,
                           color: catColor,
                           border: `1px solid ${catColor}40`,
-                          fontWeight: 700
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
                         }}
                       >
-                        {process.category}
+                        <span>{process.category}</span>
+                        {rankings?.categories?.[process.category] && (
+                          <span
+                            style={{
+                              fontSize: '0.65rem',
+                              fontWeight: 900,
+                              padding: '0 4px',
+                              borderRadius: '3px',
+                              background: rankings.categories[process.category].currentRank.bg,
+                              color: rankings.categories[process.category].currentRank.textColor,
+                              border: `1px solid ${rankings.categories[process.category].currentRank.border}`
+                            }}
+                          >
+                            {rankings.categories[process.category].currentRank.name}
+                          </span>
+                        )}
                       </span>
                     </div>
 

@@ -15,6 +15,7 @@ import {
   Award,
   Play,
   Pause,
+  RotateCcw,
   Edit3,
   FileText,
   Percent,
@@ -41,7 +42,32 @@ const COMMON_SUBJECTS = [
   'Ética no Serviço Público'
 ];
 
-export function QuestionsView({ examQuestions, analytics, onAddQuestions, onDeleteQuestions }) {
+export function QuestionsView({
+  examQuestions,
+  questCategories = [],
+  rankings,
+  analytics,
+  onAddQuestions,
+  onUpdateQuestions,
+  onDeleteQuestions
+}) {
+  const defaultCategoryList = [
+    { id: 'cat-1', name: 'Trabalho', color: '#38bdf8' },
+    { id: 'cat-2', name: 'Estudos', color: '#a855f7' },
+    { id: 'cat-3', name: 'Pessoal', color: '#10b981' },
+    { id: 'cat-4', name: 'Projetos', color: '#f59e0b' },
+    { id: 'cat-5', name: 'Saúde', color: '#f43f5e' },
+    { id: 'cat-6', name: 'Finanças', color: '#eab308' }
+  ];
+
+  const activeCategories = Array.isArray(questCategories) && questCategories.length > 0
+    ? questCategories
+    : defaultCategoryList;
+
+  const defaultCatName = activeCategories.find(c => (typeof c === 'string' ? c : c.name) === 'Estudos')
+    ? 'Estudos'
+    : (activeCategories[0] ? (typeof activeCategories[0] === 'string' ? activeCategories[0] : activeCategories[0].name) : 'Estudos');
+
   const [subTab, setSubTab] = useState('history'); // 'history' | 'subjects'
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -93,6 +119,7 @@ export function QuestionsView({ examQuestions, analytics, onAddQuestions, onDele
   };
 
   // Form State
+  const [category, setCategory] = useState(defaultCatName);
   const [subject, setSubject] = useState('Direito Constitucional');
   const [topic, setTopic] = useState('');
   const [institution, setInstitution] = useState('');
@@ -101,6 +128,15 @@ export function QuestionsView({ examQuestions, analytics, onAddQuestions, onDele
   const [durationMinutes, setDurationMinutes] = useState('25');
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Edit Question Modal State
+  const [editingQuestion, setEditingQuestion] = useState(null);
+  const [editCategory, setEditCategory] = useState(defaultCatName);
+  const [editSubject, setEditSubject] = useState('');
+  const [editTopic, setEditTopic] = useState('');
+  const [editInstitution, setEditInstitution] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editNotes, setEditNotes] = useState('');
 
   // Modal Stopwatch State
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -153,6 +189,7 @@ export function QuestionsView({ examQuestions, analytics, onAddQuestions, onDele
     }
 
     onAddQuestions({
+      category: category.trim(),
       subject: subject.trim() || 'Geral',
       topic: topic.trim(),
       institution: institution.trim(),
@@ -166,6 +203,34 @@ export function QuestionsView({ examQuestions, analytics, onAddQuestions, onDele
     handleCloseAddModal();
     setTopic('');
     setNotes('');
+  };
+
+  const handleOpenEditQuestion = (item) => {
+    setEditingQuestion(item);
+    setEditCategory(item.category || defaultCatName);
+    setEditSubject(item.subject || '');
+    setEditTopic(item.topic || '');
+    setEditInstitution(item.institution || '');
+    setEditDate(item.date || (item.timestamp ? new Date(item.timestamp).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]));
+    setEditNotes(item.notes || '');
+  };
+
+  const handleSaveEditQuestion = (e) => {
+    e.preventDefault();
+    if (!editingQuestion) return;
+
+    if (onUpdateQuestions) {
+      onUpdateQuestions(editingQuestion.id, {
+        category: editCategory.trim(),
+        subject: editSubject.trim() || 'Geral',
+        topic: editTopic.trim(),
+        institution: editInstitution.trim(),
+        date: editDate,
+        notes: editNotes.trim()
+      });
+    }
+
+    setEditingQuestion(null);
   };
 
   const formatTimer = (secs) => {
@@ -451,15 +516,78 @@ export function QuestionsView({ examQuestions, analytics, onAddQuestions, onDele
                   >
                     <div>
                       {/* Top metadata tags */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '0.75rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.12)', color: '#fbbf24', fontWeight: 700 }}>
-                          {item.subject}
-                        </span>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          {(() => {
+                            const itemCat = item.category || 'Estudos';
+                            const catInfo = activeCategories.find(c => (typeof c === 'string' ? c : c.name) === itemCat);
+                            const catColor = (catInfo && typeof catInfo === 'object' && catInfo.color) ? catInfo.color : '#a855f7';
+                            const catRanking = rankings?.categories?.[itemCat];
+
+                            return (
+                              <span
+                                style={{
+                                  fontSize: '0.7rem',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  background: `${catColor}18`,
+                                  color: catColor,
+                                  border: `1px solid ${catColor}40`,
+                                  fontWeight: 700,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px'
+                                }}
+                              >
+                                <span>{itemCat}</span>
+                                {catRanking && (
+                                  <span
+                                    style={{
+                                      fontSize: '0.65rem',
+                                      fontWeight: 900,
+                                      padding: '0 4px',
+                                      borderRadius: '3px',
+                                      background: catRanking.currentRank.bg,
+                                      color: catRanking.currentRank.textColor,
+                                      border: `1px solid ${catRanking.currentRank.border}`
+                                    }}
+                                  >
+                                    {catRanking.currentRank.name}
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          })()}
+
+                          <span style={{ fontSize: '0.75rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.12)', color: '#fbbf24', fontWeight: 700 }}>
+                            {item.subject}
+                          </span>
+                        </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <Calendar size={12} /> {item.date ? new Date(item.date + 'T12:00:00').toLocaleDateString('pt-BR') : new Date(item.timestamp).toLocaleDateString('pt-BR')}
                           </span>
+
+                          <button
+                            onClick={() => handleOpenEditQuestion(item)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#64748b',
+                              cursor: 'pointer',
+                              padding: '2px',
+                              borderRadius: '4px',
+                              display: 'flex',
+                              alignItems: 'center'
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.color = '#38bdf8'}
+                            onMouseOut={(e) => e.currentTarget.style.color = '#64748b'}
+                            title="Editar registro"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+
                           <button
                             onClick={() => promptDeleteQuestion(item)}
                             style={{
@@ -467,8 +595,13 @@ export function QuestionsView({ examQuestions, analytics, onAddQuestions, onDele
                               border: 'none',
                               color: '#64748b',
                               cursor: 'pointer',
-                              padding: '2px'
+                              padding: '2px',
+                              borderRadius: '4px',
+                              display: 'flex',
+                              alignItems: 'center'
                             }}
+                            onMouseOver={(e) => e.currentTarget.style.color = '#f87171'}
+                            onMouseOut={(e) => e.currentTarget.style.color = '#64748b'}
                             title="Excluir registro"
                           >
                             <Trash2 size={14} />
@@ -759,6 +892,35 @@ export function QuestionsView({ examQuestions, analytics, onAddQuestions, onDele
 
             <form onSubmit={handleSaveQuestions} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               
+              {/* Categoria */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#fbbf24', marginBottom: '4px' }}>
+                  Categoria *
+                </label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: '#1a2030',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  {activeCategories.map(cat => {
+                    const catName = typeof cat === 'string' ? cat : cat.name;
+                    return (
+                      <option key={catName} value={catName}>
+                        {catName}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
               {/* Disciplina / Matéria with Suggestions */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#fbbf24', marginBottom: '4px' }}>
@@ -1019,6 +1181,240 @@ export function QuestionsView({ examQuestions, analytics, onAddQuestions, onDele
                   }}
                 >
                   Salvar Bateria & Ganhar XP 🎯
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Questões */}
+      {editingQuestion && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              maxWidth: '540px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '28px',
+              border: '1px solid rgba(56, 189, 248, 0.4)',
+              borderRadius: '20px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+              <h3 className="font-cinzel" style={{ fontSize: '1.3rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Edit3 size={22} /> Editar Bateria de Questões
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingQuestion(null)}
+                style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  border: 'none',
+                  color: '#94a3b8',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditQuestion} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              
+              {/* Categoria */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#38bdf8', marginBottom: '4px' }}>
+                  Categoria *
+                </label>
+                <select
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: '#1a2030',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  {activeCategories.map(cat => {
+                    const catName = typeof cat === 'string' ? cat : cat.name;
+                    return (
+                      <option key={catName} value={catName}>
+                        {catName}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Disciplina / Matéria */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#38bdf8', marginBottom: '4px' }}>
+                  Matéria / Disciplina *
+                </label>
+                <input
+                  type="text"
+                  required
+                  list="edit-subjects-list"
+                  placeholder="Ex: Direito Constitucional, Português..."
+                  value={editSubject}
+                  onChange={(e) => setEditSubject(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: '#1a2030',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.95rem'
+                  }}
+                />
+                <datalist id="edit-subjects-list">
+                  {COMMON_SUBJECTS.map(s => <option key={s} value={s} />)}
+                </datalist>
+              </div>
+
+              {/* Assunto / Tópico & Banca */}
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                    Assunto / Tópico (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Controle de Constitucionalidade"
+                    value={editTopic}
+                    onChange={(e) => setEditTopic(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      background: '#1a2030',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#fff',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                    Banca / Órgão (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Cebraspe, FGV, FCC..."
+                    value={editInstitution}
+                    onChange={(e) => setEditInstitution(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      background: '#1a2030',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#fff',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Data do Treino */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                  Data do Treino
+                </label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    background: '#1a2030',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.9rem'
+                  }}
+                />
+              </div>
+
+              {/* Anotações / Análise de Erros */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#fbbf24', marginBottom: '4px' }}>
+                  Análise de Erros / Pontos a Revisar (Opcional)
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Ex: Errei questão sobre legitimidade ativa de ADC; revisar súmula vinculante X..."
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    background: '#1a2030',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.85rem'
+                  }}
+                />
+              </div>
+
+              {/* Action buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingQuestion(null)}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: '#fff',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  style={{
+                    padding: '10px 22px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)',
+                    color: '#000',
+                    fontWeight: 800,
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 10px rgba(56, 189, 248, 0.3)'
+                  }}
+                >
+                  Salvar Alterações
                 </button>
               </div>
 

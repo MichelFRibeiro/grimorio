@@ -1,4 +1,5 @@
 import { getDb } from './db.js';
+import { computeCategoryRankings } from './rankings.js';
 
 export function computeAnalytics() {
   const db = getDb();
@@ -335,6 +336,33 @@ export function computeAnalytics() {
     });
   }
 
+  // 9. Category & User Rankings (E to S+ tiers, Sunday-to-Saturday weekly cycle, decay rules)
+  const rankings = computeCategoryRankings(db);
+
+  // Insight 6: Category Rankings & Risk of Decay
+  const atRiskCategories = (rankings.categoriesList || []).filter(c => c.status === 'at_risk' && c.currentRankIndex > 0);
+  const promotedCategories = (rankings.categoriesList || []).filter(c => c.status === 'promoted');
+
+  if (promotedCategories.length > 0) {
+    const names = promotedCategories.map(c => `"${c.category.name}" (Rank ${c.currentRank.name})`).join(', ');
+    insights.unshift({
+      type: 'ranking_promoted',
+      icon: 'Award',
+      color: 'emerald',
+      title: `⚡ Promoção de Ranking Conquistada!`,
+      description: `Parabéns! Você alcançou novos patamares esta semana em: ${names}. Continue firme para consolidar seu prestígio!`
+    });
+  } else if (atRiskCategories.length > 0) {
+    const firstRisk = atRiskCategories[0];
+    insights.unshift({
+      type: 'ranking_risk',
+      icon: 'ShieldAlert',
+      color: 'amber',
+      title: `⚠️ Atenção ao Ranking: "${firstRisk.category.name}" em Risco de Queda`,
+      description: `Você está atualmente no Rank ${firstRisk.currentRank.name} em "${firstRisk.category.name}". Faltam ${firstRisk.xpNeededToMaintain} XP até sábado às 23:59 para manter seu nível e evitar a queda de 1 rank.`
+    });
+  }
+
   // Summary counts
   const summary = {
     totalQuestsCompleted: completedQuests.length,
@@ -346,7 +374,8 @@ export function computeAnalytics() {
     overallAccuracyRate: totalQuestionsStats.accuracyRate,
     totalProcessUnitsCompleted,
     totalHabitsActive: habits.length,
-    totalActionsLogged: logs.length
+    totalActionsLogged: logs.length,
+    overallUserRank: rankings.overall?.rank?.name || 'E'
   };
 
   return {
@@ -365,6 +394,7 @@ export function computeAnalytics() {
     questionDailyHistory,
     totalProcessUnitsCompleted,
     habitStats,
+    rankings,
     insights,
     summary
   };

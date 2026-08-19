@@ -24,6 +24,7 @@ import { ConfirmModal } from './ConfirmModal';
 export function QuestsView({
   quests,
   questCategories = [],
+  rankings,
   onAddQuest,
   onCompleteQuest,
   onDeleteQuest,
@@ -389,24 +390,50 @@ export function QuestsView({
         
         {/* Categories Pills */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-          {categoryNames.map(catName => (
-            <button
-              key={catName}
-              onClick={() => setSelectedCategory(catName)}
-              style={{
-                padding: '6px 12px',
-                borderRadius: '8px',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                background: selectedCategory === catName ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                color: selectedCategory === catName ? '#fbbf24' : '#94a3b8',
-                border: selectedCategory === catName ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid transparent'
-              }}
-            >
-              {catName}
-            </button>
-          ))}
+          {categoryNames.map(catName => {
+            const isAll = catName === 'Todas';
+            const catRanking = !isAll ? rankings?.categories?.[catName] : null;
+            const rankTier = catRanking?.currentRank;
+
+            return (
+              <button
+                key={catName}
+                onClick={() => setSelectedCategory(catName)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  background: selectedCategory === catName ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                  color: selectedCategory === catName ? '#fbbf24' : '#94a3b8',
+                  border: selectedCategory === catName ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid transparent'
+                }}
+              >
+                <span>{catName}</span>
+                {rankTier && (
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 900,
+                      padding: '1px 5px',
+                      borderRadius: '4px',
+                      background: rankTier.bg,
+                      color: rankTier.textColor,
+                      border: `1px solid ${rankTier.border}`,
+                      lineHeight: 1.15
+                    }}
+                    title={`Ranking semanal: Tier ${rankTier.name} (${rankTier.title}) • ${catRanking.weeklyXp} XP nesta semana`}
+                  >
+                    {rankTier.name}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Status Filter */}
@@ -1448,6 +1475,21 @@ export function QuestsView({
                           <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#f8fafc' }}>
                             {cat.name}
                           </span>
+                          {rankings?.categories?.[cat.name] && (
+                            <span
+                              style={{
+                                fontSize: '0.7rem',
+                                fontWeight: 900,
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                background: rankings.categories[cat.name].currentRank.bg,
+                                color: rankings.categories[cat.name].currentRank.textColor,
+                                border: `1px solid ${rankings.categories[cat.name].currentRank.border}`
+                              }}
+                            >
+                              Tier {rankings.categories[cat.name].currentRank.name} ({rankings.categories[cat.name].weeklyXp} XP)
+                            </span>
+                          )}
                           <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
                             ({catQuestCount} {catQuestCount === 1 ? 'missão' : 'missões'})
                           </span>

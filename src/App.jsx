@@ -63,6 +63,7 @@ export function App() {
     stepProcess,
     deleteProcess,
     addHabit,
+    updateHabit,
     toggleHabit,
     deleteHabit,
     addReward,
@@ -164,8 +165,10 @@ export function App() {
         currentUser={user}
         onLogout={logout}
         boss={bossRaid}
+        rankings={analytics?.rankings}
         muted={muted}
         onToggleMute={toggleMute}
+        onOpenOracle={() => setActiveTab('oracle')}
       />
 
       {/* Boss Raid Banner */}
@@ -244,6 +247,7 @@ export function App() {
           <QuestsView
             quests={quests}
             questCategories={questCategories}
+            rankings={analytics?.rankings}
             onAddQuest={addQuest}
             onCompleteQuest={completeQuest}
             onDeleteQuest={deleteQuest}
@@ -257,8 +261,11 @@ export function App() {
         {activeTab === 'questions' && (
           <QuestionsView
             examQuestions={examQuestions}
+            questCategories={questCategories}
+            rankings={analytics?.rankings}
             analytics={analytics}
             onAddQuestions={addExamQuestions}
+            onUpdateQuestions={updateExamQuestions}
             onDeleteQuestions={deleteExamQuestions}
           />
         )}
@@ -267,6 +274,7 @@ export function App() {
           <BooksView
             books={books}
             readingSessions={readingSessions}
+            questCategories={questCategories}
             onAddBook={addBook}
             onUpdateBook={updateBook}
             onLogReadingSession={logReadingSession}
@@ -284,6 +292,7 @@ export function App() {
             processes={processes}
             processSteps={processSteps}
             questCategories={questCategories}
+            rankings={analytics?.rankings}
             onAddProcess={addProcess}
             onStepProcess={stepProcess}
             onDeleteProcess={deleteProcess}
@@ -293,7 +302,10 @@ export function App() {
         {activeTab === 'habits' && (
           <HabitsView
             habits={habits}
+            questCategories={questCategories}
+            rankings={analytics?.rankings}
             onAddHabit={addHabit}
+            onUpdateHabit={updateHabit}
             onToggleHabit={toggleHabit}
             onDeleteHabit={deleteHabit}
           />

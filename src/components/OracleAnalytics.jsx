@@ -28,7 +28,14 @@ import {
   Brain,
   Target,
   Award,
-  Filter
+  Filter,
+  Trophy,
+  Shield,
+  Zap,
+  Flame,
+  Info,
+  AlertTriangle,
+  ChevronRight
 } from 'lucide-react';
 
 ChartJS.register(
@@ -46,6 +53,7 @@ ChartJS.register(
 export function OracleAnalytics({ analytics, actionLogs, onRefresh }) {
   const fileInputRef = useRef(null);
   const [selectedHorizon, setSelectedHorizon] = useState('total'); // 'day' | 'week' | 'month' | 'year' | 'total'
+  const [rankingTab, setRankingTab] = useState('categories'); // 'categories' | 'tiers'
 
   if (!analytics) {
     return (
@@ -351,6 +359,375 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh }) {
         </div>
 
       </div>
+
+      {/* SECTION: TRIBUNAL DOS RANKINGS & MAESTRIA DE CATEGORIAS */}
+      {analytics.rankings && (
+        <div
+          className="glass-panel"
+          style={{
+            padding: '24px',
+            marginBottom: '26px',
+            border: `1px solid ${analytics.rankings.overall?.rank?.border || 'rgba(245, 158, 11, 0.4)'}`,
+            background: 'rgba(18, 22, 34, 0.9)',
+            boxShadow: `0 0 25px ${analytics.rankings.overall?.rank?.glow || 'rgba(0,0,0,0.3)'}`
+          }}
+        >
+          {/* Section Header */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '14px', marginBottom: '20px' }}>
+            <div>
+              <h3 className="font-cinzel" style={{ fontSize: '1.3rem', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Trophy size={24} color={analytics.rankings.overall?.rank?.color || '#fbbf24'} /> Tribunal dos Rankings & Maestria de Categorias
+              </h3>
+              <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginTop: '2px' }}>
+                Ciclo semanal de <strong>Domingo a Sábado</strong>. O ranking sobe com o XP semanal e decai <strong>1 nível por semana</strong> com produção insuficiente.
+              </p>
+            </div>
+
+            {/* Tab Selector */}
+            <div
+              style={{
+                padding: '4px',
+                borderRadius: '10px',
+                background: 'rgba(0,0,0,0.35)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                display: 'inline-flex',
+                gap: '4px'
+              }}
+            >
+              <button
+                onClick={() => setRankingTab('categories')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  background: rankingTab === 'categories' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
+                  color: rankingTab === 'categories' ? '#000' : '#94a3b8',
+                  fontWeight: rankingTab === 'categories' ? 800 : 600,
+                  fontSize: '0.82rem',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                📊 Rankings por Categoria
+              </button>
+
+              <button
+                onClick={() => setRankingTab('tiers')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  background: rankingTab === 'tiers' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
+                  color: rankingTab === 'tiers' ? '#000' : '#94a3b8',
+                  fontWeight: rankingTab === 'tiers' ? 800 : 600,
+                  fontSize: '0.82rem',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                📜 Tabela de Faixas (E a S+)
+              </button>
+            </div>
+          </div>
+
+          {/* Hero Card - Overall User Ranking */}
+          <div
+            style={{
+              padding: '20px 24px',
+              borderRadius: '16px',
+              background: analytics.rankings.overall?.rank?.bg || 'rgba(245, 158, 11, 0.12)',
+              border: `1px solid ${analytics.rankings.overall?.rank?.border || 'rgba(245, 158, 11, 0.35)'}`,
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '20px',
+              marginBottom: '24px'
+            }}
+          >
+            {/* Rank Identity */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+              <div
+                style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '16px',
+                  background: 'rgba(0,0,0,0.4)',
+                  border: `2px solid ${analytics.rankings.overall?.rank?.border || '#fbbf24'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.8rem',
+                  fontWeight: 900,
+                  color: analytics.rankings.overall?.rank?.textColor || '#fbbf24',
+                  boxShadow: `0 0 18px ${analytics.rankings.overall?.rank?.glow || 'rgba(245, 158, 11, 0.3)'}`
+                }}
+              >
+                {analytics.rankings.overall?.rank?.name || 'E'}
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.05em' }}>
+                    Ranking Geral do Usuário
+                  </span>
+                  <span style={{ fontSize: '0.72rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)', color: '#cbd5e1', fontWeight: 700 }}>
+                    Média de {analytics.rankings.overall?.totalCategories || 0} categorias
+                  </span>
+                </div>
+
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span>Tier {analytics.rankings.overall?.rank?.name}</span>
+                  <span style={{ fontSize: '1rem', color: analytics.rankings.overall?.rank?.color || '#fbbf24', fontWeight: 700 }}>
+                    • {analytics.rankings.overall?.rank?.title}
+                  </span>
+                </div>
+
+                <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '2px 0 0 0' }}>
+                  {analytics.rankings.overall?.rank?.description}
+                </p>
+              </div>
+            </div>
+
+            {/* Stats Metrics */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px' }}>
+              <div style={{ padding: '10px 16px', borderRadius: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Pontuação Média</span>
+                <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#f8fafc', fontFamily: 'var(--font-mono)' }}>
+                  {analytics.rankings.overall?.avgScore || 0} <span style={{ fontSize: '0.8rem', color: '#64748b' }}>/ 10</span>
+                </div>
+              </div>
+
+              <div style={{ padding: '10px 16px', borderRadius: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>XP Semanal Total</span>
+                <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>
+                  +{analytics.rankings.overall?.totalWeeklyXp || 0} XP
+                </div>
+              </div>
+
+              <div style={{ padding: '10px 16px', borderRadius: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <span style={{ fontSize: '0.7rem', color: '#38bdf8', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Clock size={12} /> Fechamento Semanal
+                </span>
+                <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#f8fafc' }}>
+                  {analytics.rankings.currentWeek?.countdownLabel || 'Sábado às 23:59'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* TAB 1: Categories Cards Grid */}
+          {rankingTab === 'categories' && (
+            <div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: '16px' }}>
+                {(analytics.rankings.categoriesList || []).map(catRank => {
+                  const rank = catRank.currentRank;
+                  const status = catRank.status;
+
+                  return (
+                    <div
+                      key={catRank.category.name}
+                      style={{
+                        padding: '18px',
+                        borderRadius: '14px',
+                        background: 'rgba(255, 255, 255, 0.025)',
+                        border: `1px solid ${rank.border ? `${rank.border}40` : 'rgba(255, 255, 255, 0.08)'}`,
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {/* Top Row: Category Name + Rank Badge */}
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px', marginBottom: '12px' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                            <span
+                              style={{
+                                width: '12px',
+                                height: '12px',
+                                borderRadius: '50%',
+                                background: catRank.category.color || '#38bdf8',
+                                boxShadow: `0 0 10px ${catRank.category.color || '#38bdf8'}`
+                              }}
+                            />
+                            <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                              {catRank.category.name}
+                            </h4>
+                          </div>
+                          <span style={{ fontSize: '0.78rem', color: rank.color, fontWeight: 700 }}>
+                            {rank.title}
+                          </span>
+                        </div>
+
+                        {/* Big Rank Badge */}
+                        <div
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: '12px',
+                            background: rank.bg,
+                            border: `2px solid ${rank.border}`,
+                            color: rank.textColor,
+                            fontWeight: 900,
+                            fontSize: '1.25rem',
+                            textAlign: 'center',
+                            boxShadow: `0 0 12px ${rank.glow}`
+                          }}
+                          title={`Tier ${rank.name} • Mínimo para manter: ${catRank.maintainMinXp} XP`}
+                        >
+                          {rank.name}
+                        </div>
+                      </div>
+
+                      {/* Middle: Weekly XP & Progress */}
+                      <div style={{ marginBottom: '14px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', marginBottom: '6px' }}>
+                          <span style={{ color: '#94a3b8' }}>
+                            XP nesta semana: <strong style={{ color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>{catRank.weeklyXp} XP</strong>
+                          </span>
+                          <span style={{ color: '#cbd5e1', fontSize: '0.75rem' }}>
+                            {catRank.nextRank ? `Meta Tier ${catRank.nextRank.name}: ${catRank.nextRankMinXp} XP` : 'Tier Máximo!'}
+                          </span>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="progress-container" style={{ height: '8px', background: 'rgba(0,0,0,0.4)' }}>
+                          <div
+                            style={{
+                              width: `${catRank.progressPercent}%`,
+                              height: '100%',
+                              background: rank.border,
+                              borderRadius: '999px',
+                              transition: 'width 0.4s ease'
+                            }}
+                          />
+                        </div>
+
+                        {/* Status Note */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                          {status === 'promoted' && (
+                            <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', fontWeight: 800, border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                              ⚡ Promovido esta semana!
+                            </span>
+                          )}
+                          {status === 'at_risk' && (
+                            <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', fontWeight: 800, border: '1px solid rgba(245, 158, 11, 0.3)' }} title={`Faltam ${catRank.xpNeededToMaintain} XP para não cair`}>
+                              ⚠️ Risco de Queda (-1 Rank no domingo)
+                            </span>
+                          )}
+                          {status === 'maintained' && (
+                            <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 800, border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                              🛡️ Nível Garantido
+                            </span>
+                          )}
+
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                            {catRank.nextRank && catRank.xpNeededForNextRank > 0 ? (
+                              `+${catRank.xpNeededForNextRank} XP para subir`
+                            ) : (
+                              'Nível máximo atingido'
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Historical Evolution Badges */}
+                      {catRank.history && catRank.history.length > 1 && (
+                        <div style={{ paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                          <span style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: '6px' }}>
+                            Evolução Semanal Recente
+                          </span>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center' }}>
+                            {catRank.history.map((h, hIdx) => (
+                              <div
+                                key={h.weekKey}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  fontSize: '0.72rem',
+                                  padding: '2px 6px',
+                                  borderRadius: '6px',
+                                  background: h.isClosed ? 'rgba(255, 255, 255, 0.04)' : 'rgba(245, 158, 11, 0.15)',
+                                  border: h.isClosed ? '1px solid rgba(255, 255, 255, 0.06)' : '1px solid rgba(245, 158, 11, 0.35)',
+                                  color: h.isClosed ? '#cbd5e1' : '#fbbf24',
+                                  fontWeight: 700
+                                }}
+                                title={`${h.weekLabel}: ${h.xp} XP gerados -> Rank ${h.rank}`}
+                              >
+                                <span style={{ color: '#94a3b8', fontSize: '0.65rem' }}>{h.shortLabel}:</span>
+                                <span>{h.rank}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: 11-Tiers Reference Guide Table */}
+          {rankingTab === 'tiers' && (
+            <div style={{ padding: '10px', borderRadius: '14px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ marginBottom: '14px', padding: '12px 16px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
+                <p style={{ fontSize: '0.85rem', color: '#cbd5e1', margin: 0, lineHeight: 1.5 }}>
+                  ℹ️ <strong>Como funcionam as 11 Faixas de Ranking:</strong> O ranking de cada categoria é calculado com base no XP semanal gerado entre Domingo e Sábado. Ao atingir o XP da faixa, você sobe imediatamente de tier. Caso passe uma semana inteira sem produzir o XP mínimo para manter seu nível, aquela categoria <strong>cai 1 nível</strong> no domingo subsequente (decaimento gradual, sem queda abrupta).
+                </p>
+              </div>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left', color: '#94a3b8' }}>
+                      <th style={{ padding: '10px 14px' }}>Tier</th>
+                      <th style={{ padding: '10px 14px' }}>Faixa de XP Semanal</th>
+                      <th style={{ padding: '10px 14px' }}>Título de Prestígio</th>
+                      <th style={{ padding: '10px 14px' }}>Rendimento Esperado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(analytics.rankings.tiers || []).map((t, idx) => (
+                      <tr
+                        key={t.name}
+                        style={{
+                          borderBottom: '1px solid rgba(255,255,255,0.04)',
+                          background: idx % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent'
+                        }}
+                      >
+                        <td style={{ padding: '10px 14px' }}>
+                          <span
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              background: t.bg,
+                              color: t.textColor,
+                              border: `1px solid ${t.border}`,
+                              fontWeight: 900,
+                              fontSize: '0.88rem'
+                            }}
+                          >
+                            {t.name}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#f8fafc' }}>
+                          {t.maxXp === Infinity || !t.maxXp ? `${t.minXp}+ XP` : `${t.minXp} - ${t.maxXp} XP`}
+                        </td>
+                        <td style={{ padding: '10px 14px', color: t.color, fontWeight: 700 }}>
+                          {t.title}
+                        </td>
+                        <td style={{ padding: '10px 14px', color: '#94a3b8' }}>
+                          {t.description}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* SECTION: CONCURSO QUESTIONS ORACLE MONITORING (5 TIME HORIZONS) */}
       <div

@@ -32,6 +32,7 @@ import { ConfirmModal } from './ConfirmModal';
 export function BooksView({
   books,
   readingSessions,
+  questCategories = [],
   onAddBook,
   onUpdateBook,
   onLogReadingSession,
@@ -42,6 +43,19 @@ export function BooksView({
   onUpdateBookQuote,
   onDeleteBookQuote
 }) {
+  const defaultCategoryList = [
+    { id: 'cat-1', name: 'Trabalho', color: '#38bdf8' },
+    { id: 'cat-2', name: 'Estudos', color: '#a855f7' },
+    { id: 'cat-3', name: 'Pessoal', color: '#10b981' },
+    { id: 'cat-4', name: 'Projetos', color: '#f59e0b' },
+    { id: 'cat-5', name: 'Saúde', color: '#f43f5e' },
+    { id: 'cat-6', name: 'Finanças', color: '#eab308' }
+  ];
+
+  const activeCategories = Array.isArray(questCategories) && questCategories.length > 0
+    ? questCategories
+    : defaultCategoryList;
+
   const [subTab, setSubTab] = useState('books'); // 'books' | 'quotes' | 'book-detail'
   const [selectedBookId, setSelectedBookId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -2070,9 +2084,7 @@ export function BooksView({
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
                     Categoria
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Produtividade, Filosofia"
+                  <select
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
                     style={{
@@ -2084,7 +2096,16 @@ export function BooksView({
                       color: '#fff',
                       fontSize: '0.9rem'
                     }}
-                  />
+                  >
+                    {activeCategories.map(cat => {
+                      const catName = typeof cat === 'string' ? cat : cat.name;
+                      return (
+                        <option key={catName} value={catName}>
+                          {catName}
+                        </option>
+                      );
+                    })}
+                  </select>
                 </div>
 
                 <div style={{ flex: 1 }}>

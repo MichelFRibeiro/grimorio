@@ -47,6 +47,13 @@ export function useGameData() {
 
   useEffect(() => {
     fetchState();
+
+    // Frontend Keep-Alive Heartbeat (every 7 minutes to keep Render alive while tab is open)
+    const heartbeat = setInterval(() => {
+      fetch('/api/health').catch(() => {});
+    }, 7 * 60 * 1000);
+
+    return () => clearInterval(heartbeat);
   }, [fetchState]);
 
   // Trigger floating reward popup
@@ -418,6 +425,16 @@ export function useGameData() {
     }
   };
 
+  const updateHabit = async (id, habitData) => {
+    playClick();
+    const res = await fetch(`/api/habits/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(habitData)
+    });
+    if (res.ok) fetchState();
+  };
+
   const deleteHabit = async (id) => {
     playClick();
     const res = await fetch(`/api/habits/${id}`, {
@@ -539,6 +556,7 @@ export function useGameData() {
     stepProcess,
     deleteProcess,
     addHabit,
+    updateHabit,
     toggleHabit,
     deleteHabit,
     addReward,

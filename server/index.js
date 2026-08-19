@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { getDb, saveDb, initDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, findOrCreateUser } from './db.js';
 import { computeAnalytics } from './analytics.js';
+import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
 import {
   verifyGoogleToken,
   createSession,
@@ -12,6 +13,7 @@ import {
   getGoogleClientId,
   authMiddleware
 } from './auth.js';
+import { initKeepAlive } from './keepAlive.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,6 +52,18 @@ app.use(express.static(distPath));
 
 // Helper to generate unique IDs
 const uid = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+
+// ==========================================
+// HEALTH & KEEP-ALIVE (ANTI-SLEEP)
+// ==========================================
+app.get(['/api/health', '/api/ping'], (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    service: 'Grimório de Missões'
+  });
+});
 
 // ==========================================
 // 0. AUTHENTICATION & SESSIONS
@@ -167,6 +181,22 @@ app.get('/api/state', (req, res) => {
       ...db,
       analytics,
       user: req.user || null
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 1.5. CATEGORY & USER RANKINGS
+// ==========================================
+app.get('/api/rankings', (req, res) => {
+  try {
+    const db = getDb();
+    const rankings = computeCategoryRankings(db);
+    res.json({
+      success: true,
+      rankings
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -590,7 +620,7 @@ app.post('/api/books/:id/reading-session', (req, res) => {
       actionType: 'reading_session',
       entityId: book.id,
       title: `${book.title} (+${pagesRead} págs${parsedQuotes.length > 0 ? `, ${parsedQuotes.length} citação(ões)` : ''})`,
-      details: { pagesRead, durationMinutes: duration, finishedBook, quotesCount: parsedQuotes.length }
+      details: { category: 'Estudos', pagesRead, durationMinutes: duration, finishedBook, quotesCount: parsedQuotes.length }
     });
 
     saveDb(db);
@@ -860,7 +890,7 @@ app.post('/api/books/:id/quotes', (req, res) => {
       actionType: 'book_quote',
       entityId: newQuote.id,
       title: `Citação: ${book.title} (pág. ${newQuote.page})`,
-      details: { quote: newQuote.quote.substring(0, 50) }
+      details: { category: 'Estudos', quote: newQuote.quote.substring(0, 50) }
     });
 
     saveDb(db);
@@ -951,7 +981,7 @@ app.post('/api/questions', (req, res) => {
     const db = getDb();
     if (!db.examQuestions) db.examQuestions = [];
 
-    const { subject, topic, institution, totalQuestions, correctAnswers, durationMinutes, notes, date } = req.body;
+    const { subject, topic, institution, totalQuestions, correctAnswers, durationMinutes, notes, date, category } = req.body;
     const total = parseInt(totalQuestions, 10);
     const correct = parseInt(correctAnswers, 10);
     const duration = parseInt(durationMinutes, 10) || 0;
@@ -975,9 +1005,11 @@ app.post('/api/questions', (req, res) => {
 
     const now = new Date();
     const entryDate = date || now.toISOString().split('T')[0];
+    const chosenCategory = (category && category.trim()) ? category.trim() : 'Estudos';
 
     const newQuestionLog = {
       id: uid('eq'),
+      category: chosenCategory,
       subject: (subject || 'Geral').trim(),
       topic: (topic || '').trim(),
       institution: (institution || '').trim(),
@@ -1005,6 +1037,7 @@ app.post('/api/questions', (req, res) => {
       entityId: newQuestionLog.id,
       title: `${newQuestionLog.subject}: ${correct}/${total} acertos (${accuracyRate}%)`,
       details: {
+        category: chosenCategory,
         totalQuestions: total,
         correctAnswers: correct,
         accuracyRate,
@@ -1035,13 +1068,22 @@ app.put('/api/questions/:id', (req, res) => {
     if (index === -1) return res.status(404).json({ error: 'Registro de questões não encontrado' });
 
     const existing = db.examQuestions[index];
-    const { subject, topic, institution, notes, date } = req.body;
+    const { subject, topic, institution, notes, date, category } = req.body;
 
+    if (category !== undefined && category.trim()) existing.category = category.trim();
     if (subject !== undefined) existing.subject = subject.trim();
     if (topic !== undefined) existing.topic = topic.trim();
     if (institution !== undefined) existing.institution = institution.trim();
     if (notes !== undefined) existing.notes = notes.trim();
     if (date !== undefined) existing.date = date;
+
+    if (db.actionLogs) {
+      const log = db.actionLogs.find(l => l.entityId === existing.id);
+      if (log && log.details) {
+        if (category !== undefined && category.trim()) log.details.category = category.trim();
+        if (subject !== undefined) log.details.subject = subject.trim();
+      }
+    }
 
     saveDb(db);
     res.json({ success: true, examQuestion: existing, analytics: computeAnalytics() });
@@ -1160,7 +1202,7 @@ app.post('/api/processes/:id/step', (req, res) => {
       actionType: 'process_step',
       entityId: process.id,
       title: `${process.title} (+${actualUnitsAdded} ${process.unitName})`,
-      details: { unitsAdded: actualUnitsAdded, finished },
+      details: { category: process.category || 'Trabalho', unitsAdded: actualUnitsAdded, finished },
       timestamp: stepTimestamp
     });
 
@@ -1219,12 +1261,13 @@ app.delete('/api/processes/:id', (req, res) => {
 app.post('/api/habits', (req, res) => {
   try {
     const db = getDb();
-    const { title, icon, frequency, xpReward, coinReward } = req.body;
+    const { title, category, icon, frequency, xpReward, coinReward } = req.body;
     if (!title) return res.status(400).json({ error: 'Título do hábito é obrigatório' });
 
     const newHabit = {
       id: uid('h'),
       title: title.trim(),
+      category: (category && category.trim()) ? category.trim() : 'Pessoal',
       icon: icon || 'Flame',
       frequency: frequency || 'daily',
       currentStreak: 0,
@@ -1238,6 +1281,27 @@ app.post('/api/habits', (req, res) => {
     db.habits.unshift(newHabit);
     saveDb(db);
     res.json({ success: true, habit: newHabit });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/habits/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const habit = db.habits.find(h => h.id === req.params.id);
+    if (!habit) return res.status(404).json({ error: 'Hábito não encontrado' });
+
+    const { title, category, icon, frequency, xpReward, coinReward } = req.body;
+    if (title !== undefined && title.trim()) habit.title = title.trim();
+    if (category !== undefined && category.trim()) habit.category = category.trim();
+    if (icon !== undefined) habit.icon = icon;
+    if (frequency !== undefined) habit.frequency = frequency;
+    if (xpReward !== undefined) habit.xpReward = parseInt(xpReward, 10) || 30;
+    if (coinReward !== undefined) habit.coinReward = parseInt(coinReward, 10) || 8;
+
+    saveDb(db);
+    res.json({ success: true, habit });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1281,7 +1345,7 @@ app.post('/api/habits/:id/toggle', (req, res) => {
         actionType: 'habit_complete',
         entityId: habit.id,
         title: `${habit.title} (Sequência 🔥 ${habit.currentStreak})`,
-        details: { streak: habit.currentStreak }
+        details: { category: habit.category || 'Pessoal', streak: habit.currentStreak }
       });
     }
 
@@ -1523,10 +1587,12 @@ app.get('*', (req, res) => {
 initDb().then(() => {
   app.listen(PORT, () => {
     console.log(`🗡️ [Grimório de Missões] Servidor iniciado com sucesso em http://localhost:${PORT}`);
+    initKeepAlive();
   });
 }).catch(err => {
   console.error('Erro na inicialização do DB:', err);
   app.listen(PORT, () => {
     console.log(`🗡️ [Grimório de Missões] Servidor iniciado com fallback local em http://localhost:${PORT}`);
+    initKeepAlive();
   });
 });

@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Volume2, VolumeX, Flame, Coins, Shield, Brain, Zap, Swords, Sparkles, LogOut, User } from 'lucide-react';
+import { Volume2, VolumeX, Flame, Coins, Shield, Brain, Zap, Swords, Sparkles, LogOut, User, Trophy, Award, ChevronRight, X, AlertTriangle, TrendingUp } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 
-export function Header({ profile, currentUser, onLogout, boss, muted, onToggleMute }) {
+export function Header({ profile, currentUser, onLogout, boss, rankings, muted, onToggleMute, onOpenOracle }) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showRankingsModal, setShowRankingsModal] = useState(false);
 
   if (!profile) return null;
 
   const xpPercent = Math.min(100, Math.round((profile.xp / profile.xpToNextLevel) * 100));
+  const overallRank = rankings?.overall?.rank || { name: 'E', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.15)', border: '#64748b', title: 'Iniciado' };
 
   const handleConfirmLogout = () => {
     setShowLogoutModal(false);
@@ -137,6 +139,34 @@ export function Header({ profile, currentUser, onLogout, boss, muted, onToggleMu
             </span>
           </div>
 
+          {/* Overall Rank Pill */}
+          <button
+            onClick={() => setShowRankingsModal(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 14px',
+              borderRadius: '12px',
+              background: overallRank.bg || 'rgba(245, 158, 11, 0.15)',
+              border: `1px solid ${overallRank.border || 'rgba(245, 158, 11, 0.4)'}`,
+              cursor: 'pointer',
+              boxShadow: `0 0 14px ${overallRank.glow || 'rgba(245, 158, 11, 0.2)'}`,
+              transition: 'all 0.2s ease'
+            }}
+            title="Clique para ver o Ranking de todas as Categorias"
+          >
+            <Trophy size={18} color={overallRank.color || '#fbbf24'} />
+            <div style={{ textAlign: 'left', lineHeight: 1.15 }}>
+              <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.05em' }}>
+                Ranking Geral
+              </div>
+              <div style={{ color: overallRank.textColor || '#fbbf24', fontWeight: 900, fontSize: '0.9rem' }}>
+                Tier {overallRank.name} <span style={{ fontSize: '0.72rem', color: '#cbd5e1', fontWeight: 600 }}>({rankings?.overall?.avgScore || 0}/10)</span>
+              </div>
+            </div>
+          </button>
+
           {/* Character Attributes Pills */}
           <div style={{ display: 'flex', gap: '6px' }}>
             <div
@@ -239,6 +269,226 @@ export function Header({ profile, currentUser, onLogout, boss, muted, onToggleMu
         </div>
 
       </div>
+
+      {/* Modal de Detalhes dos Rankings de Categorias */}
+      {showRankingsModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 2000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            animation: 'fadeIn 0.15s ease'
+          }}
+          onClick={() => setShowRankingsModal(false)}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              maxWidth: '640px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '28px',
+              borderRadius: '20px',
+              border: `1px solid ${overallRank.border || 'rgba(245, 158, 11, 0.4)'}`,
+              boxShadow: `0 20px 50px rgba(0, 0, 0, 0.9), 0 0 30px ${overallRank.glow || 'rgba(245, 158, 11, 0.2)'}`,
+              textAlign: 'left',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '12px',
+                    background: overallRank.bg || 'rgba(245, 158, 11, 0.15)',
+                    border: `1px solid ${overallRank.border || 'rgba(245, 158, 11, 0.4)'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <Trophy size={24} color={overallRank.color || '#fbbf24'} />
+                </div>
+                <div>
+                  <h3 className="font-cinzel" style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                    Quadro de Rankings de Categorias
+                  </h3>
+                  <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>
+                    Ciclo Semanal: {rankings?.currentWeek?.weekLabel || 'Domingo a Sábado'} ({rankings?.currentWeek?.countdownLabel || ''})
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowRankingsModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '4px'
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Overall Rank Hero Banner */}
+            <div
+              style={{
+                padding: '16px 20px',
+                borderRadius: '14px',
+                background: overallRank.bg || 'rgba(245, 158, 11, 0.12)',
+                border: `1px solid ${overallRank.border || 'rgba(245, 158, 11, 0.3)'}`,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px'
+              }}
+            >
+              <div>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800 }}>
+                  Seu Ranking Geral
+                </span>
+                <div style={{ fontSize: '1.4rem', fontWeight: 900, color: overallRank.textColor || '#fbbf24', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>Tier {overallRank.name}</span>
+                  <span style={{ fontSize: '0.9rem', color: '#e2e8f0', fontWeight: 700 }}>• {overallRank.title}</span>
+                </div>
+                <span style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
+                  Média calculada entre {rankings?.overall?.totalCategories || 0} categorias ativas: {rankings?.overall?.avgScore || 0} / 10
+                </span>
+              </div>
+
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800 }}>
+                  XP Total Esta Semana
+                </span>
+                <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>
+                  +{rankings?.overall?.totalWeeklyXp || 0} XP
+                </div>
+              </div>
+            </div>
+
+            {/* Category Rankings Cards List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '22px' }}>
+              {(rankings?.categoriesList || []).map(catRank => {
+                const rank = catRank.currentRank;
+                const status = catRank.status;
+
+                return (
+                  <div
+                    key={catRank.category.name}
+                    style={{
+                      padding: '14px 16px',
+                      borderRadius: '12px',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px solid rgba(255, 255, 255, 0.07)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '14px'
+                    }}
+                  >
+                    {/* Category Name & Color */}
+                    <div style={{ flex: '1 1 180px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <span
+                          style={{
+                            width: '10px',
+                            height: '10px',
+                            borderRadius: '999px',
+                            background: catRank.category.color || '#38bdf8',
+                            boxShadow: `0 0 8px ${catRank.category.color || '#38bdf8'}`
+                          }}
+                        />
+                        <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#f8fafc' }}>
+                          {catRank.category.name}
+                        </span>
+                      </div>
+                      
+                      <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                        Semana atual: <strong style={{ color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>{catRank.weeklyXp} XP</strong>
+                        {catRank.nextRank && (
+                          <span> (faltam {catRank.xpNeededForNextRank} XP para Tier {catRank.nextRank.name})</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Status Pill */}
+                    <div>
+                      {status === 'promoted' && (
+                        <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', fontWeight: 800, border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                          ⚡ Promovido!
+                        </span>
+                      )}
+                      {status === 'at_risk' && (
+                        <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', fontWeight: 800, border: '1px solid rgba(245, 158, 11, 0.3)' }} title={`Faltam ${catRank.xpNeededToMaintain} XP para não cair`}>
+                          ⚠️ Risco (-1)
+                        </span>
+                      )}
+                      {status === 'maintained' && catRank.currentRankIndex > 0 && (
+                        <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 800, border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                          🛡️ Mantido
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Rank Badge */}
+                    <div
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '10px',
+                        background: rank.bg,
+                        border: `1px solid ${rank.border}`,
+                        color: rank.textColor,
+                        fontWeight: 900,
+                        fontSize: '1rem',
+                        minWidth: '58px',
+                        textAlign: 'center',
+                        boxShadow: `0 0 10px ${rank.glow}`
+                      }}
+                      title={`${rank.title}: ${rank.description}`}
+                    >
+                      {rank.name}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setShowRankingsModal(false)}
+                style={{
+                  padding: '9px 20px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  color: '#000',
+                  border: 'none',
+                  fontSize: '0.88rem',
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de confirmação de Logout */}
       <ConfirmModal
