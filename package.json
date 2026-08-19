@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev:server": "node server/index.js",
-    "dev:client": "vite",
+    "dev:client": "node node_modules/vite/bin/vite.js",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "build": "vite build",
+    "build": "node node_modules/vite/bin/vite.js build",
     "start": "node server/index.js",
     "serve": "npm run build && node server/index.js"
   },
