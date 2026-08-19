@@ -153,9 +153,20 @@ export function BooksView({
   const [newAuthor, setNewAuthor] = useState('');
   const [newTotalPages, setNewTotalPages] = useState('');
   const [newCurrentPage, setNewCurrentPage] = useState('0');
-  const [newCategory, setNewCategory] = useState('Produtividade');
+  const [newCategory, setNewCategory] = useState(defaultCategoryList[0]?.name || 'Estudos');
   const [newCoverColor, setNewCoverColor] = useState('gradient-amber');
   const [newNotes, setNewNotes] = useState('');
+
+  // Edit Book Form
+  const [editingBook, setEditingBook] = useState(null);
+  const [editBookTitle, setEditBookTitle] = useState('');
+  const [editBookAuthor, setEditBookAuthor] = useState('');
+  const [editBookTotalPages, setEditBookTotalPages] = useState('');
+  const [editBookCurrentPage, setEditBookCurrentPage] = useState('0');
+  const [editBookCategory, setEditBookCategory] = useState(defaultCategoryList[0]?.name || 'Estudos');
+  const [editBookCoverColor, setEditBookCoverColor] = useState('gradient-amber');
+  const [editBookNotes, setEditBookNotes] = useState('');
+  const [editBookStatus, setEditBookStatus] = useState('reading');
 
   // Reading Session Stopwatch & Input
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -416,6 +427,65 @@ export function BooksView({
     setNewCurrentPage('0');
     setNewNotes('');
     setShowAddModal(false);
+  };
+
+  const handleOpenEditBookModal = (book, e) => {
+    if (e) e.stopPropagation();
+    setEditingBook(book);
+    setEditBookTitle(book.title || '');
+    setEditBookAuthor(book.author || '');
+    setEditBookTotalPages(String(book.totalPages || ''));
+    setEditBookCurrentPage(String(book.currentPage || 0));
+    setEditBookCategory(book.category || (activeCategories[0] ? (typeof activeCategories[0] === 'string' ? activeCategories[0] : activeCategories[0].name) : 'Estudos'));
+    setEditBookCoverColor(book.coverColor || 'gradient-amber');
+    setEditBookNotes(book.notes || '');
+    setEditBookStatus(book.status || 'reading');
+  };
+
+  const handleCloseEditBookModal = () => {
+    setEditingBook(null);
+    setEditBookTitle('');
+    setEditBookAuthor('');
+    setEditBookTotalPages('');
+    setEditBookCurrentPage('0');
+    setEditBookNotes('');
+  };
+
+  const handleSaveEditBook = (e) => {
+    e.preventDefault();
+    if (!editingBook) return;
+    if (!editBookTitle.trim() || !editBookTotalPages) {
+      showAlert('Campos Obrigatórios', 'Por favor, informe o título e o total de páginas do livro.');
+      return;
+    }
+
+    const total = parseInt(editBookTotalPages, 10);
+    const current = parseInt(editBookCurrentPage, 10) || 0;
+
+    if (isNaN(total) || total <= 0) {
+      showAlert('Total de Páginas Inválido', 'O total de páginas deve ser maior que zero.');
+      return;
+    }
+
+    if (current < 0 || current > total) {
+      showAlert('Página Atual Inválida', 'A página atual deve estar entre 0 e o total de páginas.');
+      return;
+    }
+
+    if (onUpdateBook) {
+      onUpdateBook(editingBook.id, {
+        title: editBookTitle.trim(),
+        author: editBookAuthor.trim(),
+        totalPages: total,
+        currentPage: current,
+        category: editBookCategory,
+        coverColor: editBookCoverColor,
+        status: current >= total ? 'completed' : editBookStatus,
+        notes: editBookNotes.trim()
+      });
+    }
+
+    handleCloseEditBookModal();
   };
 
   const formatTimer = (secs) => {
@@ -701,25 +771,49 @@ export function BooksView({
                           <span style={{ fontSize: '0.72rem', padding: '2px 6px', borderRadius: '6px', background: 'rgba(0,0,0,0.4)', color: '#fbbf24', fontWeight: 700 }}>
                             {bookQuotes.length} {bookQuotes.length === 1 ? 'citação' : 'citações'}
                           </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (confirm(`Deseja realmente excluir "${book.title}"?`)) {
-                                onDeleteBook(book.id);
-                              }
-                            }}
-                            style={{
-                              background: 'rgba(0,0,0,0.3)',
-                              border: 'none',
-                              color: '#fff',
-                              cursor: 'pointer',
-                              padding: '4px 6px',
-                              borderRadius: '6px'
-                            }}
-                            title="Excluir livro"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {onUpdateBook && (
+                            <button
+                              onClick={(e) => handleOpenEditBookModal(book, e)}
+                              style={{
+                                background: 'rgba(0,0,0,0.3)',
+                                border: 'none',
+                                color: '#fff',
+                                cursor: 'pointer',
+                                padding: '4px 6px',
+                                borderRadius: '6px',
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                              onMouseOver={(e) => e.currentTarget.style.color = '#38bdf8'}
+                              onMouseOut={(e) => e.currentTarget.style.color = '#fff'}
+                              title="Editar livro"
+                            >
+                              <Edit3 size={14} />
+                            </button>
+                          )}
+                          {onDeleteBook && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                promptDeleteBook(book);
+                              }}
+                              style={{
+                                background: 'rgba(0,0,0,0.3)',
+                                border: 'none',
+                                color: '#fff',
+                                cursor: 'pointer',
+                                padding: '4px 6px',
+                                borderRadius: '6px',
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                              onMouseOver={(e) => e.currentTarget.style.color = '#f87171'}
+                              onMouseOut={(e) => e.currentTarget.style.color = '#fff'}
+                              title="Excluir livro"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -925,6 +1019,29 @@ export function BooksView({
               >
                 <Quote size={18} /> {showDirectQuoteForm ? 'Fechar Cadastro' : '+ Cadastrar Citação Direta'}
               </button>
+
+              {onUpdateBook && (
+                <button
+                  onClick={() => handleOpenEditBookModal(selectedBook)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '12px 16px',
+                    borderRadius: '12px',
+                    background: 'rgba(56, 189, 248, 0.25)',
+                    backdropFilter: 'blur(8px)',
+                    color: '#38bdf8',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    border: '1px solid rgba(56, 189, 248, 0.4)',
+                    cursor: 'pointer'
+                  }}
+                  title="Editar este livro"
+                >
+                  <Edit3 size={16} /> Editar Tomo
+                </button>
+              )}
 
               {onDeleteBook && (
                 <button
@@ -2161,6 +2278,235 @@ export function BooksView({
                   }}
                 >
                   Salvar Livro
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Livro */}
+      {editingBook && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              maxWidth: '500px',
+              width: '100%',
+              padding: '28px',
+              border: '1px solid rgba(56, 189, 248, 0.4)',
+              borderRadius: '20px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+              <h3 className="font-cinzel" style={{ fontSize: '1.3rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Edit3 size={22} /> Editar Tomo na Biblioteca
+              </h3>
+              <button
+                type="button"
+                onClick={handleCloseEditBookModal}
+                style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  border: 'none',
+                  color: '#94a3b8',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditBook} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#38bdf8', marginBottom: '4px' }}>
+                  Título do Livro *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Hábitos Atômicos"
+                  value={editBookTitle}
+                  onChange={(e) => setEditBookTitle(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.95rem'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                  Autor
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: James Clear"
+                  value={editBookAuthor}
+                  onChange={(e) => setEditBookAuthor(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.9rem'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                    Total de Páginas *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    placeholder="320"
+                    value={editBookTotalPages}
+                    onChange={(e) => setEditBookTotalPages(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      background: '#1a2030',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#fff',
+                      fontSize: '0.95rem',
+                      fontFamily: 'var(--font-mono)'
+                    }}
+                  />
+                </div>
+
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                    Página Atual
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={editBookCurrentPage}
+                    onChange={(e) => setEditBookCurrentPage(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      background: '#1a2030',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#fff',
+                      fontSize: '0.95rem',
+                      fontFamily: 'var(--font-mono)'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                    Categoria
+                  </label>
+                  <select
+                    value={editBookCategory}
+                    onChange={(e) => setEditBookCategory(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      background: '#1a2030',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#fff',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    {activeCategories.map(cat => {
+                      const catName = typeof cat === 'string' ? cat : cat.name;
+                      return (
+                        <option key={catName} value={catName}>
+                          {catName}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                    Cor da Capa
+                  </label>
+                  <select
+                    value={editBookCoverColor}
+                    onChange={(e) => setEditBookCoverColor(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      background: '#1a2030',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#fff',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    {coverOptions.map(c => (
+                      <option key={c.key} value={c.key}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={handleCloseEditBookModal}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: '#fff',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)',
+                    color: '#000',
+                    fontWeight: 800,
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 10px rgba(56, 189, 248, 0.3)'
+                  }}
+                >
+                  Salvar Alterações
                 </button>
               </div>
             </form>
