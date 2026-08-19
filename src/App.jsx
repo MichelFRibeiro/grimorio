@@ -283,6 +283,7 @@ export function App() {
           <ProcessesView
             processes={processes}
             processSteps={processSteps}
+            questCategories={questCategories}
             onAddProcess={addProcess}
             onStepProcess={stepProcess}
             onDeleteProcess={deleteProcess}

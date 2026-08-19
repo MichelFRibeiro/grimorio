@@ -22,7 +22,20 @@ const getNowDateTimeLocal = () => {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
-export function ProcessesView({ processes, processSteps, onAddProcess, onStepProcess, onDeleteProcess }) {
+export function ProcessesView({ processes, processSteps, questCategories = [], onAddProcess, onStepProcess, onDeleteProcess }) {
+  const defaultCategoryList = [
+    { id: 'cat-1', name: 'Trabalho', color: '#38bdf8' },
+    { id: 'cat-2', name: 'Estudos', color: '#a855f7' },
+    { id: 'cat-3', name: 'Pessoal', color: '#10b981' },
+    { id: 'cat-4', name: 'Projetos', color: '#f59e0b' },
+    { id: 'cat-5', name: 'Saúde', color: '#f43f5e' },
+    { id: 'cat-6', name: 'Finanças', color: '#eab308' }
+  ];
+
+  const activeCategories = Array.isArray(questCategories) && questCategories.length > 0
+    ? questCategories
+    : defaultCategoryList;
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedProcessForStep, setSelectedProcessForStep] = useState(null);
   const [stepUnits, setStepUnits] = useState(1);
@@ -68,7 +81,7 @@ export function ProcessesView({ processes, processSteps, onAddProcess, onStepPro
 
   // New Process Form
   const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState('Trabalho');
+  const [newCategory, setNewCategory] = useState(activeCategories[0]?.name || 'Trabalho');
   const [newUnitName, setNewUnitName] = useState('processos');
   const [newTotalUnits, setNewTotalUnits] = useState('10');
   const [newXpPerUnit, setNewXpPerUnit] = useState('20');
@@ -90,6 +103,7 @@ export function ProcessesView({ processes, processSteps, onAddProcess, onStepPro
     });
 
     setNewTitle('');
+    setNewCategory(activeCategories[0]?.name || 'Trabalho');
     setNewUnitName('processos');
     setNewTotalUnits('10');
     setNewNotes('');
@@ -183,13 +197,17 @@ export function ProcessesView({ processes, processSteps, onAddProcess, onStepPro
             const isHistoryExpanded = !!expandedHistory[process.id];
             const displayedSteps = isHistoryExpanded ? processStepsForThis : processStepsForThis.slice(0, 3);
 
+            const catName = process.category;
+            const catObj = activeCategories.find(c => (typeof c === 'string' ? c : c.name) === catName);
+            const catColor = catObj?.color || '#38bdf8';
+
             return (
               <div
                 key={process.id}
                 className="rpg-card"
                 style={{
                   padding: '20px',
-                  borderLeft: isFinished ? '4px solid #10b981' : '4px solid #06b6d4',
+                  borderLeft: isFinished ? '4px solid #10b981' : `4px solid ${catColor}`,
                   background: isFinished ? 'rgba(19, 23, 34, 0.7)' : '#131722'
                 }}
               >
@@ -204,9 +222,9 @@ export function ProcessesView({ processes, processSteps, onAddProcess, onStepPro
                           fontSize: '0.7rem',
                           padding: '2px 8px',
                           borderRadius: '6px',
-                          background: 'rgba(6, 182, 212, 0.15)',
-                          color: '#38bdf8',
-                          border: '1px solid rgba(6, 182, 212, 0.3)',
+                          background: `${catColor}18`,
+                          color: catColor,
+                          border: `1px solid ${catColor}40`,
                           fontWeight: 700
                         }}
                       >
@@ -697,9 +715,7 @@ export function ProcessesView({ processes, processSteps, onAddProcess, onStepPro
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
                     Categoria
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Trabalho, Auditoria"
+                  <select
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
                     style={{
@@ -711,7 +727,16 @@ export function ProcessesView({ processes, processSteps, onAddProcess, onStepPro
                       color: '#fff',
                       fontSize: '0.9rem'
                     }}
-                  />
+                  >
+                    {activeCategories.map(c => {
+                      const name = typeof c === 'string' ? c : c.name;
+                      return (
+                        <option key={name} value={name} style={{ background: '#1a2030', color: '#fff' }}>
+                          {name}
+                        </option>
+                      );
+                    })}
+                  </select>
                 </div>
 
                 <div style={{ flex: 1 }}>
