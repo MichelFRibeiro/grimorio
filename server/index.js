@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, saveDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, findOrCreateUser } from './db.js';
+import { getDb, saveDb, initDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, findOrCreateUser } from './db.js';
 import { computeAnalytics } from './analytics.js';
 import {
   verifyGoogleToken,
@@ -1520,6 +1520,13 @@ app.get('*', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`🗡️ [Grimório de Missões] Servidor iniciado com sucesso em http://localhost:${PORT}`);
+initDb().then(() => {
+  app.listen(PORT, () => {
+    console.log(`🗡️ [Grimório de Missões] Servidor iniciado com sucesso em http://localhost:${PORT}`);
+  });
+}).catch(err => {
+  console.error('Erro na inicialização do DB:', err);
+  app.listen(PORT, () => {
+    console.log(`🗡️ [Grimório de Missões] Servidor iniciado com fallback local em http://localhost:${PORT}`);
+  });
 });

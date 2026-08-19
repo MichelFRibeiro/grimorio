@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import pg from 'pg';
 
+const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_DIR = path.join(__dirname, '..', 'data');
@@ -10,6 +12,20 @@ const DB_FILE = path.join(DATA_DIR, 'database.json');
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+let pool = null;
+
+export function getPool() {
+  if (pool) return pool;
+  const connectionString = process.env.DATABASE_URL;
+  if (connectionString) {
+    pool = new Pool({
+      connectionString,
+      ssl: { rejectUnauthorized: false }
+    });
+  }
+  return pool;
 }
 
 // XP needed for a given level
@@ -38,7 +54,7 @@ export const defaultQuestCategories = [
   { id: 'cat-6', name: 'Finanças', color: '#eab308', icon: 'Coins' }
 ];
 
-const defaultDatabase = () => {
+export const defaultDatabase = () => {
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
 
@@ -90,8 +106,83 @@ const defaultDatabase = () => {
   };
 };
 
-// In-memory cache synced with disk
+export function sanitizeDb(db) {
+  if (!db) return defaultDatabase();
+  if (!db.quests) db.quests = [];
+  if (!db.questCategories || db.questCategories.length === 0) {
+    db.questCategories = [...defaultQuestCategories];
+  }
+  if (!db.books) db.books = [];
+  if (!db.readingSessions) db.readingSessions = [];
+  if (!db.examQuestions) db.examQuestions = [];
+  if (!db.processes) db.processes = [];
+  if (!db.processSteps) db.processSteps = [];
+  if (!db.habits) db.habits = [];
+  if (!db.rewards) db.rewards = [];
+  if (!db.rewardRedemptions) db.rewardRedemptions = [];
+  if (!db.actionLogs) db.actionLogs = [];
+  if (!db.users) db.users = [];
+  if (!db.userProfile) db.userProfile = defaultDatabase().userProfile;
+  if (!db.bossRaid) db.bossRaid = defaultDatabase().bossRaid;
+  return db;
+}
+
+// In-memory cache synced with disk and PostgreSQL
 let cachedDb = null;
+
+export async function initDb() {
+  const p = getPool();
+  if (p) {
+    try {
+      // 1. Ensure table exists
+      await p.query(`
+        CREATE TABLE IF NOT EXISTS grimorio_store (
+          key VARCHAR(50) PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `);
+
+      // 2. Try loading main record
+      const res = await p.query(`SELECT data FROM grimorio_store WHERE key = 'main' LIMIT 1;`);
+      if (res.rows.length > 0 && res.rows[0].data) {
+        cachedDb = sanitizeDb(res.rows[0].data);
+        console.log('🔮 [Grimório DB] Conectado e sincronizado com PostgreSQL (Supabase)!');
+        return cachedDb;
+      }
+
+      // 3. If empty in PostgreSQL, migrate from local database.json or defaults
+      let initialData = null;
+      if (fs.existsSync(DB_FILE)) {
+        try {
+          const raw = fs.readFileSync(DB_FILE, 'utf-8');
+          initialData = JSON.parse(raw);
+        } catch (e) {
+          console.warn('Erro ao ler database.json para migração inicial:', e.message);
+        }
+      }
+      if (!initialData) initialData = defaultDatabase();
+      initialData = sanitizeDb(initialData);
+
+      await p.query(`
+        INSERT INTO grimorio_store (key, data, updated_at)
+        VALUES ('main', $1, NOW())
+        ON CONFLICT (key) DO UPDATE
+        SET data = $1, updated_at = NOW();
+      `, [initialData]);
+
+      cachedDb = initialData;
+      console.log('🔮 [Grimório DB] PostgreSQL (Supabase) inicializado com sucesso e dados migrados!');
+      return cachedDb;
+    } catch (err) {
+      console.error('❌ [Grimório DB] Erro ao conectar ao PostgreSQL, usando fallback local:', err.message);
+    }
+  }
+
+  // Fallback to local file
+  getDb();
+  return cachedDb;
+}
 
 export function getDb() {
   if (cachedDb) return cachedDb;
@@ -100,13 +191,7 @@ export function getDb() {
     try {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
       cachedDb = JSON.parse(raw);
-      if (!cachedDb.examQuestions) cachedDb.examQuestions = [];
-      if (!cachedDb.books) cachedDb.books = [];
-      if (!cachedDb.readingSessions) cachedDb.readingSessions = [];
-      if (!cachedDb.users) cachedDb.users = [];
-      if (!cachedDb.questCategories || cachedDb.questCategories.length === 0) {
-        cachedDb.questCategories = [...defaultQuestCategories];
-      }
+      cachedDb = sanitizeDb(cachedDb);
       return cachedDb;
     } catch (err) {
       console.error('Error loading database file, initializing defaults:', err);
@@ -119,11 +204,26 @@ export function getDb() {
 }
 
 export function saveDb(data) {
-  cachedDb = data;
+  cachedDb = sanitizeDb(data);
+
+  // 1. Save local backup file
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    fs.writeFileSync(DB_FILE, JSON.stringify(cachedDb, null, 2), 'utf-8');
   } catch (err) {
-    console.error('Error saving database:', err);
+    console.error('Error saving local database backup:', err);
+  }
+
+  // 2. Save to Postgres if available
+  const p = getPool();
+  if (p) {
+    p.query(`
+      INSERT INTO grimorio_store (key, data, updated_at)
+      VALUES ('main', $1, NOW())
+      ON CONFLICT (key) DO UPDATE
+      SET data = $1, updated_at = NOW();
+    `, [cachedDb]).catch(err => {
+      console.error('❌ [Grimório DB] Erro ao persistir dados no PostgreSQL:', err.message);
+    });
   }
 }
 
