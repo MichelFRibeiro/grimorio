@@ -166,10 +166,10 @@ export function findOrCreateUser({ email, name, picture, googleId }) {
 }
 
 // Reward player helper: handles XP, leveling, coins, stats, boss damage and action logging
-export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpower = 0, consistency = 0, actionType, entityId, title, details = {} }) {
+export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpower = 0, consistency = 0, actionType, entityId, title, details = {}, timestamp }) {
   const db = getDb();
   const profile = db.userProfile;
-  const now = new Date();
+  const now = timestamp ? new Date(timestamp) : new Date();
 
   // Add stats
   profile.stats.wisdom = (profile.stats.wisdom || 0) + wisdom;

@@ -1116,7 +1116,7 @@ app.post('/api/processes/:id/step', (req, res) => {
     const process = db.processes.find(p => p.id === req.params.id);
     if (!process) return res.status(404).json({ error: 'Processo não encontrado' });
 
-    const { unitsAdded, stepNote } = req.body;
+    const { unitsAdded, stepNote, timestamp } = req.body;
     const added = parseInt(unitsAdded, 10) || 1;
     const previousUnits = process.completedUnits || 0;
     const newCompleted = Math.min(process.totalUnits, previousUnits + added);
@@ -1126,11 +1126,13 @@ app.post('/api/processes/:id/step', (req, res) => {
       return res.status(400).json({ error: 'Processo já está totalmente concluído!' });
     }
 
+    const stepTimestamp = timestamp || new Date().toISOString();
+
     process.completedUnits = newCompleted;
     const finished = newCompleted >= process.totalUnits;
     if (finished) {
       process.status = 'completed';
-      process.completedAt = new Date().toISOString();
+      process.completedAt = stepTimestamp;
     }
 
     const xp = actualUnitsAdded * process.xpPerUnit + (finished ? 100 : 0);
@@ -1144,7 +1146,8 @@ app.post('/api/processes/:id/step', (req, res) => {
       unitsAdded: actualUnitsAdded,
       totalCompletedNow: newCompleted,
       stepNote: stepNote || '',
-      timestamp: new Date().toISOString(),
+      timestamp: stepTimestamp,
+      createdAt: stepTimestamp,
       xpEarned: xp
     };
 
@@ -1157,7 +1160,8 @@ app.post('/api/processes/:id/step', (req, res) => {
       actionType: 'process_step',
       entityId: process.id,
       title: `${process.title} (+${actualUnitsAdded} ${process.unitName})`,
-      details: { unitsAdded: actualUnitsAdded, finished }
+      details: { unitsAdded: actualUnitsAdded, finished },
+      timestamp: stepTimestamp
     });
 
     saveDb(db);

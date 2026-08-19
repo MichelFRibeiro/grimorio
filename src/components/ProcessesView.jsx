@@ -1,12 +1,38 @@
 import React, { useState } from 'react';
-import { Plus, Layers, CheckCircle2, Zap, Sparkles, Trash2, ArrowUpRight, FileCheck, Check, MessageSquare, AlertCircle } from 'lucide-react';
+import { Plus, Layers, CheckCircle2, Zap, Sparkles, Trash2, ArrowUpRight, FileCheck, Check, MessageSquare, AlertCircle, Clock, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+
+const formatStepDateTime = (timestamp) => {
+  if (!timestamp) return '';
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) return '';
+
+  const dateStr = d.toLocaleDateString('pt-BR');
+  const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `${dateStr} às ${timeStr}`;
+};
+
+const getNowDateTimeLocal = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
 
 export function ProcessesView({ processes, processSteps, onAddProcess, onStepProcess, onDeleteProcess }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedProcessForStep, setSelectedProcessForStep] = useState(null);
   const [stepUnits, setStepUnits] = useState(1);
   const [stepNote, setStepNote] = useState('');
+  const [stepDateTime, setStepDateTime] = useState('');
+  const [expandedHistory, setExpandedHistory] = useState({});
+
+  const toggleHistory = (processId) => {
+    setExpandedHistory(prev => ({ ...prev, [processId]: !prev[processId] }));
+  };
 
   // Confirm Modal State
   const [confirmModal, setConfirmModal] = useState({
@@ -75,6 +101,7 @@ export function ProcessesView({ processes, processSteps, onAddProcess, onStepPro
     setSelectedProcessForStep(process);
     setStepUnits(Math.min(remaining, defaultUnits));
     setStepNote('');
+    setStepDateTime(getNowDateTimeLocal());
   };
 
   const handleConfirmStep = (e) => {
@@ -86,11 +113,13 @@ export function ProcessesView({ processes, processSteps, onAddProcess, onStepPro
 
     onStepProcess(selectedProcessForStep.id, {
       unitsAdded: units,
-      stepNote: stepNote.trim()
+      stepNote: stepNote.trim(),
+      timestamp: stepDateTime ? new Date(stepDateTime).toISOString() : new Date().toISOString()
     });
 
     setSelectedProcessForStep(null);
     setStepNote('');
+    setStepDateTime('');
   };
 
   return (
@@ -146,10 +175,13 @@ export function ProcessesView({ processes, processSteps, onAddProcess, onStepPro
             const isFinished = process.status === 'completed' || completed >= total;
             const remaining = Math.max(0, total - completed);
 
-            // Filter recent steps for this process
-            const recentSteps = (processSteps || [])
+            // Filter and sort steps for this process (newest first)
+            const processStepsForThis = (processSteps || [])
               .filter(s => s.processId === process.id)
-              .slice(0, 3);
+              .sort((a, b) => new Date(b.timestamp || b.createdAt || 0) - new Date(a.timestamp || a.createdAt || 0));
+
+            const isHistoryExpanded = !!expandedHistory[process.id];
+            const displayedSteps = isHistoryExpanded ? processStepsForThis : processStepsForThis.slice(0, 3);
 
             return (
               <div
@@ -316,19 +348,97 @@ export function ProcessesView({ processes, processSteps, onAddProcess, onStepPro
                 )}
 
                 {/* Recent step logs */}
-                {recentSteps.length > 0 && (
+                {processStepsForThis.length > 0 && (
                   <div style={{ marginTop: '8px', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: '6px' }}>
-                      Últimos avanços registrados:
-                    </span>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {recentSteps.map(st => (
-                        <div key={st.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#94a3b8' }}>
-                          <Check size={12} color="#06b6d4" />
-                          <span style={{ color: '#38bdf8', fontWeight: 700 }}>+{st.unitsAdded} {process.unitName}:</span>
-                          <span>{st.stepNote || 'Avanço sem anotação'}</span>
-                        </div>
-                      ))}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                        Últimos avanços registrados ({processStepsForThis.length}):
+                      </span>
+                      {processStepsForThis.length > 3 && (
+                        <button
+                          type="button"
+                          onClick={() => toggleHistory(process.id)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#38bdf8',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontWeight: 600
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                          onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}
+                        >
+                          {isHistoryExpanded ? (
+                            <>Recolher <ChevronUp size={13} /></>
+                          ) : (
+                            <>Ver todos ({processStepsForThis.length}) <ChevronDown size={13} /></>
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {displayedSteps.map(st => {
+                        const stepTime = st.timestamp || st.createdAt;
+                        const formattedDate = formatStepDateTime(stepTime);
+
+                        return (
+                          <div
+                            key={st.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              flexWrap: 'wrap',
+                              gap: '6px 12px',
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              background: 'rgba(255, 255, 255, 0.02)',
+                              border: '1px solid rgba(255, 255, 255, 0.04)',
+                              fontSize: '0.8rem',
+                              color: '#94a3b8'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                              <Check size={13} color="#06b6d4" style={{ flexShrink: 0 }} />
+                              <span style={{ color: '#38bdf8', fontWeight: 700, flexShrink: 0 }}>
+                                +{st.unitsAdded} {st.unitsAdded === 1 ? (process.unitName?.replace(/s$/, '') || 'item') : process.unitName}:
+                              </span>
+                              <span style={{ color: st.stepNote ? '#cbd5e1' : '#64748b', fontStyle: st.stepNote ? 'normal' : 'italic' }}>
+                                {st.stepNote || 'Avanço sem anotação'}
+                              </span>
+                            </div>
+
+                            {formattedDate && (
+                              <span
+                                style={{
+                                  fontSize: '0.72rem',
+                                  color: '#94a3b8',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontFamily: 'var(--font-mono)',
+                                  flexShrink: 0,
+                                  backgroundColor: 'rgba(6, 182, 212, 0.08)',
+                                  border: '1px solid rgba(6, 182, 212, 0.15)',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px'
+                                }}
+                                title="Data e hora em que o avanço foi registrado"
+                              >
+                                <Clock size={11} color="#38bdf8" />
+                                {formattedDate}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -392,6 +502,27 @@ export function ProcessesView({ processes, processSteps, onAddProcess, onStepPro
                     color: '#38bdf8',
                     fontWeight: 800,
                     fontSize: '1.1rem',
+                    fontFamily: 'var(--font-mono)'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                  Data e Hora do Registro
+                </label>
+                <input
+                  type="datetime-local"
+                  value={stepDateTime}
+                  onChange={(e) => setStepDateTime(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.9rem',
                     fontFamily: 'var(--font-mono)'
                   }}
                 />
