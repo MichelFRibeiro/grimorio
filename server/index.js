@@ -1261,12 +1261,13 @@ app.delete('/api/processes/:id', (req, res) => {
 app.post('/api/habits', (req, res) => {
   try {
     const db = getDb();
-    const { title, category, icon, frequency, xpReward, coinReward } = req.body;
+    const { title, description, category, icon, frequency, xpReward, coinReward } = req.body;
     if (!title) return res.status(400).json({ error: 'Título do hábito é obrigatório' });
 
     const newHabit = {
       id: uid('h'),
       title: title.trim(),
+      description: (description || '').trim(),
       category: (category && category.trim()) ? category.trim() : 'Pessoal',
       icon: icon || 'Flame',
       frequency: frequency || 'daily',
@@ -1292,8 +1293,9 @@ app.put('/api/habits/:id', (req, res) => {
     const habit = db.habits.find(h => h.id === req.params.id);
     if (!habit) return res.status(404).json({ error: 'Hábito não encontrado' });
 
-    const { title, category, icon, frequency, xpReward, coinReward } = req.body;
+    const { title, description, category, icon, frequency, xpReward, coinReward } = req.body;
     if (title !== undefined && title.trim()) habit.title = title.trim();
+    if (description !== undefined) habit.description = description.trim();
     if (category !== undefined && category.trim()) habit.category = category.trim();
     if (icon !== undefined) habit.icon = icon;
     if (frequency !== undefined) habit.frequency = frequency;

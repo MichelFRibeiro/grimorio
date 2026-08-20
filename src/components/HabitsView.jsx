@@ -44,6 +44,7 @@ export function HabitsView({
   // New Habit State
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  const [newDesc, setNewDesc] = useState('');
   const [newCategory, setNewCategory] = useState(defaultCatName);
   const [newFrequency, setNewFrequency] = useState('daily');
   const [newXpReward, setNewXpReward] = useState('30');
@@ -52,6 +53,7 @@ export function HabitsView({
   // Edit Habit State
   const [editingHabit, setEditingHabit] = useState(null);
   const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
   const [editCategory, setEditCategory] = useState(defaultCatName);
   const [editFrequency, setEditFrequency] = useState('daily');
   const [editXpReward, setEditXpReward] = useState('30');
@@ -97,6 +99,7 @@ export function HabitsView({
 
     onAddHabit({
       title: newTitle.trim(),
+      description: newDesc.trim(),
       category: newCategory,
       frequency: newFrequency,
       xpReward: parseInt(newXpReward, 10) || 30,
@@ -104,12 +107,14 @@ export function HabitsView({
     });
 
     setNewTitle('');
+    setNewDesc('');
     setShowAddModal(false);
   };
 
   const handleOpenEditHabit = (habit) => {
     setEditingHabit(habit);
     setEditTitle(habit.title || '');
+    setEditDesc(habit.description || '');
     setEditCategory(habit.category || defaultCatName);
     setEditFrequency(habit.frequency || 'daily');
     setEditXpReward(String(habit.xpReward || 30));
@@ -123,6 +128,7 @@ export function HabitsView({
     if (onUpdateHabit) {
       onUpdateHabit(editingHabit.id, {
         title: editTitle.trim(),
+        description: editDesc.trim(),
         category: editCategory,
         frequency: editFrequency,
         xpReward: parseInt(editXpReward, 10) || 30,
@@ -149,6 +155,7 @@ export function HabitsView({
         <button
           onClick={() => {
             setNewCategory(defaultCatName);
+            setNewDesc('');
             setShowAddModal(true);
           }}
           style={{
@@ -289,6 +296,12 @@ export function HabitsView({
                     </div>
                   </div>
 
+                  {habit.description && (
+                    <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '10px', lineHeight: 1.4 }}>
+                      {habit.description}
+                    </p>
+                  )}
+
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: '#94a3b8' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <Sparkles size={14} color="#f59e0b" /> +{habit.xpReward} XP
@@ -404,6 +417,28 @@ export function HabitsView({
                     border: '1px solid rgba(255, 255, 255, 0.15)',
                     color: '#fff',
                     fontSize: '0.95rem'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                  Descrição / Notas
+                </label>
+                <textarea
+                  placeholder="Detalhes adicionais do ritual..."
+                  rows={2}
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.9rem',
+                    resize: 'vertical'
                   }}
                 />
               </div>
@@ -589,6 +624,28 @@ export function HabitsView({
                     border: '1px solid rgba(255, 255, 255, 0.15)',
                     color: '#fff',
                     fontSize: '0.95rem'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                  Descrição / Notas
+                </label>
+                <textarea
+                  placeholder="Detalhes adicionais..."
+                  rows={2}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.9rem',
+                    resize: 'vertical'
                   }}
                 />
               </div>
