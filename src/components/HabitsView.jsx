@@ -14,6 +14,7 @@ import {
   Tag
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { getSaoPauloDateStr } from '../utils/timeUtils';
 
 export function HabitsView({
   habits,
@@ -91,7 +92,7 @@ export function HabitsView({
     });
   };
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getSaoPauloDateStr();
 
   const handleCreateHabit = (e) => {
     e.preventDefault();

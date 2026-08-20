@@ -1,5 +1,13 @@
 import { getDb } from './db.js';
 import { computeCategoryRankings } from './rankings.js';
+import {
+  getSaoPauloDateStr,
+  getSaoPauloMonthStr,
+  getSaoPauloYearStr,
+  getSaoPauloHour,
+  getSaoPauloDayOfWeek,
+  addDaysToDateStr
+} from './timeUtils.js';
 
 export function computeAnalytics() {
   const db = getDb();
@@ -13,21 +21,19 @@ export function computeAnalytics() {
   const habits = db.habits || [];
 
   const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
-  const currentMonthStr = todayStr.substring(0, 7); // '2026-08'
-  const currentYearStr = todayStr.substring(0, 4); // '2026'
+  const todayStr = getSaoPauloDateStr(now);
+  const currentMonthStr = getSaoPauloMonthStr(now); // '2026-08'
+  const currentYearStr = getSaoPauloYearStr(now); // '2026'
 
-  // Calculate start of current week (Monday)
-  const currentDayOfWeek = now.getDay(); // 0 is Sunday, 1 is Monday...
+  // Calculate start of current week (Monday) in São Paulo
+  const currentDayOfWeek = getSaoPauloDayOfWeek(now); // 0 is Sunday, 1 is Monday...
   const diffToMonday = (currentDayOfWeek === 0 ? -6 : 1) - currentDayOfWeek;
-  const mondayDate = new Date(now);
-  mondayDate.setDate(now.getDate() + diffToMonday);
-  const weekStartStr = mondayDate.toISOString().split('T')[0];
+  const weekStartStr = addDaysToDateStr(todayStr, diffToMonday);
 
-  // 1. Hourly Distribution (0 to 23)
+  // 1. Hourly Distribution (0 to 23) in São Paulo
   const hourlyCount = Array(24).fill(0);
   logs.forEach(log => {
-    const h = log.hour !== undefined ? log.hour : new Date(log.timestamp).getHours();
+    const h = log.hour !== undefined ? log.hour : getSaoPauloHour(log.timestamp);
     if (h >= 0 && h < 24) {
       hourlyCount[h] += 1;
     }
@@ -44,11 +50,11 @@ export function computeAnalytics() {
   });
   const peakWindow = `${String(maxHour).padStart(2, '0')}:00 - ${String(Math.min(23, maxHour + 2)).padStart(2, '0')}:00`;
 
-  // 2. Day of Week Distribution (0: Sun, 1: Mon, ..., 6: Sat)
+  // 2. Day of Week Distribution (0: Sun, 1: Mon, ..., 6: Sat) in São Paulo
   const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
   const dayCounts = Array(7).fill(0);
   logs.forEach(log => {
-    const d = log.dayOfWeek !== undefined ? log.dayOfWeek : new Date(log.timestamp).getDay();
+    const d = log.dayOfWeek !== undefined ? log.dayOfWeek : getSaoPauloDayOfWeek(log.timestamp);
     if (d >= 0 && d < 7) {
       dayCounts[d] += 1;
     }
@@ -148,17 +154,19 @@ export function computeAnalytics() {
     };
   };
 
-  const dayQuestions = examQuestions.filter(q => (q.date || q.timestamp?.split('T')[0]) === todayStr);
+  const getEntryDate = (q) => q.date || (q.timestamp ? getSaoPauloDateStr(q.timestamp) : '');
+
+  const dayQuestions = examQuestions.filter(q => getEntryDate(q) === todayStr);
   const weekQuestions = examQuestions.filter(q => {
-    const d = q.date || q.timestamp?.split('T')[0];
+    const d = getEntryDate(q);
     return d >= weekStartStr && d <= todayStr;
   });
   const monthQuestions = examQuestions.filter(q => {
-    const d = q.date || q.timestamp?.split('T')[0];
+    const d = getEntryDate(q);
     return d && d.startsWith(currentMonthStr);
   });
   const yearQuestions = examQuestions.filter(q => {
-    const d = q.date || q.timestamp?.split('T')[0];
+    const d = getEntryDate(q);
     return d && d.startsWith(currentYearStr);
   });
   const totalQuestionsStats = aggregateQuestions(examQuestions);
@@ -201,13 +209,13 @@ export function computeAnalytics() {
     accuracyRate: s.totalSolved > 0 ? Math.round((s.totalCorrect / s.totalSolved) * 1000) / 10 : 0
   })).sort((a, b) => b.totalSolved - a.totalSolved);
 
-  // Question Daily History (Last 14 Days for Charts)
+  // Question Daily History (Last 14 Days for Charts in São Paulo)
   const questionDailyHistory = [];
   for (let i = 13; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-    const dateStr = d.toISOString().split('T')[0];
-    const dayLabel = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const dayLogs = examQuestions.filter(q => (q.date || q.timestamp?.split('T')[0]) === dateStr);
+    const dateStr = addDaysToDateStr(todayStr, -i);
+    const parts = dateStr.split('-');
+    const dayLabel = `${parts[2]}/${parts[1]}`;
+    const dayLogs = examQuestions.filter(q => getEntryDate(q) === dateStr);
     const agg = aggregateQuestions(dayLogs);
     questionDailyHistory.push({
       date: dateStr,

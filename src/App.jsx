@@ -14,6 +14,7 @@ import { OracleAnalytics } from './components/OracleAnalytics';
 import { LevelUpModal } from './components/LevelUpModal';
 import { FloatingToasts } from './components/FloatingToasts';
 import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass } from 'lucide-react';
+import { getSaoPauloDateStr } from './utils/timeUtils';
 
 export function App() {
   const [activeTab, setActiveTab] = useState('quests');
@@ -140,8 +141,8 @@ export function App() {
 
   const pendingQuestsCount = (quests || []).filter(q => !q.completed).length;
   const todayQuestionsCount = (examQuestions || []).filter(q => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    return (q.date || q.timestamp?.split('T')[0]) === todayStr;
+    const todayStr = getSaoPauloDateStr();
+    return (q.date || (q.timestamp ? getSaoPauloDateStr(q.timestamp) : '')) === todayStr;
   }).length;
   const activeBooksCount = (books || []).filter(b => b.status === 'reading').length;
   const activeProcessesCount = (processes || []).filter(p => p.status === 'in_progress').length;

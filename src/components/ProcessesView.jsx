@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Layers, CheckCircle2, Zap, Sparkles, Trash2, ArrowUpRight, FileCheck, Check, MessageSquare, AlertCircle, Clock, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { getSaoPauloNowDateTimeLocal } from '../utils/timeUtils';
 
 const formatStepDateTime = (timestamp) => {
   if (!timestamp) return '';
@@ -13,13 +14,7 @@ const formatStepDateTime = (timestamp) => {
 };
 
 const getNowDateTimeLocal = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+  return getSaoPauloNowDateTimeLocal();
 };
 
 export function ProcessesView({ processes, processSteps, questCategories = [], rankings, onAddProcess, onStepProcess, onDeleteProcess }) {

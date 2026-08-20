@@ -2,6 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
+import {
+  getSaoPauloDateStr,
+  getSaoPauloHour,
+  getSaoPauloDayOfWeek,
+  getYesterdaySaoPauloDateStr
+} from './timeUtils.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -56,7 +62,7 @@ export const defaultQuestCategories = [
 
 export const defaultDatabase = () => {
   const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = getSaoPauloDateStr(now);
 
   return {
     userProfile: {
@@ -309,9 +315,9 @@ export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpow
   }
 
   // Check Daily Streak
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = getSaoPauloDateStr(now);
   if (profile.lastActiveDate !== todayStr) {
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const yesterday = getYesterdaySaoPauloDateStr(now);
     if (profile.lastActiveDate === yesterday) {
       profile.streak = (profile.streak || 0) + 1;
     } else {
@@ -330,8 +336,8 @@ export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpow
     coins,
     details: { ...(details || {}), bossDefeated: bossDefeatedNow },
     timestamp: now.toISOString(),
-    hour: now.getHours(),
-    dayOfWeek: now.getDay(),
+    hour: getSaoPauloHour(now),
+    dayOfWeek: getSaoPauloDayOfWeek(now),
     date: todayStr
   };
   db.actionLogs.unshift(logEntry);

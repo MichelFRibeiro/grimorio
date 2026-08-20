@@ -20,6 +20,7 @@ import {
   PlusCircle
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { getSaoPauloDateStr } from '../utils/timeUtils';
 
 export function QuestsView({
   quests,
@@ -308,7 +309,7 @@ export function QuestsView({
 
   const getDueDateLabel = (dueDate, dueTime) => {
     if (!dueDate) return null;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getSaoPauloDateStr();
     const isToday = dueDate === today;
     const isPast = dueDate < today;
 

@@ -14,6 +14,11 @@ import {
   authMiddleware
 } from './auth.js';
 import { initKeepAlive } from './keepAlive.js';
+import {
+  getSaoPauloDateStr,
+  getSaoPauloHour,
+  getSaoPauloDayOfWeek
+} from './timeUtils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1004,7 +1009,7 @@ app.post('/api/questions', (req, res) => {
     const coins = Math.max(2, Math.floor(correct / 2)) + (accuracyRate >= 80 ? 5 : 0) + (accuracyRate === 100 ? 10 : 0);
 
     const now = new Date();
-    const entryDate = date || now.toISOString().split('T')[0];
+    const entryDate = date || getSaoPauloDateStr(now);
     const chosenCategory = (category && category.trim()) ? category.trim() : 'Estudos';
 
     const newQuestionLog = {
@@ -1315,7 +1320,7 @@ app.post('/api/habits/:id/toggle', (req, res) => {
     const habit = db.habits.find(h => h.id === req.params.id);
     if (!habit) return res.status(404).json({ error: 'Hábito não encontrado' });
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getSaoPauloDateStr();
     const alreadyDoneToday = (habit.history || []).includes(todayStr);
 
     let rewardResult = null;
@@ -1436,9 +1441,9 @@ app.post('/api/rewards/:id/redeem', (req, res) => {
       coins: -reward.cost,
       details: { cost: reward.cost },
       timestamp: new Date().toISOString(),
-      hour: new Date().getHours(),
-      dayOfWeek: new Date().getDay(),
-      date: new Date().toISOString().split('T')[0]
+      hour: getSaoPauloHour(),
+      dayOfWeek: getSaoPauloDayOfWeek(),
+      date: getSaoPauloDateStr()
     });
 
     saveDb(db);
@@ -1496,9 +1501,9 @@ app.post('/api/rewards/redemptions/:id/cancel', (req, res) => {
         coins: refundCoins,
         details: { refund: refundCoins },
         timestamp: new Date().toISOString(),
-        hour: new Date().getHours(),
-        dayOfWeek: new Date().getDay(),
-        date: new Date().toISOString().split('T')[0]
+        hour: getSaoPauloHour(),
+        dayOfWeek: getSaoPauloDayOfWeek(),
+        date: getSaoPauloDateStr()
       });
     }
 
@@ -1540,7 +1545,7 @@ app.post('/api/boss/reset', (req, res) => {
       defeated: false,
       rewardCoins: 200,
       rewardXp: 500,
-      weekStartDate: new Date().toISOString().split('T')[0]
+      weekStartDate: getSaoPauloDateStr()
     };
     saveDb(db);
     res.json({ success: true, bossRaid: db.bossRaid });
@@ -1556,7 +1561,7 @@ app.get('/api/backup/export', (req, res) => {
   try {
     const db = getDb();
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename=grimorio-backup-${new Date().toISOString().split('T')[0]}.json`);
+    res.setHeader('Content-Disposition', `attachment; filename=grimorio-backup-${getSaoPauloDateStr()}.json`);
     res.send(JSON.stringify(db, null, 2));
   } catch (err) {
     res.status(500).json({ error: err.message });

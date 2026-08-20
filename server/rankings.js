@@ -172,41 +172,39 @@ export function getRankIndexForXp(xp) {
 /**
  * Retorna o objeto completo do rank para um determinado XP
  */
+import {
+  getSaoPauloDateStr,
+  getSaoPauloDayOfWeek,
+  addDaysToDateStr
+} from './timeUtils.js';
+
 export function getRankForXp(xp) {
   return RANK_TIERS[getRankIndexForXp(xp)];
 }
 
 /**
- * Calcula os limites da semana (Domingo 00:00:00 até Sábado 23:59:59) para uma dada data.
+ * Calcula os limites da semana (Domingo 00:00:00 até Sábado 23:59:59) para uma dada data no fuso de São Paulo.
  */
 export function getWeekBounds(dateInput = new Date()) {
-  const d = new Date(dateInput);
-  if (isNaN(d.getTime())) {
-    return getWeekBounds(new Date());
-  }
+  const d = typeof dateInput === 'string' || typeof dateInput === 'number' ? new Date(dateInput) : (dateInput || new Date());
+  const validDate = isNaN(d.getTime()) ? new Date() : d;
 
-  // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
-  const day = d.getDay();
+  const spDateStr = getSaoPauloDateStr(validDate);
+  const day = getSaoPauloDayOfWeek(validDate);
 
-  // Início da semana: Domingo 00:00:00 local
-  const sunday = new Date(d);
-  sunday.setDate(d.getDate() - day);
-  sunday.setHours(0, 0, 0, 0);
+  // Início da semana: Domingo 00:00:00 no fuso de São Paulo
+  const sundayDateStr = addDaysToDateStr(spDateStr, -day);
+  const saturdayDateStr = addDaysToDateStr(sundayDateStr, 6);
 
-  // Fim da semana: Sábado 23:59:59.999 local
-  const saturday = new Date(sunday);
-  saturday.setDate(sunday.getDate() + 6);
-  saturday.setHours(23, 59, 59, 999);
+  const sunday = new Date(`${sundayDateStr}T00:00:00-03:00`);
+  const saturday = new Date(`${saturdayDateStr}T23:59:59.999-03:00`);
 
   const startIso = sunday.toISOString();
   const endIso = saturday.toISOString();
-  const weekKey = startIso.split('T')[0]; // Ex: "2026-08-16" (data do domingo)
+  const weekKey = sundayDateStr;
 
-  const sDay = String(sunday.getDate()).padStart(2, '0');
-  const sMonth = String(sunday.getMonth() + 1).padStart(2, '0');
-  const eDay = String(saturday.getDate()).padStart(2, '0');
-  const eMonth = String(saturday.getMonth() + 1).padStart(2, '0');
-  const eYear = saturday.getFullYear();
+  const [sYear, sMonth, sDay] = sundayDateStr.split('-');
+  const [eYear, eMonth, eDay] = saturdayDateStr.split('-');
 
   const weekLabel = `${sDay}/${sMonth} a ${eDay}/${eMonth}/${eYear}`;
   const shortLabel = `${sDay}/${sMonth} - ${eDay}/${eMonth}`;
@@ -353,20 +351,14 @@ export function computeCategoryRankings(db = {}) {
   });
 
   // Gerar a lista de todas as semanas do início até a atual (garante semanas sem atividade)
+  const earliestWeekBounds = getWeekBounds(earliestDate);
+  let iterWeekKey = earliestWeekBounds.weekKey;
+
   const weeksList = [];
-  let iterDate = new Date(earliestDate);
-  // Retroceder até o domingo da data mais antiga
-  iterDate.setDate(iterDate.getDate() - iterDate.getDay());
-  iterDate.setHours(0, 0, 0, 0);
-
-  const currentSunday = currentWeekBounds.sunday;
-
-  while (iterDate <= currentSunday) {
-    const bounds = getWeekBounds(iterDate);
+  while (iterWeekKey <= currentWeekKey) {
+    const bounds = getWeekBounds(new Date(`${iterWeekKey}T12:00:00-03:00`));
     weeksList.push(bounds);
-    // Avançar 7 dias
-    iterDate = new Date(iterDate);
-    iterDate.setDate(iterDate.getDate() + 7);
+    iterWeekKey = addDaysToDateStr(iterWeekKey, 7);
   }
 
   if (weeksList.length === 0 || weeksList[weeksList.length - 1].weekKey !== currentWeekKey) {

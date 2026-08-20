@@ -23,6 +23,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { getSaoPauloDateStr } from '../utils/timeUtils';
 
 const COMMON_SUBJECTS = [
   'Direito Constitucional',
@@ -127,7 +128,7 @@ export function QuestionsView({
   const [correctAnswers, setCorrectAnswers] = useState('19');
   const [durationMinutes, setDurationMinutes] = useState('25');
   const [notes, setNotes] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getSaoPauloDateStr());
 
   // Edit Question Modal State
   const [editingQuestion, setEditingQuestion] = useState(null);
@@ -162,6 +163,7 @@ export function QuestionsView({
   }, [timerSeconds]);
 
   const handleOpenAddModal = () => {
+    setDate(getSaoPauloDateStr());
     setShowAddModal(true);
     setTimerSeconds(0);
     setIsTimerRunning(false);
@@ -211,7 +213,7 @@ export function QuestionsView({
     setEditSubject(item.subject || '');
     setEditTopic(item.topic || '');
     setEditInstitution(item.institution || '');
-    setEditDate(item.date || (item.timestamp ? new Date(item.timestamp).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]));
+    setEditDate(item.date || (item.timestamp ? getSaoPauloDateStr(item.timestamp) : getSaoPauloDateStr()));
     setEditNotes(item.notes || '');
   };
 
