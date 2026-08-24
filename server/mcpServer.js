@@ -1,13 +1,34 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { toolsDefinition, resourcesDefinition, formatError } from './mcpTools.js';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import { z } from 'zod';
 
 /**
- * Active SSE transports map: sessionId -> { transport, server }
+ * Active SSE transports map: sessionId -> { transport, server, token, createdAt }
  */
 const activeSseTransports = new Map();
+
+/**
+ * Shared in-memory bridge client for direct JSON-RPC HTTP calls
+ */
+let directBridgeClient = null;
+
+export async function getDirectMcpBridge() {
+  if (directBridgeClient) return directBridgeClient;
+
+  const server = createMcpServer();
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 'grimorio-direct-bridge', version: '1.0.0' });
+
+  await Promise.all([
+    client.connect(clientTransport),
+    server.connect(serverTransport)
+  ]);
+
+  directBridgeClient = client;
+  return directBridgeClient;
+}
 
 /**
  * Create and configure a new McpServer instance with all tools and resources
@@ -142,25 +163,13 @@ export async function handleSseMessage(req, res) {
 }
 
 /**
- * Convert Zod schema object to JSON Schema format for tools/list
- */
-function getJsonSchemaForTool(tool) {
-  if (!tool.schema || Object.keys(tool.schema).length === 0) {
-    return {
-      type: 'object',
-      properties: {}
-    };
-  }
-
-  const zodObject = z.object(tool.schema);
-  const jsonSchema = zodToJsonSchema(zodObject, { target: 'openApi3' });
-  return jsonSchema;
-}
-
-/**
  * Direct HTTP JSON-RPC 2.0 Request Handler (POST /api/mcp or POST /mcp)
  */
 export async function handleDirectJsonRpc(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
   const body = req.body;
   if (!body || typeof body !== 'object') {
     return res.status(400).json({
@@ -173,13 +182,15 @@ export async function handleDirectJsonRpc(req, res) {
   const { jsonrpc = '2.0', id = null, method, params = {} } = body;
 
   try {
+    const bridge = await getDirectMcpBridge();
+
     switch (method) {
       case 'initialize': {
         return res.json({
           jsonrpc: '2.0',
           id,
           result: {
-            protocolVersion: '2024-11-05',
+            protocolVersion: params?.protocolVersion || '2024-11-05',
             capabilities: {
               tools: { listChanged: false },
               resources: { subscribe: false, listChanged: false },
@@ -202,110 +213,43 @@ export async function handleDirectJsonRpc(req, res) {
       }
 
       case 'tools/list': {
-        const toolsList = toolsDefinition.map(t => ({
-          name: t.name,
-          description: t.description,
-          inputSchema: getJsonSchemaForTool(t)
-        }));
-
+        const toolsResult = await bridge.listTools();
         return res.json({
           jsonrpc: '2.0',
           id,
-          result: {
-            tools: toolsList
-          }
+          result: toolsResult
         });
       }
 
       case 'tools/call': {
-        const toolName = params.name;
-        const toolArgs = params.arguments || {};
-
-        const tool = toolsDefinition.find(t => t.name === toolName);
-        if (!tool) {
-          return res.status(404).json({
-            jsonrpc: '2.0',
-            id,
-            error: { code: -32601, message: `Ferramenta '${toolName}' não encontrada.` }
-          });
-        }
-
-        // Validate arguments against zod schema if present
-        let parsedArgs = toolArgs;
-        if (tool.schema && Object.keys(tool.schema).length > 0) {
-          const zodSchema = z.object(tool.schema);
-          const validation = zodSchema.safeParse(toolArgs);
-          if (!validation.success) {
-            return res.json({
-              jsonrpc: '2.0',
-              id,
-              result: {
-                isError: true,
-                content: [
-                  {
-                    type: 'text',
-                    text: JSON.stringify({
-                      success: false,
-                      error: 'Erro de validação dos argumentos',
-                      details: validation.error.errors
-                    }, null, 2)
-                  }
-                ]
-              }
-            });
-          }
-          parsedArgs = validation.data;
-        }
-
-        const executionResult = await tool.handler(parsedArgs);
+        const callResult = await bridge.callTool({
+          name: params.name,
+          arguments: params.arguments || {}
+        });
         return res.json({
           jsonrpc: '2.0',
           id,
-          result: executionResult
+          result: callResult
         });
       }
 
       case 'resources/list': {
-        const resourcesList = resourcesDefinition.map(r => ({
-          uri: r.uri,
-          name: r.name,
-          description: r.description,
-          mimeType: r.mimeType
-        }));
-
+        const resourcesResult = await bridge.listResources();
         return res.json({
           jsonrpc: '2.0',
           id,
-          result: {
-            resources: resourcesList
-          }
+          result: resourcesResult
         });
       }
 
       case 'resources/read': {
-        const uri = params.uri;
-        const resource = resourcesDefinition.find(r => r.uri === uri);
-        if (!resource) {
-          return res.status(404).json({
-            jsonrpc: '2.0',
-            id,
-            error: { code: -32602, message: `Recurso com URI '${uri}' não encontrado.` }
-          });
-        }
-
-        const content = await resource.handler(uri);
+        const readResult = await bridge.readResource({
+          uri: params.uri
+        });
         return res.json({
           jsonrpc: '2.0',
           id,
-          result: {
-            contents: [
-              {
-                uri: content.uri || uri,
-                mimeType: content.mimeType || 'application/json',
-                text: content.text
-              }
-            ]
-          }
+          result: readResult
         });
       }
 
@@ -324,5 +268,37 @@ export async function handleDirectJsonRpc(req, res) {
       id,
       error: { code: -32603, message: 'Internal error: ' + err.message }
     });
+  }
+}
+
+/**
+ * Direct HTTP GET Discovery Handler (GET /api/mcp or GET /mcp)
+ */
+export async function handleMcpDiscoveryGet(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
+  try {
+    const bridge = await getDirectMcpBridge();
+    const tools = await bridge.listTools();
+    const resources = await bridge.listResources();
+
+    return res.json({
+      status: 'ok',
+      service: 'Grimório de Missões MCP Server',
+      version: '1.0.0',
+      protocolVersion: '2024-11-05',
+      endpoints: {
+        sse: '/mcp/sse',
+        messages: '/mcp/messages',
+        jsonrpc: '/api/mcp'
+      },
+      toolsCount: tools.tools.length,
+      tools: tools.tools,
+      resources: resources.resources
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 }

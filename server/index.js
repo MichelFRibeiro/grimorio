@@ -20,7 +20,7 @@ import {
   getSaoPauloDayOfWeek
 } from './timeUtils.js';
 import { getMcpToken, regenerateMcpToken, mcpAuthMiddleware, mcpSseMessagesAuthMiddleware } from './mcpAuth.js';
-import { handleSseConnection, handleSseMessage, handleDirectJsonRpc } from './mcpServer.js';
+import { handleSseConnection, handleSseMessage, handleDirectJsonRpc, handleMcpDiscoveryGet } from './mcpServer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -128,6 +128,11 @@ app.post('/mcp/messages', mcpSseMessagesAuthMiddleware, (req, res) => {
 // Direct JSON-RPC 2.0 Endpoint (protected with Bearer Token)
 app.post(['/api/mcp', '/mcp'], mcpAuthMiddleware, (req, res) => {
   handleDirectJsonRpc(req, res);
+});
+
+// Direct HTTP GET Discovery Endpoint (protected with Bearer Token)
+app.get(['/api/mcp', '/mcp'], mcpAuthMiddleware, (req, res) => {
+  handleMcpDiscoveryGet(req, res);
 });
 
 // ==========================================

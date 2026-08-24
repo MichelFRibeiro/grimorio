@@ -3,16 +3,16 @@
     "id": "hero-1",
     "name": "Mestre do Foco",
     "level": 6,
-    "xp": 102,
+    "xp": 392,
     "xpToNextLevel": 1187,
-    "coins": 1028,
+    "coins": 1105,
     "title": "Adepto do Foco",
     "avatar": "🧙‍♂️",
     "stats": {
-      "wisdom": 232,
-      "focus": 170,
-      "willpower": 155,
-      "consistency": 85
+      "wisdom": 262,
+      "focus": 195,
+      "willpower": 180,
+      "consistency": 95
     },
     "streak": 1,
     "lastActiveDate": "2026-08-24",
@@ -352,6 +352,32 @@
   ],
   "readingSessions": [
     {
+      "id": "rs-1787575953066-ik6vd0",
+      "bookId": "bk-1787575953060-amatu2",
+      "bookTitle": "Grimório dos Algoritmos Lendários",
+      "startPage": 0,
+      "endPage": 25,
+      "pagesRead": 25,
+      "durationMinutes": 40,
+      "notes": "Capítulo inicial fascinante",
+      "quotes": [
+        {
+          "id": "quo-1787575953066-ygfnn9",
+          "bookId": "bk-1787575953060-amatu2",
+          "bookTitle": "Grimório dos Algoritmos Lendários",
+          "quote": "O foco vence o talento quando o talento procrastina.",
+          "page": 12,
+          "note": "",
+          "createdAt": "2026-08-24T12:52:33.066Z"
+        }
+      ],
+      "xpEarned": 65,
+      "coinsEarned": 10,
+      "wisdomEarned": 30,
+      "date": "2026-08-24",
+      "timestamp": "2026-08-24T12:52:33.066Z"
+    },
+    {
       "id": "rs-1787573688850-cqgj52",
       "bookId": "bk-1787573688846-rx3yai",
       "bookTitle": "Grimório dos Algoritmos Lendários",
@@ -669,6 +695,78 @@
     }
   ],
   "actionLogs": [
+    {
+      "id": "log-1787575953077-i950",
+      "type": "process_step",
+      "entityId": "proc-1787575953074-lsgyn9",
+      "title": "Revisão de 10 Relatórios Técnicos (+3 relatórios)",
+      "xp": 45,
+      "coins": 9,
+      "details": {
+        "category": "Trabalho",
+        "finished": false,
+        "bossDefeated": false
+      },
+      "timestamp": "2026-08-24T12:52:33.077Z",
+      "hour": 9,
+      "dayOfWeek": 1,
+      "date": "2026-08-24"
+    },
+    {
+      "id": "log-1787575953067-u6mk",
+      "type": "reading_session",
+      "entityId": "bk-1787575953060-amatu2",
+      "title": "Grimório dos Algoritmos Lendários (+25 págs, 1 citações)",
+      "xp": 65,
+      "coins": 10,
+      "details": {
+        "category": "Estudos",
+        "pagesRead": 25,
+        "durationMinutes": 40,
+        "finishedBook": false,
+        "quotesCount": 1,
+        "bossDefeated": false
+      },
+      "timestamp": "2026-08-24T12:52:33.066Z",
+      "hour": 9,
+      "dayOfWeek": 1,
+      "date": "2026-08-24"
+    },
+    {
+      "id": "log-1787575953052-wmti",
+      "type": "quest_complete",
+      "entityId": "q-1787575953045-7a3eqh",
+      "title": "Missão Épica Criada via MCP",
+      "xp": 150,
+      "coins": 50,
+      "details": {
+        "category": "Projetos",
+        "priority": "epica",
+        "bossDefeated": false
+      },
+      "timestamp": "2026-08-24T12:52:33.052Z",
+      "hour": 9,
+      "dayOfWeek": 1,
+      "date": "2026-08-24"
+    },
+    {
+      "id": "log-1787575953028-9n8f",
+      "type": "habit_toggle",
+      "entityId": "h-1787575953024-euuv18",
+      "title": "Ritual Concluído: Ritual MCP Teste 3x/Semana",
+      "xp": 30,
+      "coins": 8,
+      "details": {
+        "category": "Saúde",
+        "date": "2026-08-24",
+        "streak": 1,
+        "bossDefeated": false
+      },
+      "timestamp": "2026-08-24T12:52:33.028Z",
+      "hour": 9,
+      "dayOfWeek": 1,
+      "date": "2026-08-24"
+    },
     {
       "id": "log-1787573688860-km19",
       "type": "process_step",
