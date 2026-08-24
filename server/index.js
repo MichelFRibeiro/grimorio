@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, saveDb, initDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, findOrCreateUser } from './db.js';
+import { getDb, saveDb, initDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG } from './db.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
 import {
@@ -796,12 +796,16 @@ app.put('/api/reading-sessions/:id', (req, res) => {
         boss.currentHp = Math.max(0, boss.currentHp - deltaDmg);
         if (boss.currentHp === 0) {
           boss.defeated = true;
+          boss.defeatsCount = (boss.defeatsCount || 0) + 1;
           profile.coins += boss.rewardCoins;
           profile.xp += boss.rewardXp;
         }
       } else if (deltaDmg < 0) {
         boss.currentHp = Math.min(boss.maxHp, boss.currentHp - deltaDmg);
-        if (boss.defeated && boss.currentHp > 0) boss.defeated = false;
+        if (boss.defeated && boss.currentHp > 0) {
+          boss.defeated = false;
+          boss.defeatsCount = Math.max(0, (boss.defeatsCount || 1) - 1);
+        }
       }
     }
 
@@ -884,7 +888,10 @@ app.delete('/api/reading-sessions/:id', (req, res) => {
     if (boss) {
       const totalDmg = Math.round(xpToRevert * 0.8 + coinsToRevert * 1.2);
       boss.currentHp = Math.min(boss.maxHp, boss.currentHp + totalDmg);
-      if (boss.defeated && boss.currentHp > 0) boss.defeated = false;
+      if (boss.defeated && boss.currentHp > 0) {
+        boss.defeated = false;
+        boss.defeatsCount = Math.max(0, (boss.defeatsCount || 1) - 1);
+      }
     }
 
     // Remove matching action log
@@ -1633,17 +1640,24 @@ app.delete('/api/rewards/redemptions/:id', (req, res) => {
 app.post('/api/boss/reset', (req, res) => {
   try {
     const db = getDb();
-    db.bossRaid = {
-      id: uid('boss'),
-      name: 'O Dragão da Procrastinação',
-      subtitle: 'Chefe Semanal - Derrote-o até domingo!',
-      maxHp: 600,
-      currentHp: 600,
-      defeated: false,
-      rewardCoins: 200,
-      rewardXp: 500,
-      weekStartDate: getSaoPauloDateStr()
-    };
+    const currentBoss = db.bossRaid;
+    let targetLevel;
+
+    if (req.body && req.body.level !== undefined) {
+      targetLevel = Math.max(1, parseInt(req.body.level, 10) || 1);
+    } else if (currentBoss && currentBoss.defeated) {
+      targetLevel = (currentBoss.level || 1) + 1;
+    } else {
+      targetLevel = currentBoss?.level || 1;
+    }
+
+    const forceName = req.body?.name || null;
+    db.bossRaid = createBossRaid({
+      level: targetLevel,
+      currentBoss,
+      forceName
+    });
+
     saveDb(db);
     res.json({ success: true, bossRaid: db.bossRaid });
   } catch (err) {

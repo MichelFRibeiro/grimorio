@@ -2,11 +2,11 @@
   "userProfile": {
     "id": "hero-1",
     "name": "Mestre do Foco",
-    "level": 6,
-    "xp": 392,
-    "xpToNextLevel": 1187,
-    "coins": 1105,
-    "title": "Adepto do Foco",
+    "level": 7,
+    "xp": 805,
+    "xpToNextLevel": 1440,
+    "coins": 1910,
+    "title": "Estrategista do Tempo",
     "avatar": "🧙‍♂️",
     "stats": {
       "wisdom": 262,
@@ -20,15 +20,18 @@
     "email": "convidado@grimorio.app"
   },
   "bossRaid": {
-    "id": "boss-1",
-    "name": "O Dragão da Procrastinação",
-    "subtitle": "Chefe Semanal - Derrote-o até domingo!",
+    "id": "boss-1787582565049-iym46s",
+    "level": 1,
+    "name": "O Behemoth do Imediatismo",
+    "subtitle": "Fera selvagem sedenta por dopamina rápida e prazer efêmero. Conquiste a vitória do longo prazo!",
+    "icon": "🦏",
     "maxHp": 500,
-    "currentHp": 0,
-    "defeated": true,
+    "currentHp": 52,
+    "defeated": false,
     "rewardCoins": 150,
     "rewardXp": 400,
-    "weekStartDate": "2026-08-17"
+    "defeatsCount": 0,
+    "weekStartDate": "2026-08-24"
   },
   "quests": [
     {
@@ -695,6 +698,36 @@
     }
   ],
   "actionLogs": [
+    {
+      "id": "log-1787582565046-tnqz",
+      "type": "fatal_dmg",
+      "entityId": "fatal-1",
+      "title": "Golpe Final",
+      "xp": 1000,
+      "coins": 500,
+      "details": {
+        "bossDefeated": true
+      },
+      "timestamp": "2026-08-24T14:42:45.046Z",
+      "hour": 11,
+      "dayOfWeek": 1,
+      "date": "2026-08-24"
+    },
+    {
+      "id": "log-1787582565044-zpa7",
+      "type": "test_dmg",
+      "entityId": "test-1",
+      "title": "Ataque Teste",
+      "xp": 200,
+      "coins": 50,
+      "details": {
+        "bossDefeated": false
+      },
+      "timestamp": "2026-08-24T14:42:45.043Z",
+      "hour": 11,
+      "dayOfWeek": 1,
+      "date": "2026-08-24"
+    },
     {
       "id": "log-1787575953077-i950",
       "type": "process_step",

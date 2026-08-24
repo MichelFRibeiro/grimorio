@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getDb, saveDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel } from './db.js';
+import { getDb, saveDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, createBossRaid } from './db.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings } from './rankings.js';
 import {
@@ -1394,23 +1394,37 @@ export const toolsDefinition = [
   },
   {
     name: 'reset_boss_raid',
-    description: 'Reiniciar o Chefe Semanal da Procrastinação com HP restaurado.',
-    schema: {},
-    handler: async () => {
+    description: 'Invocar um novo Chefe Semanal ou avançar para o próximo nível (+10% de vida e recompensas). Escolhe dinamicamente um novo chefe motivador com nome e ícone exclusivos.',
+    schema: {
+      level: z.number().int().positive().optional().describe('Nível do chefe desejado (opcional. Se omitido, avança 1 nível caso o atual tenha sido derrotado)'),
+      name: z.string().optional().describe('Nome forçado para o chefe (opcional)')
+    },
+    handler: async (args = {}) => {
       const db = getDb();
-      db.bossRaid = {
-        id: uid('boss'),
-        name: 'O Dragão da Procrastinação',
-        subtitle: 'Chefe Semanal - Derrote-o até domingo!',
-        maxHp: 600,
-        currentHp: 600,
-        defeated: false,
-        rewardCoins: 200,
-        rewardXp: 500,
-        weekStartDate: getSaoPauloDateStr()
-      };
+      const currentBoss = db.bossRaid;
+      let targetLevel;
+
+      if (args.level !== undefined) {
+        targetLevel = Math.max(1, args.level);
+      } else if (currentBoss && currentBoss.defeated) {
+        targetLevel = (currentBoss.level || 1) + 1;
+      } else {
+        targetLevel = currentBoss?.level || 1;
+      }
+
+      db.bossRaid = createBossRaid({
+        level: targetLevel,
+        currentBoss,
+        forceName: args.name || null
+      });
       saveDb(db);
-      return formatSuccess(db.bossRaid, '🐉 Chefe Semanal da Procrastinação reiniciado com sucesso!');
+
+      const icon = db.bossRaid.icon || '🐉';
+      const pctStronger = db.bossRaid.level > 1 ? ` (+${Math.round((Math.pow(1.10, db.bossRaid.level - 1) - 1) * 100)}% poder)` : '';
+      return formatSuccess(
+        db.bossRaid,
+        `${icon} Chefe Nível ${db.bossRaid.level} invocado: "${db.bossRaid.name}" com ${db.bossRaid.maxHp} HP${pctStronger}!`
+      );
     }
   },
 

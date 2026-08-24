@@ -60,6 +60,140 @@ export const defaultQuestCategories = [
   { id: 'cat-6', name: 'Finanças', color: '#eab308', icon: 'Coins' }
 ];
 
+export const uid = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+
+export const BOSS_CATALOG = [
+  {
+    name: 'O Dragão da Procrastinação',
+    subtitle: 'A fera alada que sussurra "deixe para amanhã". Derrote-o com foco imediato!',
+    icon: '🐉',
+    theme: 'procrastinacao'
+  },
+  {
+    name: 'O Titã da Distração Infinita',
+    subtitle: 'Senhor do feed sem fim e notificações vazias. Corte seus tentáculos com disciplina!',
+    icon: '🌀',
+    theme: 'distracao'
+  },
+  {
+    name: 'O Colosso da Paralisia por Análise',
+    subtitle: 'A estátua de pedra que congela a ação em planejamentos eternos. Quebre sua couraça com execução!',
+    icon: '🗿',
+    theme: 'overthinking'
+  },
+  {
+    name: 'A Hidra da Insegurança & Dúvida',
+    subtitle: 'Monstro de muitas cabeças que sussurra incertezas. Destrua suas dúvidas com conhecimento e estudo!',
+    icon: '🐍',
+    theme: 'inseguranca'
+  },
+  {
+    name: 'O Arquimago da Falsa Produtividade',
+    subtitle: 'O ilusionista que gasta horas organizando em vez de realizar. Dissipe suas ilusões com tarefas reais!',
+    icon: '🧙‍♂️',
+    theme: 'falsa_produtividade'
+  },
+  {
+    name: 'O Demônio da Sobrecarga Mental',
+    subtitle: 'Criatura tempestuosa que torna tudo urgente e caótico. Domine o caos com uma ação de cada vez!',
+    icon: '👹',
+    theme: 'sobrecarga'
+  },
+  {
+    name: 'O Devorador de Prazos do Abismo',
+    subtitle: 'A besta que devora horas, dias e oportunidades. Recupere o controle do seu tempo!',
+    icon: '⏳',
+    theme: 'tempo'
+  },
+  {
+    name: 'O Golem do Cansaço Ilusório',
+    subtitle: 'O guardião pesado que te convence a desistir antes do fim. Supere o cansaço com constância inabalável!',
+    icon: '🪨',
+    theme: 'resistencia'
+  },
+  {
+    name: 'O Leviatã da Autossabotagem',
+    subtitle: 'Sombra das profundezas que tenta diminuir suas conquistas. Mostre sua força e merecimento!',
+    icon: '🐙',
+    theme: 'autossabotagem'
+  },
+  {
+    name: 'O Behemoth do Imediatismo',
+    subtitle: 'Fera selvagem sedenta por dopamina rápida e prazer efêmero. Conquiste a vitória do longo prazo!',
+    icon: '🦏',
+    theme: 'imediatismo'
+  },
+  {
+    name: 'O Espectro da Zona de Conforto',
+    subtitle: 'Fantasma sedutor que quer mantê-lo estagnado. Rompa as correntes e avance rumo ao topo!',
+    icon: '👻',
+    theme: 'conforto'
+  },
+  {
+    name: 'O Soberano da Síndrome do Impostor',
+    subtitle: 'Monarca sombrio que questiona sua capacidade na carreira e nos estudos. Prove o seu real valor!',
+    icon: '👑',
+    theme: 'impostor'
+  },
+  {
+    name: 'A Quimera da Hesitação',
+    subtitle: 'Predador veloz que ataca no momento da decisão. Execute o primeiro passo sem vacilar!',
+    icon: '🦁',
+    theme: 'hesitacao'
+  },
+  {
+    name: 'O Basilisco do Desânimo',
+    subtitle: 'Monstro cujo olhar petrifica a motivação. Incendeie seu espírito com vitórias diárias!',
+    icon: '🦎',
+    theme: 'desanimo'
+  },
+  {
+    name: 'O Senhor das Justificativas',
+    subtitle: 'Criatura astuta que cria desculpas perfeitas para adiar o triunfo. Transforme desculpas em resultados!',
+    icon: '🎭',
+    theme: 'desculpas'
+  }
+];
+
+export function createBossRaid({ level = 1, currentBoss = null, forceName = null } = {}) {
+  const targetLevel = Math.max(1, parseInt(level, 10) || 1);
+  const hp = Math.round(500 * Math.pow(1.10, targetLevel - 1));
+  const xp = Math.round(400 * Math.pow(1.10, targetLevel - 1));
+  const coins = Math.round(150 * Math.pow(1.10, targetLevel - 1));
+
+  let catalogEntry;
+  if (forceName) {
+    catalogEntry = BOSS_CATALOG.find(b => b.name.toLowerCase() === forceName.toLowerCase()) || {
+      name: forceName,
+      subtitle: `Chefe Nível ${targetLevel} - Supere seus limites com foco total!`,
+      icon: '🐉'
+    };
+  } else {
+    const currentName = currentBoss?.name;
+    const candidates = BOSS_CATALOG.filter(b => b.name !== currentName);
+    catalogEntry = candidates[Math.floor(Math.random() * candidates.length)] || BOSS_CATALOG[0];
+  }
+
+  const prevDefeats = currentBoss?.defeatsCount !== undefined
+    ? currentBoss.defeatsCount
+    : (targetLevel > 1 ? targetLevel - 1 : 0);
+
+  return {
+    id: uid('boss'),
+    level: targetLevel,
+    name: catalogEntry.name,
+    subtitle: catalogEntry.subtitle,
+    icon: catalogEntry.icon || '🐉',
+    maxHp: hp,
+    currentHp: hp,
+    defeated: false,
+    rewardCoins: coins,
+    rewardXp: xp,
+    defeatsCount: prevDefeats,
+    weekStartDate: getSaoPauloDateStr()
+  };
+}
+
 export const defaultDatabase = () => {
   const now = new Date();
   const todayStr = getSaoPauloDateStr(now);
@@ -88,17 +222,7 @@ export const defaultDatabase = () => {
     },
     users: [],
     questCategories: [...defaultQuestCategories],
-    bossRaid: {
-      id: 'boss-1',
-      name: 'O Dragão da Procrastinação',
-      subtitle: 'Chefe Semanal - Derrote-o até domingo!',
-      maxHp: 500,
-      currentHp: 500,
-      defeated: false,
-      rewardCoins: 150,
-      rewardXp: 400,
-      weekStartDate: todayStr
-    },
+    bossRaid: createBossRaid({ level: 1 }),
     quests: [],
     books: [],
     readingSessions: [],
@@ -129,7 +253,23 @@ export function sanitizeDb(db) {
   if (!db.actionLogs) db.actionLogs = [];
   if (!db.users) db.users = [];
   if (!db.userProfile) db.userProfile = defaultDatabase().userProfile;
-  if (!db.bossRaid) db.bossRaid = defaultDatabase().bossRaid;
+  if (!db.bossRaid) {
+    db.bossRaid = createBossRaid({ level: 1 });
+  } else {
+    if (!db.bossRaid.level) db.bossRaid.level = 1;
+    if (db.bossRaid.defeatsCount === undefined) {
+      db.bossRaid.defeatsCount = db.bossRaid.defeated ? 1 : 0;
+    }
+    if (!db.bossRaid.icon) {
+      const match = BOSS_CATALOG.find(b => b.name === db.bossRaid.name);
+      db.bossRaid.icon = match ? match.icon : '🐉';
+    }
+    if (!db.bossRaid.maxHp) db.bossRaid.maxHp = 500;
+    if (db.bossRaid.currentHp === undefined) db.bossRaid.currentHp = db.bossRaid.maxHp;
+    if (db.bossRaid.defeated === undefined) db.bossRaid.defeated = false;
+    if (!db.bossRaid.rewardCoins) db.bossRaid.rewardCoins = 150;
+    if (!db.bossRaid.rewardXp) db.bossRaid.rewardXp = 400;
+  }
   return db;
 }
 
@@ -308,6 +448,7 @@ export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpow
     boss.currentHp = Math.max(0, boss.currentHp - totalDmg);
     if (boss.currentHp === 0) {
       boss.defeated = true;
+      boss.defeatsCount = (boss.defeatsCount || 0) + 1;
       bossDefeatedNow = true;
       profile.coins += boss.rewardCoins;
       profile.xp += boss.rewardXp;
@@ -408,6 +549,7 @@ export function revertPlayerReward({ xp = 0, coins = 0, wisdom = 0, focus = 0, w
     boss.currentHp = Math.min(boss.maxHp, boss.currentHp + totalDmg);
     if (actionDefeatedBoss && boss.currentHp > 0) {
       boss.defeated = false;
+      boss.defeatsCount = Math.max(0, (boss.defeatsCount || 1) - 1);
       profile.coins = Math.max(0, profile.coins - boss.rewardCoins);
       profile.xp -= boss.rewardXp;
       while (profile.xp < 0 && profile.level > 1) {
