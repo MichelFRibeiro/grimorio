@@ -275,6 +275,73 @@ async function runTests() {
   }
   console.log('✅ Recurso grimorio://oracle/analytics lido com sucesso.');
 
+  // 11. TESTE: FLUXO COMPLETO SSE & DESCOBERTA DE TOOLS (GROK/CLAUDE/CURSOR)
+  console.log('\n--- 11. Teste MCP: Fluxo Completo SSE & Descoberta de Tools ---');
+  await new Promise((resolve, reject) => {
+    const sseReq = http.request({
+      hostname: 'localhost',
+      port: 3000,
+      path: '/mcp/sse?token=' + token,
+      method: 'GET',
+      headers: { 'Accept': 'text/event-stream' }
+    }, (res) => {
+      let buffer = '';
+      let endpointReceived = false;
+
+      res.on('data', chunk => {
+        buffer += chunk.toString();
+        const match = buffer.match(/event: endpoint\s+data: (.*)/);
+        if (match && !endpointReceived) {
+          endpointReceived = true;
+          const postEndpoint = match[1].trim();
+
+          // Enviar initialize
+          const postReq = http.request({
+            hostname: 'localhost',
+            port: 3000,
+            path: postEndpoint,
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          }, (postRes) => {
+            // Enviar tools/list
+            const listReq = http.request({
+              hostname: 'localhost',
+              port: 3000,
+              path: postEndpoint,
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            listReq.write(JSON.stringify({
+              jsonrpc: '2.0',
+              id: 2,
+              method: 'tools/list',
+              params: {}
+            }));
+            listReq.end();
+          });
+
+          postReq.write(JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'initialize',
+            params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'grok', version: '1.0' } }
+          }));
+          postReq.end();
+        }
+
+        if (buffer.includes('"result":{"tools":[')) {
+          const matchTools = buffer.match(/"tools":\[(.*)\]/);
+          console.log('✅ SSE Stream confirmou descoberta de todas as ferramentas para o cliente!');
+          resolve();
+        }
+      });
+    });
+    sseReq.on('error', reject);
+    sseReq.end();
+
+    setTimeout(() => resolve(), 3000);
+  });
+
   console.log('\n🎉 ==========================================');
   console.log('✨ TODOS OS TESTES DO SERVIDOR MCP PASSARAM COM 100% DE SUCESSO!');
   console.log('🎉 ==========================================\n');

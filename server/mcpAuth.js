@@ -94,6 +94,8 @@ export function extractBearerToken(req) {
   return null;
 }
 
+import { isSseSessionActive } from './mcpServer.js';
+
 /**
  * Express Middleware to protect MCP endpoints
  */
@@ -115,3 +117,19 @@ export function mcpAuthMiddleware(req, res, next) {
   req.mcpAuth = verification;
   next();
 }
+
+/**
+ * Express Middleware specifically for POST /mcp/messages
+ * Allows requests if sessionId belongs to an active, pre-authenticated SSE connection,
+ * or if a valid token is provided.
+ */
+export function mcpSseMessagesAuthMiddleware(req, res, next) {
+  const sessionId = req.query?.sessionId;
+  if (sessionId && isSseSessionActive(sessionId)) {
+    req.mcpAuth = { valid: true, type: 'sse_session', sessionId };
+    return next();
+  }
+
+  return mcpAuthMiddleware(req, res, next);
+}
+

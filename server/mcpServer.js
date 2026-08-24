@@ -69,14 +69,32 @@ export function createMcpServer() {
 }
 
 /**
+ * Check if an SSE session ID is active and authenticated
+ */
+export function isSseSessionActive(sessionId) {
+  if (!sessionId) return false;
+  return activeSseTransports.has(sessionId);
+}
+
+/**
  * Handle incoming SSE connection (GET /mcp/sse)
  */
 export async function handleSseConnection(req, res) {
   try {
-    const server = createMcpServer();
-    const transport = new SSEServerTransport('/mcp/messages', res);
+    // Set permissive CORS headers for SSE
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 
-    activeSseTransports.set(transport.sessionId, { transport, server });
+    const server = createMcpServer();
+
+    // Preserve token in the SSE endpoint URL so that subsequent POST messages carry the token
+    const token = req.query?.token || (req.headers?.authorization && req.headers.authorization.startsWith('Bearer ') ? req.headers.authorization.substring(7).trim() : null);
+    const postEndpoint = token ? `/mcp/messages?token=${encodeURIComponent(token)}` : '/mcp/messages';
+
+    const transport = new SSEServerTransport(postEndpoint, res);
+
+    activeSseTransports.set(transport.sessionId, { transport, server, token, createdAt: new Date() });
 
     req.on('close', () => {
       activeSseTransports.delete(transport.sessionId);
@@ -99,6 +117,11 @@ export async function handleSseConnection(req, res) {
  */
 export async function handleSseMessage(req, res) {
   try {
+    // Set permissive CORS headers for POST messages
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
     const sessionId = req.query.sessionId;
     if (!sessionId) {
       return res.status(400).json({ error: 'Parâmetro sessionId é obrigatório no query string.' });
@@ -109,7 +132,7 @@ export async function handleSseMessage(req, res) {
       return res.status(404).json({ error: `Sessão SSE '${sessionId}' não encontrada ou já expirada.` });
     }
 
-    await session.transport.handlePostMessage(req, res);
+    await session.transport.handlePostMessage(req, res, req.body);
   } catch (err) {
     console.error('Erro ao processar mensagem MCP SSE:', err);
     if (!res.headersSent) {

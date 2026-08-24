@@ -19,7 +19,7 @@ import {
   getSaoPauloHour,
   getSaoPauloDayOfWeek
 } from './timeUtils.js';
-import { getMcpToken, regenerateMcpToken, mcpAuthMiddleware } from './mcpAuth.js';
+import { getMcpToken, regenerateMcpToken, mcpAuthMiddleware, mcpSseMessagesAuthMiddleware } from './mcpAuth.js';
 import { handleSseConnection, handleSseMessage, handleDirectJsonRpc } from './mcpServer.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -107,13 +107,21 @@ app.post('/api/mcp/token/regenerate', (req, res) => {
   }
 });
 
+// MCP OPTIONS Preflight
+app.options(['/mcp/sse', '/mcp/messages', '/api/mcp', '/mcp'], (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.status(204).end();
+});
+
 // MCP SSE Handshake (protected with Bearer Token)
 app.get('/mcp/sse', mcpAuthMiddleware, (req, res) => {
   handleSseConnection(req, res);
 });
 
-// MCP SSE Messages (protected with Bearer Token)
-app.post('/mcp/messages', mcpAuthMiddleware, (req, res) => {
+// MCP SSE Messages (protected with session/token authentication)
+app.post('/mcp/messages', mcpSseMessagesAuthMiddleware, (req, res) => {
   handleSseMessage(req, res);
 });
 
