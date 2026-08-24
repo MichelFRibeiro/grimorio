@@ -6,7 +6,8 @@ import {
   getSaoPauloYearStr,
   getSaoPauloHour,
   getSaoPauloDayOfWeek,
-  addDaysToDateStr
+  addDaysToDateStr,
+  getHabitWeeklyStats
 } from './timeUtils.js';
 
 export function computeAnalytics() {
@@ -234,13 +235,20 @@ export function computeAnalytics() {
   });
 
   // 7. Habit Consistency
-  const habitStats = habits.map(h => ({
-    id: h.id,
-    title: h.title,
-    currentStreak: h.currentStreak,
-    bestStreak: h.bestStreak,
-    totalCompletions: (h.history || []).length
-  }));
+  const habitStats = habits.map(h => {
+    const weeklyStats = getHabitWeeklyStats(h, now);
+    return {
+      id: h.id,
+      title: h.title,
+      frequency: h.frequency || 'daily',
+      targetTimesPerWeek: weeklyStats.targetTimesPerWeek,
+      completionsThisWeek: weeklyStats.completionsThisWeek,
+      isGoalMet: weeklyStats.isGoalMet,
+      currentStreak: h.currentStreak || 0,
+      bestStreak: h.bestStreak || 0,
+      totalCompletions: (h.history || []).length
+    };
+  });
 
   // 8. Behavioral Pattern Insights Engine (The Oracle's Wisdom)
   const insights = [];

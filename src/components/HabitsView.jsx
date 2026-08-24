@@ -11,10 +11,12 @@ import {
   Sparkles,
   AlertCircle,
   Edit3,
-  Tag
+  Tag,
+  Target,
+  Check
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
-import { getSaoPauloDateStr } from '../utils/timeUtils';
+import { getSaoPauloDateStr, getHabitWeeklyStats } from '../utils/timeUtils';
 
 export function HabitsView({
   habits,
@@ -48,6 +50,7 @@ export function HabitsView({
   const [newDesc, setNewDesc] = useState('');
   const [newCategory, setNewCategory] = useState(defaultCatName);
   const [newFrequency, setNewFrequency] = useState('daily');
+  const [newTimesPerWeek, setNewTimesPerWeek] = useState(3);
   const [newXpReward, setNewXpReward] = useState('30');
   const [newCoinReward, setNewCoinReward] = useState('8');
 
@@ -57,6 +60,7 @@ export function HabitsView({
   const [editDesc, setEditDesc] = useState('');
   const [editCategory, setEditCategory] = useState(defaultCatName);
   const [editFrequency, setEditFrequency] = useState('daily');
+  const [editTimesPerWeek, setEditTimesPerWeek] = useState(3);
   const [editXpReward, setEditXpReward] = useState('30');
   const [editCoinReward, setEditCoinReward] = useState('8');
 
@@ -94,6 +98,17 @@ export function HabitsView({
 
   const todayStr = getSaoPauloDateStr();
 
+  const getFrequencyLabel = (habit) => {
+    if (habit.frequency === 'daily') return 'Diário';
+    if (habit.frequency === 'weekdays') return 'Seg-Sex';
+    if (habit.frequency === 'weekly') return 'Semanal';
+    if (habit.frequency === 'times_per_week' || habit.frequency === 'n_times_week') {
+      const n = habit.targetTimesPerWeek || habit.timesPerWeek || 3;
+      return `${n}x por semana`;
+    }
+    return 'Diário';
+  };
+
   const handleCreateHabit = (e) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
@@ -103,12 +118,15 @@ export function HabitsView({
       description: newDesc.trim(),
       category: newCategory,
       frequency: newFrequency,
+      targetTimesPerWeek: newFrequency === 'times_per_week' ? (parseInt(newTimesPerWeek, 10) || 3) : undefined,
       xpReward: parseInt(newXpReward, 10) || 30,
       coinReward: parseInt(newCoinReward, 10) || 8
     });
 
     setNewTitle('');
     setNewDesc('');
+    setNewFrequency('daily');
+    setNewTimesPerWeek(3);
     setShowAddModal(false);
   };
 
@@ -118,6 +136,7 @@ export function HabitsView({
     setEditDesc(habit.description || '');
     setEditCategory(habit.category || defaultCatName);
     setEditFrequency(habit.frequency || 'daily');
+    setEditTimesPerWeek(habit.targetTimesPerWeek || habit.timesPerWeek || 3);
     setEditXpReward(String(habit.xpReward || 30));
     setEditCoinReward(String(habit.coinReward || 8));
   };
@@ -132,6 +151,7 @@ export function HabitsView({
         description: editDesc.trim(),
         category: editCategory,
         frequency: editFrequency,
+        targetTimesPerWeek: editFrequency === 'times_per_week' ? (parseInt(editTimesPerWeek, 10) || 3) : undefined,
         xpReward: parseInt(editXpReward, 10) || 30,
         coinReward: parseInt(editCoinReward, 10) || 8
       });
@@ -198,6 +218,7 @@ export function HabitsView({
             const catInfo = activeCategories.find(c => (typeof c === 'string' ? c : c.name) === habitCat);
             const catColor = (catInfo && typeof catInfo === 'object' && catInfo.color) ? catInfo.color : '#f59e0b';
             const catRanking = rankings?.categories?.[habitCat];
+            const weeklyStats = getHabitWeeklyStats(habit);
 
             return (
               <div
@@ -303,7 +324,7 @@ export function HabitsView({
                     </p>
                   )}
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: '#94a3b8' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '12px' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <Sparkles size={14} color="#f59e0b" /> +{habit.xpReward} XP
                     </span>
@@ -313,8 +334,100 @@ export function HabitsView({
                     </span>
                     <span>•</span>
                     <span style={{ color: '#38bdf8', fontWeight: 600 }}>
-                      {habit.frequency === 'daily' ? 'Diário' : habit.frequency === 'weekdays' ? 'Seg-Sex' : 'Semanal'}
+                      {getFrequencyLabel(habit)}
                     </span>
+                  </div>
+
+                  {/* Weekly Progress Tracker */}
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px solid rgba(255, 255, 255, 0.07)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem' }}>
+                      <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Target size={13} color={weeklyStats.isGoalMet ? '#10b981' : '#38bdf8'} />
+                        <span>Semana:</span>
+                        <strong style={{ color: weeklyStats.isGoalMet ? '#34d399' : '#f8fafc', fontFamily: 'var(--font-mono)' }}>
+                          {weeklyStats.completionsThisWeek}/{weeklyStats.targetTimesPerWeek}
+                        </strong>
+                      </span>
+                      {weeklyStats.isGoalMet ? (
+                        <span
+                          style={{
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            color: '#34d399',
+                            background: 'rgba(16, 185, 129, 0.15)',
+                            padding: '2px 6px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(16, 185, 129, 0.35)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                        >
+                          <Check size={11} /> Meta Concluída! 🎯
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                          Faltam {Math.max(0, weeklyStats.targetTimesPerWeek - weeklyStats.completionsThisWeek)}x
+                        </span>
+                      )}
+                    </div>
+
+                    {/* 7 Days Mini Tracker (Seg a Dom) */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                      {weeklyStats.completedDays.map(day => (
+                        <div
+                          key={day.dateStr}
+                          title={`${day.label} (${day.dateStr})${day.completed ? ' - Realizado' : ''}${day.isToday ? ' - Hoje' : ''}`}
+                          style={{
+                            flex: 1,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            padding: '4px 2px',
+                            borderRadius: '6px',
+                            background: day.completed
+                              ? 'rgba(16, 185, 129, 0.18)'
+                              : day.isToday
+                                ? 'rgba(56, 189, 248, 0.08)'
+                                : 'rgba(255, 255, 255, 0.03)',
+                            border: day.completed
+                              ? '1px solid rgba(16, 185, 129, 0.5)'
+                              : day.isToday
+                                ? '1px solid rgba(56, 189, 248, 0.4)'
+                                : '1px solid rgba(255, 255, 255, 0.05)',
+                            color: day.completed ? '#34d399' : day.isToday ? '#38bdf8' : '#64748b',
+                            fontSize: '0.68rem',
+                            fontWeight: day.completed || day.isToday ? 800 : 500,
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <span>{day.shortName}</span>
+                          <div
+                            style={{
+                              width: '5px',
+                              height: '5px',
+                              borderRadius: '50%',
+                              marginTop: '2px',
+                              background: day.completed
+                                ? '#10b981'
+                                : day.isToday
+                                  ? '#38bdf8'
+                                  : 'rgba(255, 255, 255, 0.15)'
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -490,10 +603,65 @@ export function HabitsView({
                   }}
                 >
                   <option value="daily">Todos os dias (Diário)</option>
-                  <option value="weekdays">Dias de semana (Seg-Sex)</option>
-                  <option value="weekly">Semanal</option>
+                  <option value="weekdays">Dias de semana (Seg-Sex - 5x/sem)</option>
+                  <option value="times_per_week">N vezes por semana (Personalizado)</option>
+                  <option value="weekly">1 vez por semana (Semanal)</option>
                 </select>
               </div>
+
+              {/* N vezes por semana - seletor */}
+              {newFrequency === 'times_per_week' && (
+                <div
+                  style={{
+                    padding: '12px',
+                    borderRadius: '10px',
+                    background: 'rgba(239, 68, 68, 0.08)',
+                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f87171' }}>
+                      Meta semanal de execuções:
+                    </label>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 900, color: '#fff' }}>
+                      {newTimesPerWeek}x / semana
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {[1, 2, 3, 4, 5, 6, 7].map(n => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setNewTimesPerWeek(n)}
+                        style={{
+                          flex: 1,
+                          padding: '7px 0',
+                          borderRadius: '8px',
+                          background: newTimesPerWeek === n
+                            ? 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)'
+                            : 'rgba(255, 255, 255, 0.05)',
+                          border: newTimesPerWeek === n
+                            ? '1px solid #ef4444'
+                            : '1px solid rgba(255, 255, 255, 0.1)',
+                          color: '#fff',
+                          fontWeight: 800,
+                          fontSize: '0.82rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {n}x
+                      </button>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
+                    O ritual terá como meta ser realizado {newTimesPerWeek} {newTimesPerWeek === 1 ? 'vez' : 'vezes'} entre Segunda e Domingo.
+                  </p>
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div style={{ flex: 1 }}>
@@ -697,10 +865,65 @@ export function HabitsView({
                   }}
                 >
                   <option value="daily">Todos os dias (Diário)</option>
-                  <option value="weekdays">Dias de semana (Seg-Sex)</option>
-                  <option value="weekly">Semanal</option>
+                  <option value="weekdays">Dias de semana (Seg-Sex - 5x/sem)</option>
+                  <option value="times_per_week">N vezes por semana (Personalizado)</option>
+                  <option value="weekly">1 vez por semana (Semanal)</option>
                 </select>
               </div>
+
+              {/* N vezes por semana - seletor em Edição */}
+              {editFrequency === 'times_per_week' && (
+                <div
+                  style={{
+                    padding: '12px',
+                    borderRadius: '10px',
+                    background: 'rgba(56, 189, 248, 0.08)',
+                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#38bdf8' }}>
+                      Meta semanal de execuções:
+                    </label>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 900, color: '#fff' }}>
+                      {editTimesPerWeek}x / semana
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {[1, 2, 3, 4, 5, 6, 7].map(n => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setEditTimesPerWeek(n)}
+                        style={{
+                          flex: 1,
+                          padding: '7px 0',
+                          borderRadius: '8px',
+                          background: editTimesPerWeek === n
+                            ? 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)'
+                            : 'rgba(255, 255, 255, 0.05)',
+                          border: editTimesPerWeek === n
+                            ? '1px solid #38bdf8'
+                            : '1px solid rgba(255, 255, 255, 0.1)',
+                          color: editTimesPerWeek === n ? '#0f172a' : '#fff',
+                          fontWeight: 800,
+                          fontSize: '0.82rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {n}x
+                      </button>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
+                    O ritual terá como meta ser realizado {editTimesPerWeek} {editTimesPerWeek === 1 ? 'vez' : 'vezes'} entre Segunda e Domingo.
+                  </p>
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div style={{ flex: 1 }}>
