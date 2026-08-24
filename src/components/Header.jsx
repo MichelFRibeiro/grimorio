@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Volume2, VolumeX, Flame, Coins, Shield, Brain, Zap, Swords, Sparkles, LogOut, User, Trophy, Award, ChevronRight, X, AlertTriangle, TrendingUp } from 'lucide-react';
+import { Volume2, VolumeX, Flame, Coins, Shield, Brain, Zap, Swords, Sparkles, LogOut, User, Trophy, Award, ChevronRight, X, AlertTriangle, TrendingUp, Bot } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { McpModal } from './McpModal';
 
 export function Header({ profile, currentUser, onLogout, boss, rankings, muted, onToggleMute, onOpenOracle }) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showRankingsModal, setShowRankingsModal] = useState(false);
+  const [showMcpModal, setShowMcpModal] = useState(false);
 
   if (!profile) return null;
 
@@ -221,6 +223,30 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
             </div>
           </div>
 
+          {/* MCP AI Agents Button */}
+          <button
+            onClick={() => setShowMcpModal(true)}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '10px',
+              background: 'rgba(56, 189, 248, 0.1)',
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+              color: '#38bdf8',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              transition: 'all 0.2s ease',
+              boxShadow: '0 0 10px rgba(56, 189, 248, 0.1)'
+            }}
+            title="Conectar Agentes de IA via MCP"
+          >
+            <Bot size={16} />
+            <span>MCP / IA</span>
+          </button>
+
           {/* Sound Toggle Button */}
           <button
             onClick={onToggleMute}
@@ -269,6 +295,9 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
         </div>
 
       </div>
+
+      {/* Modal de Integração MCP / Agentes IA */}
+      <McpModal isOpen={showMcpModal} onClose={() => setShowMcpModal(false)} />
 
       {/* Modal de Detalhes dos Rankings de Categorias */}
       {showRankingsModal && (

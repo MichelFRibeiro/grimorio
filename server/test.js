@@ -51,17 +51,19 @@ async function runTests() {
   const afterOn = await request('/api/state');
   console.log(`Hábito Marcado: XP=${afterOn.data.userProfile.xp} (+${afterOn.data.userProfile.xp - initXp}), Logs=${afterOn.data.actionLogs.length}`);
 
-  if (afterOn.data.userProfile.xp <= initXp) {
+  const initLevel = initial.data.userProfile.level;
+
+  if (afterOn.data.userProfile.level === initLevel && afterOn.data.userProfile.xp <= initXp) {
     throw new Error('Falha: XP não aumentou ao marcar o hábito!');
   }
 
   // 4. Toggle OFF habit (Cancel execution)
   const toggleOffRes = await request(`/api/habits/${habitId}/toggle`, { method: 'POST' });
   const afterOff = await request('/api/state');
-  console.log(`Hábito Desmarcado (Cancelado): XP=${afterOff.data.userProfile.xp}, Coins=${afterOff.data.userProfile.coins}, Consistency=${afterOff.data.userProfile.stats.consistency}, Logs=${afterOff.data.actionLogs.length}`);
+  console.log(`Hábito Desmarcado (Cancelado): XP=${afterOff.data.userProfile.xp}, Level=${afterOff.data.userProfile.level}, Coins=${afterOff.data.userProfile.coins}, Consistency=${afterOff.data.userProfile.stats.consistency}, Logs=${afterOff.data.actionLogs.length}`);
 
-  if (afterOff.data.userProfile.xp !== initXp) {
-    throw new Error(`Falha: XP deveria ter voltado para ${initXp}, mas está ${afterOff.data.userProfile.xp}`);
+  if (afterOff.data.userProfile.xp !== initXp || afterOff.data.userProfile.level !== initLevel) {
+    throw new Error(`Falha: XP/Level deveria ter voltado para ${initXp} (Nv. ${initLevel}), mas está ${afterOff.data.userProfile.xp} (Nv. ${afterOff.data.userProfile.level})`);
   }
   if (afterOff.data.actionLogs.length !== initLogsCount) {
     throw new Error(`Falha: Log deveria ter sido removido da timeline! Esperado: ${initLogsCount}, Atual: ${afterOff.data.actionLogs.length}`);

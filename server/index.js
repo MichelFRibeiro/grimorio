@@ -19,6 +19,8 @@ import {
   getSaoPauloHour,
   getSaoPauloDayOfWeek
 } from './timeUtils.js';
+import { getMcpToken, regenerateMcpToken, mcpAuthMiddleware } from './mcpAuth.js';
+import { handleSseConnection, handleSseMessage, handleDirectJsonRpc } from './mcpServer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -68,6 +70,56 @@ app.get(['/api/health', '/api/ping'], (req, res) => {
     timestamp: new Date().toISOString(),
     service: 'Grimório de Missões'
   });
+});
+
+// ==========================================
+// MCP (MODEL CONTEXT PROTOCOL) & EXTERNAL AI AGENTS
+// ==========================================
+
+// Token info for UI / integrations
+app.get('/api/mcp/token', (req, res) => {
+  try {
+    const token = getMcpToken();
+    res.json({
+      success: true,
+      token,
+      sseUrl: `${req.protocol}://${req.get('host')}/mcp/sse`,
+      jsonRpcUrl: `${req.protocol}://${req.get('host')}/api/mcp`,
+      serverName: 'Grimório de Missões MCP Server'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Regenerate MCP Bearer token
+app.post('/api/mcp/token/regenerate', (req, res) => {
+  try {
+    const token = regenerateMcpToken();
+    res.json({
+      success: true,
+      token,
+      sseUrl: `${req.protocol}://${req.get('host')}/mcp/sse`,
+      jsonRpcUrl: `${req.protocol}://${req.get('host')}/api/mcp`
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// MCP SSE Handshake (protected with Bearer Token)
+app.get('/mcp/sse', mcpAuthMiddleware, (req, res) => {
+  handleSseConnection(req, res);
+});
+
+// MCP SSE Messages (protected with Bearer Token)
+app.post('/mcp/messages', mcpAuthMiddleware, (req, res) => {
+  handleSseMessage(req, res);
+});
+
+// Direct JSON-RPC 2.0 Endpoint (protected with Bearer Token)
+app.post(['/api/mcp', '/mcp'], mcpAuthMiddleware, (req, res) => {
+  handleDirectJsonRpc(req, res);
 });
 
 // ==========================================

@@ -78,3 +78,106 @@ O script irá:
 ## 🔊 Efeitos Sonoros
 - Efeitos sonoros de RPG gerados em tempo real via Web Audio API (sem atraso).
 - Botão de ativar/desativar som no cabeçalho.
+
+---
+
+## 🤖 Servidor MCP (Model Context Protocol) & Agentes de IA
+
+O Grimório de Missões possui um servidor **MCP (Model Context Protocol)** integrado e autenticado por **Bearer Token**, permitindo que agentes de IA externos (Claude Desktop, Cursor, Antigravity, scripts em Python ou ferramentas HTTP/SSE) realizem operações completas de **CRUD** em todos os registros e acessem em **somente leitura** os dados calculados pelo **Oráculo de Análises & Padrões Comportamentais**.
+
+### 🔑 Autenticação Bearer Token
+Todas as chamadas aos endpoints do MCP exigem o cabeçalho:
+```http
+Authorization: Bearer <SEU_TOKEN_MCP>
+```
+*(Ou parâmetro `?token=<SEU_TOKEN_MCP>` para EventSource/SSE).*
+
+O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando no botão **"MCP / IA"**, ou configurado no `.env` via `MCP_BEARER_TOKEN`.
+
+### 🌐 Endpoints MCP Disponíveis
+- **SSE (Server-Sent Events)**: `GET /mcp/sse` e `POST /mcp/messages` (transporte padrão do Claude Desktop e Cursor).
+- **JSON-RPC 2.0 Direto (HTTP POST)**: `POST /api/mcp` ou `POST /mcp` (ideal para chamadas simples via cURL ou scripts Python).
+- **Stdio CLI (Linha de Comando)**: `npm run mcp` ou `node server/mcpCli.js`.
+
+---
+
+### 🛠️ Lista de Ferramentas MCP (47 Tools)
+
+#### 1. 📜 Missões (`quests`)
+- `list_quests`: Listar missões com filtros (categoria, prioridade, status de conclusão, busca).
+- `get_quest`: Obter detalhes de uma missão por ID.
+- `create_quest`: Criar missão (`title`, `description`, `category`, `priority`, `dueDate`, `dueTime`, `subtasks`).
+- `update_quest`: Atualizar missão existente.
+- `complete_quest`: Concluir/desmarcar missão (concede XP, moedas, atributos e dano no Boss Semanal).
+- `delete_quest`: Excluir missão por ID.
+
+#### 2. 🗂️ Categorias (`questCategories`)
+- `list_quest_categories`, `create_quest_category`, `update_quest_category`, `delete_quest_category`.
+
+#### 3. 📚 Livros & Citações (`books`)
+- `list_books`, `get_book`, `create_book`, `update_book`, `delete_book`.
+- `add_book_quote`, `update_book_quote`, `delete_book_quote`.
+
+#### 4. 📖 Sessões de Leitura (`readingSessions`)
+- `list_reading_sessions`, `log_reading_session`, `update_reading_session`, `delete_reading_session`.
+
+#### 5. ⚡ Processos em Lote (`processes`)
+- `list_processes`, `get_process`, `create_process`, `step_process`, `update_process`, `delete_process`.
+
+#### 6. 🔥 Rituais Diários (`habits`)
+- `list_habits`: Lista hábitos com métricas semanais (`completionsThisWeek`, `targetTimesPerWeek`, `isGoalMet`).
+- `create_habit`: Cria hábito com frequências (`daily`, `weekdays`, `weekly`, `times_per_week` com `targetTimesPerWeek` 1-7).
+- `toggle_habit`: Marca/desmarca execução diária com cálculo de chamas/streaks.
+- `update_habit`, `delete_habit`.
+
+#### 7. 📝 Banco de Questões / Simulados (`examQuestions`)
+- `list_exam_questions`, `log_exam_questions`, `update_exam_questions`, `delete_exam_questions`.
+
+#### 8. 🪙 Taverna & Recompensas (`rewards`)
+- `list_rewards`, `create_reward`, `redeem_reward`, `list_reward_redemptions`, `cancel_reward_redemption`, `delete_reward`.
+
+#### 9. 🧙‍♂️ Herói & Boss Raid
+- `get_player_state`, `reset_boss_raid`.
+
+#### 10. 🔮 Oráculo de Análises & Padrões (Somente Leitura)
+- `get_oracle_analytics`: Relatório completo (janela de pico produtivo, mapa de calor, ritmo semanal, simulados, hábitos e previsões).
+- `get_oracle_insights`: Revelações e conselhos contra procrastinação.
+- `get_productivity_patterns`: Distribuição de esforço horário e por dia da semana.
+- `get_study_analytics`: Métricas consolidadas de leitura e questões.
+- `get_category_rankings`: Rankings e tiers de maestria por categoria.
+
+---
+
+### 📦 Configuração no Claude Desktop (`claude_desktop_config.json`)
+```json
+{
+  "mcpServers": {
+    "grimorio-missoes": {
+      "command": "node",
+      "args": [
+        "c:/Coder/Projetos/Memory/server/mcpCli.js"
+      ],
+      "env": {
+        "MCP_BEARER_TOKEN": "SEU_TOKEN_AQUI"
+      }
+    }
+  }
+}
+```
+
+### ⚡ Exemplo de Requisição HTTP com cURL
+```bash
+curl -X POST http://localhost:3000/api/mcp \
+  -H "Authorization: Bearer <SEU_TOKEN_MCP>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "get_oracle_analytics",
+      "arguments": {}
+    }
+  }'
+```
+
