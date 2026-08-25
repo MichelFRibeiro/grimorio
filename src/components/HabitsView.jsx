@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Plus,
   Flame,
@@ -53,6 +53,14 @@ export function HabitsView({
   const [newTimesPerWeek, setNewTimesPerWeek] = useState(3);
   const [newXpReward, setNewXpReward] = useState('30');
   const [newCoinReward, setNewCoinReward] = useState('8');
+
+  // Sync newCategory with activeCategories
+  useEffect(() => {
+    const validNames = activeCategories.map(c => typeof c === 'string' ? c : c.name);
+    if (validNames.length > 0 && !validNames.includes(newCategory)) {
+      setNewCategory(validNames[0]);
+    }
+  }, [activeCategories, newCategory]);
 
   // Edit Habit State
   const [editingHabit, setEditingHabit] = useState(null);

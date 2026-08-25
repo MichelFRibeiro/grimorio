@@ -130,6 +130,14 @@ export function QuestionsView({
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(getSaoPauloDateStr());
 
+  // Sync category with activeCategories
+  useEffect(() => {
+    const validNames = activeCategories.map(c => typeof c === 'string' ? c : c.name);
+    if (validNames.length > 0 && !validNames.includes(category)) {
+      setCategory(validNames.find(n => n === 'Estudos') || validNames[0]);
+    }
+  }, [activeCategories, category]);
+
   // Edit Question Modal State
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [editCategory, setEditCategory] = useState(defaultCatName);

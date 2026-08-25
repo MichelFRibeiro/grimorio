@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Layers, CheckCircle2, Zap, Sparkles, Trash2, ArrowUpRight, FileCheck, Check, MessageSquare, AlertCircle, Clock, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { getSaoPauloNowDateTimeLocal } from '../utils/timeUtils';
@@ -30,6 +30,10 @@ export function ProcessesView({ processes, processSteps, questCategories = [], r
   const activeCategories = Array.isArray(questCategories) && questCategories.length > 0
     ? questCategories
     : defaultCategoryList;
+
+  const defaultCatName = activeCategories[0]
+    ? (typeof activeCategories[0] === 'string' ? activeCategories[0] : activeCategories[0].name)
+    : 'Geral';
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedProcessForStep, setSelectedProcessForStep] = useState(null);
@@ -76,20 +80,31 @@ export function ProcessesView({ processes, processSteps, questCategories = [], r
 
   // New Process Form
   const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState(activeCategories[0]?.name || 'Trabalho');
+  const [newCategory, setNewCategory] = useState(defaultCatName);
   const [newUnitName, setNewUnitName] = useState('processos');
   const [newTotalUnits, setNewTotalUnits] = useState('10');
   const [newXpPerUnit, setNewXpPerUnit] = useState('20');
   const [newCoinsPerUnit, setNewCoinsPerUnit] = useState('5');
   const [newNotes, setNewNotes] = useState('');
 
+  // Sync newCategory whenever activeCategories changes
+  useEffect(() => {
+    const validNames = activeCategories.map(c => typeof c === 'string' ? c : c.name);
+    if (validNames.length > 0 && !validNames.includes(newCategory)) {
+      setNewCategory(validNames[0]);
+    }
+  }, [activeCategories, newCategory]);
+
   const handleCreateProcess = (e) => {
     e.preventDefault();
     if (!newTitle.trim() || !newTotalUnits) return;
 
+    const validNames = activeCategories.map(c => typeof c === 'string' ? c : c.name);
+    const categoryToSave = validNames.includes(newCategory) ? newCategory : (validNames[0] || 'Geral');
+
     onAddProcess({
       title: newTitle.trim(),
-      category: newCategory,
+      category: categoryToSave,
       unitName: newUnitName.trim() || 'unidades',
       totalUnits: parseInt(newTotalUnits, 10),
       xpPerUnit: parseInt(newXpPerUnit, 10) || 20,
@@ -98,7 +113,7 @@ export function ProcessesView({ processes, processSteps, questCategories = [], r
     });
 
     setNewTitle('');
-    setNewCategory(activeCategories[0]?.name || 'Trabalho');
+    setNewCategory(validNames[0] || 'Geral');
     setNewUnitName('processos');
     setNewTotalUnits('10');
     setNewNotes('');

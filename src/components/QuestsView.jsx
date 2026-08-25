@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Plus,
   CheckCircle2,
@@ -46,6 +46,7 @@ export function QuestsView({
     title: '',
     message: '',
     confirmText: 'Confirmar',
+    cancelText: 'Cancelar',
     confirmVariant: 'warning',
     icon: null,
     onConfirm: null
@@ -54,33 +55,6 @@ export function QuestsView({
   const closeConfirmModal = () => {
     setConfirmModal(prev => ({ ...prev, isOpen: false }));
   };
-
-  // New Quest Form State
-  const [newTitle, setNewTitle] = useState('');
-  const [newDesc, setNewDesc] = useState('');
-  const [newCategory, setNewCategory] = useState('Trabalho');
-  const [newPriority, setNewPriority] = useState('media');
-  const [newDueDate, setNewDueDate] = useState('');
-  const [newDueTime, setNewDueTime] = useState('');
-  const [newSubtasksInput, setNewSubtasksInput] = useState('');
-
-  // Edit Quest Form State
-  const [editingQuest, setEditingQuest] = useState(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editDesc, setEditDesc] = useState('');
-  const [editCategory, setEditCategory] = useState('Trabalho');
-  const [editPriority, setEditPriority] = useState('media');
-  const [editDueDate, setEditDueDate] = useState('');
-  const [editDueTime, setEditDueTime] = useState('');
-  const [editSubtasks, setEditSubtasks] = useState([]);
-  const [newSubtaskInputForEdit, setNewSubtaskInputForEdit] = useState('');
-
-  // Category Management Form State
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [newCategoryColor, setNewCategoryColor] = useState('#f59e0b');
-  const [editingCatId, setEditingCatId] = useState(null);
-  const [editCatName, setEditCatName] = useState('');
-  const [editCatColor, setEditCatColor] = useState('#38bdf8');
 
   // Available categories list
   const defaultCategoryList = [
@@ -95,6 +69,45 @@ export function QuestsView({
   const activeCategories = Array.isArray(questCategories) && questCategories.length > 0
     ? questCategories
     : defaultCategoryList;
+
+  const defaultCategoryName = activeCategories[0]
+    ? (typeof activeCategories[0] === 'string' ? activeCategories[0] : activeCategories[0].name)
+    : 'Geral';
+
+  // New Quest Form State
+  const [newTitle, setNewTitle] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [newCategory, setNewCategory] = useState(defaultCategoryName);
+  const [newPriority, setNewPriority] = useState('media');
+  const [newDueDate, setNewDueDate] = useState('');
+  const [newDueTime, setNewDueTime] = useState('');
+  const [newSubtasksInput, setNewSubtasksInput] = useState('');
+
+  // Sync newCategory whenever activeCategories changes (e.g. data fetched from API)
+  useEffect(() => {
+    const validNames = activeCategories.map(c => typeof c === 'string' ? c : c.name);
+    if (validNames.length > 0 && !validNames.includes(newCategory)) {
+      setNewCategory(validNames[0]);
+    }
+  }, [activeCategories, newCategory]);
+
+  // Edit Quest Form State
+  const [editingQuest, setEditingQuest] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editCategory, setEditCategory] = useState(defaultCategoryName);
+  const [editPriority, setEditPriority] = useState('media');
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editDueTime, setEditDueTime] = useState('');
+  const [editSubtasks, setEditSubtasks] = useState([]);
+  const [newSubtaskInputForEdit, setNewSubtaskInputForEdit] = useState('');
+
+  // Category Management Form State
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryColor, setNewCategoryColor] = useState('#f59e0b');
+  const [editingCatId, setEditingCatId] = useState(null);
+  const [editCatName, setEditCatName] = useState('');
+  const [editCatColor, setEditCatColor] = useState('#38bdf8');
 
   const categoryNames = ['Todas', ...activeCategories.map(c => typeof c === 'string' ? c : c.name)];
 
@@ -116,10 +129,13 @@ export function QuestsView({
       .filter(Boolean)
       .map(title => ({ title, completed: false }));
 
+    const validNames = activeCategories.map(c => typeof c === 'string' ? c : c.name);
+    const categoryToSave = validNames.includes(newCategory) ? newCategory : (validNames[0] || 'Geral');
+
     onAddQuest({
       title: newTitle.trim(),
       description: newDesc.trim(),
-      category: newCategory,
+      category: categoryToSave,
       priority: newPriority,
       dueDate: newDueDate || null,
       dueTime: newDueTime || null,
@@ -128,7 +144,7 @@ export function QuestsView({
 
     setNewTitle('');
     setNewDesc('');
-    setNewCategory(activeCategories[0]?.name || 'Trabalho');
+    setNewCategory(validNames[0] || 'Geral');
     setNewPriority('media');
     setNewDueDate('');
     setNewDueTime('');
@@ -138,10 +154,14 @@ export function QuestsView({
 
   // Open Edit Quest Modal
   const handleOpenEditModal = (quest) => {
+    const validNames = activeCategories.map(c => typeof c === 'string' ? c : c.name);
+    const defaultCat = validNames[0] || 'Geral';
+    const categoryToEdit = validNames.includes(quest.category) ? quest.category : defaultCat;
+
     setEditingQuest(quest);
     setEditTitle(quest.title || '');
     setEditDesc(quest.description || '');
-    setEditCategory(quest.category || activeCategories[0]?.name || 'Trabalho');
+    setEditCategory(categoryToEdit);
     setEditPriority(quest.priority || 'media');
     setEditDueDate(quest.dueDate || '');
     setEditDueTime(quest.dueTime || '');

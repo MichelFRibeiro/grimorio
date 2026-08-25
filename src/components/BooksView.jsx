@@ -149,13 +149,25 @@ export function BooksView({
   const [editQuoteModalNote, setEditQuoteModalNote] = useState('');
 
   // New Book Form
+  const defaultBookCategory = activeCategories[0]
+    ? (typeof activeCategories[0] === 'string' ? activeCategories[0] : activeCategories[0].name)
+    : 'Estudos';
+
   const [newTitle, setNewTitle] = useState('');
   const [newAuthor, setNewAuthor] = useState('');
   const [newTotalPages, setNewTotalPages] = useState('');
   const [newCurrentPage, setNewCurrentPage] = useState('0');
-  const [newCategory, setNewCategory] = useState(defaultCategoryList[0]?.name || 'Estudos');
+  const [newCategory, setNewCategory] = useState(defaultBookCategory);
   const [newCoverColor, setNewCoverColor] = useState('gradient-amber');
   const [newNotes, setNewNotes] = useState('');
+
+  // Sync newCategory with activeCategories
+  useEffect(() => {
+    const validNames = activeCategories.map(c => typeof c === 'string' ? c : c.name);
+    if (validNames.length > 0 && !validNames.includes(newCategory)) {
+      setNewCategory(validNames[0]);
+    }
+  }, [activeCategories, newCategory]);
 
   // Edit Book Form
   const [editingBook, setEditingBook] = useState(null);
@@ -163,7 +175,7 @@ export function BooksView({
   const [editBookAuthor, setEditBookAuthor] = useState('');
   const [editBookTotalPages, setEditBookTotalPages] = useState('');
   const [editBookCurrentPage, setEditBookCurrentPage] = useState('0');
-  const [editBookCategory, setEditBookCategory] = useState(defaultCategoryList[0]?.name || 'Estudos');
+  const [editBookCategory, setEditBookCategory] = useState(defaultBookCategory);
   const [editBookCoverColor, setEditBookCoverColor] = useState('gradient-amber');
   const [editBookNotes, setEditBookNotes] = useState('');
   const [editBookStatus, setEditBookStatus] = useState('reading');

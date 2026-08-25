@@ -133,11 +133,12 @@ export const toolsDefinition = [
           xpReward = 150; coinReward = 50; difficulty = 4; break;
       }
 
+      const defaultCategory = db.questCategories?.[0]?.name || 'Geral';
       const newQuest = {
         id: uid('q'),
         title: args.title.trim(),
         description: (args.description || '').trim(),
-        category: args.category || 'Trabalho',
+        category: args.category || defaultCategory,
         priority,
         difficulty,
         xpReward,
@@ -764,6 +765,7 @@ export const toolsDefinition = [
       const total = parseInt(args.totalSteps, 10) || 10;
       const current = Math.min(total, Math.max(0, parseInt(args.currentStep, 10) || 0));
 
+      const defaultCategory = db.questCategories?.[0]?.name || 'Geral';
       const newProcess = {
         id: uid('proc'),
         title: args.title.trim(),
@@ -772,7 +774,7 @@ export const toolsDefinition = [
         currentStep: current,
         completedUnits: current,
         stepUnit: args.stepUnit || 'processos',
-        category: args.category || 'Trabalho',
+        category: args.category || defaultCategory,
         status: current >= total ? 'completed' : 'active',
         stepHistory: [],
         createdAt: new Date().toISOString()

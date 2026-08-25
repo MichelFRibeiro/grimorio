@@ -423,11 +423,12 @@ app.post('/api/quests', (req, res) => {
         priority = 'media';
     }
 
+    const defaultCategory = db.questCategories?.[0]?.name || 'Geral';
     const newQuest = {
       id: uid('q'),
       title: title.trim(),
       description: (description || '').trim(),
-      category: category || 'Trabalho',
+      category: category || defaultCategory,
       priority: priority || 'media',
       difficulty,
       xpReward,
@@ -1206,10 +1207,11 @@ app.post('/api/processes', (req, res) => {
     if (!title || !totalUnits) return res.status(400).json({ error: 'Título e total de unidades são obrigatórios' });
 
     const total = parseInt(totalUnits, 10);
+    const defaultCat = db.questCategories?.[0]?.name || 'Geral';
     const newProcess = {
       id: uid('p'),
       title: title.trim(),
-      category: category || 'Trabalho',
+      category: category || defaultCat,
       unitName: unitName || 'unidades',
       totalUnits: total,
       completedUnits: 0,
@@ -1272,6 +1274,7 @@ app.post('/api/processes/:id/step', (req, res) => {
 
     db.processSteps.unshift(step);
 
+    const defaultCat = db.questCategories?.[0]?.name || 'Geral';
     const rewardResult = rewardPlayer({
       xp,
       coins,
@@ -1279,7 +1282,7 @@ app.post('/api/processes/:id/step', (req, res) => {
       actionType: 'process_step',
       entityId: process.id,
       title: `${process.title} (+${actualUnitsAdded} ${process.unitName})`,
-      details: { category: process.category || 'Trabalho', unitsAdded: actualUnitsAdded, finished },
+      details: { category: process.category || defaultCat, unitsAdded: actualUnitsAdded, finished },
       timestamp: stepTimestamp
     });
 
