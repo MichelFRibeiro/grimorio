@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, Trash2, RotateCcw, LogOut, Info, Check, X } from 'lucide-react';
 
 export function ConfirmModal({
@@ -12,6 +13,16 @@ export function ConfirmModal({
   onConfirm,
   onCancel
 }) {
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isOpen && onCancel) {
+        onCancel();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onCancel]);
+
   if (!isOpen) return null;
 
   const getVariantStyles = () => {
@@ -59,14 +70,15 @@ export function ConfirmModal({
   const variant = getVariantStyles();
   const IconComponent = CustomIcon || variant.defaultIcon;
 
-  return (
+  const modalContent = (
     <div
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.85)',
-        backdropFilter: 'blur(8px)',
-        zIndex: 2000,
+        backgroundColor: 'rgba(5, 7, 13, 0.88)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        zIndex: 999999,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -83,7 +95,8 @@ export function ConfirmModal({
           padding: '28px',
           borderRadius: '20px',
           border: `1px solid ${variant.borderColor}`,
-          boxShadow: '0 20px 50px rgba(0, 0, 0, 0.9), 0 0 30px rgba(0, 0, 0, 0.5)',
+          background: '#0c101d',
+          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.95), 0 0 30px rgba(0, 0, 0, 0.5)',
           textAlign: 'left',
           position: 'relative'
         }}
@@ -164,4 +177,6 @@ export function ConfirmModal({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : null;
 }

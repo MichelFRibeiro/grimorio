@@ -1,22 +1,36 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Crown, Sparkles, Award, ArrowRight } from 'lucide-react';
 
 export function LevelUpModal({ data, onClose }) {
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && data && onClose) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [data, onClose]);
+
   if (!data) return null;
 
-  return (
+  const modalContent = (
     <div
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.85)',
-        backdropFilter: 'blur(8px)',
-        zIndex: 10000,
+        backgroundColor: 'rgba(5, 7, 13, 0.88)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        zIndex: 999999,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '16px'
+        padding: '16px',
+        animation: 'fadeIn 0.15s ease'
       }}
+      onClick={onClose}
     >
       <div
         className="glass-panel-gold gold-glow-pulse"
@@ -26,9 +40,11 @@ export function LevelUpModal({ data, onClose }) {
           padding: '32px',
           textAlign: 'center',
           position: 'relative',
-          background: 'linear-gradient(180deg, rgba(30, 27, 20, 0.95) 0%, rgba(15, 17, 26, 0.98) 100%)',
-          borderRadius: '24px'
+          background: 'linear-gradient(180deg, rgba(30, 27, 20, 0.98) 0%, rgba(15, 17, 26, 0.98) 100%)',
+          borderRadius: '24px',
+          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.95), 0 0 40px rgba(245, 158, 11, 0.3)'
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'inline-flex', padding: '16px', borderRadius: '50%', background: 'rgba(245, 158, 11, 0.15)', border: '2px solid rgba(245, 158, 11, 0.4)', marginBottom: '16px' }}>
           <Crown size={48} color="#fbbf24" />
@@ -88,4 +104,6 @@ export function LevelUpModal({ data, onClose }) {
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : null;
 }

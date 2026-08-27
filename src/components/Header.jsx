@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Volume2, VolumeX, Flame, Coins, Shield, Brain, Zap, Swords, Sparkles, LogOut, User, Trophy, Award, ChevronRight, X, AlertTriangle, TrendingUp, Bot } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { McpModal } from './McpModal';
@@ -7,6 +8,17 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showRankingsModal, setShowRankingsModal] = useState(false);
   const [showMcpModal, setShowMcpModal] = useState(false);
+
+  // Close Rankings modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && showRankingsModal) {
+        setShowRankingsModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showRankingsModal]);
 
   if (!profile) return null;
 
@@ -300,14 +312,15 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
       <McpModal isOpen={showMcpModal} onClose={() => setShowMcpModal(false)} />
 
       {/* Modal de Detalhes dos Rankings de Categorias */}
-      {showRankingsModal && (
+      {showRankingsModal && typeof document !== 'undefined' && createPortal(
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.85)',
-            backdropFilter: 'blur(8px)',
-            zIndex: 2000,
+            backgroundColor: 'rgba(5, 7, 13, 0.88)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            zIndex: 999999,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -319,21 +332,24 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
           <div
             className="glass-panel"
             style={{
-              maxWidth: '640px',
+              maxWidth: '660px',
               width: '100%',
               maxHeight: '90vh',
-              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
               padding: '28px',
-              borderRadius: '20px',
+              borderRadius: '24px',
               border: `1px solid ${overallRank.border || 'rgba(245, 158, 11, 0.4)'}`,
-              boxShadow: `0 20px 50px rgba(0, 0, 0, 0.9), 0 0 30px ${overallRank.glow || 'rgba(245, 158, 11, 0.2)'}`,
+              background: '#0c101d',
+              boxShadow: `0 25px 60px rgba(0, 0, 0, 0.95), 0 0 40px ${overallRank.glow || 'rgba(245, 158, 11, 0.2)'}`,
               textAlign: 'left',
-              position: 'relative'
+              position: 'relative',
+              overflow: 'hidden'
             }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div
                   style={{
@@ -344,17 +360,18 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
                     border: `1px solid ${overallRank.border || 'rgba(245, 158, 11, 0.4)'}`,
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    flexShrink: 0
                   }}
                 >
                   <Trophy size={24} color={overallRank.color || '#fbbf24'} />
                 </div>
                 <div>
-                  <h3 className="font-cinzel" style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                  <h3 className="font-cinzel" style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
                     Quadro de Rankings de Categorias
                   </h3>
-                  <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>
-                    Ciclo Semanal: {rankings?.currentWeek?.weekLabel || 'Domingo a Sábado'} ({rankings?.currentWeek?.countdownLabel || ''})
+                  <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0, marginTop: '2px' }}>
+                    Ciclo Semanal: {rankings?.currentWeek?.weekLabel || 'Domingo a Sábado'} {rankings?.currentWeek?.countdownLabel ? `(${rankings.currentWeek.countdownLabel})` : ''}
                   </p>
                 </div>
               </div>
@@ -362,11 +379,24 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
               <button
                 onClick={() => setShowRankingsModal(false)}
                 style={{
-                  background: 'none',
-                  border: 'none',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '10px',
                   color: '#94a3b8',
                   cursor: 'pointer',
-                  padding: '4px'
+                  padding: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                  e.currentTarget.style.color = '#f8fafc';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                  e.currentTarget.style.color = '#94a3b8';
                 }}
               >
                 <X size={20} />
@@ -377,17 +407,18 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
             <div
               style={{
                 padding: '16px 20px',
-                borderRadius: '14px',
+                borderRadius: '16px',
                 background: overallRank.bg || 'rgba(245, 158, 11, 0.12)',
                 border: `1px solid ${overallRank.border || 'rgba(245, 158, 11, 0.3)'}`,
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                marginBottom: '20px'
+                marginBottom: '20px',
+                flexShrink: 0
               }}
             >
               <div>
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800 }}>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.05em' }}>
                   Seu Ranking Geral
                 </span>
                 <div style={{ fontSize: '1.4rem', fontWeight: 900, color: overallRank.textColor || '#fbbf24', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -400,7 +431,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
               </div>
 
               <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800 }}>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.05em' }}>
                   XP Total Esta Semana
                 </span>
                 <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>
@@ -409,114 +440,135 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
               </div>
             </div>
 
-            {/* Category Rankings Cards List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '22px' }}>
-              {(rankings?.categoriesList || []).map(catRank => {
-                const rank = catRank.currentRank;
-                const status = catRank.status;
+            {/* Category Rankings Cards List (Scrollable Area) */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                marginBottom: '20px',
+                overflowY: 'auto',
+                paddingRight: '6px',
+                flex: 1
+              }}
+            >
+              {(rankings?.categoriesList || []).length === 0 ? (
+                <div style={{ padding: '30px', textAlign: 'center', color: '#64748b', fontSize: '0.9rem' }}>
+                  Nenhuma categoria com pontuação registrada para esta semana.
+                </div>
+              ) : (
+                (rankings?.categoriesList || []).map(catRank => {
+                  const rank = catRank.currentRank;
+                  const status = catRank.status;
 
-                return (
-                  <div
-                    key={catRank.category.name}
-                    style={{
-                      padding: '14px 16px',
-                      borderRadius: '12px',
-                      background: 'rgba(255, 255, 255, 0.03)',
-                      border: '1px solid rgba(255, 255, 255, 0.07)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '14px'
-                    }}
-                  >
-                    {/* Category Name & Color */}
-                    <div style={{ flex: '1 1 180px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <span
-                          style={{
-                            width: '10px',
-                            height: '10px',
-                            borderRadius: '999px',
-                            background: catRank.category.color || '#38bdf8',
-                            boxShadow: `0 0 8px ${catRank.category.color || '#38bdf8'}`
-                          }}
-                        />
-                        <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#f8fafc' }}>
-                          {catRank.category.name}
-                        </span>
+                  return (
+                    <div
+                      key={catRank.category.name}
+                      style={{
+                        padding: '14px 16px',
+                        borderRadius: '14px',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid rgba(255, 255, 255, 0.07)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '14px'
+                      }}
+                    >
+                      {/* Category Name & Color */}
+                      <div style={{ flex: '1 1 180px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <span
+                            style={{
+                              width: '10px',
+                              height: '10px',
+                              borderRadius: '999px',
+                              background: catRank.category.color || '#38bdf8',
+                              boxShadow: `0 0 8px ${catRank.category.color || '#38bdf8'}`
+                            }}
+                          />
+                          <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#f8fafc' }}>
+                            {catRank.category.name}
+                          </span>
+                        </div>
+                        
+                        <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                          Semana atual: <strong style={{ color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>{catRank.weeklyXp} XP</strong>
+                          {catRank.nextRank && (
+                            <span> (faltam {catRank.xpNeededForNextRank} XP para Tier {catRank.nextRank.name})</span>
+                          )}
+                        </div>
                       </div>
-                      
-                      <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-                        Semana atual: <strong style={{ color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>{catRank.weeklyXp} XP</strong>
-                        {catRank.nextRank && (
-                          <span> (faltam {catRank.xpNeededForNextRank} XP para Tier {catRank.nextRank.name})</span>
+
+                      {/* Status Pill */}
+                      <div>
+                        {status === 'promoted' && (
+                          <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', fontWeight: 800, border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                            ⚡ Promovido!
+                          </span>
+                        )}
+                        {status === 'at_risk' && (
+                          <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', fontWeight: 800, border: '1px solid rgba(245, 158, 11, 0.3)' }} title={`Faltam ${catRank.xpNeededToMaintain} XP para não cair`}>
+                            ⚠️ Risco (-1)
+                          </span>
+                        )}
+                        {status === 'maintained' && catRank.currentRankIndex > 0 && (
+                          <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 800, border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                            🛡️ Mantido
+                          </span>
                         )}
                       </div>
-                    </div>
 
-                    {/* Status Pill */}
-                    <div>
-                      {status === 'promoted' && (
-                        <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', fontWeight: 800, border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-                          ⚡ Promovido!
-                        </span>
-                      )}
-                      {status === 'at_risk' && (
-                        <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', fontWeight: 800, border: '1px solid rgba(245, 158, 11, 0.3)' }} title={`Faltam ${catRank.xpNeededToMaintain} XP para não cair`}>
-                          ⚠️ Risco (-1)
-                        </span>
-                      )}
-                      {status === 'maintained' && catRank.currentRankIndex > 0 && (
-                        <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 800, border: '1px solid rgba(56, 189, 248, 0.3)' }}>
-                          🛡️ Mantido
-                        </span>
-                      )}
+                      {/* Rank Badge */}
+                      <div
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: '10px',
+                          background: rank.bg,
+                          border: `1px solid ${rank.border}`,
+                          color: rank.textColor,
+                          fontWeight: 900,
+                          fontSize: '1rem',
+                          minWidth: '58px',
+                          textAlign: 'center',
+                          boxShadow: `0 0 10px ${rank.glow}`
+                        }}
+                        title={`${rank.title}: ${rank.description}`}
+                      >
+                        {rank.name}
+                      </div>
                     </div>
-
-                    {/* Rank Badge */}
-                    <div
-                      style={{
-                        padding: '6px 14px',
-                        borderRadius: '10px',
-                        background: rank.bg,
-                        border: `1px solid ${rank.border}`,
-                        color: rank.textColor,
-                        fontWeight: 900,
-                        fontSize: '1rem',
-                        minWidth: '58px',
-                        textAlign: 'center',
-                        boxShadow: `0 0 10px ${rank.glow}`
-                      }}
-                      title={`${rank.title}: ${rank.description}`}
-                    >
-                      {rank.name}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
 
             {/* Modal Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexShrink: 0, paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
               <button
                 type="button"
                 onClick={() => setShowRankingsModal(false)}
                 style={{
-                  padding: '9px 20px',
-                  borderRadius: '10px',
+                  padding: '10px 24px',
+                  borderRadius: '12px',
                   background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                   color: '#000',
                   border: 'none',
-                  fontSize: '0.88rem',
+                  fontSize: '0.9rem',
                   fontWeight: 800,
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(245, 158, 11, 0.3)',
+                  transition: 'transform 0.15s ease'
                 }}
+                onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
               >
                 Entendido
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal de confirmação de Logout */}
