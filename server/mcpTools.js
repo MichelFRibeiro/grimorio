@@ -6,7 +6,8 @@ import {
   getSaoPauloDateStr,
   getSaoPauloHour,
   getSaoPauloDayOfWeek,
-  getHabitWeeklyStats
+  getHabitWeeklyStats,
+  calculateHabitStreak
 } from './timeUtils.js';
 
 // Unique ID generator
@@ -993,7 +994,7 @@ export const toolsDefinition = [
   },
   {
     name: 'toggle_habit',
-    description: 'Marcar ou desmarcar a execução de um ritual diário para hoje (ou para uma data específica YYYY-MM-DD). Concede/estorna XP, Moedas, Consistência e atualiza a sequência de chamas.',
+    description: 'Marcar ou desmarcar a execução de um ritual diário para hoje (ou para uma data específica YYYY-MM-DD no passado). Concede/estorna XP, Moedas, Consistência e atualiza a sequência de chamas.',
     schema: {
       id: z.string().describe('ID do ritual/hábito'),
       date: z.string().optional().describe('Data da execução YYYY-MM-DD (se omitido, usa a data atual)')
@@ -1003,44 +1004,56 @@ export const toolsDefinition = [
       const habit = (db.habits || []).find(h => h.id === args.id);
       if (!habit) return formatError(`Ritual '${args.id}' não encontrado.`);
 
-      const targetDate = args.date || getSaoPauloDateStr();
+      const todayStr = getSaoPauloDateStr();
+      const targetDate = args.date || todayStr;
+
+      if (targetDate > todayStr) {
+        return formatError(`Não é permitido marcar rituais em datas futuras (${targetDate}).`);
+      }
+
       if (!habit.history) habit.history = [];
       const isAlreadyCompleted = habit.history.includes(targetDate);
 
       let rewardResult = null;
       if (!isAlreadyCompleted) {
         habit.history.push(targetDate);
-        habit.currentStreak = (habit.currentStreak || 0) + 1;
-        if (habit.currentStreak > (habit.bestStreak || 0)) {
-          habit.bestStreak = habit.currentStreak;
-        }
+        const streakData = calculateHabitStreak(habit.history, new Date(), habit.bestStreak || 0);
+        habit.currentStreak = streakData.currentStreak;
+        habit.bestStreak = streakData.bestStreak;
 
-        const xp = habit.xpReward || 30;
+        const multiplier = Math.min(2.0, 1 + habit.currentStreak * 0.1);
+        const xp = Math.round((habit.xpReward || 30) * multiplier);
         const coins = habit.coinReward || 8;
-        const consistency = 10;
+        const consistency = 15;
+
+        const isToday = targetDate === todayStr;
+        const dateParts = targetDate.split('-');
+        const formattedDate = isToday ? 'Hoje' : `${dateParts[2]}/${dateParts[1]}`;
 
         rewardResult = rewardPlayer({
           xp,
           coins,
           consistency,
-          actionType: 'habit_toggle',
+          actionType: 'habit_complete',
           entityId: habit.id,
-          title: `Ritual Concluído: ${habit.title}`,
-          details: { category: habit.category, date: targetDate, streak: habit.currentStreak }
+          title: `Ritual Concluído: ${habit.title} (${formattedDate})`,
+          details: { category: habit.category || 'Pessoal', date: targetDate, streak: habit.currentStreak }
         });
       } else {
         habit.history = habit.history.filter(d => d !== targetDate);
-        habit.currentStreak = Math.max(0, (habit.currentStreak || 1) - 1);
+        const streakData = calculateHabitStreak(habit.history, new Date(), habit.bestStreak || 0);
+        habit.currentStreak = streakData.currentStreak;
+        habit.bestStreak = streakData.bestStreak;
 
         const xp = habit.xpReward || 30;
         const coins = habit.coinReward || 8;
-        const consistency = 10;
+        const consistency = 15;
 
         rewardResult = revertPlayerReward({
           xp,
           coins,
           consistency,
-          actionType: 'habit_toggle',
+          actionType: 'habit_complete',
           entityId: habit.id
         });
       }
@@ -1048,15 +1061,19 @@ export const toolsDefinition = [
       saveDb(db);
       const weeklyStats = getHabitWeeklyStats(habit, new Date());
 
+      const dateParts = targetDate.split('-');
+      const formattedDate = targetDate === todayStr ? 'hoje' : `em ${dateParts[2]}/${dateParts[1]}`;
+
       return formatSuccess({
         habit: {
           ...habit,
           weeklyStats,
-          completedToday: !isAlreadyCompleted
+          completedToday: habit.history.includes(todayStr)
         },
+        targetDate,
         action: !isAlreadyCompleted ? 'completed' : 'uncompleted',
         rewardResult
-      }, !isAlreadyCompleted ? `🔥 Ritual '${habit.title}' marcado! Sequência: ${habit.currentStreak} dias (+${habit.xpReward || 30} XP).` : `Ritual '${habit.title}' desmarcado e recompensas estornadas.`);
+      }, !isAlreadyCompleted ? `🔥 Ritual '${habit.title}' marcado para ${formattedDate}! Sequência: ${habit.currentStreak} dias (+${habit.xpReward || 30} XP).` : `Ritual '${habit.title}' desmarcado para ${formattedDate} e recompensas estornadas.`);
     }
   },
   {

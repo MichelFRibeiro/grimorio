@@ -17,7 +17,8 @@ import { initKeepAlive } from './keepAlive.js';
 import {
   getSaoPauloDateStr,
   getSaoPauloHour,
-  getSaoPauloDayOfWeek
+  getSaoPauloDayOfWeek,
+  calculateHabitStreak
 } from './timeUtils.js';
 import { getMcpToken, regenerateMcpToken, mcpAuthMiddleware, mcpSseMessagesAuthMiddleware } from './mcpAuth.js';
 import { handleSseConnection, handleSseMessage, handleDirectJsonRpc, handleMcpDiscoveryGet } from './mcpServer.js';
@@ -1428,29 +1429,46 @@ app.post('/api/habits/:id/toggle', (req, res) => {
     if (!habit) return res.status(404).json({ error: 'Hábito não encontrado' });
 
     const todayStr = getSaoPauloDateStr();
-    const alreadyDoneToday = (habit.history || []).includes(todayStr);
+    let targetDate = req.body?.date;
+    if (!targetDate || typeof targetDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+      targetDate = todayStr;
+    }
+
+    if (targetDate > todayStr) {
+      return res.status(400).json({ error: 'Não é permitido marcar hábitos em datas futuras.' });
+    }
+
+    if (!habit.history) habit.history = [];
+    const isAlreadyDone = habit.history.includes(targetDate);
 
     let rewardResult = null;
 
-    if (alreadyDoneToday) {
-      habit.history = habit.history.filter(d => d !== todayStr);
-      habit.currentStreak = Math.max(0, habit.currentStreak - 1);
+    if (isAlreadyDone) {
+      habit.history = habit.history.filter(d => d !== targetDate);
+      const streakData = calculateHabitStreak(habit.history, new Date(), habit.bestStreak || 0);
+      habit.currentStreak = streakData.currentStreak;
+      habit.bestStreak = streakData.bestStreak;
 
       rewardResult = revertPlayerReward({
+        xp: habit.xpReward || 30,
+        coins: habit.coinReward || 8,
         consistency: 15,
         actionType: 'habit_complete',
         entityId: habit.id
       });
     } else {
-      habit.history.push(todayStr);
-      habit.currentStreak = (habit.currentStreak || 0) + 1;
-      if (habit.currentStreak > (habit.bestStreak || 0)) {
-        habit.bestStreak = habit.currentStreak;
-      }
+      habit.history.push(targetDate);
+      const streakData = calculateHabitStreak(habit.history, new Date(), habit.bestStreak || 0);
+      habit.currentStreak = streakData.currentStreak;
+      habit.bestStreak = streakData.bestStreak;
 
       const multiplier = Math.min(2.0, 1 + habit.currentStreak * 0.1);
-      const xp = Math.round(habit.xpReward * multiplier);
-      const coins = habit.coinReward;
+      const xp = Math.round((habit.xpReward || 30) * multiplier);
+      const coins = habit.coinReward || 8;
+
+      const isToday = targetDate === todayStr;
+      const dateParts = targetDate.split('-');
+      const formattedDate = isToday ? 'Hoje' : `${dateParts[2]}/${dateParts[1]}`;
 
       rewardResult = rewardPlayer({
         xp,
@@ -1458,8 +1476,8 @@ app.post('/api/habits/:id/toggle', (req, res) => {
         consistency: 15,
         actionType: 'habit_complete',
         entityId: habit.id,
-        title: `${habit.title} (Sequência 🔥 ${habit.currentStreak})`,
-        details: { category: habit.category || 'Pessoal', streak: habit.currentStreak }
+        title: `${habit.title} (${formattedDate} - Sequência 🔥 ${habit.currentStreak})`,
+        details: { category: habit.category || 'Pessoal', streak: habit.currentStreak, date: targetDate }
       });
     }
 
@@ -1467,7 +1485,9 @@ app.post('/api/habits/:id/toggle', (req, res) => {
     res.json({
       success: true,
       habit,
-      doneToday: !alreadyDoneToday,
+      targetDate,
+      done: !isAlreadyDone,
+      doneToday: habit.history.includes(todayStr),
       rewardResult,
       analytics: computeAnalytics()
     });

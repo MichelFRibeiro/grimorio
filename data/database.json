@@ -3,19 +3,19 @@
     "id": "hero-1",
     "name": "Mestre do Foco",
     "level": 7,
-    "xp": 805,
+    "xp": 1318,
     "xpToNextLevel": 1440,
-    "coins": 1910,
+    "coins": 2086,
     "title": "Estrategista do Tempo",
     "avatar": "🧙‍♂️",
     "stats": {
       "wisdom": 262,
       "focus": 195,
       "willpower": 180,
-      "consistency": 95
+      "consistency": 140
     },
     "streak": 1,
-    "lastActiveDate": "2026-08-24",
+    "lastActiveDate": "2026-08-28",
     "theme": "dark-fantasy",
     "email": "convidado@grimorio.app"
   },
@@ -26,11 +26,11 @@
     "subtitle": "Fera selvagem sedenta por dopamina rápida e prazer efêmero. Conquiste a vitória do longo prazo!",
     "icon": "🦏",
     "maxHp": 500,
-    "currentHp": 52,
-    "defeated": false,
+    "currentHp": 41,
+    "defeated": true,
     "rewardCoins": 150,
     "rewardXp": 400,
-    "defeatsCount": 0,
+    "defeatsCount": 1,
     "weekStartDate": "2026-08-24"
   },
   "quests": [
@@ -698,6 +698,60 @@
     }
   ],
   "actionLogs": [
+    {
+      "id": "log-1787921372679-1k02",
+      "type": "habit_complete",
+      "entityId": "h-1787921372646-dat2dk",
+      "title": "Treino de Calistenia Avançado (Hoje - Sequência 🔥 1)",
+      "xp": 44,
+      "coins": 10,
+      "details": {
+        "category": "Saúde",
+        "streak": 1,
+        "date": "2026-08-28",
+        "bossDefeated": false
+      },
+      "timestamp": "2026-08-28T12:49:32.679Z",
+      "hour": 9,
+      "dayOfWeek": 5,
+      "date": "2026-08-28"
+    },
+    {
+      "id": "log-1787921354851-zo1s",
+      "type": "habit_complete",
+      "entityId": "h-1787921354770-3y4p71",
+      "title": "Hábito de Teste Retroativo (26/08 - Sequência 🔥 2)",
+      "xp": 36,
+      "coins": 8,
+      "details": {
+        "category": "Estudos",
+        "streak": 2,
+        "date": "2026-08-26",
+        "bossDefeated": true
+      },
+      "timestamp": "2026-08-28T12:49:14.851Z",
+      "hour": 9,
+      "dayOfWeek": 5,
+      "date": "2026-08-28"
+    },
+    {
+      "id": "log-1787921354810-z9t1",
+      "type": "habit_complete",
+      "entityId": "h-1787921354770-3y4p71",
+      "title": "Hábito de Teste Retroativo (27/08 - Sequência 🔥 1)",
+      "xp": 33,
+      "coins": 8,
+      "details": {
+        "category": "Estudos",
+        "streak": 1,
+        "date": "2026-08-27",
+        "bossDefeated": false
+      },
+      "timestamp": "2026-08-28T12:49:14.809Z",
+      "hour": 9,
+      "dayOfWeek": 5,
+      "date": "2026-08-28"
+    },
     {
       "id": "log-1787582565046-tnqz",
       "type": "fatal_dmg",

@@ -104,7 +104,7 @@ export function addDaysToDateStr(dateStr, daysOffset) {
 /**
  * Retorna os 7 dias da semana corrente (Segunda a Domingo) no fuso de São Paulo.
  * @param {Date|string|number} [date=new Date()]
- * @returns {Array<{dateStr: string, dayOfWeek: number, label: string, shortName: string, isToday: boolean}>}
+ * @returns {Array<{dateStr: string, dayOfWeek: number, label: string, shortName: string, isToday: boolean, isPast: boolean, isFuture: boolean}>}
  */
 export function getCurrentWeekDays(date = new Date()) {
   const todayStr = getSaoPauloDateStr(new Date());
@@ -126,9 +126,76 @@ export function getCurrentWeekDays(date = new Date()) {
       dayOfWeek: dayIndices[i],
       label,
       shortName: dayShort[i],
-      isToday: dateStr === todayStr
+      isToday: dateStr === todayStr,
+      isPast: dateStr < todayStr,
+      isFuture: dateStr > todayStr
     };
   });
+}
+
+/**
+ * Calcula de forma determinística e precisa a sequência atual (currentStreak)
+ * e a melhor sequência histórica (bestStreak) a partir do histórico de datas.
+ * @param {string[]} history Lista de datas 'YYYY-MM-DD' em que o hábito foi concluído
+ * @param {Date|string|number} [refDate=new Date()] Data de referência (hoje)
+ * @param {number} [previousBestStreak=0] Recorde anterior para não regredir
+ * @returns {{ currentStreak: number, bestStreak: number }}
+ */
+export function calculateHabitStreak(history = [], refDate = new Date(), previousBestStreak = 0) {
+  if (!Array.isArray(history) || history.length === 0) {
+    return { currentStreak: 0, bestStreak: previousBestStreak || 0 };
+  }
+
+  // Deduplica e filtra strings de data válidas YYYY-MM-DD
+  const dateSet = new Set(history.filter(d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)));
+  if (dateSet.size === 0) {
+    return { currentStreak: 0, bestStreak: previousBestStreak || 0 };
+  }
+
+  const todayStr = getSaoPauloDateStr(refDate);
+  const yesterdayStr = addDaysToDateStr(todayStr, -1);
+
+  // 1. Sequência Ativa (currentStreak)
+  let currentStreak = 0;
+  let checkDate = null;
+
+  if (dateSet.has(todayStr)) {
+    checkDate = todayStr;
+  } else if (dateSet.has(yesterdayStr)) {
+    checkDate = yesterdayStr;
+  }
+
+  if (checkDate) {
+    while (dateSet.has(checkDate)) {
+      currentStreak++;
+      checkDate = addDaysToDateStr(checkDate, -1);
+    }
+  }
+
+  // 2. Melhor Sequência Histórica (bestStreak)
+  const sortedDates = Array.from(dateSet).sort();
+  let maxHistoryStreak = 0;
+  let tempStreak = 0;
+  let prevDate = null;
+
+  for (const d of sortedDates) {
+    if (prevDate && addDaysToDateStr(prevDate, 1) === d) {
+      tempStreak++;
+    } else {
+      tempStreak = 1;
+    }
+    if (tempStreak > maxHistoryStreak) {
+      maxHistoryStreak = tempStreak;
+    }
+    prevDate = d;
+  }
+
+  const bestStreak = Math.max(previousBestStreak || 0, maxHistoryStreak, currentStreak);
+
+  return {
+    currentStreak,
+    bestStreak
+  };
 }
 
 /**

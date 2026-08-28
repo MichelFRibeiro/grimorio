@@ -405,16 +405,24 @@ export function useGameData() {
     if (res.ok) fetchState();
   };
 
-  const toggleHabit = async (id) => {
+  const toggleHabit = async (id, date = null) => {
     playClick();
     const res = await fetch(`/api/habits/${id}/toggle`, {
       method: 'POST',
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
+      body: JSON.stringify(date ? { date } : {})
     });
     if (res.ok) {
       const result = await res.json();
-      if (result.doneToday && result.rewardResult) {
-        handleRewardResponse(result.rewardResult, `Hábito Realizado! 🔥 Sequência: ${result.habit.currentStreak}`);
+      if (result.done && result.rewardResult) {
+        const targetDate = result.targetDate;
+        const dateParts = targetDate ? targetDate.split('-') : [];
+        const dateLabel = (!date || date === targetDate) && dateParts.length === 3
+          ? `${dateParts[2]}/${dateParts[1]}`
+          : 'Data anterior';
+        const displayLabel = result.doneToday && (!date || date === result.targetDate) ? 'Hoje' : dateLabel;
+
+        handleRewardResponse(result.rewardResult, `Hábito Realizado (${displayLabel})! 🔥 Sequência: ${result.habit.currentStreak}`);
         confetti({
           particleCount: 35,
           spread: 50,

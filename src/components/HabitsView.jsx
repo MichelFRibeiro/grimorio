@@ -7,16 +7,22 @@ import {
   Trophy,
   Trash2,
   Calendar,
+  CalendarDays,
   ShieldCheck,
   Sparkles,
   AlertCircle,
   Edit3,
   Tag,
   Target,
-  Check
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  History,
+  RotateCcw,
+  Clock
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
-import { getSaoPauloDateStr, getHabitWeeklyStats } from '../utils/timeUtils';
+import { getSaoPauloDateStr, getHabitWeeklyStats, getCurrentWeekDays, addDaysToDateStr } from '../utils/timeUtils';
 
 export function HabitsView({
   habits,
@@ -105,6 +111,21 @@ export function HabitsView({
   };
 
   const todayStr = getSaoPauloDateStr();
+  const yesterdayStr = addDaysToDateStr(todayStr, -1);
+  const dayBeforeYesterdayStr = addDaysToDateStr(todayStr, -2);
+
+  // Week View & Retroactive Completion State
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [retroModalHabit, setRetroModalHabit] = useState(null);
+  const [customRetroDate, setCustomRetroDate] = useState(yesterdayStr);
+
+  // Format date helper (YYYY-MM-DD -> DD/MM)
+  const formatShortDate = (dateStr) => {
+    if (!dateStr || typeof dateStr !== 'string') return '';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    return `${parts[2]}/${parts[1]}`;
+  };
 
   const getFrequencyLabel = (habit) => {
     if (habit.frequency === 'daily') return 'Diário';
@@ -170,43 +191,125 @@ export function HabitsView({
 
   return (
     <div>
-      {/* Header */}
+      {/* Header & Week Navigation Control */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '20px' }}>
         <div>
           <h2 className="font-cinzel" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span>🔥</span> Rituais Diários (Hábitos & Streaks)
           </h2>
           <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-            Mantenha a chama da disciplina acesa! Sequências diárias aumentam seus multiplicadores de XP.
+            Mantenha a chama da disciplina acesa! Marque hábitos diários e datas passadas para manter suas sequências.
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setNewCategory(defaultCatName);
-            setNewDesc('');
-            setShowAddModal(true);
-          }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 18px',
-            borderRadius: '12px',
-            background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
-            color: '#fff',
-            fontWeight: 800,
-            fontSize: '0.9rem',
-            border: 'none',
-            cursor: 'pointer',
-            boxShadow: '0 4px 15px rgba(239, 68, 68, 0.35)',
-            transition: 'transform 0.15s ease'
-          }}
-          onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-          onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-        >
-          <Plus size={18} /> Novo Ritual
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Week Selector Bar */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 10px',
+              borderRadius: '12px',
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.1)'
+            }}
+          >
+            <button
+              onClick={() => setWeekOffset(prev => prev - 1)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#94a3b8',
+                cursor: 'pointer',
+                padding: '4px 6px',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                transition: 'all 0.15s ease'
+              }}
+              title="Semana anterior"
+              onMouseOver={e => e.currentTarget.style.color = '#fff'}
+              onMouseOut={e => e.currentTarget.style.color = '#94a3b8'}
+            >
+              <ChevronLeft size={16} />
+            </button>
+
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: weekOffset === 0 ? '#38bdf8' : '#fbbf24', padding: '0 4px', minWidth: '115px', textAlign: 'center' }}>
+              {weekOffset === 0 ? 'Esta Semana' : weekOffset === -1 ? 'Semana Passada' : `Há ${Math.abs(weekOffset)} Semanas`}
+            </span>
+
+            <button
+              onClick={() => setWeekOffset(prev => Math.min(0, prev + 1))}
+              disabled={weekOffset === 0}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: weekOffset === 0 ? 'rgba(255,255,255,0.15)' : '#94a3b8',
+                cursor: weekOffset === 0 ? 'not-allowed' : 'pointer',
+                padding: '4px 6px',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                transition: 'all 0.15s ease'
+              }}
+              title={weekOffset === 0 ? 'Semana atual' : 'Próxima semana'}
+              onMouseOver={e => { if (weekOffset < 0) e.currentTarget.style.color = '#fff'; }}
+              onMouseOut={e => { if (weekOffset < 0) e.currentTarget.style.color = '#94a3b8'; }}
+            >
+              <ChevronRight size={16} />
+            </button>
+
+            {weekOffset !== 0 && (
+              <button
+                onClick={() => setWeekOffset(0)}
+                style={{
+                  background: 'rgba(56, 189, 248, 0.15)',
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  color: '#38bdf8',
+                  cursor: 'pointer',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title="Voltar para a semana atual"
+              >
+                <RotateCcw size={11} /> Hoje
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={() => {
+              setNewCategory(defaultCatName);
+              setNewDesc('');
+              setShowAddModal(true);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 18px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+              color: '#fff',
+              fontWeight: 800,
+              fontSize: '0.9rem',
+              border: 'none',
+              cursor: 'pointer',
+              boxShadow: '0 4px 15px rgba(239, 68, 68, 0.35)',
+              transition: 'transform 0.15s ease'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+            onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
+            <Plus size={18} /> Novo Ritual
+          </button>
+        </div>
       </div>
 
       {/* Habits List */}
@@ -226,7 +329,10 @@ export function HabitsView({
             const catInfo = activeCategories.find(c => (typeof c === 'string' ? c : c.name) === habitCat);
             const catColor = (catInfo && typeof catInfo === 'object' && catInfo.color) ? catInfo.color : '#f59e0b';
             const catRanking = rankings?.categories?.[habitCat];
-            const weeklyStats = getHabitWeeklyStats(habit);
+
+            // Weekly Stats based on active weekOffset
+            const targetRefDate = addDaysToDateStr(todayStr, weekOffset * 7);
+            const weeklyStats = getHabitWeeklyStats(habit, targetRefDate);
 
             return (
               <div
@@ -284,6 +390,29 @@ export function HabitsView({
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <button
+                        onClick={() => {
+                          setCustomRetroDate(yesterdayStr);
+                          setRetroModalHabit(habit);
+                        }}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#64748b',
+                          cursor: 'pointer',
+                          padding: '4px',
+                          borderRadius: '6px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.color = '#fbbf24'}
+                        onMouseOut={(e) => e.currentTarget.style.color = '#64748b'}
+                        title="Marcar datas passadas / Histórico retroativo"
+                      >
+                        <CalendarDays size={15} />
+                      </button>
+
                       <button
                         onClick={() => handleOpenEditHabit(habit)}
                         style={{
@@ -390,57 +519,90 @@ export function HabitsView({
                       )}
                     </div>
 
-                    {/* 7 Days Mini Tracker (Seg a Dom) */}
+                    {/* 7 Days Interactive Tracker (Seg a Dom - Clicável para marcar dias passados e hoje) */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                      {weeklyStats.completedDays.map(day => (
-                        <div
-                          key={day.dateStr}
-                          title={`${day.label} (${day.dateStr})${day.completed ? ' - Realizado' : ''}${day.isToday ? ' - Hoje' : ''}`}
-                          style={{
-                            flex: 1,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            padding: '4px 2px',
-                            borderRadius: '6px',
-                            background: day.completed
-                              ? 'rgba(16, 185, 129, 0.18)'
-                              : day.isToday
-                                ? 'rgba(56, 189, 248, 0.08)'
-                                : 'rgba(255, 255, 255, 0.03)',
-                            border: day.completed
-                              ? '1px solid rgba(16, 185, 129, 0.5)'
-                              : day.isToday
-                                ? '1px solid rgba(56, 189, 248, 0.4)'
-                                : '1px solid rgba(255, 255, 255, 0.05)',
-                            color: day.completed ? '#34d399' : day.isToday ? '#38bdf8' : '#64748b',
-                            fontSize: '0.68rem',
-                            fontWeight: day.completed || day.isToday ? 800 : 500,
-                            transition: 'all 0.15s ease'
-                          }}
-                        >
-                          <span>{day.shortName}</span>
-                          <div
-                            style={{
-                              width: '5px',
-                              height: '5px',
-                              borderRadius: '50%',
-                              marginTop: '2px',
-                              background: day.completed
-                                ? '#10b981'
-                                : day.isToday
-                                  ? '#38bdf8'
-                                  : 'rgba(255, 255, 255, 0.15)'
+                      {weeklyStats.completedDays.map(day => {
+                        const isClickable = !day.isFuture;
+                        const tooltipText = day.isFuture
+                          ? `Dia futuro (${day.dateStr})`
+                          : `${day.completed ? 'Desmarcar' : 'Marcar'} ${day.label} (${formatShortDate(day.dateStr)})${day.isToday ? ' - Hoje' : day.dateStr === yesterdayStr ? ' - Ontem' : ''}`;
+
+                        return (
+                          <button
+                            key={day.dateStr}
+                            type="button"
+                            disabled={!isClickable}
+                            onClick={() => {
+                              if (isClickable) {
+                                onToggleHabit(habit.id, day.dateStr);
+                              }
                             }}
-                          />
-                        </div>
-                      ))}
+                            title={tooltipText}
+                            style={{
+                              flex: 1,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              padding: '5px 2px',
+                              borderRadius: '7px',
+                              background: day.completed
+                                ? 'rgba(16, 185, 129, 0.22)'
+                                : day.isToday
+                                  ? 'rgba(56, 189, 248, 0.12)'
+                                  : 'rgba(255, 255, 255, 0.03)',
+                              border: day.completed
+                                ? '1px solid rgba(16, 185, 129, 0.55)'
+                                : day.isToday
+                                  ? '1px solid rgba(56, 189, 248, 0.5)'
+                                  : '1px solid rgba(255, 255, 255, 0.07)',
+                              color: day.completed ? '#34d399' : day.isToday ? '#38bdf8' : day.isFuture ? '#475569' : '#94a3b8',
+                              fontSize: '0.68rem',
+                              fontWeight: day.completed || day.isToday ? 800 : 500,
+                              cursor: isClickable ? 'pointer' : 'not-allowed',
+                              opacity: day.isFuture ? 0.4 : 1,
+                              transition: 'all 0.15s ease',
+                              outline: 'none'
+                            }}
+                            onMouseOver={(e) => {
+                              if (isClickable && !day.completed) {
+                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+                                e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                                e.currentTarget.style.transform = 'scale(1.04)';
+                              }
+                            }}
+                            onMouseOut={(e) => {
+                              if (isClickable && !day.completed) {
+                                e.currentTarget.style.background = day.isToday ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.03)';
+                                e.currentTarget.style.borderColor = day.isToday ? 'rgba(56, 189, 248, 0.5)' : 'rgba(255, 255, 255, 0.07)';
+                                e.currentTarget.style.transform = 'scale(1)';
+                              }
+                            }}
+                          >
+                            <span>{day.shortName}</span>
+                            <div
+                              style={{
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                marginTop: '3px',
+                                background: day.completed
+                                  ? '#10b981'
+                                  : day.isToday
+                                    ? '#38bdf8'
+                                    : day.isFuture
+                                      ? 'rgba(255, 255, 255, 0.08)'
+                                      : 'rgba(255, 255, 255, 0.2)'
+                              }}
+                            />
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
 
                 {/* Streak & Completion Trigger */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)', gap: '8px', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Flame size={20} color={streak > 0 ? '#ef4444' : '#64748b'} />
                     <div>
@@ -455,35 +617,72 @@ export function HabitsView({
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => onToggleHabit(habit.id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '8px 16px',
-                      borderRadius: '10px',
-                      background: isDoneToday
-                        ? 'rgba(16, 185, 129, 0.15)'
-                        : 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(185, 28, 28, 0.2) 100%)',
-                      border: isDoneToday ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)',
-                      color: isDoneToday ? '#34d399' : '#f87171',
-                      fontWeight: 700,
-                      fontSize: '0.85rem',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    {isDoneToday ? (
-                      <>
-                        <CheckCircle2 size={16} /> Realizado Hoje
-                      </>
-                    ) : (
-                      <>
-                        <Circle size={16} /> Marcar Ritual
-                      </>
-                    )}
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {/* Quick Retroactive Modal Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomRetroDate(yesterdayStr);
+                        setRetroModalHabit(habit);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '8px 10px',
+                        borderRadius: '10px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        color: '#94a3b8',
+                        fontWeight: 700,
+                        fontSize: '0.78rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseOver={e => {
+                        e.currentTarget.style.color = '#fbbf24';
+                        e.currentTarget.style.borderColor = 'rgba(251, 191, 36, 0.4)';
+                      }}
+                      onMouseOut={e => {
+                        e.currentTarget.style.color = '#94a3b8';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                      }}
+                      title="Marcar ontem ou datas passadas"
+                    >
+                      <Calendar size={13} /> Datas Passadas
+                    </button>
+
+                    {/* Today Completion Toggle Button */}
+                    <button
+                      onClick={() => onToggleHabit(habit.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '8px 14px',
+                        borderRadius: '10px',
+                        background: isDoneToday
+                          ? 'rgba(16, 185, 129, 0.15)'
+                          : 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(185, 28, 28, 0.2) 100%)',
+                        border: isDoneToday ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)',
+                        color: isDoneToday ? '#34d399' : '#f87171',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {isDoneToday ? (
+                        <>
+                          <CheckCircle2 size={16} /> Realizado Hoje
+                        </>
+                      ) : (
+                        <>
+                          <Circle size={16} /> Marcar Hoje
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -1014,6 +1213,326 @@ export function HabitsView({
           </div>
         </div>
       )}
+
+      {/* Modal Conclusão Retroativa & Datas Passadas */}
+      {retroModalHabit && (() => {
+        const activeHabit = habits?.find(h => h.id === retroModalHabit.id) || retroModalHabit;
+        const habitHistory = activeHabit.history || [];
+        const isYesterdayDone = habitHistory.includes(yesterdayStr);
+        const isAnteontemDone = habitHistory.includes(dayBeforeYesterdayStr);
+        const isCustomDateDone = habitHistory.includes(customRetroDate);
+
+        // Generate last 14 days for quick toggle grid
+        const last14Days = Array.from({ length: 14 }, (_, i) => {
+          const dStr = addDaysToDateStr(todayStr, -i);
+          const parts = dStr.split('-');
+          const isDone = habitHistory.includes(dStr);
+          const isToday = dStr === todayStr;
+          const isYesterday = dStr === yesterdayStr;
+          const label = isToday ? 'Hoje' : isYesterday ? 'Ontem' : `${parts[2]}/${parts[1]}`;
+          return { dateStr: dStr, label, shortDate: `${parts[2]}/${parts[1]}`, isDone, isToday, isYesterday };
+        });
+
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.82)',
+              backdropFilter: 'blur(8px)',
+              zIndex: 1000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px'
+            }}
+            onClick={() => setRetroModalHabit(null)}
+          >
+            <div
+              className="glass-panel"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: '520px',
+                width: '100%',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                padding: '28px',
+                border: '1px solid rgba(251, 191, 36, 0.35)',
+                borderRadius: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '18px'
+              }}
+            >
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                <div>
+                  <h3 className="font-cinzel" style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>📅</span> Conclusão Retroativa
+                  </h3>
+                  <p style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.95rem', marginTop: '4px' }}>
+                    {activeHabit.title}
+                  </p>
+                  <p style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '2px' }}>
+                    Esqueceu de marcar? Registre datas passadas para manter suas chamas acesas.
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(239, 68, 68, 0.15)', padding: '4px 8px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                    <Flame size={14} color="#ef4444" />
+                    <span style={{ fontSize: '0.8rem', fontWeight: 900, color: '#f87171', fontFamily: 'var(--font-mono)' }}>
+                      {activeHabit.currentStreak || 0} {activeHabit.currentStreak === 1 ? 'dia' : 'dias'}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: '#fbbf24', fontWeight: 700 }}>
+                    Recorde: {activeHabit.bestStreak || 0}d 🏆
+                  </span>
+                </div>
+              </div>
+
+              {/* 1-Click Quick Buttons (Ontem e Anteontem) */}
+              <div
+                style={{
+                  padding: '14px',
+                  borderRadius: '12px',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}
+              >
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  ⚡ Atalhos Rápidos de 1 Clique
+                </label>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  {/* Ontem */}
+                  <button
+                    type="button"
+                    onClick={() => onToggleHabit(activeHabit.id, yesterdayStr)}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '10px',
+                      background: isYesterdayDone
+                        ? 'rgba(16, 185, 129, 0.18)'
+                        : 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(185, 28, 28, 0.2) 100%)',
+                      border: isYesterdayDone
+                        ? '1px solid rgba(16, 185, 129, 0.5)'
+                        : '1px solid rgba(239, 68, 68, 0.5)',
+                      color: isYesterdayDone ? '#34d399' : '#f87171',
+                      fontWeight: 800,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseOver={e => e.currentTarget.style.transform = 'scale(1.02)'}
+                    onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+                  >
+                    {isYesterdayDone ? <CheckCircle2 size={16} /> : <Clock size={16} />}
+                    <span>{isYesterdayDone ? 'Ontem (Feito ✅)' : `Ontem (${formatShortDate(yesterdayStr)})`}</span>
+                  </button>
+
+                  {/* Anteontem */}
+                  <button
+                    type="button"
+                    onClick={() => onToggleHabit(activeHabit.id, dayBeforeYesterdayStr)}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '10px',
+                      background: isAnteontemDone
+                        ? 'rgba(16, 185, 129, 0.18)'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: isAnteontemDone
+                        ? '1px solid rgba(16, 185, 129, 0.5)'
+                        : '1px solid rgba(255, 255, 255, 0.12)',
+                      color: isAnteontemDone ? '#34d399' : '#e2e8f0',
+                      fontWeight: 800,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseOver={e => e.currentTarget.style.transform = 'scale(1.02)'}
+                    onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+                  >
+                    {isAnteontemDone ? <CheckCircle2 size={16} /> : <History size={16} />}
+                    <span>{isAnteontemDone ? 'Anteontem (Feito ✅)' : `Anteontem (${formatShortDate(dayBeforeYesterdayStr)})`}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Date Picker */}
+              <div
+                style={{
+                  padding: '14px',
+                  borderRadius: '12px',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}
+              >
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  📅 Escolher Outra Data no Calendário
+                </label>
+
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <input
+                    type="date"
+                    max={todayStr}
+                    value={customRetroDate}
+                    onChange={(e) => setCustomRetroDate(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      background: '#1a2030',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#fff',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+
+                  <button
+                    type="button"
+                    disabled={!customRetroDate || customRetroDate > todayStr}
+                    onClick={() => {
+                      if (customRetroDate && customRetroDate <= todayStr) {
+                        onToggleHabit(activeHabit.id, customRetroDate);
+                      }
+                    }}
+                    style={{
+                      padding: '10px 16px',
+                      borderRadius: '10px',
+                      background: isCustomDateDone
+                        ? 'rgba(239, 68, 68, 0.18)'
+                        : 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)',
+                      border: isCustomDateDone ? '1px solid rgba(239, 68, 68, 0.5)' : 'none',
+                      color: isCustomDateDone ? '#f87171' : '#000',
+                      fontWeight: 800,
+                      fontSize: '0.85rem',
+                      cursor: (!customRetroDate || customRetroDate > todayStr) ? 'not-allowed' : 'pointer',
+                      whiteSpace: 'nowrap',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {isCustomDateDone ? `Desmarcar (${formatShortDate(customRetroDate)})` : `Marcar (${formatShortDate(customRetroDate)})`}
+                  </button>
+                </div>
+              </div>
+
+              {/* Last 14 Days History Grid */}
+              <div
+                style={{
+                  padding: '14px',
+                  borderRadius: '12px',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    📋 Histórico dos Últimos 14 Dias
+                  </label>
+                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Clique para alternar</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(65px, 1fr))', gap: '6px' }}>
+                  {last14Days.map(item => (
+                    <button
+                      key={item.dateStr}
+                      type="button"
+                      onClick={() => onToggleHabit(activeHabit.id, item.dateStr)}
+                      title={`${item.isDone ? 'Desmarcar' : 'Marcar'} ${item.label} (${item.dateStr})`}
+                      style={{
+                        padding: '6px 4px',
+                        borderRadius: '8px',
+                        background: item.isDone
+                          ? 'rgba(16, 185, 129, 0.2)'
+                          : item.isToday
+                            ? 'rgba(56, 189, 248, 0.1)'
+                            : 'rgba(255, 255, 255, 0.02)',
+                        border: item.isDone
+                          ? '1px solid rgba(16, 185, 129, 0.5)'
+                          : item.isToday
+                            ? '1px solid rgba(56, 189, 248, 0.4)'
+                            : '1px solid rgba(255, 255, 255, 0.06)',
+                        color: item.isDone ? '#34d399' : item.isToday ? '#38bdf8' : '#94a3b8',
+                        fontSize: '0.68rem',
+                        fontWeight: item.isDone || item.isToday ? 800 : 500,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '3px',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseOver={e => {
+                        if (!item.isDone) {
+                          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+                          e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                        }
+                      }}
+                      onMouseOut={e => {
+                        if (!item.isDone) {
+                          e.currentTarget.style.background = item.isToday ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255, 255, 255, 0.02)';
+                          e.currentTarget.style.borderColor = item.isToday ? 'rgba(56, 189, 248, 0.4)' : 'rgba(255, 255, 255, 0.06)';
+                        }
+                      }}
+                    >
+                      <span>{item.label}</span>
+                      <div
+                        style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          background: item.isDone ? '#10b981' : item.isToday ? '#38bdf8' : 'rgba(255, 255, 255, 0.15)'
+                        }}
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Close Button */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => setRetroModalHabit(null)}
+                  style={{
+                    padding: '10px 22px',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: '#fff',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    fontSize: '0.88rem',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseOver={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'}
+                  onMouseOut={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
+                >
+                  Concluir & Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Reusable Confirm Modal */}
       <ConfirmModal
