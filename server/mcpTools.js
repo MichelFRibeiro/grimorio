@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getDb, saveDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, createBossRaid } from './db.js';
+import { getDb, saveDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, createBossRaid, applyCategoryRename } from './db.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings } from './rankings.js';
 import {
@@ -333,7 +333,11 @@ export const toolsDefinition = [
       const category = (db.questCategories || []).find(c => c.id === args.id);
       if (!category) return formatError(`Categoria '${args.id}' não encontrada.`);
 
-      if (args.name !== undefined) category.name = args.name.trim();
+      const oldName = category.name;
+      if (args.name !== undefined && args.name.trim()) {
+        category.name = args.name.trim();
+        applyCategoryRename(db, oldName, category.name);
+      }
       if (args.color !== undefined) category.color = args.color;
       if (args.icon !== undefined) category.icon = args.icon;
 
@@ -353,6 +357,8 @@ export const toolsDefinition = [
       if (index === -1) return formatError(`Categoria '${args.id}' não encontrada.`);
 
       const [removed] = db.questCategories.splice(index, 1);
+      const fallbackCat = db.questCategories.length > 0 ? db.questCategories[0].name : 'Geral';
+      applyCategoryRename(db, removed.name, fallbackCat);
       saveDb(db);
       return formatSuccess(removed, `Categoria '${removed.name}' excluída.`);
     }
@@ -757,7 +763,7 @@ export const toolsDefinition = [
       totalSteps: z.number().optional().default(10).describe('Meta total de itens/etapas no lote'),
       currentStep: z.number().optional().default(0).describe('Itens já concluídos inicialmente'),
       stepUnit: z.string().optional().default('processos').describe('Unidade de contagem (ex: processos, relatórios, casos, aulas)'),
-      category: z.string().optional().default('Trabalho').describe('Categoria do processo')
+      category: z.string().optional().describe('Categoria do processo')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1510,10 +1516,10 @@ export const toolsDefinition = [
   },
   {
     name: 'get_category_rankings',
-    description: 'Obter os rankings e níveis de maestria alcançados em cada categoria de atividade (Trabalho, Estudos, Pessoal, etc.).',
+    description: 'Obter os rankings e níveis de maestria alcançados em cada categoria de atividade cadastrada.',
     schema: {},
     handler: async () => {
-      const rankings = computeCategoryRankings();
+      const rankings = computeCategoryRankings(getDb());
       return formatSuccess(rankings, 'Rankings de categoria obtidos.');
     }
   }

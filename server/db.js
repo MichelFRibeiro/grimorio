@@ -62,6 +62,34 @@ export const defaultQuestCategories = [
 
 export const uid = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
 
+/**
+ * Propaga rename/remoção de categoria para missões, processos, hábitos,
+ * livros, questões e logs históricos — evita categorias fantasma no ranking.
+ */
+export function applyCategoryRename(db, oldName, newName) {
+  if (!db || !oldName || newName == null || oldName === newName) return db;
+
+  const rename = (item) => {
+    if (item && item.category === oldName) {
+      item.category = newName;
+    }
+  };
+
+  (db.quests || []).forEach(rename);
+  (db.processes || []).forEach(rename);
+  (db.habits || []).forEach(rename);
+  (db.books || []).forEach(rename);
+  (db.examQuestions || []).forEach(rename);
+
+  (db.actionLogs || []).forEach(log => {
+    if (log.details?.category === oldName) {
+      log.details.category = newName;
+    }
+  });
+
+  return db;
+}
+
 export const BOSS_CATALOG = [
   {
     name: 'O Dragão da Procrastinação',

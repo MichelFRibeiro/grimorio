@@ -220,35 +220,55 @@ export function getWeekBounds(dateInput = new Date()) {
   };
 }
 
+function findRegisteredFallback(registeredNames, preferred) {
+  for (const name of preferred) {
+    if (registeredNames.has(name)) return name;
+  }
+  return null;
+}
+
 /**
- * Extrai a categoria normalizada de um log de ação ou entidade
+ * Extrai a categoria normalizada de um log de ação ou entidade.
+ * Prefere a categoria atual da entidade (rename) e só aceita nomes
+ * cadastrados em questCategories — evita categorias fantasma como "Trabalho".
  */
-function resolveLogCategory(log, db) {
-  if (log.details?.category) return log.details.category;
+function resolveLogCategory(log, db, registeredNames) {
+  let resolved = null;
 
   if (log.type === 'quest_complete' && log.entityId && db.quests) {
     const q = db.quests.find(item => item.id === log.entityId);
-    if (q?.category) return q.category;
-  }
-
-  if (log.type === 'process_step' && log.entityId && db.processes) {
+    if (q?.category) resolved = q.category;
+  } else if (log.type === 'process_step' && log.entityId && db.processes) {
     const p = db.processes.find(item => item.id === log.entityId);
-    if (p?.category) return p.category;
+    if (p?.category) resolved = p.category;
+  } else if ((log.type === 'habit_complete' || log.type === 'habit_toggle') && log.entityId && db.habits) {
+    const h = db.habits.find(item => item.id === log.entityId);
+    if (h?.category) resolved = h.category;
+  } else if ((log.type === 'reading_session' || log.type === 'book_quote') && log.entityId && db.books) {
+    const b = db.books.find(item => item.id === log.entityId);
+    if (b?.category) resolved = b.category;
+  } else if (log.type === 'exam_questions' && log.entityId && db.examQuestions) {
+    const eq = db.examQuestions.find(item => item.id === log.entityId);
+    if (eq?.category) resolved = eq.category;
   }
 
-  if (log.type === 'reading_session' || log.type === 'book_quote') {
-    return 'Estudos';
+  if (!resolved && log.details?.category) {
+    resolved = log.details.category;
   }
 
-  if (log.type === 'exam_questions') {
-    return 'Estudos';
+  if (resolved && registeredNames.has(resolved)) {
+    return resolved;
   }
 
-  if (log.type === 'habit_complete') {
-    return 'Pessoal';
+  if (log.type === 'reading_session' || log.type === 'book_quote' || log.type === 'exam_questions') {
+    return findRegisteredFallback(registeredNames, ['Estudos']);
   }
 
-  return 'Geral';
+  if (log.type === 'habit_complete' || log.type === 'habit_toggle') {
+    return findRegisteredFallback(registeredNames, ['Pessoal']);
+  }
+
+  return null;
 }
 
 /**
@@ -259,29 +279,20 @@ export function computeCategoryRankings(db = {}) {
   const currentWeekBounds = getWeekBounds(now);
   const currentWeekKey = currentWeekBounds.weekKey;
 
-  // 1. Categorias registradas no Grimório
+  // 1. Categorias registradas no Grimório (fonte da verdade — sem defaults fantasma)
   const rawCategories = db.questCategories || [];
   const categoriesMap = new Map();
 
   rawCategories.forEach(cat => {
     const catName = typeof cat === 'string' ? cat : cat.name;
+    if (!catName) return;
     const catColor = cat.color || '#38bdf8';
     const catIcon = cat.icon || 'Tag';
     const catId = cat.id || `cat-${catName.toLowerCase()}`;
     categoriesMap.set(catName, { id: catId, name: catName, color: catColor, icon: catIcon });
   });
 
-  // Garantir que categorias padrão mínimas existam caso a lista esteja vazia
-  if (categoriesMap.size === 0) {
-    [
-      { id: 'cat-1', name: 'Trabalho', color: '#38bdf8', icon: 'Briefcase' },
-      { id: 'cat-2', name: 'Estudos', color: '#a855f7', icon: 'GraduationCap' },
-      { id: 'cat-3', name: 'Pessoal', color: '#10b981', icon: 'User' },
-      { id: 'cat-4', name: 'Projetos', color: '#f59e0b', icon: 'FolderGit2' },
-      { id: 'cat-5', name: 'Saúde', color: '#f43f5e', icon: 'Heart' },
-      { id: 'cat-6', name: 'Finanças', color: '#eab308', icon: 'Coins' }
-    ].forEach(c => categoriesMap.set(c.name, c));
-  }
+  const registeredNames = new Set(categoriesMap.keys());
 
   // 2. Coletar todos os eventos de XP com data e categoria
   const xpEvents = [];
@@ -294,16 +305,8 @@ export function computeCategoryRankings(db = {}) {
     const timestamp = log.timestamp || (log.date ? `${log.date}T12:00:00.000Z` : null);
     if (!timestamp) return;
 
-    const category = resolveLogCategory(log, db);
-    // Registrar categoria caso seja nova
-    if (!categoriesMap.has(category) && category !== 'Geral') {
-      categoriesMap.set(category, {
-        id: `cat-${category.toLowerCase().replace(/\s+/g, '-')}`,
-        name: category,
-        color: '#f59e0b',
-        icon: 'Tag'
-      });
-    }
+    const category = resolveLogCategory(log, db, registeredNames);
+    if (!category || !registeredNames.has(category)) return;
 
     xpEvents.push({
       xp,
@@ -316,10 +319,8 @@ export function computeCategoryRankings(db = {}) {
   (db.quests || []).filter(q => q.completed && q.completedAt).forEach(q => {
     const hasLog = logs.some(l => l.entityId === q.id && l.type === 'quest_complete');
     if (!hasLog) {
-      const cat = q.category || 'Geral';
-      if (!categoriesMap.has(cat) && cat !== 'Geral') {
-        categoriesMap.set(cat, { id: `cat-${cat.toLowerCase()}`, name: cat, color: '#38bdf8', icon: 'Tag' });
-      }
+      const cat = q.category;
+      if (!cat || !registeredNames.has(cat)) return;
       xpEvents.push({
         xp: parseInt(q.xpReward, 10) || 45,
         category: cat,
@@ -333,7 +334,8 @@ export function computeCategoryRankings(db = {}) {
     const hasLog = logs.some(l => l.type === 'process_step' && l.timestamp === step.createdAt);
     if (!hasLog && step.xpEarned && step.createdAt) {
       const proc = (db.processes || []).find(p => p.id === step.processId);
-      const cat = proc?.category || 'Trabalho';
+      const cat = proc?.category;
+      if (!cat || !registeredNames.has(cat)) return;
       xpEvents.push({
         xp: parseInt(step.xpEarned, 10) || 20,
         category: cat,

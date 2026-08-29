@@ -78,7 +78,8 @@ export function computeAnalytics() {
     categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
   });
   processes.forEach(p => {
-    const cat = p.category || 'Trabalho';
+    const cat = p.category;
+    if (!cat) return;
     categoryCounts[cat] = (categoryCounts[cat] || 0) + (p.completedUnits || 0);
   });
   examQuestions.forEach(q => {

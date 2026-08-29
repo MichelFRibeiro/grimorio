@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, saveDb, initDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG } from './db.js';
+import { getDb, saveDb, initDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG, applyCategoryRename } from './db.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
 import {
@@ -352,13 +352,7 @@ app.put('/api/quest-categories/:id', (req, res) => {
         return res.status(400).json({ error: 'Já existe outra categoria com este nome.' });
       }
       cat.name = trimmedName;
-
-      // Update existing quests with old category name
-      (db.quests || []).forEach(q => {
-        if (q.category === oldName) {
-          q.category = trimmedName;
-        }
-      });
+      applyCategoryRename(db, oldName, trimmedName);
     }
 
     if (color !== undefined) cat.color = color;
@@ -382,13 +376,8 @@ app.delete('/api/quest-categories/:id', (req, res) => {
     const catName = cat.name;
     db.questCategories = db.questCategories.filter(c => c.id !== req.params.id);
 
-    // Fallback category for quests in this deleted category
     const fallbackCat = db.questCategories.length > 0 ? db.questCategories[0].name : 'Geral';
-    (db.quests || []).forEach(q => {
-      if (q.category === catName) {
-        q.category = fallbackCat;
-      }
-    });
+    applyCategoryRename(db, catName, fallbackCat);
 
     saveDb(db);
     res.json({ success: true, categories: db.questCategories });

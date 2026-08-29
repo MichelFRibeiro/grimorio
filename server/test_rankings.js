@@ -5,6 +5,7 @@ import {
   getWeekBounds,
   computeCategoryRankings
 } from './rankings.js';
+import { applyCategoryRename } from './db.js';
 
 function assert(condition, message) {
   if (!condition) {
@@ -121,6 +122,58 @@ async function runRankingsTests() {
   console.log(`Ranking Geral: ${result.overall.rank.name} (Score: ${result.overall.avgScore}/10)`);
   assert(result.overall.rank !== undefined, 'Ranking geral deve estar definido');
   assert(result.overall.totalCategories === 2, 'Total de categorias deve ser 2');
+
+  // 5. Categorias cadastradas vs fantasma (ex.: "Trabalho" após rename para INSS)
+  console.log('\n🗂️ 5. Testando que categorias fantasma não aparecem e categorias criadas sempre aparecem...');
+  const renamedDb = {
+    questCategories: [
+      { id: 'cat-1', name: 'INSS', color: '#38bdf8' },
+      { id: 'cat-adv', name: 'Advocacia', color: '#f43f5e' },
+      { id: 'cat-est', name: 'Estudos', color: '#a855f7' }
+    ],
+    quests: [
+      { id: 'q-old', title: 'Missão antiga', category: 'INSS', completed: true, completedAt: '2026-08-19T11:34:22.698Z', xpReward: 80 }
+    ],
+    actionLogs: [
+      { id: 'l-old', type: 'quest_complete', entityId: 'q-old', xp: 80, timestamp: '2026-08-19T11:34:22.698Z', details: { category: 'Trabalho' } },
+      { id: 'l-orphan', type: 'process_step', entityId: 'proc-inexistente', xp: 45, timestamp: '2026-08-24T12:52:33.077Z', details: { category: 'Trabalho' } }
+    ]
+  };
+
+  const renamedResult = computeCategoryRankings(renamedDb);
+  const rankedNames = renamedResult.categoriesList.map(c => c.category.name);
+
+  assert(!rankedNames.includes('Trabalho'), 'Categoria fantasma "Trabalho" NÃO deve aparecer no ranking');
+  assert(rankedNames.includes('INSS'), 'Categoria INSS (renomeada) deve aparecer');
+  assert(rankedNames.includes('Advocacia'), 'Categoria criada Advocacia deve aparecer mesmo sem XP');
+  assert(rankedNames.includes('Estudos'), 'Categoria cadastrada Estudos deve aparecer mesmo sem XP');
+  assert(renamedResult.overall.totalCategories === 3, 'Total de categorias deve ser exatamente as cadastradas (3)');
+  assert(renamedResult.categories['INSS'].history.some(h => h.xp >= 80), 'XP histórico do log antigo "Trabalho" deve contar para INSS via entidade da missão');
+  assert(!renamedResult.categories['INSS'].history.some(h => h.xp >= 125), 'XP órfão de processo inexistente em "Trabalho" não deve inflar INSS');
+
+  // 6. Sem categorias cadastradas: não injetar defaults Trabalho/Estudos/etc.
+  console.log('\n🚫 6. Testando ranking sem injetar categorias padrão quando a lista está vazia...');
+  const emptyCatsResult = computeCategoryRankings({ questCategories: [], actionLogs: [] });
+  assert(emptyCatsResult.categoriesList.length === 0, 'Sem categorias cadastradas, o ranking deve ficar vazio');
+  assert(!Object.keys(emptyCatsResult.categories).includes('Trabalho'), 'Default "Trabalho" não deve ser injetado');
+
+  // 7. Rename deve atualizar missões, hábitos, processos e logs
+  console.log('\n🔁 7. Testando cascade de rename de categoria...');
+  const renameDb = {
+    quests: [{ id: 'q1', category: 'Trabalho' }],
+    processes: [{ id: 'p1', category: 'Trabalho' }],
+    habits: [{ id: 'h1', category: 'Trabalho' }],
+    books: [{ id: 'b1', category: 'Estudos' }],
+    examQuestions: [{ id: 'eq1', category: 'Trabalho' }],
+    actionLogs: [{ id: 'l1', details: { category: 'Trabalho' } }]
+  };
+  applyCategoryRename(renameDb, 'Trabalho', 'INSS');
+  assert(renameDb.quests[0].category === 'INSS', 'Missão deve ser atualizada no rename');
+  assert(renameDb.processes[0].category === 'INSS', 'Processo deve ser atualizado no rename');
+  assert(renameDb.habits[0].category === 'INSS', 'Hábito deve ser atualizado no rename');
+  assert(renameDb.examQuestions[0].category === 'INSS', 'Questões devem ser atualizadas no rename');
+  assert(renameDb.actionLogs[0].details.category === 'INSS', 'Log histórico deve ser atualizado no rename');
+  assert(renameDb.books[0].category === 'Estudos', 'Livros de outras categorias não devem ser alterados');
 
   console.log('\n🎉 TODOS OS TESTES UNITÁRIOS DE RANKINGS PASSARAM COM SUCESSO!\n');
 }
