@@ -534,7 +534,7 @@ export function QuestsView({
                   borderLeft: quest.completed ? '4px solid #10b981' : `4px solid ${pBadge.color}`
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px' }}>
+                <div className="quest-card-row">
                   
                   {/* Checkbox and Main Info */}
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', flex: 1 }}>
@@ -656,7 +656,7 @@ export function QuestsView({
                   </div>
 
                   {/* Rewards & Actions */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div className="quest-card-actions">
                     <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
                         <Sparkles size={14} /> +{quest.xpReward} XP
@@ -796,9 +796,10 @@ export function QuestsView({
             justifyContent: 'center',
             padding: '16px'
           }}
+          className="modal-overlay"
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '520px',
               width: '100%',
@@ -1019,9 +1020,10 @@ export function QuestsView({
             justifyContent: 'center',
             padding: '16px'
           }}
+          className="modal-overlay"
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '560px',
               width: '100%',
@@ -1312,6 +1314,7 @@ export function QuestsView({
       {/* Modal Gerenciar Categorias (CRUD) */}
       {showCategoryModal && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -1325,7 +1328,7 @@ export function QuestsView({
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '560px',
               width: '100%',

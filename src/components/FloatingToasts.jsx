@@ -5,7 +5,7 @@ export function FloatingToasts({ toasts }) {
   if (!toasts || toasts.length === 0) return null;
 
   return (
-    <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '8px', pointerEvents: 'none' }}>
+    <div className="floating-toasts">
       {toasts.map(t => (
         <div
           key={t.id}

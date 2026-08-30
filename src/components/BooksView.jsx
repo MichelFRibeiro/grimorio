@@ -740,7 +740,7 @@ export function BooksView({
               <p style={{ fontSize: '0.85rem' }}>Cadastre um livro para iniciar sessões de leitura e acumular Sabedoria!</p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '20px' }}>
               {books.map(book => {
                 const percent = Math.min(100, Math.round((book.currentPage / book.totalPages) * 100));
                 const isCompleted = book.status === 'completed' || book.currentPage >= book.totalPages;
@@ -1317,7 +1317,7 @@ export function BooksView({
               }
 
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
                   {filtered.map(q => (
                     <div
                       key={q.id}
@@ -1567,7 +1567,7 @@ export function BooksView({
               <p style={{ fontSize: '0.85rem' }}>Cadastre citações em suas sessões de leitura ou diretamente na ficha do livro!</p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
               {filteredLibraryQuotes.map(q => (
                 <div
                   key={q.id}
@@ -1687,6 +1687,7 @@ export function BooksView({
       {/* Modal Sessão de Leitura Aprimorado e Expandido */}
       {activeSessionBook && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -1700,7 +1701,7 @@ export function BooksView({
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '780px',
               width: '100%',
@@ -2089,6 +2090,7 @@ export function BooksView({
       {/* Modal Cadastro de Livro */}
       {showAddModal && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -2102,7 +2104,7 @@ export function BooksView({
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '500px',
               width: '100%',
@@ -2300,6 +2302,7 @@ export function BooksView({
       {/* Modal Editar Livro */}
       {editingBook && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -2313,7 +2316,7 @@ export function BooksView({
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '500px',
               width: '100%',
@@ -2529,6 +2532,7 @@ export function BooksView({
       {/* Modal Editar Sessão de Leitura */}
       {editingSession && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -2542,7 +2546,7 @@ export function BooksView({
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '720px',
               width: '100%',
@@ -2882,6 +2886,7 @@ export function BooksView({
       {/* Modal Editar Citação */}
       {editingQuote && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -2895,7 +2900,7 @@ export function BooksView({
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '560px',
               width: '100%',

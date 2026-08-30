@@ -72,6 +72,7 @@ export function ConfirmModal({
 
   const modalContent = (
     <div
+      className="modal-overlay"
       style={{
         position: 'fixed',
         inset: 0,
@@ -88,7 +89,7 @@ export function ConfirmModal({
       onClick={onCancel}
     >
       <div
-        className="glass-panel"
+        className="glass-panel modal-sheet"
         style={{
           maxWidth: '460px',
           width: '100%',
@@ -132,7 +133,7 @@ export function ConfirmModal({
         </div>
 
         {/* Buttons */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '22px' }}>
+        <div className="confirm-modal-actions">
           {cancelText && (
             <button
               type="button"

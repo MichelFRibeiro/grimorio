@@ -320,7 +320,7 @@ export function HabitsView({
           <p style={{ fontSize: '0.85rem' }}>Adicione rituais como "Leitura matinal" ou "Revisão de processos" para ganhar consistência!</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
           {habits.map(habit => {
             const isDoneToday = (habit.history || []).includes(todayStr);
             const streak = habit.currentStreak || 0;
@@ -693,6 +693,7 @@ export function HabitsView({
       {/* Modal Novo Ritual */}
       {showAddModal && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -706,7 +707,7 @@ export function HabitsView({
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '460px',
               width: '100%',
@@ -955,6 +956,7 @@ export function HabitsView({
       {/* Modal Editar Ritual */}
       {editingHabit && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -968,7 +970,7 @@ export function HabitsView({
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '460px',
               width: '100%',
@@ -1235,6 +1237,7 @@ export function HabitsView({
 
         return (
           <div
+            className="modal-overlay"
             style={{
               position: 'fixed',
               inset: 0,
@@ -1249,7 +1252,7 @@ export function HabitsView({
             onClick={() => setRetroModalHabit(null)}
           >
             <div
-              className="glass-panel"
+              className="glass-panel modal-sheet"
               onClick={(e) => e.stopPropagation()}
               style={{
                 maxWidth: '520px',

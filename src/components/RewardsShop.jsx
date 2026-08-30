@@ -139,7 +139,7 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
           <p style={{ fontSize: '0.85rem' }}>Crie recompensas prazerosas da sua rotina para se motivar!</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '18px', marginBottom: '32px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 240px), 1fr))', gap: '18px', marginBottom: '32px' }}>
           {rewards.map(reward => {
             const canAfford = coins >= reward.cost;
 
@@ -329,6 +329,7 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
       {/* Modal Criar Recompensa */}
       {showAddModal && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -342,7 +343,7 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '480px',
               width: '100%',
@@ -489,6 +490,7 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
       {/* Modal de Confirmação de Cancelamento de Resgate */}
       {cancelModalRedemption && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -502,7 +504,7 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '460px',
               width: '100%',

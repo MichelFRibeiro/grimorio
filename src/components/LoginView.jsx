@@ -38,7 +38,7 @@ export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleCli
           shape: 'rectangular',
           text: 'signin_with',
           logo_alignment: 'left',
-          width: 320
+          width: Math.min(320, Math.max(240, window.innerWidth - 80))
         });
       } catch (err) {
         console.warn('Google GSI render error:', err);
@@ -80,7 +80,7 @@ export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleCli
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '24px',
+        padding: '16px',
         position: 'relative',
         overflow: 'hidden'
       }}
@@ -105,7 +105,7 @@ export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleCli
         style={{
           maxWidth: '460px',
           width: '100%',
-          padding: '36px 32px',
+          padding: '28px 20px',
           borderRadius: '24px',
           border: '1px solid rgba(245, 158, 11, 0.35)',
           boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(245, 158, 11, 0.1)',
@@ -352,6 +352,7 @@ export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleCli
       {/* Help Modal */}
       {showHelpModal && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -365,7 +366,7 @@ export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleCli
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '520px',
               width: '100%',

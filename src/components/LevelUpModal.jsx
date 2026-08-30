@@ -17,6 +17,7 @@ export function LevelUpModal({ data, onClose }) {
 
   const modalContent = (
     <div
+      className="modal-overlay"
       style={{
         position: 'fixed',
         inset: 0,
@@ -33,7 +34,7 @@ export function LevelUpModal({ data, onClose }) {
       onClick={onClose}
     >
       <div
-        className="glass-panel-gold gold-glow-pulse"
+        className="glass-panel-gold gold-glow-pulse modal-sheet"
         style={{
           maxWidth: '480px',
           width: '100%',

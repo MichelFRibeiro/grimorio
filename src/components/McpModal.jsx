@@ -159,6 +159,7 @@ print("Missão Criada:", nova_missao.json())`;
 
   const modalContent = (
     <div
+      className="modal-overlay"
       style={{
         position: 'fixed',
         inset: 0,
@@ -175,7 +176,7 @@ print("Missão Criada:", nova_missao.json())`;
       onClick={onClose}
     >
       <div
-        className="glass-panel"
+        className="glass-panel modal-sheet"
         style={{
           maxWidth: '820px',
           width: '100%',

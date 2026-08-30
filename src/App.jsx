@@ -158,7 +158,7 @@ export function App() {
   ];
 
   return (
-    <div style={{ minHeight: '100vh', padding: '24px 20px 60px 20px', maxWidth: '1280px', margin: '0 auto' }}>
+    <div className="app-shell">
       
       {/* Top Header */}
       <Header
@@ -176,17 +176,7 @@ export function App() {
       <BossRaid boss={bossRaid} onResetBoss={resetBoss} />
 
       {/* Navigation Tab Bar */}
-      <nav
-        className="glass-panel"
-        style={{
-          padding: '8px 12px',
-          marginBottom: '24px',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '8px',
-          justifyContent: 'flex-start'
-        }}
-      >
+      <nav className="glass-panel app-nav">
         {tabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -198,6 +188,7 @@ export function App() {
                 playClick();
                 setActiveTab(tab.id);
               }}
+              className="app-nav-tab"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -222,7 +213,7 @@ export function App() {
               }}
             >
               <Icon size={18} />
-              <span>{tab.label}</span>
+              <span className="nav-tab-label">{tab.label}</span>
               {tab.badge !== undefined && tab.badge > 0 && (
                 <span
                   style={{

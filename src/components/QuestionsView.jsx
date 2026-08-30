@@ -508,7 +508,7 @@ export function QuestionsView({
               <p style={{ fontSize: '0.85rem' }}>Clique em "Registrar Bateria de Questões" para cadastrar seu primeiro lote de questões resolvidas!</p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
               {filteredQuestions.map(item => {
                 return (
                   <div
@@ -722,7 +722,7 @@ export function QuestionsView({
               <p>Nenhuma estatística por disciplina acumulada ainda.</p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
               {analytics.subjectStats.map(stat => {
                 const color = getAccuracyColor(stat.accuracyRate);
                 return (
@@ -794,6 +794,7 @@ export function QuestionsView({
       {/* Modal: Registrar Bateria de Questões */}
       {showAddModal && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -807,7 +808,7 @@ export function QuestionsView({
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '620px',
               width: '100%',
@@ -1202,6 +1203,7 @@ export function QuestionsView({
       {/* Modal Editar Questões */}
       {editingQuestion && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -1215,7 +1217,7 @@ export function QuestionsView({
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '540px',
               width: '100%',

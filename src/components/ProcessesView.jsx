@@ -498,6 +498,7 @@ export function ProcessesView({ processes, processSteps, questCategories = [], r
       {/* Modal Avançar Passo do Processo */}
       {selectedProcessForStep && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -511,7 +512,7 @@ export function ProcessesView({ processes, processSteps, questCategories = [], r
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '480px',
               width: '100%',
@@ -642,6 +643,7 @@ export function ProcessesView({ processes, processSteps, questCategories = [], r
       {/* Modal Criar Processo */}
       {showAddModal && (
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -655,7 +657,7 @@ export function ProcessesView({ processes, processSteps, questCategories = [], r
           }}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '500px',
               width: '100%',

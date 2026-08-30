@@ -37,7 +37,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '20px' }}>
         
         {/* Hero Identity & Level */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0, flex: '1 1 220px' }}>
           <div
             style={{
               width: '56px',
@@ -66,9 +66,9 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
             )}
           </div>
 
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h1 className="font-cinzel" style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.02em' }}>
+          <div className="header-identity">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <h1 className="font-cinzel" style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.02em', wordBreak: 'break-word' }}>
                 {currentUser?.name || profile.name}
               </h1>
               <span
@@ -85,12 +85,12 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
                 NV. {profile.level}
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <p style={{ fontSize: '0.85rem', color: '#c084fc', fontWeight: 600 }}>
                 {profile.title}
               </p>
               {currentUser?.email && (
-                <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                <span style={{ fontSize: '0.72rem', color: '#64748b', wordBreak: 'break-all' }}>
                   • {currentUser.email}
                 </span>
               )}
@@ -99,7 +99,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
         </div>
 
         {/* XP Progress Bar */}
-        <div style={{ flex: '1 1 240px', maxWidth: '360px' }}>
+        <div className="header-xp">
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '6px', fontWeight: 600 }}>
             <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Sparkles size={14} color="#f59e0b" /> Experiência (XP)
@@ -314,6 +314,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
       {/* Modal de Detalhes dos Rankings de Categorias */}
       {showRankingsModal && typeof document !== 'undefined' && createPortal(
         <div
+          className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
@@ -330,7 +331,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
           onClick={() => setShowRankingsModal(false)}
         >
           <div
-            className="glass-panel"
+            className="glass-panel modal-sheet"
             style={{
               maxWidth: '660px',
               width: '100%',
@@ -349,7 +350,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '20px', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div
                   style={{
@@ -413,6 +414,8 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
                 marginBottom: '20px',
                 flexShrink: 0
               }}
@@ -472,6 +475,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
+                        flexWrap: 'wrap',
                         gap: '14px'
                       }}
                     >

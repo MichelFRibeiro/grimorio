@@ -519,7 +519,7 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh }) {
           {/* TAB 1: Categories Cards Grid */}
           {rankingTab === 'categories' && (
             <div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '16px' }}>
                 {(analytics.rankings.categoriesList || []).map(catRank => {
                   const rank = catRank.currentRank;
                   const status = catRank.status;
@@ -879,7 +879,7 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh }) {
         </div>
 
         {/* Questions Charts Grid: 14 Days History + Subject Breakdown */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '20px' }}>
           
           {/* Daily Evolution Chart */}
           <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -941,7 +941,7 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh }) {
           <Sparkles size={18} color="#fbbf24" /> Revelações do Oráculo de Comportamento
         </h3>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '14px' }}>
           {(analytics.insights || []).map((ins, idx) => (
             <div
               key={idx}
@@ -964,7 +964,7 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh }) {
       </div>
 
       {/* General Productivity Charts Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px', marginBottom: '28px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '20px', marginBottom: '28px' }}>
         
         {/* Hourly Productivity Chart */}
         <div className="glass-panel" style={{ padding: '20px' }}>
@@ -999,7 +999,7 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh }) {
       </div>
 
       {/* Reading Projections & Categories Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginBottom: '28px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '20px', marginBottom: '28px' }}>
         
         {/* Reading Pace Projections */}
         <div className="glass-panel" style={{ padding: '20px' }}>
