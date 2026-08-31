@@ -197,6 +197,100 @@ function runTests() {
   assert(anyIds.includes('q-galinheiro'), 'anywhere inclui missão de casa');
   assert(anyIds.includes('q-socorro') || anyResult.primary?.id === 'q-socorro' || anyResult.queue.length >= 0, 'anywhere não filtra lugar');
 
+  // Histórico horário enorme não pode furar prazo de hoje
+  const dueTodayQuest = {
+    id: 'q-hoje',
+    title: 'Entregar peça hoje',
+    category: 'Advocacia',
+    priority: 'media',
+    dueDate: '2026-08-29',
+    dueTime: '18:00',
+    completed: false,
+    location: 'home',
+    timeWindow: null,
+    createdAt: '2026-08-29T10:00:00.000Z',
+    subtasks: []
+  };
+  const dbDueToday = baseDb({
+    quests: [dueTodayQuest, garden],
+    habits: [creatina],
+    actionLogs: Array.from({ length: 40 }, () => ({
+      type: 'habit_complete',
+      entityId: 'h-creatina',
+      hour: 10,
+      dayOfWeek: 6,
+      details: { category: 'Saúde' }
+    }))
+  });
+  const dueTodayResult = computeNextAction(dbDueToday, { location: 'home', now: nowHomeSat });
+  assert(dueTodayResult.primary?.id === 'q-hoje', `Prazo de hoje deve ganhar do pico horário do ritual (foi ${dueTodayResult.primary?.id})`);
+
+  const dueSoonQuest = {
+    id: 'q-amanha',
+    title: 'Protocolar amanhã',
+    category: 'Advocacia',
+    priority: 'media',
+    dueDate: '2026-08-31',
+    completed: false,
+    location: 'home',
+    timeWindow: null,
+    createdAt: '2026-08-20T10:00:00.000Z',
+    subtasks: []
+  };
+  const undatedEpic = {
+    id: 'q-epica',
+    title: 'Reescrever o sistema',
+    category: 'Programação',
+    priority: 'epica',
+    dueDate: null,
+    completed: false,
+    location: 'home',
+    timeWindow: null,
+    createdAt: '2026-07-01T10:00:00.000Z',
+    subtasks: []
+  };
+  const dbDueSoon = baseDb({
+    quests: [dueSoonQuest, undatedEpic],
+    actionLogs: Array.from({ length: 20 }, () => ({
+      type: 'quest_complete',
+      entityId: 'q-epica',
+      hour: 10,
+      dayOfWeek: 6,
+      details: { category: 'Programação' }
+    }))
+  });
+  const dueSoonResult = computeNextAction(dbDueSoon, { location: 'home', now: nowHomeSat });
+  assert(dueSoonResult.primary?.id === 'q-amanha', `Prazo em 2 dias deve ganhar de épica sem prazo com pico horário (foi ${dueSoonResult.primary?.id})`);
+
+  // Item fora da janela neste lugar não some: entra em deferredByTime
+  const gymMorning = computeNextAction(dbHome, { location: 'home', now: nowHomeSat });
+  assert(
+    gymMorning.deferredByTime.some(d => d.id === 'h-terco'),
+    'Terço fora da janela 15h deve aparecer como adiado por horário, não desaparecer'
+  );
+
+  // Snooze no servidor remove o item do ranking
+  const snoozed = computeNextAction(dbHome, {
+    location: 'home',
+    now: nowHomeSat,
+    snoozedIds: ['q-galinheiro']
+  });
+  assert(snoozed.primary?.id !== 'q-galinheiro', 'Item adiado não pode voltar como principal');
+  assert(![snoozed.primary, ...snoozed.queue].some(i => i && i.id === 'q-galinheiro'), 'Item adiado não entra na fila');
+
+  // Logs sem type (ou type irrelevante) não entram no histograma
+  const dbBadLogs = baseDb({
+    quests: [garden],
+    actionLogs: [
+      { entityId: 'q-jardim', hour: 10, dayOfWeek: 6, details: { category: 'Casa' } },
+      { type: 'reading_session', entityId: 'book-1', hour: 10, dayOfWeek: 6 }
+    ]
+  });
+  const originalGarden = { ...garden };
+  const badLogsResult = computeNextAction(dbBadLogs, { location: 'home', now: nowHomeSat });
+  assert(badLogsResult.primary?.id === 'q-jardim', 'Missão pendente continua elegível mesmo com logs irrelevantes');
+  assert(dbBadLogs.quests[0].location === originalGarden.location, 'computeNextAction não deve mutar o snapshot original');
+
   console.log('\n🏆 Todos os testes do motor de Próxima Atividade passaram.');
 }
 

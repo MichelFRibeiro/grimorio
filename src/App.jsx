@@ -73,7 +73,8 @@ export function App() {
     cancelRewardRedemption,
     deleteReward,
     resetBoss,
-    setCurrentLocation
+    setCurrentLocation,
+    refreshNextAction
   } = useGameData();
 
   if (loadingAuth || (isAuthenticated && loading)) {
@@ -190,6 +191,7 @@ export function App() {
         quests={quests}
         onOpenQuests={() => setActiveTab('quests')}
         onOpenHabits={() => setActiveTab('habits')}
+        onRefresh={refreshNextAction}
         playClick={playClick}
       />
 

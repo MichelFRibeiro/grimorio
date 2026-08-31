@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Compass, CheckCircle2, Clock, MapPin, Sparkles, Flame, Scroll } from 'lucide-react';
+import { Compass, CheckCircle2, Clock, MapPin, Sparkles, Flame, Scroll, RefreshCw } from 'lucide-react';
 import { LOCATIONS, getLocationMeta } from '../utils/locations';
 
 export function NextActionCard({
@@ -12,10 +12,12 @@ export function NextActionCard({
   onToggleHabit,
   onOpenQuests,
   onOpenHabits,
+  onRefresh,
   quests = [],
   playClick
 }) {
   const [snoozedIds, setSnoozedIds] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
   const catalog = (locations && locations.length) ? locations : LOCATIONS;
   const context = nextAction?.context || {};
   const activeLocation = currentLocation || context.location || 'anywhere';
@@ -64,6 +66,17 @@ export function NextActionCard({
     setSnoozedIds(prev => [...prev, item.id]);
   };
 
+  const handleRefresh = async () => {
+    if (refreshing || !onRefresh) return;
+    if (playClick) playClick();
+    setRefreshing(true);
+    try {
+      await onRefresh({ snoozedIds });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleOpen = (item) => {
     if (!item) return;
     if (playClick) playClick();
@@ -108,9 +121,35 @@ export function NextActionCard({
               Próxima atividade para agora · {locMeta.emoji} {locMeta.label}
             </p>
           </div>
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              title="Reprocessar a indicação do Oráculo"
+              style={{
+                marginLeft: '4px',
+                padding: '6px 10px',
+                borderRadius: '999px',
+                border: '1px solid rgba(168, 85, 247, 0.45)',
+                background: refreshing ? 'rgba(168, 85, 247, 0.28)' : 'rgba(168, 85, 247, 0.14)',
+                color: '#e9d5ff',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                cursor: refreshing ? 'wait' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                opacity: refreshing ? 0.85 : 1
+              }}
+            >
+              <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+              {refreshing ? 'Consultando...' : 'Reprocessar'}
+            </button>
+          )}
         </div>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
           {catalog.map(loc => {
             const active = loc.id === activeLocation;
             return (
@@ -220,6 +259,16 @@ export function NextActionCard({
             </button>
           ))}
         </div>
+      )}
+
+      {(nextAction?.deferredByTime || []).length > 0 && (
+        <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '10px' }}>
+          Depois, neste lugar:{' '}
+          {nextAction.deferredByTime.map(d => {
+            const windowLabel = d.timeWindow ? `${d.timeWindow.start}–${d.timeWindow.end}` : '';
+            return windowLabel ? `${d.title} (${windowLabel})` : d.title;
+          }).join(' · ')}
+        </p>
       )}
     </div>
   );

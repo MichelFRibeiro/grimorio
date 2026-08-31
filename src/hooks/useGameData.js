@@ -541,6 +541,30 @@ export function useGameData() {
     }
   };
 
+  const refreshNextAction = async ({ location, snoozedIds } = {}) => {
+    const params = new URLSearchParams();
+    if (location) params.set('location', location);
+    if (Array.isArray(snoozedIds) && snoozedIds.length > 0) {
+      params.set('snoozed', snoozedIds.join(','));
+    }
+    const query = params.toString();
+    const res = await fetch(`/api/next-action${query ? `?${query}` : ''}`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) return false;
+    const json = await res.json();
+    setData(prev => {
+      if (!prev) return prev;
+      const { success, locations, ...nextAction } = json;
+      return {
+        ...prev,
+        nextAction,
+        locations: locations || prev.locations
+      };
+    });
+    return true;
+  };
+
   // 7. Profile Actions
   const updateProfile = async (profileData) => {
     playClick();
@@ -595,6 +619,7 @@ export function useGameData() {
     deleteReward,
     resetBoss,
     updateProfile,
-    setCurrentLocation
+    setCurrentLocation,
+    refreshNextAction
   };
 }

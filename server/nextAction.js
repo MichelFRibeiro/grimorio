@@ -26,6 +26,8 @@ const PRIORITY_RANK = { epica: 4, alta: 3, media: 2, baixa: 1 };
 const HIST_MIN_SAMPLES = 5;
 const WINDOW_GRACE_MINUTES = 15;
 const RELEVANT_LOG_TYPES = new Set(['quest_complete', 'habit_complete']);
+const HOUR_FIT_MAX = 8;
+const DAY_FIT_MAX = 4;
 
 function daysBetween(fromStr, toStr) {
   if (!fromStr || !toStr) return null;
@@ -57,7 +59,7 @@ function histTotal(arr) {
   return (arr || []).reduce((s, n) => s + n, 0);
 }
 
-function windowFit(counts, center, radius = 1) {
+function windowFit(counts, center, radius = 1, { wrap = true } = {}) {
   const n = (counts || []).length;
   if (!n) return 0.5;
   let peak = 0;
@@ -65,7 +67,9 @@ function windowFit(counts, center, radius = 1) {
   for (let i = 0; i < n; i++) {
     let sum = 0;
     for (let r = -radius; r <= radius; r++) {
-      sum += counts[(i + r + n) % n] || 0;
+      const idx = wrap ? ((i + r + n) % n) : (i + r);
+      if (idx < 0 || idx >= n) continue;
+      sum += counts[idx] || 0;
     }
     if (sum > peak) peak = sum;
     if (i === center) current = sum;
@@ -83,7 +87,7 @@ function buildHistoryIndexes(logs) {
   const byCategoryDay = {};
 
   (logs || []).forEach(log => {
-    if (!log || (log.type && !RELEVANT_LOG_TYPES.has(log.type))) return;
+    if (!log || !RELEVANT_LOG_TYPES.has(log.type)) return;
     const h = log.hour !== undefined ? log.hour : (log.timestamp ? getSaoPauloHour(log.timestamp) : -1);
     const d = log.dayOfWeek !== undefined ? log.dayOfWeek : (log.timestamp ? getSaoPauloDayOfWeek(log.timestamp) : -1);
     const category = log.details?.category;
@@ -150,17 +154,18 @@ function isHabitDueToday(habit, weeklyStats, now, todayStr) {
 
 function urgencyScore(quest, todayStr, nowMinutes) {
   if (!quest?.dueDate) {
-    return { score: 8, label: null, overdue: false, dueToday: false };
+    return { score: 8, label: null, overdue: false, dueToday: false, dueSoon: false };
   }
   const delta = daysBetween(todayStr, quest.dueDate);
-  if (delta == null) return { score: 8, label: null, overdue: false, dueToday: false };
+  if (delta == null) return { score: 8, label: null, overdue: false, dueToday: false, dueSoon: false };
 
   if (delta < 0) {
     return {
       score: 35,
       label: `Atrasada desde ${formatDayMonth(quest.dueDate)}`,
       overdue: true,
-      dueToday: false
+      dueToday: false,
+      dueSoon: false
     };
   }
 
@@ -171,7 +176,8 @@ function urgencyScore(quest, todayStr, nowMinutes) {
         score: 35,
         label: `Prazo de hoje (${quest.dueTime}) já passou`,
         overdue: true,
-        dueToday: true
+        dueToday: true,
+        dueSoon: false
       };
     }
     let score = 30;
@@ -180,7 +186,8 @@ function urgencyScore(quest, todayStr, nowMinutes) {
       score,
       label: quest.dueTime ? `Vence hoje às ${quest.dueTime}` : 'Vence hoje',
       overdue: false,
-      dueToday: true
+      dueToday: true,
+      dueSoon: true
     };
   }
 
@@ -189,7 +196,8 @@ function urgencyScore(quest, todayStr, nowMinutes) {
       score: 22,
       label: delta === 1 ? 'Prazo amanhã' : `Prazo em ${delta} dias`,
       overdue: false,
-      dueToday: false
+      dueToday: false,
+      dueSoon: true
     };
   }
   if (delta <= 7) {
@@ -197,10 +205,11 @@ function urgencyScore(quest, todayStr, nowMinutes) {
       score: 14,
       label: `Prazo em ${delta} dias`,
       overdue: false,
-      dueToday: false
+      dueToday: false,
+      dueSoon: false
     };
   }
-  return { score: 8, label: `Prazo em ${delta} dias`, overdue: false, dueToday: false };
+  return { score: 8, label: `Prazo em ${delta} dias`, overdue: false, dueToday: false, dueSoon: false };
 }
 
 function ritualRiskScore(habit, weeklyStats, now, todayStr, extra) {
@@ -224,6 +233,7 @@ function ritualRiskScore(habit, weeklyStats, now, todayStr, extra) {
   const done = weeklyStats?.completionsThisWeek || 0;
   const remainingNeeded = Math.max(0, target - done);
   const weekDays = getCurrentWeekDays(now);
+  // Compara datas civis da semana de `now`, não o "hoje" real do relógio.
   const remainingDays = weekDays.filter(d => d.dateStr >= todayStr).length;
   if (remainingNeeded <= 0) return { score: 0, label: null };
   if (remainingNeeded >= remainingDays) {
@@ -279,16 +289,16 @@ function scoreCandidate({
   const reasons = [];
   const urgency = kind === 'quest'
     ? urgencyScore(item, todayStr, nowMinutes)
-    : { score: 8, label: extra ? 'Extra da semana' : null, overdue: false, dueToday: false };
+    : { score: 8, label: extra ? 'Extra da semana' : null, overdue: false, dueToday: false, dueSoon: false };
 
   const priorityKey = kind === 'quest' ? (item.priority || 'media') : 'media';
   const priorityPts = PRIORITY_SCORE[priorityKey] || 10;
 
   const histograms = pickHistogram(hist, item.id, item.category);
-  const hourFit = windowFit(histograms.hour, hour, 1);
-  const dayFit = windowFit(histograms.day, dayOfWeek, 0);
-  const hourPts = Math.round(20 * hourFit);
-  const dayPts = Math.round(10 * dayFit);
+  const hourFit = windowFit(histograms.hour, hour, 1, { wrap: true });
+  const dayFit = windowFit(histograms.day, dayOfWeek, 0, { wrap: false });
+  const hourPts = Math.round(HOUR_FIT_MAX * hourFit);
+  const dayPts = Math.round(DAY_FIT_MAX * dayFit);
 
   const risk = kind === 'habit'
     ? ritualRiskScore(item, weeklyStats, now, todayStr, extra)
@@ -320,11 +330,14 @@ function scoreCandidate({
   }
 
   const score = urgency.score + priorityPts + hourPts + dayPts + risk.score + freshPts;
+  // Prazos concretos não podem perder para pico horário de outro item.
+  const urgencyClass = urgency.overdue ? 3 : urgency.dueToday ? 2 : (urgency.dueSoon ? 1 : 0);
 
   return {
     score,
     reasons: reasons.slice(0, 3),
     urgency,
+    urgencyClass,
     hourFit,
     dayFit,
     histSource: histograms.source,
@@ -347,6 +360,9 @@ function serializeCandidate(kind, item, scoring, extra, weeklyStats, completedTo
     dueDate: kind === 'quest' ? (item.dueDate || null) : null,
     dueTime: kind === 'quest' ? (item.dueTime || null) : null,
     score: scoring.score,
+    urgencyClass: scoring.urgencyClass || 0,
+    overdue: !!scoring.urgency?.overdue,
+    dueToday: !!scoring.urgency?.dueToday,
     reasons: scoring.reasons,
     reason: scoring.reasons[0] || (kind === 'habit' ? 'Ritual pendente agora' : 'Missão pendente agora'),
     nextSubtask: scoring.nextSubtask,
@@ -365,6 +381,9 @@ function serializeCandidate(kind, item, scoring, extra, weeklyStats, completedTo
 }
 
 function compareCandidates(a, b) {
+  const aClass = a.urgencyClass || 0;
+  const bClass = b.urgencyClass || 0;
+  if (bClass !== aClass) return bClass - aClass;
   if (b.score !== a.score) return b.score - a.score;
   const aDue = a.dueDate || '9999-99-99';
   const bDue = b.dueDate || '9999-99-99';
@@ -423,10 +442,16 @@ export function computeNextAction(db, options = {}) {
   const main = [];
   const extras = [];
   const deferredSource = [];
+  const deferredByTimeSource = [];
 
-  const consider = (kind, item, extra, weeklyStats, completedToday, eligibleHere) => {
+  const prepareItem = (item) => {
+    const copy = { ...item };
+    applyActivityContext(copy, {}, categories);
+    return copy;
+  };
+
+  const consider = (kind, item, extra, weeklyStats, completedToday) => {
     if (snoozed.has(item.id)) return;
-    applyActivityContext(item, {}, categories);
     const scoring = scoreCandidate({
       kind,
       item,
@@ -440,39 +465,43 @@ export function computeNextAction(db, options = {}) {
       weeklyStats
     });
     const serialized = serializeCandidate(kind, item, scoring, extra, weeklyStats, completedToday);
-    if (eligibleHere) {
-      if (extra) extras.push(serialized);
-      else main.push(serialized);
-    }
+    if (extra) extras.push(serialized);
+    else main.push(serialized);
   };
 
   (db.quests || []).forEach(quest => {
     if (!quest || quest.completed) return;
-    applyActivityContext(quest, {}, categories);
-    const windowOk = isNowInTimeWindow(quest.timeWindow, nowMinutes, WINDOW_GRACE_MINUTES);
-    if (!windowOk) return;
-    const placeOk = locationMatches(quest.location, location);
+    const item = prepareItem(quest);
+    const windowOk = isNowInTimeWindow(item.timeWindow, nowMinutes, WINDOW_GRACE_MINUTES);
+    const placeOk = locationMatches(item.location, location);
     if (!placeOk) {
-      deferredSource.push(quest);
+      deferredSource.push(item);
       return;
     }
-    consider('quest', quest, false, null, false, true);
+    if (!windowOk) {
+      deferredByTimeSource.push({ kind: 'quest', item });
+      return;
+    }
+    consider('quest', item, false, null, false);
   });
 
   (db.habits || []).forEach(habit => {
     if (!habit) return;
-    applyActivityContext(habit, {}, categories);
-    const weeklyStats = getHabitWeeklyStats(habit, now);
-    const due = isHabitDueToday(habit, weeklyStats, now, todayStr);
+    const item = prepareItem(habit);
+    const weeklyStats = getHabitWeeklyStats(item, now);
+    const due = isHabitDueToday(item, weeklyStats, now, todayStr);
     if (!due.due && !due.extra) return;
-    const windowOk = isNowInTimeWindow(habit.timeWindow, nowMinutes, WINDOW_GRACE_MINUTES);
-    if (!windowOk) return;
-    const placeOk = locationMatches(habit.location, location);
+    const windowOk = isNowInTimeWindow(item.timeWindow, nowMinutes, WINDOW_GRACE_MINUTES);
+    const placeOk = locationMatches(item.location, location);
     if (!placeOk) {
-      if (due.due) deferredSource.push(habit);
+      if (due.due) deferredSource.push(item);
       return;
     }
-    consider('habit', habit, due.extra, weeklyStats, due.completedToday, true);
+    if (!windowOk) {
+      if (due.due) deferredByTimeSource.push({ kind: 'habit', item });
+      return;
+    }
+    consider('habit', item, due.extra, weeklyStats, due.completedToday);
   });
 
   main.sort(compareCandidates);
@@ -486,12 +515,32 @@ export function computeNextAction(db, options = {}) {
   }
 
   const deferredByLocation = countDeferred(deferredSource);
+  const deferredByTime = deferredByTimeSource
+    .slice()
+    .sort((a, b) => {
+      const aStart = parseTimeToMinutes(a.item?.timeWindow?.start) ?? 0;
+      const bStart = parseTimeToMinutes(b.item?.timeWindow?.start) ?? 0;
+      return aStart - bStart;
+    })
+    .slice(0, 4)
+    .map(({ kind, item }) => ({
+      id: item.id,
+      kind,
+      title: item.title,
+      timeWindow: item.timeWindow || null
+    }));
 
   let emptyReason = null;
   if (!primary) {
     if (deferredByLocation.length > 0) {
       const first = deferredByLocation[0];
       emptyReason = `${first.count} atividade(s) te esperam em ${first.locationLabel}.`;
+    } else if (deferredByTime.length > 0) {
+      const first = deferredByTime[0];
+      const windowLabel = first.timeWindow
+        ? `${first.timeWindow.start}–${first.timeWindow.end}`
+        : 'outra janela';
+      emptyReason = `${deferredByTime.length} atividade(s) neste lugar só entram na janela ${windowLabel}.`;
     } else {
       emptyReason = 'Nada pendente neste lugar e neste horário. O Boss pode esperar.';
     }
@@ -513,11 +562,13 @@ export function computeNextAction(db, options = {}) {
     queue,
     extras: extras.filter(e => !primary || e.id !== primary.id).slice(0, 3),
     deferredByLocation,
+    deferredByTime,
     emptyReason,
     counts: {
       eligible: main.length,
       extras: extras.length,
-      deferred: deferredSource.length
+      deferred: deferredSource.length,
+      deferredByTime: deferredByTimeSource.length
     }
   };
 }
