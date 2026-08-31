@@ -3,6 +3,7 @@ import {
   getRankIndexForXp,
   getRankForXp,
   getWeekBounds,
+  calculateWeeklyRankProgress,
   computeCategoryRankings
 } from './rankings.js';
 import { applyCategoryRename } from './db.js';
@@ -174,6 +175,30 @@ async function runRankingsTests() {
   assert(renameDb.examQuestions[0].category === 'INSS', 'Questões devem ser atualizadas no rename');
   assert(renameDb.actionLogs[0].details.category === 'INSS', 'Log histórico deve ser atualizado no rename');
   assert(renameDb.books[0].category === 'Estudos', 'Livros de outras categorias não devem ser alterados');
+
+  // 8. Barra de progresso deve refletir XP da semana / meta do próximo tier
+  console.log('\n📊 8. Testando barra de progresso (XP da semana vs meta do próximo tier)...');
+  assert(calculateWeeklyRankProgress(222, 700) === 32, '222/700 XP deve preencher 32% da barra');
+  assert(calculateWeeklyRankProgress(0, 700) === 0, '0 XP deve deixar a barra vazia');
+  assert(calculateWeeklyRankProgress(700, 700) === 100, 'Meta atingida deve encher a barra');
+  assert(calculateWeeklyRankProgress(500, null) === 100, 'Tier máximo deve encher a barra');
+
+  const atRiskDb = {
+    questCategories: [{ id: 'cat-inss', name: 'INSS', color: '#38bdf8' }],
+    actionLogs: [
+      { id: 'l-prev', type: 'quest_complete', xp: 500, timestamp: (() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 7);
+        return d.toISOString();
+      })(), details: { category: 'INSS' } },
+      { id: 'l-now', type: 'quest_complete', xp: 222, timestamp: new Date().toISOString(), details: { category: 'INSS' } }
+    ]
+  };
+  const atRiskResult = computeCategoryRankings(atRiskDb);
+  const atRiskInss = atRiskResult.categories['INSS'];
+  assert(atRiskInss.weeklyXp === 222, `XP da semana atual deve ser 222 (obtido: ${atRiskInss.weeklyXp})`);
+  assert(atRiskInss.progressPercent === 32, `Barra com 222/700 deve ser 32% (obtido: ${atRiskInss.progressPercent}%)`);
+  assert(atRiskInss.progressPercent > 0, 'Barra não pode ficar vazia com 222 XP já feitos');
 
   console.log('\n🎉 TODOS OS TESTES UNITÁRIOS DE RANKINGS PASSARAM COM SUCESSO!\n');
 }

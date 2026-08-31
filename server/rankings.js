@@ -272,6 +272,16 @@ function resolveLogCategory(log, db, registeredNames) {
 }
 
 /**
+ * Progresso da barra semanal: XP atual vs meta do próximo tier.
+ * Ex.: 222 XP com meta B em 700 → 32%. Null = já está no tier máximo.
+ */
+export function calculateWeeklyRankProgress(weeklyXp, nextRankMinXp) {
+  if (nextRankMinXp == null) return 100;
+  if (nextRankMinXp <= 0) return weeklyXp > 0 ? 100 : 0;
+  return Math.min(100, Math.round((Math.max(0, weeklyXp) / nextRankMinXp) * 100));
+}
+
+/**
  * Calcula todo o histórico semana a semana e o ranking atual de cada categoria e do usuário
  */
 export function computeCategoryRankings(db = {}) {
@@ -457,15 +467,10 @@ export function computeCategoryRankings(db = {}) {
     const nextRankMinXp = nextRankTier ? nextRankTier.minXp : maintainMinXp;
     const xpNeededForNextRank = nextRankTier ? Math.max(0, nextRankMinXp - currentWeekXp) : 0;
 
-    // Percentual de progresso na semana
-    let progressPercent = 0;
-    if (nextRankTier) {
-      const range = nextRankMinXp - currentRankTier.minXp;
-      const progressInTier = Math.max(0, currentWeekXp - currentRankTier.minXp);
-      progressPercent = Math.min(100, Math.round((progressInTier / range) * 100));
-    } else {
-      progressPercent = 100;
-    }
+    // Barra da UI: XP da semana / meta do próximo tier (ex.: 222 / 700).
+    // Não usa o mínimo do rank atual, senão "em risco de queda" fica em 0%
+    // mesmo com XP visível (222 ainda não chegou nos 450 do B-).
+    const progressPercent = calculateWeeklyRankProgress(currentWeekXp, nextRankTier ? nextRankMinXp : null);
 
     const currentWeekSummary = {
       weekKey: currentWeekKey,

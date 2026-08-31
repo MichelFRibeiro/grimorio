@@ -523,6 +523,11 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh }) {
                 {(analytics.rankings.categoriesList || []).map(catRank => {
                   const rank = catRank.currentRank;
                   const status = catRank.status;
+                  const weeklyXp = Number(catRank.weeklyXp) || 0;
+                  const nextRankMinXp = Number(catRank.nextRankMinXp) || 0;
+                  const progressPercent = catRank.nextRank
+                    ? (nextRankMinXp > 0 ? Math.min(100, Math.round((weeklyXp / nextRankMinXp) * 100)) : 0)
+                    : 100;
 
                   return (
                     <div
@@ -588,11 +593,15 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh }) {
                           </span>
                         </div>
 
-                        {/* Progress Bar */}
-                        <div className="progress-container" style={{ height: '8px', background: 'rgba(0,0,0,0.4)' }}>
+                        {/* Progress Bar: XP da semana / meta do próximo tier (ex.: 222/700) */}
+                        <div
+                          className="progress-container"
+                          style={{ height: '8px', background: 'rgba(0,0,0,0.4)' }}
+                          title={`${weeklyXp} / ${catRank.nextRank ? nextRankMinXp : weeklyXp} XP`}
+                        >
                           <div
                             style={{
-                              width: `${catRank.progressPercent}%`,
+                              width: `${progressPercent}%`,
                               height: '100%',
                               background: rank.border,
                               borderRadius: '999px',
