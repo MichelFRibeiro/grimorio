@@ -124,6 +124,7 @@ export function HabitsView({
 
   // Week View & Retroactive Completion State
   const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [retroModalHabit, setRetroModalHabit] = useState(null);
   const [customRetroDate, setCustomRetroDate] = useState(yesterdayStr);
 
@@ -141,10 +142,17 @@ export function HabitsView({
     if (habit.frequency === 'weekly') return 'Semanal';
     if (habit.frequency === 'times_per_week' || habit.frequency === 'n_times_week') {
       const n = habit.targetTimesPerWeek || habit.timesPerWeek || 3;
-      return `${n}x por semana`;
+      return `${n}x/sem`;
     }
     return 'Diário';
   };
+
+  const categoryNames = ['Todas', ...activeCategories.map(c => typeof c === 'string' ? c : c.name)];
+
+  const filteredHabits = (habits || []).filter(h => {
+    if (selectedCategory === 'Todas') return true;
+    return (h.category || 'Pessoal') === selectedCategory;
+  });
 
   const handleCreateHabit = (e) => {
     e.preventDefault();
@@ -331,6 +339,56 @@ export function HabitsView({
         </div>
       </div>
 
+      {/* Category Filter Bar — same pattern as QuestsView */}
+      <div className="glass-panel" style={{ padding: '12px 16px', marginBottom: '20px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+          {categoryNames.map(catName => {
+            const isAll = catName === 'Todas';
+            const catRanking = !isAll ? rankings?.categories?.[catName] : null;
+            const rankTier = catRanking?.currentRank;
+
+            return (
+              <button
+                key={catName}
+                onClick={() => setSelectedCategory(catName)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  background: selectedCategory === catName ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                  color: selectedCategory === catName ? '#f87171' : '#94a3b8',
+                  border: selectedCategory === catName ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid transparent'
+                }}
+              >
+                <span>{catName}</span>
+                {rankTier && (
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 900,
+                      padding: '1px 5px',
+                      borderRadius: '4px',
+                      background: rankTier.bg,
+                      color: rankTier.textColor,
+                      border: `1px solid ${rankTier.border}`,
+                      lineHeight: 1.15
+                    }}
+                    title={`Ranking semanal: Tier ${rankTier.name} (${rankTier.title}) • ${catRanking.weeklyXp} XP nesta semana`}
+                  >
+                    {rankTier.name}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Habits List */}
       {(!habits || habits.length === 0) ? (
         <div className="glass-panel" style={{ padding: '40px 20px', textAlign: 'center', color: '#64748b' }}>
@@ -338,9 +396,15 @@ export function HabitsView({
           <p style={{ fontSize: '1rem', fontWeight: 600 }}>Nenhum ritual diário configurado.</p>
           <p style={{ fontSize: '0.85rem' }}>Adicione rituais como "Leitura matinal" ou "Revisão de processos" para ganhar consistência!</p>
         </div>
+      ) : filteredHabits.length === 0 ? (
+        <div className="glass-panel" style={{ padding: '40px 20px', textAlign: 'center', color: '#64748b' }}>
+          <Flame size={40} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
+          <p style={{ fontSize: '1rem', fontWeight: 600 }}>Nenhum ritual nesta categoria.</p>
+          <p style={{ fontSize: '0.85rem' }}>Selecione outra categoria ou cadastre um novo ritual.</p>
+        </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
-          {habits.map(habit => {
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '16px' }}>
+          {filteredHabits.map(habit => {
             const isDoneToday = (habit.history || []).includes(todayStr);
             const streak = habit.currentStreak || 0;
             const multiplier = Math.min(2.0, 1 + streak * 0.1).toFixed(1);
@@ -353,27 +417,60 @@ export function HabitsView({
             const targetRefDate = addDaysToDateStr(todayStr, weekOffset * 7);
             const weeklyStats = getHabitWeeklyStats(habit, targetRefDate);
 
+            const locationMeta = habit.location && habit.location !== 'anywhere'
+              ? getLocationMeta(habit.location)
+              : null;
+            const hasTimeWindow = Boolean(habit.timeWindow?.start && habit.timeWindow?.end);
+            const metaChipStyle = {
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '3px 8px',
+              borderRadius: '999px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              color: '#94a3b8',
+              whiteSpace: 'nowrap',
+              lineHeight: 1.2
+            };
+            const iconBtnStyle = {
+              background: 'transparent',
+              border: 'none',
+              color: '#64748b',
+              cursor: 'pointer',
+              padding: '4px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            };
+
             return (
               <div
                 key={habit.id}
                 className="rpg-card"
                 style={{
-                  padding: '20px',
+                  padding: '16px',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
-                  gap: '16px',
+                  gap: '12px',
+                  minWidth: 0,
+                  overflow: 'hidden',
                   borderLeft: isDoneToday ? '4px solid #10b981' : '4px solid #ef4444',
                   background: isDoneToday ? 'rgba(16, 185, 129, 0.04)' : '#131722'
                 }}
               >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '8px' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '8px' }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', minWidth: 0 }}>
                         <span
                           style={{
-                            fontSize: '0.7rem',
+                            fontSize: '0.68rem',
                             padding: '2px 8px',
                             borderRadius: '6px',
                             background: `${catColor}18`,
@@ -382,20 +479,23 @@ export function HabitsView({
                             fontWeight: 700,
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '5px'
+                            gap: '5px',
+                            maxWidth: '100%',
+                            minWidth: 0
                           }}
                         >
-                          <span>{habitCat}</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{habitCat}</span>
                           {catRanking && (
                             <span
                               style={{
-                                fontSize: '0.65rem',
+                                fontSize: '0.62rem',
                                 fontWeight: 900,
                                 padding: '0 4px',
                                 borderRadius: '3px',
                                 background: catRanking.currentRank.bg,
                                 color: catRanking.currentRank.textColor,
-                                border: `1px solid ${catRanking.currentRank.border}`
+                                border: `1px solid ${catRanking.currentRank.border}`,
+                                flexShrink: 0
                               }}
                             >
                               {catRanking.currentRank.name}
@@ -403,28 +503,28 @@ export function HabitsView({
                           )}
                         </span>
                       </div>
-                      <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc' }}>
+                      <h3 style={{
+                        fontSize: '1rem',
+                        fontWeight: 700,
+                        color: '#f8fafc',
+                        lineHeight: 1.3,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical'
+                      }}>
                         {habit.title}
                       </h3>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
                       <button
                         onClick={() => {
                           setCustomRetroDate(yesterdayStr);
                           setRetroModalHabit(habit);
                         }}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#64748b',
-                          cursor: 'pointer',
-                          padding: '4px',
-                          borderRadius: '6px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
+                        style={iconBtnStyle}
                         onMouseOver={(e) => e.currentTarget.style.color = '#fbbf24'}
                         onMouseOut={(e) => e.currentTarget.style.color = '#64748b'}
                         title="Marcar datas passadas / Histórico retroativo"
@@ -434,17 +534,7 @@ export function HabitsView({
 
                       <button
                         onClick={() => handleOpenEditHabit(habit)}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#64748b',
-                          cursor: 'pointer',
-                          padding: '4px',
-                          borderRadius: '6px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
+                        style={iconBtnStyle}
                         onMouseOver={(e) => e.currentTarget.style.color = '#38bdf8'}
                         onMouseOut={(e) => e.currentTarget.style.color = '#64748b'}
                         title="Editar ritual"
@@ -454,17 +544,7 @@ export function HabitsView({
 
                       <button
                         onClick={() => promptDeleteHabit(habit)}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#64748b',
-                          cursor: 'pointer',
-                          padding: '4px',
-                          borderRadius: '6px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
+                        style={iconBtnStyle}
                         onMouseOver={(e) => e.currentTarget.style.color = '#f87171'}
                         onMouseOut={(e) => e.currentTarget.style.color = '#64748b'}
                         title="Excluir ritual"
@@ -475,36 +555,40 @@ export function HabitsView({
                   </div>
 
                   {habit.description && (
-                    <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '10px', lineHeight: 1.4 }}>
+                    <p style={{
+                      fontSize: '0.8rem',
+                      color: '#94a3b8',
+                      marginBottom: '10px',
+                      lineHeight: 1.4,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical'
+                    }}>
                       {habit.description}
                     </p>
                   )}
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '12px' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Sparkles size={14} color="#f59e0b" /> +{habit.xpReward} XP
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+                    <span style={{ ...metaChipStyle, color: '#fbbf24' }}>
+                      <Sparkles size={12} color="#f59e0b" /> +{habit.xpReward} XP
                     </span>
-                    <span>•</span>
-                    <span style={{ color: '#fbbf24', fontWeight: 700 }}>
+                    <span style={{ ...metaChipStyle, color: '#fbbf24' }}>
                       +{habit.coinReward} 🪙
                     </span>
-                    <span>•</span>
-                    <span style={{ color: '#38bdf8', fontWeight: 600 }}>
+                    <span style={{ ...metaChipStyle, color: '#38bdf8' }}>
                       {getFrequencyLabel(habit)}
                     </span>
-                    {habit.location && habit.location !== 'anywhere' && (
-                      <>
-                        <span>•</span>
-                        <span>{getLocationMeta(habit.location).emoji} {getLocationMeta(habit.location).short}</span>
-                      </>
+                    {locationMeta && (
+                      <span style={metaChipStyle} title={locationMeta.label}>
+                        {locationMeta.emoji} {locationMeta.short}
+                      </span>
                     )}
-                    {habit.timeWindow?.start && habit.timeWindow?.end && (
-                      <>
-                        <span>•</span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <Clock size={13} /> {habit.timeWindow.start}–{habit.timeWindow.end}
-                        </span>
-                      </>
+                    {hasTimeWindow && (
+                      <span style={metaChipStyle} title={`${habit.timeWindow.start}–${habit.timeWindow.end}`}>
+                        <Clock size={12} /> {habit.timeWindow.start}–{habit.timeWindow.end}
+                      </span>
                     )}
                   </div>
 
@@ -520,10 +604,10 @@ export function HabitsView({
                       gap: '8px'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem' }}>
-                      <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '0.78rem', minWidth: 0 }}>
+                      <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                         <Target size={13} color={weeklyStats.isGoalMet ? '#10b981' : '#38bdf8'} />
-                        <span>Semana:</span>
+                        <span>Semana</span>
                         <strong style={{ color: weeklyStats.isGoalMet ? '#34d399' : '#f8fafc', fontFamily: 'var(--font-mono)' }}>
                           {weeklyStats.completionsThisWeek}/{weeklyStats.targetTimesPerWeek}
                         </strong>
@@ -538,15 +622,17 @@ export function HabitsView({
                             padding: '2px 6px',
                             borderRadius: '6px',
                             border: '1px solid rgba(16, 185, 129, 0.35)',
-                            display: 'flex',
+                            display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '3px'
+                            gap: '3px',
+                            flexShrink: 0,
+                            whiteSpace: 'nowrap'
                           }}
                         >
-                          <Check size={11} /> Meta Concluída! 🎯
+                          <Check size={11} /> Meta ok
                         </span>
                       ) : (
-                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                        <span style={{ fontSize: '0.7rem', color: '#64748b', flexShrink: 0, whiteSpace: 'nowrap' }}>
                           Faltam {Math.max(0, weeklyStats.targetTimesPerWeek - weeklyStats.completionsThisWeek)}x
                         </span>
                       )}
@@ -635,23 +721,20 @@ export function HabitsView({
                 </div>
 
                 {/* Streak & Completion Trigger */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Flame size={20} color={streak > 0 ? '#ef4444' : '#64748b'} />
-                    <div>
-                      <div style={{ fontSize: '0.9rem', fontWeight: 900, color: streak > 0 ? '#f87171' : '#64748b', fontFamily: 'var(--font-mono)' }}>
-                        {streak} {streak === 1 ? 'dia' : 'dias'}
-                      </div>
-                      {streak > 1 && (
-                        <div style={{ fontSize: '0.7rem', color: '#fbbf24', fontWeight: 700 }}>
-                          Multiplicador x{multiplier}
-                        </div>
-                      )}
-                    </div>
+                    <Flame size={18} color={streak > 0 ? '#ef4444' : '#64748b'} />
+                    <span style={{ fontSize: '0.85rem', fontWeight: 900, color: streak > 0 ? '#f87171' : '#64748b', fontFamily: 'var(--font-mono)' }}>
+                      {streak} {streak === 1 ? 'dia' : 'dias'}
+                    </span>
+                    {streak > 1 && (
+                      <span style={{ fontSize: '0.7rem', color: '#fbbf24', fontWeight: 700 }}>
+                        · x{multiplier}
+                      </span>
+                    )}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {/* Quick Retroactive Modal Button */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)', gap: '6px' }}>
                     <button
                       type="button"
                       onClick={() => {
@@ -661,16 +744,18 @@ export function HabitsView({
                       style={{
                         display: 'flex',
                         alignItems: 'center',
+                        justifyContent: 'center',
                         gap: '5px',
-                        padding: '8px 10px',
+                        padding: '8px 8px',
                         borderRadius: '10px',
                         background: 'rgba(255, 255, 255, 0.05)',
                         border: '1px solid rgba(255, 255, 255, 0.12)',
                         color: '#94a3b8',
                         fontWeight: 700,
-                        fontSize: '0.78rem',
+                        fontSize: '0.75rem',
                         cursor: 'pointer',
-                        transition: 'all 0.15s ease'
+                        transition: 'all 0.15s ease',
+                        minWidth: 0
                       }}
                       onMouseOver={e => {
                         e.currentTarget.style.color = '#fbbf24';
@@ -682,17 +767,18 @@ export function HabitsView({
                       }}
                       title="Marcar ontem ou datas passadas"
                     >
-                      <Calendar size={13} /> Datas Passadas
+                      <Calendar size={13} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Datas</span>
                     </button>
 
-                    {/* Today Completion Toggle Button */}
                     <button
                       onClick={() => onToggleHabit(habit.id)}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '8px',
-                        padding: '8px 14px',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        padding: '8px 8px',
                         borderRadius: '10px',
                         background: isDoneToday
                           ? 'rgba(16, 185, 129, 0.15)'
@@ -700,18 +786,21 @@ export function HabitsView({
                         border: isDoneToday ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)',
                         color: isDoneToday ? '#34d399' : '#f87171',
                         fontWeight: 700,
-                        fontSize: '0.85rem',
+                        fontSize: '0.75rem',
                         cursor: 'pointer',
-                        transition: 'all 0.15s ease'
+                        transition: 'all 0.15s ease',
+                        minWidth: 0
                       }}
                     >
                       {isDoneToday ? (
                         <>
-                          <CheckCircle2 size={16} /> Realizado Hoje
+                          <CheckCircle2 size={15} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Feito hoje</span>
                         </>
                       ) : (
                         <>
-                          <Circle size={16} /> Marcar Hoje
+                          <Circle size={15} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Marcar hoje</span>
                         </>
                       )}
                     </button>
