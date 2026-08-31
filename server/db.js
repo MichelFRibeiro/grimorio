@@ -8,6 +8,7 @@ import {
   getSaoPauloDayOfWeek,
   getYesterdaySaoPauloDateStr
 } from './timeUtils.js';
+import { applyLocationDefaults } from './locations.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -52,12 +53,12 @@ export function getTitleForLevel(level) {
 }
 
 export const defaultQuestCategories = [
-  { id: 'cat-1', name: 'Trabalho', color: '#38bdf8', icon: 'Briefcase' },
-  { id: 'cat-2', name: 'Estudos', color: '#a855f7', icon: 'GraduationCap' },
-  { id: 'cat-3', name: 'Pessoal', color: '#10b981', icon: 'User' },
-  { id: 'cat-4', name: 'Projetos', color: '#f59e0b', icon: 'FolderGit2' },
-  { id: 'cat-5', name: 'Saúde', color: '#f43f5e', icon: 'Heart' },
-  { id: 'cat-6', name: 'Finanças', color: '#eab308', icon: 'Coins' }
+  { id: 'cat-1', name: 'Trabalho', color: '#38bdf8', icon: 'Briefcase', defaultLocation: 'office' },
+  { id: 'cat-2', name: 'Estudos', color: '#a855f7', icon: 'GraduationCap', defaultLocation: 'anywhere' },
+  { id: 'cat-3', name: 'Pessoal', color: '#10b981', icon: 'User', defaultLocation: 'anywhere' },
+  { id: 'cat-4', name: 'Projetos', color: '#f59e0b', icon: 'FolderGit2', defaultLocation: 'anywhere' },
+  { id: 'cat-5', name: 'Saúde', color: '#f43f5e', icon: 'Heart', defaultLocation: 'anywhere' },
+  { id: 'cat-6', name: 'Finanças', color: '#eab308', icon: 'Coins', defaultLocation: 'anywhere' }
 ];
 
 export const uid = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
@@ -246,7 +247,9 @@ export const defaultDatabase = () => {
       },
       streak: 1,
       lastActiveDate: todayStr,
-      theme: 'dark-fantasy'
+      theme: 'dark-fantasy',
+      currentLocation: null,
+      locationManual: false
     },
     users: [],
     questCategories: [...defaultQuestCategories],
@@ -298,6 +301,7 @@ export function sanitizeDb(db) {
     if (!db.bossRaid.rewardCoins) db.bossRaid.rewardCoins = 150;
     if (!db.bossRaid.rewardXp) db.bossRaid.rewardXp = 400;
   }
+  applyLocationDefaults(db);
   return db;
 }
 

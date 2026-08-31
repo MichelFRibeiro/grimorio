@@ -2,6 +2,13 @@ import { z } from 'zod';
 import { getDb, saveDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, createBossRaid, applyCategoryRename } from './db.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings } from './rankings.js';
+import { computeNextAction } from './nextAction.js';
+import {
+  LOCATIONS,
+  normalizeLocation,
+  applyActivityContext,
+  defaultLocationForCategory
+} from './locations.js';
 import {
   getSaoPauloDateStr,
   getSaoPauloHour,
@@ -9,6 +16,12 @@ import {
   getHabitWeeklyStats,
   calculateHabitStreak
 } from './timeUtils.js';
+
+const locationEnum = z.enum(['anywhere', 'office', 'home', 'gym']);
+const timeWindowSchema = z.object({
+  start: z.string().describe('Início da janela HH:mm'),
+  end: z.string().describe('Fim da janela HH:mm')
+}).nullable();
 
 // Unique ID generator
 const uid = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
@@ -107,6 +120,8 @@ export const toolsDefinition = [
       priority: z.enum(['baixa', 'media', 'alta', 'epica']).optional().default('media').describe('Prioridade da missão'),
       dueDate: z.string().optional().describe('Data limite no formato YYYY-MM-DD'),
       dueTime: z.string().optional().describe('Horário limite no formato HH:mm'),
+      location: locationEnum.optional().describe('Onde a missão pode ser feita: anywhere, office, home ou gym'),
+      timeWindow: timeWindowSchema.optional().describe('Janela de execução (não é prazo). Null = qualquer hora'),
       subtasks: z.array(z.union([
         z.string(),
         z.object({ title: z.string(), completed: z.boolean().optional() })
@@ -155,6 +170,7 @@ export const toolsDefinition = [
         completedAt: null,
         createdAt: new Date().toISOString()
       };
+      applyActivityContext(newQuest, { location: args.location, timeWindow: args.timeWindow }, db.questCategories);
 
       if (!db.quests) db.quests = [];
       db.quests.unshift(newQuest);
@@ -174,6 +190,8 @@ export const toolsDefinition = [
       priority: z.enum(['baixa', 'media', 'alta', 'epica']).optional().describe('Nova prioridade'),
       dueDate: z.string().nullable().optional().describe('Nova data limite YYYY-MM-DD (ou null para remover)'),
       dueTime: z.string().nullable().optional().describe('Novo horário limite HH:mm (ou null para remover)'),
+      location: locationEnum.optional().describe('Novo lugar (anywhere, office, home, gym)'),
+      timeWindow: timeWindowSchema.optional().describe('Nova janela de execução (ou null para qualquer hora)'),
       subtasks: z.array(z.union([
         z.string(),
         z.object({ id: z.string().optional(), title: z.string(), completed: z.boolean().optional() })
@@ -196,6 +214,9 @@ export const toolsDefinition = [
       }
       if (args.dueDate !== undefined) quest.dueDate = args.dueDate;
       if (args.dueTime !== undefined) quest.dueTime = args.dueTime;
+      if (args.location !== undefined || args.timeWindow !== undefined) {
+        applyActivityContext(quest, { location: args.location, timeWindow: args.timeWindow }, db.questCategories);
+      }
       if (args.subtasks !== undefined) {
         quest.subtasks = args.subtasks.map(st => ({
           id: (typeof st === 'object' && st.id) ? st.id : uid('st'),
@@ -240,7 +261,7 @@ export const toolsDefinition = [
           actionType: 'quest_complete',
           entityId: quest.id,
           title: quest.title,
-          details: { category: quest.category, priority: quest.priority }
+          details: { category: quest.category, priority: quest.priority, location: quest.location || null }
         });
       } else {
         const willpower = quest.priority === 'epica' ? 25 : quest.priority === 'alta' ? 15 : 5;
@@ -298,7 +319,8 @@ export const toolsDefinition = [
     schema: {
       name: z.string().describe('Nome da categoria'),
       color: z.string().optional().default('#38bdf8').describe('Código hexadecimal da cor (ex: #38bdf8)'),
-      icon: z.string().optional().default('FolderGit2').describe('Nome do ícone Lucide')
+      icon: z.string().optional().default('FolderGit2').describe('Nome do ícone Lucide'),
+      defaultLocation: locationEnum.optional().describe('Lugar padrão das missões desta categoria')
     },
     handler: async (args) => {
       const db = getDb();
@@ -309,6 +331,9 @@ export const toolsDefinition = [
         name: args.name.trim(),
         color: args.color || '#38bdf8',
         icon: args.icon || 'FolderGit2',
+        defaultLocation: args.defaultLocation
+          ? normalizeLocation(args.defaultLocation)
+          : defaultLocationForCategory(args.name.trim()),
         isCustom: true,
         createdAt: new Date().toISOString()
       };
@@ -326,7 +351,8 @@ export const toolsDefinition = [
       id: z.string().describe('ID da categoria'),
       name: z.string().optional().describe('Novo nome'),
       color: z.string().optional().describe('Nova cor hex'),
-      icon: z.string().optional().describe('Novo ícone')
+      icon: z.string().optional().describe('Novo ícone'),
+      defaultLocation: locationEnum.optional().describe('Novo lugar padrão da categoria')
     },
     handler: async (args) => {
       const db = getDb();
@@ -340,6 +366,11 @@ export const toolsDefinition = [
       }
       if (args.color !== undefined) category.color = args.color;
       if (args.icon !== undefined) category.icon = args.icon;
+      if (args.defaultLocation !== undefined) {
+        category.defaultLocation = args.defaultLocation
+          ? normalizeLocation(args.defaultLocation)
+          : defaultLocationForCategory(category.name);
+      }
 
       saveDb(db);
       return formatSuccess(category, `Categoria '${category.name}' atualizada.`);
@@ -939,6 +970,8 @@ export const toolsDefinition = [
           bestStreak: h.bestStreak || 0,
           xpReward: h.xpReward || 30,
           coinReward: h.coinReward || 8,
+          location: h.location || 'anywhere',
+          timeWindow: h.timeWindow || null,
           createdAt: h.createdAt
         };
       });
@@ -957,7 +990,9 @@ export const toolsDefinition = [
       frequency: z.enum(['daily', 'weekdays', 'weekly', 'times_per_week']).optional().default('daily').describe('Frequência do hábito'),
       targetTimesPerWeek: z.number().min(1).max(7).optional().describe('Meta de vezes por semana (usado quando frequency for times_per_week)'),
       xpReward: z.number().optional().default(30).describe('XP concedido por execução'),
-      coinReward: z.number().optional().default(8).describe('Moedas concedidas por execução')
+      coinReward: z.number().optional().default(8).describe('Moedas concedidas por execução'),
+      location: locationEnum.optional().describe('Onde o ritual pode ser feito: anywhere, office, home ou gym'),
+      timeWindow: timeWindowSchema.optional().describe('Janela de execução (não é prazo). Null = qualquer hora')
     },
     handler: async (args) => {
       const db = getDb();
@@ -991,6 +1026,7 @@ export const toolsDefinition = [
         coinReward: parseInt(args.coinReward, 10) || 8,
         createdAt: new Date().toISOString()
       };
+      applyActivityContext(newHabit, { location: args.location, timeWindow: args.timeWindow }, db.questCategories);
 
       if (!db.habits) db.habits = [];
       db.habits.unshift(newHabit);
@@ -1043,7 +1079,7 @@ export const toolsDefinition = [
           actionType: 'habit_complete',
           entityId: habit.id,
           title: `Ritual Concluído: ${habit.title} (${formattedDate})`,
-          details: { category: habit.category || 'Pessoal', date: targetDate, streak: habit.currentStreak }
+          details: { category: habit.category || 'Pessoal', date: targetDate, streak: habit.currentStreak, location: habit.location || null }
         });
       } else {
         habit.history = habit.history.filter(d => d !== targetDate);
@@ -1094,7 +1130,9 @@ export const toolsDefinition = [
       frequency: z.enum(['daily', 'weekdays', 'weekly', 'times_per_week']).optional().describe('Nova frequência'),
       targetTimesPerWeek: z.number().min(1).max(7).optional().describe('Nova meta de vezes por semana'),
       xpReward: z.number().optional().describe('Novo XP'),
-      coinReward: z.number().optional().describe('Novas moedas')
+      coinReward: z.number().optional().describe('Novas moedas'),
+      location: locationEnum.optional().describe('Novo lugar (anywhere, office, home, gym)'),
+      timeWindow: timeWindowSchema.optional().describe('Nova janela de execução (ou null para qualquer hora)')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1124,6 +1162,9 @@ export const toolsDefinition = [
 
       if (args.xpReward !== undefined) habit.xpReward = parseInt(args.xpReward, 10) || 30;
       if (args.coinReward !== undefined) habit.coinReward = parseInt(args.coinReward, 10) || 8;
+      if (args.location !== undefined || args.timeWindow !== undefined) {
+        applyActivityContext(habit, { location: args.location, timeWindow: args.timeWindow }, db.questCategories);
+      }
 
       saveDb(db);
       return formatSuccess(habit, `Ritual '${habit.title}' atualizado com sucesso.`);
@@ -1521,6 +1562,51 @@ export const toolsDefinition = [
     handler: async () => {
       const rankings = computeCategoryRankings(getDb());
       return formatSuccess(rankings, 'Rankings de categoria obtidos.');
+    }
+  },
+
+  // ==========================================
+  // 11. PRÓXIMA ATIVIDADE (ORÁCULO DE CONTEXTO)
+  // ==========================================
+  {
+    name: 'get_next_action',
+    description: 'Indicar a próxima atividade (missão ou ritual) considerando o lugar atual, janela de horário, prazos, prioridade e histórico de execução. Filtra o que não pode ser feito agora e ranqueia o restante.',
+    schema: {
+      location: locationEnum.optional().describe('Lugar atual (anywhere, office, home, gym). Se omitido, usa o lugar salvo no perfil ou um palpite por horário.'),
+      snoozedIds: z.array(z.string()).optional().describe('IDs adiados nesta sessão (ignorados no ranking)')
+    },
+    handler: async (args = {}) => {
+      const db = getDb();
+      const result = computeNextAction(db, {
+        location: args.location,
+        snoozedIds: args.snoozedIds || []
+      });
+      return formatSuccess({
+        ...result,
+        locations: LOCATIONS
+      }, result.primary
+        ? `Próxima atividade: ${result.primary.title} (${result.primary.kind === 'habit' ? 'ritual' : 'missão'} · ${result.primary.locationLabel}).`
+        : (result.emptyReason || 'Nenhuma atividade elegível agora.'));
+    }
+  },
+  {
+    name: 'set_current_location',
+    description: 'Definir o lugar atual do herói (Casa, Escritório, Academia ou Qualquer lugar) usado pelo Oráculo para indicar a próxima atividade.',
+    schema: {
+      location: locationEnum.describe('Lugar atual: anywhere, office, home ou gym'),
+      manual: z.boolean().optional().default(true).describe('Se true, persiste a escolha até o herói mudar. Se false, volta a palpite automático.')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.userProfile.currentLocation = normalizeLocation(args.location);
+      db.userProfile.locationManual = args.manual !== false;
+      saveDb(db);
+      const result = computeNextAction(db, { location: db.userProfile.currentLocation });
+      return formatSuccess({
+        currentLocation: db.userProfile.currentLocation,
+        locationManual: db.userProfile.locationManual,
+        nextAction: result
+      }, `Lugar atual: ${result.context.locationLabel}.`);
     }
   }
 ];

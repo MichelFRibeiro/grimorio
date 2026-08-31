@@ -519,6 +519,28 @@ export function useGameData() {
     if (res.ok) fetchState();
   };
 
+  const setCurrentLocation = async (location, manual = true) => {
+    playClick();
+    const res = await fetch('/api/next-action/location', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ location, manual })
+    });
+    if (res.ok) {
+      const json = await res.json();
+      setData(prev => {
+        if (!prev) return prev;
+        const { success, userProfile, locations, ...nextAction } = json;
+        return {
+          ...prev,
+          userProfile: userProfile || prev.userProfile,
+          nextAction,
+          locations: locations || prev.locations
+        };
+      });
+    }
+  };
+
   // 7. Profile Actions
   const updateProfile = async (profileData) => {
     playClick();
@@ -572,6 +594,7 @@ export function useGameData() {
     cancelRewardRedemption,
     deleteReward,
     resetBoss,
-    updateProfile
+    updateProfile,
+    setCurrentLocation
   };
 }

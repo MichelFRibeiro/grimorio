@@ -22,7 +22,9 @@ import {
   Clock
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { ActivityContextFields } from './ActivityContextFields';
 import { getSaoPauloDateStr, getHabitWeeklyStats, getCurrentWeekDays, addDaysToDateStr } from '../utils/timeUtils';
+import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 
 export function HabitsView({
   habits,
@@ -59,6 +61,9 @@ export function HabitsView({
   const [newTimesPerWeek, setNewTimesPerWeek] = useState(3);
   const [newXpReward, setNewXpReward] = useState('30');
   const [newCoinReward, setNewCoinReward] = useState('8');
+  const [newLocation, setNewLocation] = useState(defaultLocationForCategory(defaultCatName, activeCategories));
+  const [newWindowStart, setNewWindowStart] = useState('');
+  const [newWindowEnd, setNewWindowEnd] = useState('');
 
   // Sync newCategory with activeCategories
   useEffect(() => {
@@ -77,6 +82,9 @@ export function HabitsView({
   const [editTimesPerWeek, setEditTimesPerWeek] = useState(3);
   const [editXpReward, setEditXpReward] = useState('30');
   const [editCoinReward, setEditCoinReward] = useState('8');
+  const [editLocation, setEditLocation] = useState('anywhere');
+  const [editWindowStart, setEditWindowStart] = useState('');
+  const [editWindowEnd, setEditWindowEnd] = useState('');
 
   // Confirm Modal State
   const [confirmModal, setConfirmModal] = useState({
@@ -149,13 +157,18 @@ export function HabitsView({
       frequency: newFrequency,
       targetTimesPerWeek: newFrequency === 'times_per_week' ? (parseInt(newTimesPerWeek, 10) || 3) : undefined,
       xpReward: parseInt(newXpReward, 10) || 30,
-      coinReward: parseInt(newCoinReward, 10) || 8
+      coinReward: parseInt(newCoinReward, 10) || 8,
+      location: newLocation,
+      timeWindow: fieldsToTimeWindow(newWindowStart, newWindowEnd)
     });
 
     setNewTitle('');
     setNewDesc('');
     setNewFrequency('daily');
     setNewTimesPerWeek(3);
+    setNewLocation(defaultLocationForCategory(newCategory, activeCategories));
+    setNewWindowStart('');
+    setNewWindowEnd('');
     setShowAddModal(false);
   };
 
@@ -168,6 +181,10 @@ export function HabitsView({
     setEditTimesPerWeek(habit.targetTimesPerWeek || habit.timesPerWeek || 3);
     setEditXpReward(String(habit.xpReward || 30));
     setEditCoinReward(String(habit.coinReward || 8));
+    setEditLocation(habit.location || defaultLocationForCategory(habit.category || defaultCatName, activeCategories));
+    const win = windowToFields(habit.timeWindow);
+    setEditWindowStart(win.start);
+    setEditWindowEnd(win.end);
   };
 
   const handleSaveEditHabit = (e) => {
@@ -182,7 +199,9 @@ export function HabitsView({
         frequency: editFrequency,
         targetTimesPerWeek: editFrequency === 'times_per_week' ? (parseInt(editTimesPerWeek, 10) || 3) : undefined,
         xpReward: parseInt(editXpReward, 10) || 30,
-        coinReward: parseInt(editCoinReward, 10) || 8
+        coinReward: parseInt(editCoinReward, 10) || 8,
+        location: editLocation,
+        timeWindow: fieldsToTimeWindow(editWindowStart, editWindowEnd)
       });
     }
 
@@ -473,6 +492,20 @@ export function HabitsView({
                     <span style={{ color: '#38bdf8', fontWeight: 600 }}>
                       {getFrequencyLabel(habit)}
                     </span>
+                    {habit.location && habit.location !== 'anywhere' && (
+                      <>
+                        <span>•</span>
+                        <span>{getLocationMeta(habit.location).emoji} {getLocationMeta(habit.location).short}</span>
+                      </>
+                    )}
+                    {habit.timeWindow?.start && habit.timeWindow?.end && (
+                      <>
+                        <span>•</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <Clock size={13} /> {habit.timeWindow.start}–{habit.timeWindow.end}
+                        </span>
+                      </>
+                    )}
                   </div>
 
                   {/* Weekly Progress Tracker */}
@@ -771,7 +804,11 @@ export function HabitsView({
                 </label>
                 <select
                   value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setNewCategory(next);
+                    setNewLocation(defaultLocationForCategory(next, activeCategories));
+                  }}
                   style={{
                     width: '100%',
                     padding: '10px 12px',
@@ -870,6 +907,15 @@ export function HabitsView({
                   </p>
                 </div>
               )}
+
+              <ActivityContextFields
+                location={newLocation}
+                timeWindowStart={newWindowStart}
+                timeWindowEnd={newWindowEnd}
+                onLocationChange={setNewLocation}
+                onWindowStartChange={setNewWindowStart}
+                onWindowEndChange={setNewWindowEnd}
+              />
 
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div style={{ flex: 1 }}>
@@ -1034,7 +1080,11 @@ export function HabitsView({
                 </label>
                 <select
                   value={editCategory}
-                  onChange={(e) => setEditCategory(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setEditCategory(next);
+                    setEditLocation(defaultLocationForCategory(next, activeCategories));
+                  }}
                   style={{
                     width: '100%',
                     padding: '10px 12px',
@@ -1133,6 +1183,15 @@ export function HabitsView({
                   </p>
                 </div>
               )}
+
+              <ActivityContextFields
+                location={editLocation}
+                timeWindowStart={editWindowStart}
+                timeWindowEnd={editWindowEnd}
+                onLocationChange={setEditLocation}
+                onWindowStartChange={setEditWindowStart}
+                onWindowEndChange={setEditWindowEnd}
+              />
 
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div style={{ flex: 1 }}>

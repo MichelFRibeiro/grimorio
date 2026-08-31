@@ -297,7 +297,7 @@ print("Missão Criada:", nova_missao.json())`;
                 border: '1px solid rgba(56, 189, 248, 0.35)'
               }}
             >
-              47 Ferramentas CRUD + Oráculo
+              49 Ferramentas CRUD + Oráculo
             </span>
           </div>
 

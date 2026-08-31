@@ -73,6 +73,11 @@ O script irá:
 - **Linha do Tempo**: Histórico completo de tudo que foi realizado com data e hora.
 - **Backup & Restauração**: Download e upload em 1 clique de arquivo JSON para segurança total dos seus dados.
 
+### 🧭 Próxima Atividade
+- Cartão permanente que indica a melhor missão ou ritual **agora**, filtrando por lugar (Casa, Escritório, Academia ou Qualquer lugar) e janela de horário.
+- Prazo (`dueDate`/`dueTime`) é diferente da janela de execução: uma audiência às 17h continua visível o dia inteiro; um terço só das 15h às 16h some fora dessa faixa.
+- Missões atrasadas no lugar certo ganham de rituais “na hora histórica”. Ritual com meta da semana já batida sai da lista principal.
+
 ---
 
 ## 🔊 Efeitos Sonoros
@@ -101,7 +106,7 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 
 ---
 
-### 🛠️ Lista de Ferramentas MCP (47 Tools)
+### 🛠️ Lista de Ferramentas MCP (49 Tools)
 
 #### 1. 📜 Missões (`quests`)
 - `list_quests`: Listar missões com filtros (categoria, prioridade, status de conclusão, busca).
@@ -145,6 +150,10 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 - `get_productivity_patterns`: Distribuição de esforço horário e por dia da semana.
 - `get_study_analytics`: Métricas consolidadas de leitura e questões.
 - `get_category_rankings`: Rankings e tiers de maestria por categoria.
+
+#### 11. 🧭 Próxima Atividade (contexto de lugar e horário)
+- `get_next_action`: Indica a próxima missão ou ritual considerando lugar (`anywhere`, `office`, `home`, `gym`), janela de horário, prazos, prioridade e histórico.
+- `set_current_location`: Define o lugar atual do herói usado pelo Oráculo.
 
 ---
 

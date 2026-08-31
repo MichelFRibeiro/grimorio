@@ -11,6 +11,7 @@ import { ProcessesView } from './components/ProcessesView';
 import { HabitsView } from './components/HabitsView';
 import { RewardsShop } from './components/RewardsShop';
 import { OracleAnalytics } from './components/OracleAnalytics';
+import { NextActionCard } from './components/NextActionCard';
 import { LevelUpModal } from './components/LevelUpModal';
 import { FloatingToasts } from './components/FloatingToasts';
 import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass } from 'lucide-react';
@@ -71,7 +72,8 @@ export function App() {
     redeemReward,
     cancelRewardRedemption,
     deleteReward,
-    resetBoss
+    resetBoss,
+    setCurrentLocation
   } = useGameData();
 
   if (loadingAuth || (isAuthenticated && loading)) {
@@ -136,7 +138,9 @@ export function App() {
     rewards,
     rewardRedemptions,
     actionLogs,
-    analytics
+    analytics,
+    nextAction,
+    locations
   } = data || {};
 
   const pendingQuestsCount = (quests || []).filter(q => !q.completed).length;
@@ -174,6 +178,20 @@ export function App() {
 
       {/* Boss Raid Banner */}
       <BossRaid boss={bossRaid} onResetBoss={resetBoss} />
+
+      <NextActionCard
+        nextAction={nextAction}
+        locations={locations}
+        currentLocation={userProfile?.currentLocation || nextAction?.context?.location}
+        onChangeLocation={setCurrentLocation}
+        onCompleteQuest={completeQuest}
+        onUpdateQuest={updateQuest}
+        onToggleHabit={toggleHabit}
+        quests={quests}
+        onOpenQuests={() => setActiveTab('quests')}
+        onOpenHabits={() => setActiveTab('habits')}
+        playClick={playClick}
+      />
 
       {/* Navigation Tab Bar */}
       <nav className="glass-panel app-nav">

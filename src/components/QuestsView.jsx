@@ -20,7 +20,9 @@ import {
   PlusCircle
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { ActivityContextFields } from './ActivityContextFields';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
+import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 
 export function QuestsView({
   quests,
@@ -81,6 +83,9 @@ export function QuestsView({
   const [newPriority, setNewPriority] = useState('media');
   const [newDueDate, setNewDueDate] = useState('');
   const [newDueTime, setNewDueTime] = useState('');
+  const [newLocation, setNewLocation] = useState(defaultLocationForCategory(defaultCategoryName, activeCategories));
+  const [newWindowStart, setNewWindowStart] = useState('');
+  const [newWindowEnd, setNewWindowEnd] = useState('');
   const [newSubtasksInput, setNewSubtasksInput] = useState('');
 
   // Sync newCategory whenever activeCategories changes (e.g. data fetched from API)
@@ -99,6 +104,9 @@ export function QuestsView({
   const [editPriority, setEditPriority] = useState('media');
   const [editDueDate, setEditDueDate] = useState('');
   const [editDueTime, setEditDueTime] = useState('');
+  const [editLocation, setEditLocation] = useState('anywhere');
+  const [editWindowStart, setEditWindowStart] = useState('');
+  const [editWindowEnd, setEditWindowEnd] = useState('');
   const [editSubtasks, setEditSubtasks] = useState([]);
   const [newSubtaskInputForEdit, setNewSubtaskInputForEdit] = useState('');
 
@@ -139,6 +147,8 @@ export function QuestsView({
       priority: newPriority,
       dueDate: newDueDate || null,
       dueTime: newDueTime || null,
+      location: newLocation,
+      timeWindow: fieldsToTimeWindow(newWindowStart, newWindowEnd),
       subtasks
     });
 
@@ -148,6 +158,9 @@ export function QuestsView({
     setNewPriority('media');
     setNewDueDate('');
     setNewDueTime('');
+    setNewLocation(defaultLocationForCategory(validNames[0] || 'Geral', activeCategories));
+    setNewWindowStart('');
+    setNewWindowEnd('');
     setNewSubtasksInput('');
     setShowAddModal(false);
   };
@@ -165,6 +178,10 @@ export function QuestsView({
     setEditPriority(quest.priority || 'media');
     setEditDueDate(quest.dueDate || '');
     setEditDueTime(quest.dueTime || '');
+    setEditLocation(quest.location || defaultLocationForCategory(categoryToEdit, activeCategories));
+    const win = windowToFields(quest.timeWindow);
+    setEditWindowStart(win.start);
+    setEditWindowEnd(win.end);
     setEditSubtasks(Array.isArray(quest.subtasks) ? [...quest.subtasks] : []);
     setNewSubtaskInputForEdit('');
   };
@@ -211,6 +228,8 @@ export function QuestsView({
       priority: editPriority,
       dueDate: editDueDate || null,
       dueTime: editDueTime || null,
+      location: editLocation,
+      timeWindow: fieldsToTimeWindow(editWindowStart, editWindowEnd),
       subtasks: finalSubtasks
     });
 
@@ -630,6 +649,16 @@ export function QuestsView({
                             <Calendar size={14} /> {dueInfo.text}
                           </span>
                         )}
+                        {quest.location && quest.location !== 'anywhere' && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                            {getLocationMeta(quest.location).emoji} {getLocationMeta(quest.location).short}
+                          </span>
+                        )}
+                        {quest.timeWindow?.start && quest.timeWindow?.end && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Clock size={14} /> {quest.timeWindow.start}–{quest.timeWindow.end}
+                          </span>
+                        )}
 
                         {totalSubtasks > 0 && (
                           <button
@@ -864,7 +893,11 @@ export function QuestsView({
                   </label>
                   <select
                     value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setNewCategory(next);
+                      setNewLocation(defaultLocationForCategory(next, activeCategories));
+                    }}
                     style={{
                       width: '100%',
                       padding: '10px 12px',
@@ -906,6 +939,15 @@ export function QuestsView({
                   </select>
                 </div>
               </div>
+
+              <ActivityContextFields
+                location={newLocation}
+                timeWindowStart={newWindowStart}
+                timeWindowEnd={newWindowEnd}
+                onLocationChange={setNewLocation}
+                onWindowStartChange={setNewWindowStart}
+                onWindowEndChange={setNewWindowEnd}
+              />
 
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div style={{ flex: 1 }}>
@@ -1105,7 +1147,11 @@ export function QuestsView({
                   </label>
                   <select
                     value={editCategory}
-                    onChange={(e) => setEditCategory(e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setEditCategory(next);
+                      setEditLocation(defaultLocationForCategory(next, activeCategories));
+                    }}
                     style={{
                       width: '100%',
                       padding: '10px 12px',
@@ -1147,6 +1193,15 @@ export function QuestsView({
                   </select>
                 </div>
               </div>
+
+              <ActivityContextFields
+                location={editLocation}
+                timeWindowStart={editWindowStart}
+                timeWindowEnd={editWindowEnd}
+                onLocationChange={setEditLocation}
+                onWindowStartChange={setEditWindowStart}
+                onWindowEndChange={setEditWindowEnd}
+              />
 
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div style={{ flex: 1 }}>

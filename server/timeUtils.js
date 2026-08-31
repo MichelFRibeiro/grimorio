@@ -72,6 +72,28 @@ export function getSaoPauloHour(date = new Date()) {
 }
 
 /**
+ * Retorna o minuto (0-59) no fuso de São Paulo.
+ * @param {Date|string|number} [date=new Date()]
+ * @returns {number} 0 a 59
+ */
+export function getSaoPauloMinute(date = new Date()) {
+  try {
+    const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : (date || new Date());
+    if (isNaN(d.getTime())) return getSaoPauloMinute(new Date());
+
+    const minuteStr = new Intl.DateTimeFormat('en-US', {
+      timeZone: SAO_PAULO_TZ,
+      minute: '2-digit'
+    }).format(d);
+
+    const m = parseInt(minuteStr, 10);
+    return isNaN(m) ? d.getMinutes() : m;
+  } catch (e) {
+    return new Date().getMinutes();
+  }
+}
+
+/**
  * Retorna o dia da semana (0: Domingo, 1: Segunda, ..., 6: Sábado) no fuso de São Paulo.
  * @param {Date|string|number} [date=new Date()]
  * @returns {number} 0 a 6

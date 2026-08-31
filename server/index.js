@@ -6,6 +6,13 @@ import { fileURLToPath } from 'url';
 import { getDb, saveDb, initDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG, applyCategoryRename } from './db.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
+import { computeNextAction } from './nextAction.js';
+import {
+  LOCATIONS,
+  normalizeLocation,
+  applyActivityContext,
+  defaultLocationForCategory
+} from './locations.js';
 import {
   verifyGoogleToken,
   createSession,
@@ -248,9 +255,12 @@ app.get('/api/state', (req, res) => {
   try {
     const db = getDb();
     const analytics = computeAnalytics();
+    const nextAction = computeNextAction(db);
     res.json({
       ...db,
       analytics,
+      nextAction,
+      locations: LOCATIONS,
       user: req.user || null
     });
   } catch (err) {
@@ -280,13 +290,73 @@ app.get('/api/rankings', (req, res) => {
 app.post('/api/profile', (req, res) => {
   try {
     const db = getDb();
-    const { name, avatar, title, theme } = req.body;
+    const { name, avatar, title, theme, currentLocation, locationManual } = req.body;
     if (name) db.userProfile.name = name;
     if (avatar) db.userProfile.avatar = avatar;
     if (title) db.userProfile.title = title;
     if (theme) db.userProfile.theme = theme;
+    if (currentLocation !== undefined) {
+      db.userProfile.currentLocation = currentLocation == null || currentLocation === ''
+        ? null
+        : normalizeLocation(currentLocation);
+      if (locationManual === undefined) {
+        db.userProfile.locationManual = db.userProfile.currentLocation != null;
+      }
+    }
+    if (locationManual !== undefined) {
+      db.userProfile.locationManual = !!locationManual;
+    }
     saveDb(db);
     res.json({ success: true, userProfile: db.userProfile });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 2.2. NEXT ACTION (ORACLE SUGGESTION)
+// ==========================================
+app.get('/api/next-action', (req, res) => {
+  try {
+    const db = getDb();
+    const location = req.query.location ? String(req.query.location) : undefined;
+    const snoozedIds = req.query.snoozed
+      ? String(req.query.snoozed).split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+    const result = computeNextAction(db, { location, snoozedIds });
+    res.json({
+      success: true,
+      ...result,
+      locations: LOCATIONS
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/next-action/location', (req, res) => {
+  try {
+    const db = getDb();
+    const { location, manual } = req.body || {};
+    if (location === undefined) {
+      return res.status(400).json({ error: 'location é obrigatório' });
+    }
+    db.userProfile.currentLocation = location == null || location === ''
+      ? null
+      : normalizeLocation(location);
+    db.userProfile.locationManual = manual === undefined
+      ? db.userProfile.currentLocation != null
+      : !!manual;
+    saveDb(db);
+    const result = computeNextAction(db, {
+      location: db.userProfile.currentLocation || 'anywhere'
+    });
+    res.json({
+      success: true,
+      userProfile: db.userProfile,
+      ...result,
+      locations: LOCATIONS
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -309,7 +379,7 @@ app.post('/api/quest-categories', (req, res) => {
     const db = getDb();
     if (!db.questCategories) db.questCategories = [];
 
-    const { name, color, icon } = req.body;
+    const { name, color, icon, defaultLocation } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Nome da categoria é obrigatório' });
     }
@@ -323,7 +393,10 @@ app.post('/api/quest-categories', (req, res) => {
       id: uid('cat'),
       name: trimmedName,
       color: color || '#f59e0b',
-      icon: icon || 'Tag'
+      icon: icon || 'Tag',
+      defaultLocation: defaultLocation
+        ? normalizeLocation(defaultLocation)
+        : defaultLocationForCategory(trimmedName)
     };
 
     db.questCategories.push(newCategory);
@@ -343,7 +416,7 @@ app.put('/api/quest-categories/:id', (req, res) => {
     if (!cat) return res.status(404).json({ error: 'Categoria não encontrada' });
 
     const oldName = cat.name;
-    const { name, color, icon } = req.body;
+    const { name, color, icon, defaultLocation } = req.body;
 
     if (name !== undefined && name.trim()) {
       const trimmedName = name.trim();
@@ -357,6 +430,11 @@ app.put('/api/quest-categories/:id', (req, res) => {
 
     if (color !== undefined) cat.color = color;
     if (icon !== undefined) cat.icon = icon;
+    if (defaultLocation !== undefined) {
+      cat.defaultLocation = defaultLocation
+        ? normalizeLocation(defaultLocation)
+        : defaultLocationForCategory(cat.name);
+    }
 
     saveDb(db);
     res.json({ success: true, category: cat, categories: db.questCategories });
@@ -392,7 +470,7 @@ app.delete('/api/quest-categories/:id', (req, res) => {
 app.post('/api/quests', (req, res) => {
   try {
     const db = getDb();
-    let { title, description, category, priority, dueDate, dueTime, subtasks } = req.body;
+    let { title, description, category, priority, dueDate, dueTime, subtasks, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes } = req.body;
     if (!title) return res.status(400).json({ error: 'Título é obrigatório' });
 
     // Calculate rewards based on priority
@@ -434,6 +512,7 @@ app.post('/api/quests', (req, res) => {
       completedAt: null,
       createdAt: new Date().toISOString()
     };
+    applyActivityContext(newQuest, { location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes }, db.questCategories);
 
     db.quests.unshift(newQuest);
     saveDb(db);
@@ -450,7 +529,7 @@ app.put('/api/quests/:id', (req, res) => {
     if (index === -1) return res.status(404).json({ error: 'Missão não encontrada' });
 
     const existing = db.quests[index];
-    const { title, description, category, priority, dueDate, dueTime, subtasks } = req.body;
+    const { title, description, category, priority, dueDate, dueTime, subtasks, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes } = req.body;
 
     if (title !== undefined) existing.title = title.trim();
     if (description !== undefined) existing.description = description.trim();
@@ -464,6 +543,9 @@ app.put('/api/quests/:id', (req, res) => {
     }
     if (dueDate !== undefined) existing.dueDate = dueDate || null;
     if (dueTime !== undefined) existing.dueTime = dueTime || null;
+    if (location !== undefined || timeWindow !== undefined || timeWindowStart !== undefined || timeWindowEnd !== undefined || estimatedMinutes !== undefined) {
+      applyActivityContext(existing, { location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes }, db.questCategories);
+    }
     if (subtasks !== undefined) {
       existing.subtasks = Array.isArray(subtasks) ? subtasks.map(st => ({
         id: st.id || uid('st'),
@@ -502,7 +584,7 @@ app.post('/api/quests/:id/complete', (req, res) => {
         actionType: 'quest_complete',
         entityId: quest.id,
         title: quest.title,
-        details: { category: quest.category, priority: quest.priority }
+        details: { category: quest.category, priority: quest.priority, location: quest.location || null }
       });
     } else {
       // Revert willpower, focus, xp and coins
@@ -1331,7 +1413,7 @@ app.delete('/api/processes/:id', (req, res) => {
 app.post('/api/habits', (req, res) => {
   try {
     const db = getDb();
-    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, xpReward, coinReward } = req.body;
+    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes } = req.body;
     if (!title) return res.status(400).json({ error: 'Título do hábito é obrigatório' });
 
     let freq = frequency || 'daily';
@@ -1363,6 +1445,7 @@ app.post('/api/habits', (req, res) => {
       coinReward: parseInt(coinReward, 10) || 8,
       createdAt: new Date().toISOString()
     };
+    applyActivityContext(newHabit, { location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes }, db.questCategories);
 
     db.habits.unshift(newHabit);
     saveDb(db);
@@ -1378,7 +1461,7 @@ app.put('/api/habits/:id', (req, res) => {
     const habit = db.habits.find(h => h.id === req.params.id);
     if (!habit) return res.status(404).json({ error: 'Hábito não encontrado' });
 
-    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, xpReward, coinReward } = req.body;
+    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes } = req.body;
     if (title !== undefined && title.trim()) habit.title = title.trim();
     if (description !== undefined) habit.description = description.trim();
     if (category !== undefined && category.trim()) habit.category = category.trim();
@@ -1403,6 +1486,9 @@ app.put('/api/habits/:id', (req, res) => {
 
     if (xpReward !== undefined) habit.xpReward = parseInt(xpReward, 10) || 30;
     if (coinReward !== undefined) habit.coinReward = parseInt(coinReward, 10) || 8;
+    if (location !== undefined || timeWindow !== undefined || timeWindowStart !== undefined || timeWindowEnd !== undefined || estimatedMinutes !== undefined) {
+      applyActivityContext(habit, { location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes }, db.questCategories);
+    }
 
     saveDb(db);
     res.json({ success: true, habit });
@@ -1466,7 +1552,7 @@ app.post('/api/habits/:id/toggle', (req, res) => {
         actionType: 'habit_complete',
         entityId: habit.id,
         title: `${habit.title} (${formattedDate} - Sequência 🔥 ${habit.currentStreak})`,
-        details: { category: habit.category || 'Pessoal', streak: habit.currentStreak, date: targetDate }
+        details: { category: habit.category || 'Pessoal', streak: habit.currentStreak, date: targetDate, location: habit.location || null }
       });
     }
 
