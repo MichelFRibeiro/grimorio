@@ -20,10 +20,34 @@ import {
   FileText,
   Percent,
   Check,
-  AlertCircle
+  AlertCircle,
+  ExternalLink
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
+
+const URL_IN_TEXT = /https?:\/\/[^\s]+/i;
+
+const normalizeNotebookUrl = (raw) => {
+  const value = (raw || '').trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  return `https://${value}`;
+};
+
+const resolveNotebookUrl = (item) => {
+  if (item?.notebookUrl) return item.notebookUrl;
+  const match = (item?.notes || '').match(URL_IN_TEXT);
+  return match ? match[0] : '';
+};
+
+const notesWithoutNotebookUrl = (notes, url) => {
+  if (!notes) return '';
+  let cleaned = notes;
+  if (url) cleaned = cleaned.replace(url, '');
+  cleaned = cleaned.replace(/link do caderno(?: de questões)?\s*:?\s*/i, '');
+  return cleaned.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+};
 
 const COMMON_SUBJECTS = [
   'Direito Constitucional',
@@ -128,6 +152,7 @@ export function QuestionsView({
   const [correctAnswers, setCorrectAnswers] = useState('19');
   const [durationMinutes, setDurationMinutes] = useState('25');
   const [notes, setNotes] = useState('');
+  const [notebookUrl, setNotebookUrl] = useState('');
   const [date, setDate] = useState(getSaoPauloDateStr());
 
   // Sync category with activeCategories
@@ -146,6 +171,7 @@ export function QuestionsView({
   const [editInstitution, setEditInstitution] = useState('');
   const [editDate, setEditDate] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editNotebookUrl, setEditNotebookUrl] = useState('');
 
   // Modal Stopwatch State
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -207,12 +233,14 @@ export function QuestionsView({
       correctAnswers: correct,
       durationMinutes: duration,
       notes: notes.trim(),
+      notebookUrl: normalizeNotebookUrl(notebookUrl),
       date
     });
 
     handleCloseAddModal();
     setTopic('');
     setNotes('');
+    setNotebookUrl('');
   };
 
   const handleOpenEditQuestion = (item) => {
@@ -222,7 +250,9 @@ export function QuestionsView({
     setEditTopic(item.topic || '');
     setEditInstitution(item.institution || '');
     setEditDate(item.date || (item.timestamp ? getSaoPauloDateStr(item.timestamp) : getSaoPauloDateStr()));
-    setEditNotes(item.notes || '');
+    const extractedUrl = resolveNotebookUrl(item);
+    setEditNotebookUrl(extractedUrl);
+    setEditNotes(notesWithoutNotebookUrl(item.notes || '', extractedUrl));
   };
 
   const handleSaveEditQuestion = (e) => {
@@ -236,7 +266,8 @@ export function QuestionsView({
         topic: editTopic.trim(),
         institution: editInstitution.trim(),
         date: editDate,
-        notes: editNotes.trim()
+        notes: editNotes.trim(),
+        notebookUrl: normalizeNotebookUrl(editNotebookUrl)
       });
     }
 
@@ -265,7 +296,8 @@ export function QuestionsView({
       (q.subject && q.subject.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (q.topic && q.topic.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (q.institution && q.institution.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (q.notes && q.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+      (q.notes && q.notes.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (q.notebookUrl && q.notebookUrl.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const matchSubject = selectedSubjectFilter === 'all' || q.subject === selectedSubjectFilter;
 
@@ -510,6 +542,8 @@ export function QuestionsView({
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
               {filteredQuestions.map(item => {
+                const notebookHref = resolveNotebookUrl(item);
+                const visibleNotes = notesWithoutNotebookUrl(item.notes, notebookHref);
                 return (
                   <div
                     key={item.id}
@@ -521,10 +555,12 @@ export function QuestionsView({
                       justifyContent: 'space-between',
                       gap: '14px',
                       borderLeft: `4px solid ${getAccuracyColor(item.accuracyRate)}`,
-                      background: 'rgba(19, 23, 34, 0.9)'
+                      background: 'rgba(19, 23, 34, 0.9)',
+                      overflow: 'hidden',
+                      minWidth: 0
                     }}
                   >
-                    <div>
+                    <div style={{ minWidth: 0, overflow: 'hidden' }}>
                       {/* Top metadata tags */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -620,7 +656,7 @@ export function QuestionsView({
                       </div>
 
                       {/* Topic & Institution */}
-                      <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#f8fafc', marginBottom: '4px' }}>
+                      <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#f8fafc', marginBottom: '4px', overflowWrap: 'anywhere' }}>
                         {item.topic || 'Bateria de Questões'}
                       </h4>
 
@@ -676,15 +712,42 @@ export function QuestionsView({
                       </div>
 
                       {/* Notes / Error Analysis */}
-                      {item.notes && (
-                        <div style={{ marginTop: '10px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.05)', border: '1px dashed rgba(245, 158, 11, 0.2)' }}>
+                      {visibleNotes && (
+                        <div style={{ marginTop: '10px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.05)', border: '1px dashed rgba(245, 158, 11, 0.2)', overflow: 'hidden', minWidth: 0 }}>
                           <span style={{ fontSize: '0.72rem', color: '#fbbf24', fontWeight: 700, display: 'block', marginBottom: '2px' }}>
                             📝 Análise de Erros / Pontos a revisar:
                           </span>
-                          <p style={{ fontSize: '0.8rem', color: '#cbd5e1', fontStyle: 'italic', lineHeight: 1.4 }}>
-                            {item.notes}
+                          <p style={{ fontSize: '0.8rem', color: '#cbd5e1', fontStyle: 'italic', lineHeight: 1.45, overflowWrap: 'anywhere', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+                            {visibleNotes}
                           </p>
                         </div>
+                      )}
+
+                      {notebookHref && (
+                        <a
+                          href={notebookHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={notebookHref}
+                          style={{
+                            marginTop: '10px',
+                            padding: '8px 10px',
+                            borderRadius: '8px',
+                            background: 'rgba(56, 189, 248, 0.08)',
+                            border: '1px solid rgba(56, 189, 248, 0.22)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            minWidth: 0,
+                            textDecoration: 'none',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          <ExternalLink size={14} color="#38bdf8" style={{ flexShrink: 0 }} />
+                          <span style={{ fontSize: '0.78rem', color: '#7dd3fc', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            Abrir caderno de questões
+                          </span>
+                        </a>
                       )}
                     </div>
 
@@ -1160,6 +1223,28 @@ export function QuestionsView({
                 />
               </div>
 
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                  Link do Caderno de Questões (Opcional)
+                </label>
+                <input
+                  type="text"
+                  inputMode="url"
+                  placeholder="https://app.qconcursos.com/playground/questoes?..."
+                  value={notebookUrl}
+                  onChange={(e) => setNotebookUrl(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    background: '#1a2030',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.85rem'
+                  }}
+                />
+              </div>
+
               {/* Action buttons */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
                 <button
@@ -1383,6 +1468,28 @@ export function QuestionsView({
                   placeholder="Ex: Errei questão sobre legitimidade ativa de ADC; revisar súmula vinculante X..."
                   value={editNotes}
                   onChange={(e) => setEditNotes(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    background: '#1a2030',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.85rem'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                  Link do Caderno de Questões (Opcional)
+                </label>
+                <input
+                  type="text"
+                  inputMode="url"
+                  placeholder="https://app.qconcursos.com/playground/questoes?..."
+                  value={editNotebookUrl}
+                  onChange={(e) => setEditNotebookUrl(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '10px 12px',

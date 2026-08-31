@@ -1220,6 +1220,7 @@ export const toolsDefinition = [
       wrongAnswers: z.number().optional().describe('Quantidade de erros (se omitido, calcula total - acertos)'),
       durationMinutes: z.number().optional().default(30).describe('Tempo dedicado em minutos'),
       notes: z.string().optional().describe('Observações, pontos de melhoria ou pegadinhas'),
+      notebookUrl: z.string().optional().describe('Link do caderno de questões (Qconcursos, Tec, etc.)'),
       date: z.string().optional().describe('Data no formato YYYY-MM-DD')
     },
     handler: async (args) => {
@@ -1249,6 +1250,7 @@ export const toolsDefinition = [
         accuracyRate: accuracy,
         durationMinutes: duration,
         notes: (args.notes || '').trim(),
+        notebookUrl: (args.notebookUrl || '').trim(),
         xpEarned: xp,
         coinsEarned: coins,
         wisdomEarned: wisdom,

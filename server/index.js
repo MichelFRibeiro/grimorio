@@ -1131,7 +1131,7 @@ app.post('/api/questions', (req, res) => {
     const db = getDb();
     if (!db.examQuestions) db.examQuestions = [];
 
-    const { subject, topic, institution, totalQuestions, correctAnswers, durationMinutes, notes, date, category } = req.body;
+    const { subject, topic, institution, totalQuestions, correctAnswers, durationMinutes, notes, notebookUrl, date, category } = req.body;
     const total = parseInt(totalQuestions, 10);
     const correct = parseInt(correctAnswers, 10);
     const duration = parseInt(durationMinutes, 10) || 0;
@@ -1169,6 +1169,7 @@ app.post('/api/questions', (req, res) => {
       accuracyRate,
       durationMinutes: duration,
       notes: (notes || '').trim(),
+      notebookUrl: (notebookUrl || '').trim(),
       xpEarned: totalXp,
       coinsEarned: coins,
       date: entryDate,
@@ -1218,13 +1219,14 @@ app.put('/api/questions/:id', (req, res) => {
     if (index === -1) return res.status(404).json({ error: 'Registro de questões não encontrado' });
 
     const existing = db.examQuestions[index];
-    const { subject, topic, institution, notes, date, category } = req.body;
+    const { subject, topic, institution, notes, notebookUrl, date, category } = req.body;
 
     if (category !== undefined && category.trim()) existing.category = category.trim();
     if (subject !== undefined) existing.subject = subject.trim();
     if (topic !== undefined) existing.topic = topic.trim();
     if (institution !== undefined) existing.institution = institution.trim();
     if (notes !== undefined) existing.notes = notes.trim();
+    if (notebookUrl !== undefined) existing.notebookUrl = notebookUrl.trim();
     if (date !== undefined) existing.date = date;
 
     if (db.actionLogs) {
