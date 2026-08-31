@@ -19,12 +19,15 @@ import {
   ChevronRight,
   History,
   RotateCcw,
-  Clock
+  Clock,
+  EyeOff
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityContextFields } from './ActivityContextFields';
 import { getSaoPauloDateStr, getHabitWeeklyStats, getCurrentWeekDays, addDaysToDateStr } from '../utils/timeUtils';
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
+
+const HIDE_SETTLED_STORAGE_KEY = 'grimorio_hide_settled_habits';
 
 export function HabitsView({
   habits,
@@ -125,8 +128,23 @@ export function HabitsView({
   // Week View & Retroactive Completion State
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState('Todas');
+  const [hideSettledHabits, setHideSettledHabits] = useState(() => {
+    try {
+      return localStorage.getItem(HIDE_SETTLED_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [retroModalHabit, setRetroModalHabit] = useState(null);
   const [customRetroDate, setCustomRetroDate] = useState(yesterdayStr);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(HIDE_SETTLED_STORAGE_KEY, hideSettledHabits ? 'true' : 'false');
+    } catch {
+      // ignore storage errors (private mode)
+    }
+  }, [hideSettledHabits]);
 
   // Format date helper (YYYY-MM-DD -> DD/MM)
   const formatShortDate = (dateStr) => {
@@ -149,10 +167,26 @@ export function HabitsView({
 
   const categoryNames = ['Todas', ...activeCategories.map(c => typeof c === 'string' ? c : c.name)];
 
-  const filteredHabits = (habits || []).filter(h => {
+  const isHabitSettled = (habit) => {
+    const isDoneToday = (habit.history || []).includes(todayStr);
+    const targetRefDate = addDaysToDateStr(todayStr, weekOffset * 7);
+    const weeklyStats = getHabitWeeklyStats(habit, targetRefDate);
+    // Feito hoje (rituais diários) ou meta da semana já atingida (semanal / Nx).
+    return isDoneToday || weeklyStats.isGoalMet;
+  };
+
+  const categoryFilteredHabits = (habits || []).filter(h => {
     if (selectedCategory === 'Todas') return true;
     return (h.category || 'Pessoal') === selectedCategory;
   });
+
+  const filteredHabits = hideSettledHabits
+    ? categoryFilteredHabits.filter(h => !isHabitSettled(h))
+    : categoryFilteredHabits;
+
+  const hiddenSettledCount = hideSettledHabits
+    ? categoryFilteredHabits.length - filteredHabits.length
+    : 0;
 
   const handleCreateHabit = (e) => {
     e.preventDefault();
@@ -340,8 +374,8 @@ export function HabitsView({
       </div>
 
       {/* Category Filter Bar — same pattern as QuestsView */}
-      <div className="glass-panel" style={{ padding: '12px 16px', marginBottom: '20px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+      <div className="glass-panel" style={{ padding: '12px 16px', marginBottom: '20px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', flex: 1, minWidth: 0 }}>
           {categoryNames.map(catName => {
             const isAll = catName === 'Todas';
             const catRanking = !isAll ? rankings?.categories?.[catName] : null;
@@ -387,6 +421,61 @@ export function HabitsView({
             );
           })}
         </div>
+
+        <button
+          type="button"
+          role="switch"
+          aria-checked={hideSettledHabits}
+          aria-label="Ocultar hábitos já realizados hoje ou com meta semanal atingida"
+          title="Oculta rituais já feitos hoje e os que já bateram a meta da semana visível"
+          onClick={() => setHideSettledHabits(prev => !prev)}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '10px',
+            cursor: 'pointer',
+            userSelect: 'none',
+            padding: '6px 10px',
+            borderRadius: '10px',
+            background: hideSettledHabits ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+            border: hideSettledHabits ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid rgba(255, 255, 255, 0.08)',
+            color: 'inherit',
+            font: 'inherit',
+            flexShrink: 0
+          }}
+        >
+          <EyeOff size={14} color={hideSettledHabits ? '#f87171' : '#64748b'} />
+          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: hideSettledHabits ? '#f87171' : '#94a3b8', whiteSpace: 'nowrap' }}>
+            Ocultar feitos
+            {hideSettledHabits && hiddenSettledCount > 0 ? ` (${hiddenSettledCount})` : ''}
+          </span>
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'relative',
+              width: '36px',
+              height: '20px',
+              borderRadius: '999px',
+              background: hideSettledHabits ? '#ef4444' : 'rgba(255, 255, 255, 0.18)',
+              transition: 'background 0.18s ease',
+              flexShrink: 0
+            }}
+          >
+            <span
+              style={{
+                position: 'absolute',
+                top: '2px',
+                left: hideSettledHabits ? '18px' : '2px',
+                width: '16px',
+                height: '16px',
+                borderRadius: '50%',
+                background: '#fff',
+                boxShadow: '0 1px 4px rgba(0, 0, 0, 0.35)',
+                transition: 'left 0.18s ease'
+              }}
+            />
+          </span>
+        </button>
       </div>
 
       {/* Habits List */}
@@ -398,9 +487,38 @@ export function HabitsView({
         </div>
       ) : filteredHabits.length === 0 ? (
         <div className="glass-panel" style={{ padding: '40px 20px', textAlign: 'center', color: '#64748b' }}>
-          <Flame size={40} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
-          <p style={{ fontSize: '1rem', fontWeight: 600 }}>Nenhum ritual nesta categoria.</p>
-          <p style={{ fontSize: '0.85rem' }}>Selecione outra categoria ou cadastre um novo ritual.</p>
+          {hideSettledHabits && hiddenSettledCount > 0 ? (
+            <>
+              <EyeOff size={40} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
+              <p style={{ fontSize: '1rem', fontWeight: 600 }}>Todos os rituais visíveis já foram feitos.</p>
+              <p style={{ fontSize: '0.85rem' }}>
+                {hiddenSettledCount} {hiddenSettledCount === 1 ? 'ritual está oculto' : 'rituais estão ocultos'} (feitos hoje ou com meta semanal atingida).
+              </p>
+              <button
+                type="button"
+                onClick={() => setHideSettledHabits(false)}
+                style={{
+                  marginTop: '14px',
+                  padding: '8px 14px',
+                  borderRadius: '10px',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  color: '#f87171',
+                  fontWeight: 700,
+                  fontSize: '0.8rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Mostrar todos
+              </button>
+            </>
+          ) : (
+            <>
+              <Flame size={40} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
+              <p style={{ fontSize: '1rem', fontWeight: 600 }}>Nenhum ritual nesta categoria.</p>
+              <p style={{ fontSize: '0.85rem' }}>Selecione outra categoria ou cadastre um novo ritual.</p>
+            </>
+          )}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '16px' }}>
