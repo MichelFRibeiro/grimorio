@@ -5,6 +5,26 @@
 
 export const SAO_PAULO_TZ = 'America/Sao_Paulo';
 
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Converte Date|string|number em Date válida.
+ * Strings 'YYYY-MM-DD' são tratadas como data civil (meio-dia UTC),
+ * evitando o deslocamento de fuso de `new Date('YYYY-MM-DD')` (meia-noite UTC),
+ * que em America/Sao_Paulo cai no dia anterior.
+ * @param {Date|string|number} [date=new Date()]
+ * @returns {Date}
+ */
+function toValidDate(date = new Date()) {
+  if (typeof date === 'string' && DATE_ONLY_RE.test(date)) {
+    const [year, month, day] = date.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  }
+  if (date instanceof Date) return date;
+  if (typeof date === 'string' || typeof date === 'number') return new Date(date);
+  return date || new Date();
+}
+
 /**
  * Retorna a data no formato 'YYYY-MM-DD' de acordo com o fuso horário de São Paulo.
  * @param {Date|string|number} [date=new Date()]
@@ -12,7 +32,7 @@ export const SAO_PAULO_TZ = 'America/Sao_Paulo';
  */
 export function getSaoPauloDateStr(date = new Date()) {
   try {
-    const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : (date || new Date());
+    const d = toValidDate(date);
     if (isNaN(d.getTime())) return getSaoPauloDateStr(new Date());
 
     return new Intl.DateTimeFormat('en-CA', {
@@ -55,7 +75,7 @@ export function getSaoPauloYearStr(date = new Date()) {
  */
 export function getSaoPauloHour(date = new Date()) {
   try {
-    const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : (date || new Date());
+    const d = toValidDate(date);
     if (isNaN(d.getTime())) return getSaoPauloHour(new Date());
 
     const hourStr = new Intl.DateTimeFormat('en-US', {
@@ -78,7 +98,7 @@ export function getSaoPauloHour(date = new Date()) {
  */
 export function getSaoPauloMinute(date = new Date()) {
   try {
-    const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : (date || new Date());
+    const d = toValidDate(date);
     if (isNaN(d.getTime())) return getSaoPauloMinute(new Date());
 
     const minuteStr = new Intl.DateTimeFormat('en-US', {
@@ -100,7 +120,7 @@ export function getSaoPauloMinute(date = new Date()) {
  */
 export function getSaoPauloDayOfWeek(date = new Date()) {
   try {
-    const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : (date || new Date());
+    const d = toValidDate(date);
     if (isNaN(d.getTime())) return getSaoPauloDayOfWeek(new Date());
 
     const weekdayStr = new Intl.DateTimeFormat('en-US', {
@@ -148,7 +168,8 @@ export function addDaysToDateStr(dateStr, daysOffset) {
 export function getCurrentWeekDays(date = new Date()) {
   const todayStr = getSaoPauloDateStr(new Date());
   const refDateStr = getSaoPauloDateStr(date);
-  const currentDayOfWeek = getSaoPauloDayOfWeek(date); // 0=Sun, 1=Mon, ..., 6=Sat
+  // Usa a data civil já normalizada para não herdar parse UTC de 'YYYY-MM-DD'
+  const currentDayOfWeek = getSaoPauloDayOfWeek(refDateStr); // 0=Sun, 1=Mon, ..., 6=Sat
 
   // Segunda-feira como início da semana (diffToMonday)
   const diffToMonday = (currentDayOfWeek === 0 ? -6 : 1) - currentDayOfWeek;

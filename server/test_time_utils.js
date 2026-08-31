@@ -5,7 +5,9 @@ import {
   getSaoPauloMonthStr,
   getSaoPauloYearStr,
   getYesterdaySaoPauloDateStr,
-  addDaysToDateStr
+  addDaysToDateStr,
+  getCurrentWeekDays,
+  getHabitWeeklyStats
 } from './timeUtils.js';
 import { getWeekBounds } from './rankings.js';
 
@@ -67,6 +69,23 @@ async function runTests() {
   const weekBounds = getWeekBounds(saturdayNight);
   console.log(`Limites da semana para Sábado 23:30: ${weekBounds.weekLabel} (${weekBounds.weekKey})`);
   assert(weekBounds.weekKey === '2026-08-16', 'A semana ainda deve ser 2026-08-16');
+
+  // Test 5: String YYYY-MM-DD não deve recuar um dia no fuso de São Paulo
+  // 2026-08-31 é Segunda-feira. `new Date('2026-08-31')` vira 00:00 UTC = 21:00 do dia 30 em SP.
+  const mondayStr = '2026-08-31';
+  assert(getSaoPauloDateStr(mondayStr) === '2026-08-31', 'YYYY-MM-DD deve permanecer a data civil, sem recuar para o domingo anterior');
+  assert(getSaoPauloDayOfWeek(mondayStr) === 1, '2026-08-31 deve ser Segunda-feira (1)');
+
+  const weekFromDateStr = getCurrentWeekDays(mondayStr);
+  console.log(`\nSemana a partir de '${mondayStr}': ${weekFromDateStr[0].dateStr} a ${weekFromDateStr[6].dateStr}`);
+  assert(weekFromDateStr[0].dateStr === '2026-08-31', 'Na segunda, o início da semana deve ser a própria segunda, não a semana passada');
+  assert(weekFromDateStr[6].dateStr === '2026-09-06', 'O domingo da semana atual deve ser 2026-09-06');
+
+  // Simula o fluxo da tela de rituais: todayStr + weekOffset * 7
+  const targetRefDate = addDaysToDateStr(mondayStr, 0);
+  const weeklyStats = getHabitWeeklyStats({ frequency: 'daily', history: [mondayStr] }, targetRefDate);
+  assert(weeklyStats.completedDays[0].dateStr === '2026-08-31', 'Rituais em "Esta Semana" devem mostrar a semana atual a partir da segunda');
+  assert(weeklyStats.completedDays.some(d => d.dateStr === mondayStr && d.completed), 'A segunda atual deve aparecer marcada na semana atual');
 
   console.log('\n🎉 TODOS OS TESTES DE FUSO HORÁRIO PASSARAM COM SUCESSO!');
 }
