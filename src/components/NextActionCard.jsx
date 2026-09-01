@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Compass, CheckCircle2, Clock, MapPin, Sparkles, Flame, Scroll, RefreshCw } from 'lucide-react';
 import { LOCATIONS, getLocationMeta } from '../utils/locations';
+import { PriorityBadge } from './ActivityScaleFields';
 
 export function NextActionCard({
   nextAction,
@@ -221,6 +222,7 @@ export function NextActionCard({
               <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', width: '16px' }}>{idx + 2}</span>
               <span style={{ fontSize: '0.95rem' }}>{item.kind === 'habit' ? '🔥' : '📜'}</span>
               <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600 }}>{item.title}</span>
+              {item.priority && <PriorityBadge priority={item.priority} compact />}
               <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{item.locationEmoji}</span>
             </button>
           ))}
@@ -322,6 +324,7 @@ function PrimaryRow({ item, onDo, onSnooze, onOpen }) {
             {item.category && (
               <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{item.category}</span>
             )}
+            {item.priority && <PriorityBadge priority={item.priority} compact />}
           </div>
           <h4 style={{ fontSize: '1.08rem', fontWeight: 800, color: '#f8fafc', margin: '0 0 4px 0' }}>
             {item.title}

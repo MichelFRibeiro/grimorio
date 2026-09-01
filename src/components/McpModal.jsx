@@ -137,7 +137,8 @@ nova_missao = requests.post(API_URL, headers=headers, json={
         "name": "create_quest",
         "arguments": {
             "title": "Missão Criada por Agente de IA",
-            "priority": "alta",
+            "priority": "importante",
+            "difficulty": "alta",
             "category": "Trabalho"
         }
     }

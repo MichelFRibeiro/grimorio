@@ -24,8 +24,10 @@ import {
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityContextFields } from './ActivityContextFields';
+import { ActivityScaleFields, PriorityBadge } from './ActivityScaleFields';
 import { getSaoPauloDateStr, getHabitWeeklyStats, getCurrentWeekDays, addDaysToDateStr } from '../utils/timeUtils';
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
+import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, inferDifficultyFromRewards, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
 
 const HIDE_SETTLED_STORAGE_KEY = 'grimorio_hide_settled_habits';
 
@@ -62,8 +64,8 @@ export function HabitsView({
   const [newCategory, setNewCategory] = useState(defaultCatName);
   const [newFrequency, setNewFrequency] = useState('daily');
   const [newTimesPerWeek, setNewTimesPerWeek] = useState(3);
-  const [newXpReward, setNewXpReward] = useState('30');
-  const [newCoinReward, setNewCoinReward] = useState('8');
+  const [newPriority, setNewPriority] = useState(DEFAULT_PRIORITY);
+  const [newDifficulty, setNewDifficulty] = useState(DEFAULT_DIFFICULTY);
   const [newLocation, setNewLocation] = useState(defaultLocationForCategory(defaultCatName, activeCategories));
   const [newWindowStart, setNewWindowStart] = useState('');
   const [newWindowEnd, setNewWindowEnd] = useState('');
@@ -83,8 +85,8 @@ export function HabitsView({
   const [editCategory, setEditCategory] = useState(defaultCatName);
   const [editFrequency, setEditFrequency] = useState('daily');
   const [editTimesPerWeek, setEditTimesPerWeek] = useState(3);
-  const [editXpReward, setEditXpReward] = useState('30');
-  const [editCoinReward, setEditCoinReward] = useState('8');
+  const [editPriority, setEditPriority] = useState(DEFAULT_PRIORITY);
+  const [editDifficulty, setEditDifficulty] = useState(DEFAULT_DIFFICULTY);
   const [editLocation, setEditLocation] = useState('anywhere');
   const [editWindowStart, setEditWindowStart] = useState('');
   const [editWindowEnd, setEditWindowEnd] = useState('');
@@ -198,8 +200,8 @@ export function HabitsView({
       category: newCategory,
       frequency: newFrequency,
       targetTimesPerWeek: newFrequency === 'times_per_week' ? (parseInt(newTimesPerWeek, 10) || 3) : undefined,
-      xpReward: parseInt(newXpReward, 10) || 30,
-      coinReward: parseInt(newCoinReward, 10) || 8,
+      priority: newPriority,
+      difficulty: newDifficulty,
       location: newLocation,
       timeWindow: fieldsToTimeWindow(newWindowStart, newWindowEnd)
     });
@@ -208,6 +210,8 @@ export function HabitsView({
     setNewDesc('');
     setNewFrequency('daily');
     setNewTimesPerWeek(3);
+    setNewPriority(DEFAULT_PRIORITY);
+    setNewDifficulty(DEFAULT_DIFFICULTY);
     setNewLocation(defaultLocationForCategory(newCategory, activeCategories));
     setNewWindowStart('');
     setNewWindowEnd('');
@@ -221,8 +225,10 @@ export function HabitsView({
     setEditCategory(habit.category || defaultCatName);
     setEditFrequency(habit.frequency || 'daily');
     setEditTimesPerWeek(habit.targetTimesPerWeek || habit.timesPerWeek || 3);
-    setEditXpReward(String(habit.xpReward || 30));
-    setEditCoinReward(String(habit.coinReward || 8));
+    setEditPriority(normalizePriority(habit.priority));
+    setEditDifficulty(habit.difficulty
+      ? normalizeDifficulty(habit.difficulty)
+      : inferDifficultyFromRewards(habit.xpReward));
     setEditLocation(habit.location || defaultLocationForCategory(habit.category || defaultCatName, activeCategories));
     const win = windowToFields(habit.timeWindow);
     setEditWindowStart(win.start);
@@ -240,8 +246,8 @@ export function HabitsView({
         category: editCategory,
         frequency: editFrequency,
         targetTimesPerWeek: editFrequency === 'times_per_week' ? (parseInt(editTimesPerWeek, 10) || 3) : undefined,
-        xpReward: parseInt(editXpReward, 10) || 30,
-        coinReward: parseInt(editCoinReward, 10) || 8,
+        priority: editPriority,
+        difficulty: editDifficulty,
         location: editLocation,
         timeWindow: fieldsToTimeWindow(editWindowStart, editWindowEnd)
       });
@@ -620,6 +626,7 @@ export function HabitsView({
                             </span>
                           )}
                         </span>
+                        <PriorityBadge priority={habit.priority} compact />
                       </div>
                       <h3 style={{
                         fontSize: '1rem',
@@ -1124,51 +1131,12 @@ export function HabitsView({
                 onWindowEndChange={setNewWindowEnd}
               />
 
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
-                    XP por Conclusão
-                  </label>
-                  <input
-                    type="number"
-                    min="5"
-                    max="150"
-                    value={newXpReward}
-                    onChange={(e) => setNewXpReward(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      background: '#1a2030',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: '#fff',
-                      fontSize: '0.9rem'
-                    }}
-                  />
-                </div>
-
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
-                    Moedas por Conclusão
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={newCoinReward}
-                    onChange={(e) => setNewCoinReward(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      background: '#1a2030',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: '#fff',
-                      fontSize: '0.9rem'
-                    }}
-                  />
-                </div>
-              </div>
+              <ActivityScaleFields
+                priority={newPriority}
+                difficulty={newDifficulty}
+                onPriorityChange={setNewPriority}
+                onDifficultyChange={setNewDifficulty}
+              />
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
                 <button
@@ -1400,51 +1368,12 @@ export function HabitsView({
                 onWindowEndChange={setEditWindowEnd}
               />
 
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
-                    XP por Conclusão
-                  </label>
-                  <input
-                    type="number"
-                    min="5"
-                    max="150"
-                    value={editXpReward}
-                    onChange={(e) => setEditXpReward(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      background: '#1a2030',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: '#fff',
-                      fontSize: '0.9rem'
-                    }}
-                  />
-                </div>
-
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
-                    Moedas por Conclusão
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={editCoinReward}
-                    onChange={(e) => setEditCoinReward(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      background: '#1a2030',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: '#fff',
-                      fontSize: '0.9rem'
-                    }}
-                  />
-                </div>
-              </div>
+              <ActivityScaleFields
+                priority={editPriority}
+                difficulty={editDifficulty}
+                onPriorityChange={setEditPriority}
+                onDifficultyChange={setEditDifficulty}
+              />
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
                 <button

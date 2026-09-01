@@ -58,7 +58,7 @@ function runTests() {
     id: 'q-galinheiro',
     title: 'Trabalhar 30 min no galinheiro',
     category: 'Casa',
-    priority: 'alta',
+    priority: 'importante',
     dueDate: '2026-08-28',
     dueTime: null,
     completed: false,
@@ -71,7 +71,7 @@ function runTests() {
     id: 'q-jardim',
     title: 'Trabalhar 30 min no jardim',
     category: 'Casa',
-    priority: 'alta',
+    priority: 'importante',
     dueDate: null,
     completed: false,
     location: 'home',
@@ -83,7 +83,7 @@ function runTests() {
     id: 'q-socorro',
     title: 'Peticionar Processo Dona Socorro x Banco do Brasil',
     category: 'Advocacia',
-    priority: 'epica',
+    priority: 'critico',
     dueDate: null,
     completed: false,
     location: 'office',
@@ -202,7 +202,7 @@ function runTests() {
     id: 'q-hoje',
     title: 'Entregar peça hoje',
     category: 'Advocacia',
-    priority: 'media',
+    priority: 'bom_fazer',
     dueDate: '2026-08-29',
     dueTime: '18:00',
     completed: false,
@@ -229,7 +229,7 @@ function runTests() {
     id: 'q-amanha',
     title: 'Protocolar amanhã',
     category: 'Advocacia',
-    priority: 'media',
+    priority: 'bom_fazer',
     dueDate: '2026-08-31',
     completed: false,
     location: 'home',
@@ -241,7 +241,7 @@ function runTests() {
     id: 'q-epica',
     title: 'Reescrever o sistema',
     category: 'Programação',
-    priority: 'epica',
+    priority: 'critico',
     dueDate: null,
     completed: false,
     location: 'home',
@@ -290,6 +290,78 @@ function runTests() {
   const badLogsResult = computeNextAction(dbBadLogs, { location: 'home', now: nowHomeSat });
   assert(badLogsResult.primary?.id === 'q-jardim', 'Missão pendente continua elegível mesmo com logs irrelevantes');
   assert(dbBadLogs.quests[0].location === originalGarden.location, 'computeNextAction não deve mutar o snapshot original');
+
+  const criticalQuest = {
+    id: 'q-critica',
+    title: 'Protocolar recurso hoje à tarde',
+    category: 'Advocacia',
+    priority: 'critico',
+    dueDate: null,
+    completed: false,
+    location: 'home',
+    timeWindow: null,
+    createdAt: '2026-08-20T10:00:00.000Z',
+    subtasks: []
+  };
+  const skippableQuest = {
+    id: 'q-dispensavel',
+    title: 'Organizar gaveta',
+    category: 'Casa',
+    priority: 'dispensavel',
+    dueDate: null,
+    completed: false,
+    location: 'home',
+    timeWindow: null,
+    createdAt: '2026-08-20T10:00:00.000Z',
+    subtasks: []
+  };
+  const criticalHabit = {
+    id: 'h-critico',
+    title: 'Tomar medicação',
+    category: 'Saúde',
+    priority: 'critico',
+    frequency: 'daily',
+    location: 'home',
+    timeWindow: null,
+    currentStreak: 0,
+    history: [],
+    createdAt: '2026-08-20T10:00:00.000Z',
+    xpReward: 20,
+    coinReward: 5
+  };
+  const optionalHabit = {
+    id: 'h-opcional',
+    title: 'Alongar 2 min',
+    category: 'Saúde',
+    priority: 'dispensavel',
+    frequency: 'daily',
+    location: 'home',
+    timeWindow: null,
+    currentStreak: 0,
+    history: [],
+    createdAt: '2026-08-20T10:00:00.000Z',
+    xpReward: 20,
+    coinReward: 5
+  };
+
+  const dbPriorityQuests = baseDb({ quests: [skippableQuest, criticalQuest] });
+  const priorityQuestResult = computeNextAction(dbPriorityQuests, { location: 'home', now: nowHomeSat });
+  assert(priorityQuestResult.primary?.id === 'q-critica', `Missão crítica deve ganhar da dispensável (foi ${priorityQuestResult.primary?.id})`);
+  assert(priorityQuestResult.primary?.priority === 'critico', 'Oráculo serializa a prioridade da missão');
+
+  const dbPriorityHabits = baseDb({ habits: [optionalHabit, criticalHabit] });
+  const priorityHabitResult = computeNextAction(dbPriorityHabits, { location: 'home', now: nowHomeSat });
+  assert(priorityHabitResult.primary?.id === 'h-critico', `Ritual crítico deve ganhar do dispensável (foi ${priorityHabitResult.primary?.id})`);
+  assert(priorityHabitResult.primary?.priority === 'critico', 'Oráculo serializa a prioridade do ritual');
+
+  const dbLegacyPriority = baseDb({
+    quests: [
+      { ...skippableQuest, id: 'q-legada-baixa', priority: 'baixa' },
+      { ...criticalQuest, id: 'q-legada-epica', priority: 'epica' }
+    ]
+  });
+  const legacyPriorityResult = computeNextAction(dbLegacyPriority, { location: 'home', now: nowHomeSat });
+  assert(legacyPriorityResult.primary?.id === 'q-legada-epica', `Prioridade legado épica deve mapear para crítica (foi ${legacyPriorityResult.primary?.id})`);
 
   console.log('\n🏆 Todos os testes do motor de Próxima Atividade passaram.');
 }

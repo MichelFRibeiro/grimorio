@@ -29,6 +29,11 @@ import {
 } from './timeUtils.js';
 import { getMcpToken, regenerateMcpToken, mcpAuthMiddleware, mcpSseMessagesAuthMiddleware } from './mcpAuth.js';
 import { handleSseConnection, handleSseMessage, handleDirectJsonRpc, handleMcpDiscoveryGet } from './mcpServer.js';
+import {
+  applyDifficultyFields,
+  resolveActivityScale,
+  willpowerForDifficulty
+} from '../src/utils/activityScale.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -470,37 +475,20 @@ app.delete('/api/quest-categories/:id', (req, res) => {
 app.post('/api/quests', (req, res) => {
   try {
     const db = getDb();
-    let { title, description, category, priority, dueDate, dueTime, subtasks, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes } = req.body;
+    let { title, description, category, priority, difficulty, dueDate, dueTime, subtasks, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes } = req.body;
     if (!title) return res.status(400).json({ error: 'Título é obrigatório' });
 
-    // Calculate rewards based on priority
-    let xpReward = 30;
-    let coinReward = 10;
-    let difficulty = 2;
-
-    switch (priority) {
-      case 'baixa':
-        xpReward = 20; coinReward = 5; difficulty = 1; break;
-      case 'media':
-        xpReward = 45; coinReward = 12; difficulty = 2; break;
-      case 'alta':
-        xpReward = 80; coinReward = 25; difficulty = 3; break;
-      case 'epica':
-        xpReward = 150; coinReward = 50; difficulty = 4; break;
-      default:
-        priority = 'media';
-    }
-
-    const defaultCategory = db.questCategories?.[0]?.name || 'Geral';
+    const scale = resolveActivityScale({
+      ...(priority !== undefined ? { priority } : {}),
+      ...(difficulty !== undefined ? { difficulty } : {})
+    });
     const newQuest = {
       id: uid('q'),
       title: title.trim(),
       description: (description || '').trim(),
-      category: category || defaultCategory,
-      priority: priority || 'media',
-      difficulty,
-      xpReward,
-      coinReward,
+      category: category || (db.questCategories?.[0]?.name || 'Geral'),
+      priority: scale.priority,
+      difficulty: scale.difficulty,
       dueDate: dueDate || null,
       dueTime: dueTime || null,
       subtasks: (subtasks || []).map(st => ({
@@ -512,6 +500,7 @@ app.post('/api/quests', (req, res) => {
       completedAt: null,
       createdAt: new Date().toISOString()
     };
+    applyDifficultyFields(newQuest, scale.difficulty);
     applyActivityContext(newQuest, { location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes }, db.questCategories);
 
     db.quests.unshift(newQuest);
@@ -529,17 +518,18 @@ app.put('/api/quests/:id', (req, res) => {
     if (index === -1) return res.status(404).json({ error: 'Missão não encontrada' });
 
     const existing = db.quests[index];
-    const { title, description, category, priority, dueDate, dueTime, subtasks, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes } = req.body;
+    const { title, description, category, priority, difficulty, dueDate, dueTime, subtasks, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes } = req.body;
 
     if (title !== undefined) existing.title = title.trim();
     if (description !== undefined) existing.description = description.trim();
     if (category !== undefined) existing.category = category;
-    if (priority !== undefined) {
-      existing.priority = priority;
-      if (priority === 'baixa') { existing.xpReward = 20; existing.coinReward = 5; existing.difficulty = 1; }
-      else if (priority === 'media') { existing.xpReward = 45; existing.coinReward = 12; existing.difficulty = 2; }
-      else if (priority === 'alta') { existing.xpReward = 80; existing.coinReward = 25; existing.difficulty = 3; }
-      else if (priority === 'epica') { existing.xpReward = 150; existing.coinReward = 50; existing.difficulty = 4; }
+    if (priority !== undefined || difficulty !== undefined) {
+      const scale = resolveActivityScale({
+        ...(priority !== undefined ? { priority } : {}),
+        ...(difficulty !== undefined ? { difficulty } : {})
+      }, existing);
+      existing.priority = scale.priority;
+      applyDifficultyFields(existing, scale.difficulty);
     }
     if (dueDate !== undefined) existing.dueDate = dueDate || null;
     if (dueTime !== undefined) existing.dueTime = dueTime || null;
@@ -574,7 +564,7 @@ app.post('/api/quests/:id/complete', (req, res) => {
     let rewardResult = null;
     if (willComplete) {
       // Award willpower and focus
-      const willpower = quest.priority === 'epica' ? 25 : quest.priority === 'alta' ? 15 : 5;
+      const willpower = willpowerForDifficulty(quest.difficulty);
       const focus = 10;
       rewardResult = rewardPlayer({
         xp: quest.xpReward,
@@ -584,11 +574,11 @@ app.post('/api/quests/:id/complete', (req, res) => {
         actionType: 'quest_complete',
         entityId: quest.id,
         title: quest.title,
-        details: { category: quest.category, priority: quest.priority, location: quest.location || null }
+        details: { category: quest.category, priority: quest.priority, difficulty: quest.difficulty, location: quest.location || null }
       });
     } else {
       // Revert willpower, focus, xp and coins
-      const willpower = quest.priority === 'epica' ? 25 : quest.priority === 'alta' ? 15 : 5;
+      const willpower = willpowerForDifficulty(quest.difficulty);
       const focus = 10;
       rewardResult = revertPlayerReward({
         xp: quest.xpReward,
@@ -1415,7 +1405,7 @@ app.delete('/api/processes/:id', (req, res) => {
 app.post('/api/habits', (req, res) => {
   try {
     const db = getDb();
-    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes } = req.body;
+    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty } = req.body;
     if (!title) return res.status(400).json({ error: 'Título do hábito é obrigatório' });
 
     let freq = frequency || 'daily';
@@ -1432,6 +1422,10 @@ app.post('/api/habits', (req, res) => {
       target = 7;
     }
 
+    const scale = resolveActivityScale({
+      ...(priority !== undefined ? { priority } : {}),
+      ...(difficulty !== undefined ? { difficulty } : {})
+    });
     const newHabit = {
       id: uid('h'),
       title: title.trim(),
@@ -1443,10 +1437,15 @@ app.post('/api/habits', (req, res) => {
       currentStreak: 0,
       bestStreak: 0,
       history: [],
-      xpReward: parseInt(xpReward, 10) || 30,
-      coinReward: parseInt(coinReward, 10) || 8,
+      priority: scale.priority,
+      difficulty: scale.difficulty,
       createdAt: new Date().toISOString()
     };
+    applyDifficultyFields(newHabit, scale.difficulty);
+    if (difficulty === undefined) {
+      if (xpReward !== undefined) newHabit.xpReward = parseInt(xpReward, 10) || 30;
+      if (coinReward !== undefined) newHabit.coinReward = parseInt(coinReward, 10) || 8;
+    }
     applyActivityContext(newHabit, { location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes }, db.questCategories);
 
     db.habits.unshift(newHabit);
@@ -1463,7 +1462,7 @@ app.put('/api/habits/:id', (req, res) => {
     const habit = db.habits.find(h => h.id === req.params.id);
     if (!habit) return res.status(404).json({ error: 'Hábito não encontrado' });
 
-    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes } = req.body;
+    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty } = req.body;
     if (title !== undefined && title.trim()) habit.title = title.trim();
     if (description !== undefined) habit.description = description.trim();
     if (category !== undefined && category.trim()) habit.category = category.trim();
@@ -1486,8 +1485,17 @@ app.put('/api/habits/:id', (req, res) => {
       habit.targetTimesPerWeek = Math.max(1, Math.min(7, parseInt(targetTimesPerWeek || timesPerWeek, 10) || 3));
     }
 
-    if (xpReward !== undefined) habit.xpReward = parseInt(xpReward, 10) || 30;
-    if (coinReward !== undefined) habit.coinReward = parseInt(coinReward, 10) || 8;
+    if (priority !== undefined || difficulty !== undefined) {
+      const scale = resolveActivityScale({
+        ...(priority !== undefined ? { priority } : {}),
+        ...(difficulty !== undefined ? { difficulty } : {})
+      }, habit);
+      habit.priority = scale.priority;
+      applyDifficultyFields(habit, scale.difficulty);
+    } else {
+      if (xpReward !== undefined) habit.xpReward = parseInt(xpReward, 10) || 30;
+      if (coinReward !== undefined) habit.coinReward = parseInt(coinReward, 10) || 8;
+    }
     if (location !== undefined || timeWindow !== undefined || timeWindowStart !== undefined || timeWindowEnd !== undefined || estimatedMinutes !== undefined) {
       applyActivityContext(habit, { location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes }, db.questCategories);
     }

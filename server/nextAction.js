@@ -20,9 +20,24 @@ import {
   guessCurrentLocation,
   applyActivityContext
 } from './locations.js';
+import {
+  DEFAULT_PRIORITY,
+  getPriorityMeta,
+  isPriorityKey,
+  PRIORITY_META
+} from '../src/utils/activityScale.js';
 
-const PRIORITY_SCORE = { epica: 20, alta: 15, media: 10, baixa: 5 };
-const PRIORITY_RANK = { epica: 4, alta: 3, media: 2, baixa: 1 };
+const LEGACY_PRIORITY_MAP = {
+  epica: 'critico',
+  alta: 'importante',
+  media: 'bom_fazer',
+  baixa: 'opcional'
+};
+
+function resolvePriorityKey(item) {
+  if (isPriorityKey(item?.priority)) return item.priority;
+  return LEGACY_PRIORITY_MAP[item?.priority] || DEFAULT_PRIORITY;
+}
 const HIST_MIN_SAMPLES = 5;
 const WINDOW_GRACE_MINUTES = 15;
 const RELEVANT_LOG_TYPES = new Set(['quest_complete', 'habit_complete']);
@@ -291,8 +306,9 @@ function scoreCandidate({
     ? urgencyScore(item, todayStr, nowMinutes)
     : { score: 8, label: extra ? 'Extra da semana' : null, overdue: false, dueToday: false, dueSoon: false };
 
-  const priorityKey = kind === 'quest' ? (item.priority || 'media') : 'media';
-  const priorityPts = PRIORITY_SCORE[priorityKey] || 10;
+  const priorityKey = resolvePriorityKey(item);
+  const priorityMeta = getPriorityMeta(priorityKey);
+  const priorityPts = priorityMeta.score;
 
   const histograms = pickHistogram(hist, item.id, item.category);
   const hourFit = windowFit(histograms.hour, hour, 1, { wrap: true });
@@ -307,8 +323,9 @@ function scoreCandidate({
   const freshPts = freshnessScore(item, todayStr, kind);
 
   if (urgency.label) reasons.push(urgency.label);
-  if (kind === 'quest' && item.priority === 'epica') reasons.push('Prioridade épica');
-  else if (kind === 'quest' && item.priority === 'alta' && !urgency.overdue) reasons.push('Prioridade alta');
+  if (priorityKey === 'critico') reasons.push('Prioridade crítica');
+  else if (priorityKey === 'importante' && !urgency.overdue) reasons.push('Prioridade importante');
+  else if (priorityKey === 'dispensavel') reasons.push('Prioridade dispensável');
   if (risk.label) reasons.push(risk.label);
 
   const locMeta = getLocationMeta(item.location);
@@ -356,7 +373,7 @@ function serializeCandidate(kind, item, scoring, extra, weeklyStats, completedTo
     locationLabel: loc.label,
     locationEmoji: loc.emoji,
     timeWindow: item.timeWindow || null,
-    priority: kind === 'quest' ? (item.priority || 'media') : null,
+    priority: resolvePriorityKey(item),
     dueDate: kind === 'quest' ? (item.dueDate || null) : null,
     dueTime: kind === 'quest' ? (item.dueTime || null) : null,
     score: scoring.score,
@@ -388,8 +405,8 @@ function compareCandidates(a, b) {
   const aDue = a.dueDate || '9999-99-99';
   const bDue = b.dueDate || '9999-99-99';
   if (aDue !== bDue) return aDue < bDue ? -1 : 1;
-  const aP = PRIORITY_RANK[a.priority] || 0;
-  const bP = PRIORITY_RANK[b.priority] || 0;
+  const aP = PRIORITY_META[a.priority]?.rank || 0;
+  const bP = PRIORITY_META[b.priority]?.rank || 0;
   if (bP !== aP) return bP - aP;
   const aStreak = a.currentStreak || 0;
   const bStreak = b.currentStreak || 0;

@@ -333,15 +333,15 @@ export function computeAnalytics() {
   // Insight 5: Urgency & Procrastination Pattern
   const completedQuests = quests.filter(q => q.completed);
   const pendingQuests = quests.filter(q => !q.completed);
-  const epicOrHighPending = pendingQuests.filter(q => q.priority === 'alta' || q.priority === 'epica').length;
+  const highPriorityPending = pendingQuests.filter(q => q.priority === 'importante' || q.priority === 'critico' || q.priority === 'alta' || q.priority === 'epica').length;
 
-  if (epicOrHighPending > 0) {
+  if (highPriorityPending > 0) {
     insights.push({
       type: 'procrastination_guard',
       icon: 'ShieldAlert',
       color: 'rose',
       title: 'Guardião Contra a Procrastinação',
-      description: `Você possui ${epicOrHighPending} missão(ões) de alta prioridade ou épica aguardando. Dividi-las em subtarefas ou atacá-las logo pela manhã reduz o atrito de início em até 60%.`
+      description: `Você possui ${highPriorityPending} missão(ões) importante(s) ou crítica(s) aguardando. Dividi-las em subtarefas ou atacá-las logo pela manhã reduz o atrito de início em até 60%.`
     });
   } else {
     insights.push({

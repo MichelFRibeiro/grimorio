@@ -9,6 +9,7 @@ import {
   getYesterdaySaoPauloDateStr
 } from './timeUtils.js';
 import { applyLocationDefaults } from './locations.js';
+import { migrateActivityScale } from '../src/utils/activityScale.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -302,6 +303,8 @@ export function sanitizeDb(db) {
     if (!db.bossRaid.rewardXp) db.bossRaid.rewardXp = 400;
   }
   applyLocationDefaults(db);
+  (db.quests || []).forEach((quest) => migrateActivityScale(quest));
+  (db.habits || []).forEach((habit) => migrateActivityScale(habit));
   return db;
 }
 

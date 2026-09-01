@@ -21,8 +21,10 @@ import {
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityContextFields } from './ActivityContextFields';
+import { ActivityScaleFields, PriorityBadge } from './ActivityScaleFields';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
+import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, getPriorityMeta, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
 
 export function QuestsView({
   quests,
@@ -80,7 +82,8 @@ export function QuestsView({
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newCategory, setNewCategory] = useState(defaultCategoryName);
-  const [newPriority, setNewPriority] = useState('media');
+  const [newPriority, setNewPriority] = useState(DEFAULT_PRIORITY);
+  const [newDifficulty, setNewDifficulty] = useState(DEFAULT_DIFFICULTY);
   const [newDueDate, setNewDueDate] = useState('');
   const [newDueTime, setNewDueTime] = useState('');
   const [newLocation, setNewLocation] = useState(defaultLocationForCategory(defaultCategoryName, activeCategories));
@@ -101,7 +104,8 @@ export function QuestsView({
   const [editTitle, setEditTitle] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [editCategory, setEditCategory] = useState(defaultCategoryName);
-  const [editPriority, setEditPriority] = useState('media');
+  const [editPriority, setEditPriority] = useState(DEFAULT_PRIORITY);
+  const [editDifficulty, setEditDifficulty] = useState(DEFAULT_DIFFICULTY);
   const [editDueDate, setEditDueDate] = useState('');
   const [editDueTime, setEditDueTime] = useState('');
   const [editLocation, setEditLocation] = useState('anywhere');
@@ -145,6 +149,7 @@ export function QuestsView({
       description: newDesc.trim(),
       category: categoryToSave,
       priority: newPriority,
+      difficulty: newDifficulty,
       dueDate: newDueDate || null,
       dueTime: newDueTime || null,
       location: newLocation,
@@ -155,7 +160,8 @@ export function QuestsView({
     setNewTitle('');
     setNewDesc('');
     setNewCategory(validNames[0] || 'Geral');
-    setNewPriority('media');
+    setNewPriority(DEFAULT_PRIORITY);
+    setNewDifficulty(DEFAULT_DIFFICULTY);
     setNewDueDate('');
     setNewDueTime('');
     setNewLocation(defaultLocationForCategory(validNames[0] || 'Geral', activeCategories));
@@ -175,7 +181,8 @@ export function QuestsView({
     setEditTitle(quest.title || '');
     setEditDesc(quest.description || '');
     setEditCategory(categoryToEdit);
-    setEditPriority(quest.priority || 'media');
+    setEditPriority(normalizePriority(quest.priority));
+    setEditDifficulty(normalizeDifficulty(quest.difficulty));
     setEditDueDate(quest.dueDate || '');
     setEditDueTime(quest.dueTime || '');
     setEditLocation(quest.location || defaultLocationForCategory(categoryToEdit, activeCategories));
@@ -226,6 +233,7 @@ export function QuestsView({
       description: editDesc.trim(),
       category: editCategory,
       priority: editPriority,
+      difficulty: editDifficulty,
       dueDate: editDueDate || null,
       dueTime: editDueTime || null,
       location: editLocation,
@@ -330,20 +338,6 @@ export function QuestsView({
         closeConfirmModal();
       }
     });
-  };
-
-  const getPriorityBadge = (priority) => {
-    switch (priority) {
-      case 'epica':
-        return { label: 'ÉPICA / BOSS', color: '#c084fc', bg: 'rgba(168, 85, 247, 0.15)', border: 'rgba(168, 85, 247, 0.4)' };
-      case 'alta':
-        return { label: 'ALTA', color: '#fbbf24', bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.4)' };
-      case 'media':
-        return { label: 'MÉDIA', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.4)' };
-      case 'baixa':
-      default:
-        return { label: 'BAIXA', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.12)', border: 'rgba(148, 163, 184, 0.3)' };
-    }
   };
 
   const getDueDateLabel = (dueDate, dueTime) => {
@@ -537,11 +531,11 @@ export function QuestsView({
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {filteredQuests.map(quest => {
-            const pBadge = getPriorityBadge(quest.priority);
             const dueInfo = getDueDateLabel(quest.dueDate, quest.dueTime);
             const isSubtasksOpen = !!expandedSubtasks[quest.id];
             const completedSubtasks = (quest.subtasks || []).filter(s => s.completed).length;
             const totalSubtasks = (quest.subtasks || []).length;
+            const priorityMeta = getPriorityMeta(quest.priority);
 
             return (
               <div
@@ -550,7 +544,7 @@ export function QuestsView({
                 style={{
                   padding: '16px 20px',
                   opacity: quest.completed ? 0.75 : 1,
-                  borderLeft: quest.completed ? '4px solid #10b981' : `4px solid ${pBadge.color}`
+                  borderLeft: quest.completed ? '4px solid #10b981' : `4px solid ${priorityMeta.color}`
                 }}
               >
                 <div className="quest-card-row">
@@ -589,20 +583,7 @@ export function QuestsView({
                           {quest.title}
                         </h3>
 
-                        {/* Priority Badge */}
-                        <span
-                          style={{
-                            fontSize: '0.7rem',
-                            padding: '2px 8px',
-                            borderRadius: '6px',
-                            background: pBadge.bg,
-                            color: pBadge.color,
-                            border: `1px solid ${pBadge.border}`,
-                            fontWeight: 800
-                          }}
-                        >
-                          {pBadge.label}
-                        </span>
+                        <PriorityBadge priority={quest.priority} />
 
                         {/* Category Tag */}
                         <span
@@ -886,59 +867,40 @@ export function QuestsView({
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
-                    Categoria
-                  </label>
-                  <select
-                    value={newCategory}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setNewCategory(next);
-                      setNewLocation(defaultLocationForCategory(next, activeCategories));
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      background: '#1a2030',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: '#fff',
-                      fontSize: '0.9rem'
-                    }}
-                  >
-                    {activeCategories.map(c => {
-                      const name = typeof c === 'string' ? c : c.name;
-                      return <option key={name} value={name}>{name}</option>;
-                    })}
-                  </select>
-                </div>
-
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
-                    Prioridade / Dificuldade
-                  </label>
-                  <select
-                    value={newPriority}
-                    onChange={(e) => setNewPriority(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      background: '#1a2030',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: '#fff',
-                      fontSize: '0.9rem'
-                    }}
-                  >
-                    <option value="baixa">Baixa (+20 XP, 5 🪙)</option>
-                    <option value="media">Média (+45 XP, 12 🪙)</option>
-                    <option value="alta">Alta (+80 XP, 25 🪙)</option>
-                    <option value="epica">Épica / Boss (+150 XP, 50 🪙)</option>
-                  </select>
-                </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                  Categoria
+                </label>
+                <select
+                  value={newCategory}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setNewCategory(next);
+                    setNewLocation(defaultLocationForCategory(next, activeCategories));
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    background: '#1a2030',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  {activeCategories.map(c => {
+                    const name = typeof c === 'string' ? c : c.name;
+                    return <option key={name} value={name}>{name}</option>;
+                  })}
+                </select>
               </div>
+
+              <ActivityScaleFields
+                priority={newPriority}
+                difficulty={newDifficulty}
+                onPriorityChange={setNewPriority}
+                onDifficultyChange={setNewDifficulty}
+              />
 
               <ActivityContextFields
                 location={newLocation}
@@ -1140,59 +1102,40 @@ export function QuestsView({
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
-                    Categoria
-                  </label>
-                  <select
-                    value={editCategory}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setEditCategory(next);
-                      setEditLocation(defaultLocationForCategory(next, activeCategories));
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      background: '#1a2030',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: '#fff',
-                      fontSize: '0.9rem'
-                    }}
-                  >
-                    {activeCategories.map(c => {
-                      const name = typeof c === 'string' ? c : c.name;
-                      return <option key={name} value={name}>{name}</option>;
-                    })}
-                  </select>
-                </div>
-
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
-                    Prioridade / Dificuldade
-                  </label>
-                  <select
-                    value={editPriority}
-                    onChange={(e) => setEditPriority(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      background: '#1a2030',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: '#fff',
-                      fontSize: '0.9rem'
-                    }}
-                  >
-                    <option value="baixa">Baixa (+20 XP, 5 🪙)</option>
-                    <option value="media">Média (+45 XP, 12 🪙)</option>
-                    <option value="alta">Alta (+80 XP, 25 🪙)</option>
-                    <option value="epica">Épica / Boss (+150 XP, 50 🪙)</option>
-                  </select>
-                </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                  Categoria
+                </label>
+                <select
+                  value={editCategory}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setEditCategory(next);
+                    setEditLocation(defaultLocationForCategory(next, activeCategories));
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    background: '#1a2030',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  {activeCategories.map(c => {
+                    const name = typeof c === 'string' ? c : c.name;
+                    return <option key={name} value={name}>{name}</option>;
+                  })}
+                </select>
               </div>
+
+              <ActivityScaleFields
+                priority={editPriority}
+                difficulty={editDifficulty}
+                onPriorityChange={setEditPriority}
+                onDifficultyChange={setEditDifficulty}
+              />
 
               <ActivityContextFields
                 location={editLocation}

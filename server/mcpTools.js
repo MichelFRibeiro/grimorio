@@ -4,6 +4,13 @@ import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings } from './rankings.js';
 import { computeNextAction } from './nextAction.js';
 import {
+  applyDifficultyFields,
+  DEFAULT_DIFFICULTY,
+  DEFAULT_PRIORITY,
+  resolveActivityScale,
+  willpowerForDifficulty
+} from '../src/utils/activityScale.js';
+import {
   LOCATIONS,
   normalizeLocation,
   applyActivityContext,
@@ -63,7 +70,8 @@ export const toolsDefinition = [
     schema: {
       completed: z.boolean().optional().describe('Filtrar por status de conclusão (true = concluídas, false = pendentes)'),
       category: z.string().optional().describe('Filtrar por nome de categoria (ex: Trabalho, Estudos, Pessoal)'),
-      priority: z.enum(['baixa', 'media', 'alta', 'epica']).optional().describe('Filtrar por nível de prioridade'),
+      priority: z.enum(['dispensavel', 'opcional', 'bom_fazer', 'importante', 'critico']).optional().describe('Filtrar por prioridade (dispensavel → critico)'),
+      difficulty: z.enum(['baixa', 'media', 'alta', 'epica']).optional().describe('Filtrar por dificuldade (baixa/média/alta/épica)'),
       search: z.string().optional().describe('Buscar termo no título ou descrição da missão'),
       limit: z.number().optional().describe('Limite máximo de registros a retornar')
     },
@@ -80,6 +88,9 @@ export const toolsDefinition = [
       }
       if (args.priority) {
         quests = quests.filter(q => q.priority === args.priority);
+      }
+      if (args.difficulty) {
+        quests = quests.filter(q => q.difficulty === args.difficulty);
       }
       if (args.search) {
         const s = args.search.toLowerCase().trim();
@@ -117,7 +128,8 @@ export const toolsDefinition = [
       title: z.string().describe('Título da missão'),
       description: z.string().optional().describe('Descrição detalhada ou contexto da missão'),
       category: z.string().optional().describe('Categoria da missão (ex: Trabalho, Estudos, Pessoal, Projetos, Saúde, Finanças)'),
-      priority: z.enum(['baixa', 'media', 'alta', 'epica']).optional().default('media').describe('Prioridade da missão'),
+      priority: z.enum(['dispensavel', 'opcional', 'bom_fazer', 'importante', 'critico', 'baixa', 'media', 'alta', 'epica']).optional().describe('Prioridade da missão (dispensavel → critico). Valores legados baixa/media/alta/epica são interpretados como Dificuldade.'),
+      difficulty: z.enum(['baixa', 'media', 'alta', 'epica']).optional().describe('Dificuldade da missão (define XP e moedas)'),
       dueDate: z.string().optional().describe('Data limite no formato YYYY-MM-DD'),
       dueTime: z.string().optional().describe('Horário limite no formato HH:mm'),
       location: locationEnum.optional().describe('Onde a missão pode ser feita: anywhere, office, home ou gym'),
@@ -133,32 +145,18 @@ export const toolsDefinition = [
         return formatError('O título da missão é obrigatório.');
       }
 
-      let priority = args.priority || 'media';
-      let xpReward = 45;
-      let coinReward = 12;
-      let difficulty = 2;
-
-      switch (priority) {
-        case 'baixa':
-          xpReward = 20; coinReward = 5; difficulty = 1; break;
-        case 'media':
-          xpReward = 45; coinReward = 12; difficulty = 2; break;
-        case 'alta':
-          xpReward = 80; coinReward = 25; difficulty = 3; break;
-        case 'epica':
-          xpReward = 150; coinReward = 50; difficulty = 4; break;
-      }
-
+      const scale = resolveActivityScale({
+        ...(args.priority !== undefined ? { priority: args.priority } : {}),
+        ...(args.difficulty !== undefined ? { difficulty: args.difficulty } : {})
+      });
       const defaultCategory = db.questCategories?.[0]?.name || 'Geral';
       const newQuest = {
         id: uid('q'),
         title: args.title.trim(),
         description: (args.description || '').trim(),
         category: args.category || defaultCategory,
-        priority,
-        difficulty,
-        xpReward,
-        coinReward,
+        priority: scale.priority,
+        difficulty: scale.difficulty,
         dueDate: args.dueDate || null,
         dueTime: args.dueTime || null,
         subtasks: (args.subtasks || []).map(st => ({
@@ -170,6 +168,7 @@ export const toolsDefinition = [
         completedAt: null,
         createdAt: new Date().toISOString()
       };
+      applyDifficultyFields(newQuest, scale.difficulty);
       applyActivityContext(newQuest, { location: args.location, timeWindow: args.timeWindow }, db.questCategories);
 
       if (!db.quests) db.quests = [];
@@ -187,7 +186,8 @@ export const toolsDefinition = [
       title: z.string().optional().describe('Novo título'),
       description: z.string().optional().describe('Nova descrição'),
       category: z.string().optional().describe('Nova categoria'),
-      priority: z.enum(['baixa', 'media', 'alta', 'epica']).optional().describe('Nova prioridade'),
+      priority: z.enum(['dispensavel', 'opcional', 'bom_fazer', 'importante', 'critico', 'baixa', 'media', 'alta', 'epica']).optional().describe('Nova prioridade (dispensavel → critico). Valores legados baixa/media/alta/epica são interpretados como Dificuldade.'),
+      difficulty: z.enum(['baixa', 'media', 'alta', 'epica']).optional().describe('Nova dificuldade (define XP e moedas)'),
       dueDate: z.string().nullable().optional().describe('Nova data limite YYYY-MM-DD (ou null para remover)'),
       dueTime: z.string().nullable().optional().describe('Novo horário limite HH:mm (ou null para remover)'),
       location: locationEnum.optional().describe('Novo lugar (anywhere, office, home, gym)'),
@@ -205,12 +205,13 @@ export const toolsDefinition = [
       if (args.title !== undefined) quest.title = args.title.trim();
       if (args.description !== undefined) quest.description = args.description.trim();
       if (args.category !== undefined) quest.category = args.category;
-      if (args.priority !== undefined) {
-        quest.priority = args.priority;
-        if (args.priority === 'baixa') { quest.xpReward = 20; quest.coinReward = 5; quest.difficulty = 1; }
-        else if (args.priority === 'media') { quest.xpReward = 45; quest.coinReward = 12; quest.difficulty = 2; }
-        else if (args.priority === 'alta') { quest.xpReward = 80; quest.coinReward = 25; quest.difficulty = 3; }
-        else if (args.priority === 'epica') { quest.xpReward = 150; quest.coinReward = 50; quest.difficulty = 4; }
+      if (args.priority !== undefined || args.difficulty !== undefined) {
+        const scale = resolveActivityScale({
+          ...(args.priority !== undefined ? { priority: args.priority } : {}),
+          ...(args.difficulty !== undefined ? { difficulty: args.difficulty } : {})
+        }, quest);
+        quest.priority = scale.priority;
+        applyDifficultyFields(quest, scale.difficulty);
       }
       if (args.dueDate !== undefined) quest.dueDate = args.dueDate;
       if (args.dueTime !== undefined) quest.dueTime = args.dueTime;
@@ -251,7 +252,7 @@ export const toolsDefinition = [
 
       let rewardResult = null;
       if (willComplete) {
-        const willpower = quest.priority === 'epica' ? 25 : quest.priority === 'alta' ? 15 : 5;
+        const willpower = willpowerForDifficulty(quest.difficulty);
         const focus = 10;
         rewardResult = rewardPlayer({
           xp: quest.xpReward,
@@ -261,10 +262,10 @@ export const toolsDefinition = [
           actionType: 'quest_complete',
           entityId: quest.id,
           title: quest.title,
-          details: { category: quest.category, priority: quest.priority, location: quest.location || null }
+          details: { category: quest.category, priority: quest.priority, difficulty: quest.difficulty, location: quest.location || null }
         });
       } else {
-        const willpower = quest.priority === 'epica' ? 25 : quest.priority === 'alta' ? 15 : 5;
+        const willpower = willpowerForDifficulty(quest.difficulty);
         const focus = 10;
         rewardResult = revertPlayerReward({
           xp: quest.xpReward,
@@ -968,6 +969,8 @@ export const toolsDefinition = [
           completedToday,
           currentStreak: h.currentStreak || 0,
           bestStreak: h.bestStreak || 0,
+          priority: h.priority || DEFAULT_PRIORITY,
+          difficulty: h.difficulty || DEFAULT_DIFFICULTY,
           xpReward: h.xpReward || 30,
           coinReward: h.coinReward || 8,
           location: h.location || 'anywhere',
@@ -989,8 +992,10 @@ export const toolsDefinition = [
       icon: z.string().optional().default('Flame').describe('Ícone Lucide (ex: Flame, Dumbbell, Book, Sun)'),
       frequency: z.enum(['daily', 'weekdays', 'weekly', 'times_per_week']).optional().default('daily').describe('Frequência do hábito'),
       targetTimesPerWeek: z.number().min(1).max(7).optional().describe('Meta de vezes por semana (usado quando frequency for times_per_week)'),
-      xpReward: z.number().optional().default(30).describe('XP concedido por execução'),
-      coinReward: z.number().optional().default(8).describe('Moedas concedidas por execução'),
+      priority: z.enum(['dispensavel', 'opcional', 'bom_fazer', 'importante', 'critico']).optional().describe('Prioridade do ritual (dispensavel → critico)'),
+      difficulty: z.enum(['baixa', 'media', 'alta', 'epica']).optional().describe('Dificuldade do ritual (define XP e moedas)'),
+      xpReward: z.number().optional().describe('XP concedido por execução (legado; preferir difficulty)'),
+      coinReward: z.number().optional().describe('Moedas concedidas por execução (legado; preferir difficulty)'),
       location: locationEnum.optional().describe('Onde o ritual pode ser feito: anywhere, office, home ou gym'),
       timeWindow: timeWindowSchema.optional().describe('Janela de execução (não é prazo). Null = qualquer hora')
     },
@@ -1011,6 +1016,10 @@ export const toolsDefinition = [
         target = 7;
       }
 
+      const scale = resolveActivityScale({
+        ...(args.priority !== undefined ? { priority: args.priority } : {}),
+        ...(args.difficulty !== undefined ? { difficulty: args.difficulty } : {})
+      });
       const newHabit = {
         id: uid('h'),
         title: args.title.trim(),
@@ -1022,10 +1031,15 @@ export const toolsDefinition = [
         currentStreak: 0,
         bestStreak: 0,
         history: [],
-        xpReward: parseInt(args.xpReward, 10) || 30,
-        coinReward: parseInt(args.coinReward, 10) || 8,
+        priority: scale.priority,
+        difficulty: scale.difficulty,
         createdAt: new Date().toISOString()
       };
+      applyDifficultyFields(newHabit, scale.difficulty);
+      if (args.difficulty === undefined) {
+        if (args.xpReward !== undefined) newHabit.xpReward = parseInt(args.xpReward, 10) || 30;
+        if (args.coinReward !== undefined) newHabit.coinReward = parseInt(args.coinReward, 10) || 8;
+      }
       applyActivityContext(newHabit, { location: args.location, timeWindow: args.timeWindow }, db.questCategories);
 
       if (!db.habits) db.habits = [];
@@ -1129,8 +1143,10 @@ export const toolsDefinition = [
       icon: z.string().optional().describe('Novo ícone'),
       frequency: z.enum(['daily', 'weekdays', 'weekly', 'times_per_week']).optional().describe('Nova frequência'),
       targetTimesPerWeek: z.number().min(1).max(7).optional().describe('Nova meta de vezes por semana'),
-      xpReward: z.number().optional().describe('Novo XP'),
-      coinReward: z.number().optional().describe('Novas moedas'),
+      priority: z.enum(['dispensavel', 'opcional', 'bom_fazer', 'importante', 'critico']).optional().describe('Nova prioridade (dispensavel → critico)'),
+      difficulty: z.enum(['baixa', 'media', 'alta', 'epica']).optional().describe('Nova dificuldade (define XP e moedas)'),
+      xpReward: z.number().optional().describe('Novo XP (legado; preferir difficulty)'),
+      coinReward: z.number().optional().describe('Novas moedas (legado; preferir difficulty)'),
       location: locationEnum.optional().describe('Novo lugar (anywhere, office, home, gym)'),
       timeWindow: timeWindowSchema.optional().describe('Nova janela de execução (ou null para qualquer hora)')
     },
@@ -1160,8 +1176,17 @@ export const toolsDefinition = [
         habit.targetTimesPerWeek = Math.max(1, Math.min(7, parseInt(args.targetTimesPerWeek, 10) || 3));
       }
 
-      if (args.xpReward !== undefined) habit.xpReward = parseInt(args.xpReward, 10) || 30;
-      if (args.coinReward !== undefined) habit.coinReward = parseInt(args.coinReward, 10) || 8;
+      if (args.priority !== undefined || args.difficulty !== undefined) {
+        const scale = resolveActivityScale({
+          ...(args.priority !== undefined ? { priority: args.priority } : {}),
+          ...(args.difficulty !== undefined ? { difficulty: args.difficulty } : {})
+        }, habit);
+        habit.priority = scale.priority;
+        applyDifficultyFields(habit, scale.difficulty);
+      } else {
+        if (args.xpReward !== undefined) habit.xpReward = parseInt(args.xpReward, 10) || 30;
+        if (args.coinReward !== undefined) habit.coinReward = parseInt(args.coinReward, 10) || 8;
+      }
       if (args.location !== undefined || args.timeWindow !== undefined) {
         applyActivityContext(habit, { location: args.location, timeWindow: args.timeWindow }, db.questCategories);
       }
@@ -1572,7 +1597,7 @@ export const toolsDefinition = [
   // ==========================================
   {
     name: 'get_next_action',
-    description: 'Indicar a próxima atividade (missão ou ritual) considerando o lugar atual, janela de horário, prazos, prioridade e histórico de execução. Filtra o que não pode ser feito agora e ranqueia o restante.',
+    description: 'Indicar a próxima atividade (missão ou ritual) considerando o lugar atual, janela de horário, prazos, prioridade (dispensavel → critico) e histórico de execução. Filtra o que não pode ser feito agora e ranqueia o restante.',
     schema: {
       location: locationEnum.optional().describe('Lugar atual (anywhere, office, home, gym). Se omitido, usa o lugar salvo no perfil ou um palpite por horário.'),
       snoozedIds: z.array(z.string()).optional().describe('IDs adiados nesta sessão (ignorados no ranking)')
