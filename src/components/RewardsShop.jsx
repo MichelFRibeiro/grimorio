@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { Plus, Gift, Coins, Check, Trash2, History, Coffee, Tv, Gamepad2, Sparkles, Heart, RotateCcw, AlertCircle } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Plus, Gift, Coins, Check, Trash2, History, Coffee, Tv, Gamepad2, Sparkles, Heart, RotateCcw, Banknote } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { brlToCoins, coinsToBrl, formatBrl, parseBrlAmount } from '../utils/coinExchange.js';
 
-export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, onRedeemReward, onCancelRedemption, onDeleteReward }) {
+export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, onSpendMoney, onRedeemReward, onCancelRedemption, onDeleteReward }) {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showSpendModal, setShowSpendModal] = useState(false);
   const [cancelModalRedemption, setCancelModalRedemption] = useState(null);
 
   // Confirm Modal State
@@ -42,8 +44,15 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
   const [newDesc, setNewDesc] = useState('');
   const [newCost, setNewCost] = useState('30');
   const [newIcon, setNewIcon] = useState('Gift');
+  const [spendAmount, setSpendAmount] = useState('');
+  const [spendItem, setSpendItem] = useState('');
+  const [spendSubmitting, setSpendSubmitting] = useState(false);
 
   const coins = userProfile?.coins || 0;
+  const walletBrl = coinsToBrl(coins);
+  const parsedSpendAmount = parseBrlAmount(spendAmount);
+  const spendCoins = parsedSpendAmount != null && parsedSpendAmount > 0 ? brlToCoins(parsedSpendAmount) : 0;
+  const canAffordSpend = spendCoins > 0 && coins >= spendCoins;
 
   const handleCreateReward = (e) => {
     e.preventDefault();
@@ -62,6 +71,31 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
     setNewCost('30');
     setShowAddModal(false);
   };
+
+  const handleSpendMoney = async (e) => {
+    e.preventDefault();
+    if (!spendItem.trim() || !canAffordSpend || spendSubmitting || !onSpendMoney) return;
+
+    setSpendSubmitting(true);
+    const result = await onSpendMoney({
+      amountBrl: parsedSpendAmount,
+      item: spendItem.trim()
+    });
+    setSpendSubmitting(false);
+
+    if (result?.success) {
+      setSpendAmount('');
+      setSpendItem('');
+      setShowSpendModal(false);
+    }
+  };
+
+  const redemptionCost = (red) => red?.costCoins ?? red?.cost ?? 0;
+  const moneySpentTotal = useMemo(() => (
+    (redemptions || [])
+      .filter(red => red.kind === 'money')
+      .reduce((sum, red) => sum + (Number(red.amountBrl) || 0), 0)
+  ), [redemptions]);
 
   const getRewardIcon = (iconName) => {
     switch (iconName) {
@@ -84,7 +118,7 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
             <span>🍻</span> A Taverna & Loja de Recompensas
           </h2>
           <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-            Troque suas moedas de ouro conquistadas por pausas, lazer e recompensas reais da sua vida!
+            Troque suas moedas de ouro por pausas, lazer e dinheiro real. Câmbio: R$ 1,00 = 10 🪙
           </p>
         </div>
 
@@ -101,10 +135,40 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
             }}
           >
             <Coins size={20} color="#fbbf24" />
-            <span style={{ color: '#fbbf24', fontWeight: 800, fontSize: '1.05rem', fontFamily: 'var(--font-mono)' }}>
-              {coins} Moedas
-            </span>
+            <div>
+              <span style={{ color: '#fbbf24', fontWeight: 800, fontSize: '1.05rem', fontFamily: 'var(--font-mono)', display: 'block', lineHeight: 1.1 }}>
+                {coins} Moedas
+              </span>
+              <span style={{ color: '#86efac', fontSize: '0.72rem', fontWeight: 700 }}>
+                ≈ {formatBrl(walletBrl)}
+              </span>
+            </div>
           </div>
+
+          {onSpendMoney && (
+            <button
+              onClick={() => setShowSpendModal(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 18px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: '#022c22',
+                fontWeight: 800,
+                fontSize: '0.9rem',
+                border: 'none',
+                cursor: 'pointer',
+                boxShadow: '0 4px 15px rgba(16, 185, 129, 0.35)',
+                transition: 'transform 0.15s ease'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+              onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              <Banknote size={18} /> Registrar Gasto em R$
+            </button>
+          )}
 
           <button
             onClick={() => setShowAddModal(true)}
@@ -256,6 +320,7 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
             </h3>
             <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
               {redemptions.length} {redemptions.length === 1 ? 'resgate realizado' : 'resgates realizados'}
+              {moneySpentTotal > 0 ? ` · ${formatBrl(moneySpentTotal)} gastos` : ''}
             </span>
           </div>
 
@@ -275,12 +340,13 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#f8fafc' }}>
-                  <div style={{ padding: '4px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.15)' }}>
-                    <Check size={14} color="#10b981" />
+                  <div style={{ padding: '4px', borderRadius: '6px', background: red.kind === 'money' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)' }}>
+                    {red.kind === 'money' ? <Banknote size={14} color="#10b981" /> : <Check size={14} color="#fbbf24" />}
                   </div>
                   <div>
                     <span style={{ fontWeight: 600 }}>{red.rewardTitle}</span>
                     <div style={{ color: '#64748b', fontSize: '0.72rem' }}>
+                      {red.kind === 'money' ? `Gasto em dinheiro · ${formatBrl(red.amountBrl)} · ` : ''}
                       {new Date(red.timestamp).toLocaleDateString('pt-BR')} às {new Date(red.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
@@ -288,7 +354,7 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <span style={{ color: '#f43f5e', fontWeight: 700, fontFamily: 'var(--font-mono)', fontSize: '0.9rem' }}>
-                    -{red.cost} 🪙
+                    -{redemptionCost(red)} 🪙
                   </span>
 
                   {onCancelRedemption && (
@@ -322,6 +388,153 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Registrar Gasto em R$ */}
+      {showSpendModal && (
+        <div
+          className="modal-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            backdropFilter: 'blur(6px)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+        >
+          <div
+            className="glass-panel modal-sheet"
+            style={{
+              maxWidth: '480px',
+              width: '100%',
+              padding: '28px',
+              border: '1px solid rgba(16, 185, 129, 0.35)',
+              borderRadius: '20px'
+            }}
+          >
+            <h3 className="font-cinzel" style={{ fontSize: '1.3rem', fontWeight: 800, color: '#86efac', marginBottom: '8px' }}>
+              💸 Registrar Gasto em R$
+            </h3>
+            <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: '18px', lineHeight: 1.45 }}>
+              Cada R$ 1,00 custa 10 moedas de ouro. Seu saldo atual cobre até <strong style={{ color: '#86efac' }}>{formatBrl(walletBrl)}</strong>.
+            </p>
+
+            <form onSubmit={handleSpendMoney} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                  O que você comprou? *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: sorvete, almoço, cinema"
+                  value={spendItem}
+                  onChange={(e) => setSpendItem(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: '0.95rem'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                  Valor gasto (R$) *
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  required
+                  placeholder="Ex: 25,00"
+                  value={spendAmount}
+                  onChange={(e) => setSpendAmount(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: '#1a2030',
+                    border: '1px solid rgba(16, 185, 129, 0.4)',
+                    color: '#86efac',
+                    fontWeight: 800,
+                    fontSize: '1rem',
+                    fontFamily: 'var(--font-mono)'
+                  }}
+                />
+              </div>
+
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '12px',
+                  background: 'rgba(245, 158, 11, 0.08)',
+                  border: '1px solid rgba(245, 158, 11, 0.25)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '10px'
+                }}
+              >
+                <div>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>
+                    Moedas a debitar
+                  </span>
+                  <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>
+                    {spendCoins} 🪙
+                  </span>
+                </div>
+                {spendCoins > 0 && !canAffordSpend && (
+                  <span style={{ fontSize: '0.75rem', color: '#f87171', fontWeight: 700, textAlign: 'right' }}>
+                    Saldo insuficiente
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowSpendModal(false)}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: '#fff',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!spendItem.trim() || !canAffordSpend || spendSubmitting}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '10px',
+                    background: canAffordSpend
+                      ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                      : 'rgba(255, 255, 255, 0.08)',
+                    color: canAffordSpend ? '#022c22' : '#64748b',
+                    fontWeight: 800,
+                    border: 'none',
+                    cursor: canAffordSpend ? 'pointer' : 'not-allowed'
+                  }}
+                >
+                  {spendSubmitting ? 'Registrando...' : 'Debitar Moedas'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -561,8 +774,13 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
                   Moedas a Serem Estornadas
                 </span>
                 <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>
-                  +{cancelModalRedemption.cost} Moedas de Ouro
+                  +{redemptionCost(cancelModalRedemption)} Moedas de Ouro
                 </span>
+                {cancelModalRedemption.kind === 'money' && (
+                  <span style={{ fontSize: '0.75rem', color: '#86efac', display: 'block' }}>
+                    referente a {formatBrl(cancelModalRedemption.amountBrl)}
+                  </span>
+                )}
               </div>
             </div>
 

@@ -34,6 +34,8 @@ import {
   resolveActivityScale,
   willpowerForDifficulty
 } from '../src/utils/activityScale.js';
+import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';
+import { formatBrl } from '../src/utils/coinExchange.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1622,6 +1624,31 @@ app.post('/api/rewards', (req, res) => {
   }
 });
 
+app.post('/api/rewards/spend-money', (req, res) => {
+  try {
+    const db = getDb();
+    const { amountBrl, amount, item, title, notes } = req.body || {};
+    const result = spendMoney(db, {
+      amountBrl: amountBrl ?? amount,
+      item: item || title,
+      notes
+    });
+
+    if (result.error) {
+      return res.status(result.status || 400).json({ error: result.error });
+    }
+
+    saveDb(db);
+    res.json({
+      success: true,
+      redemption: result.redemption,
+      userProfile: result.userProfile
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/rewards/:id/redeem', (req, res) => {
   try {
     const db = getDb();
@@ -1691,27 +1718,38 @@ app.post('/api/rewards/redemptions/:id/cancel', (req, res) => {
     if (redIndex === -1) return res.status(404).json({ error: 'Resgate não encontrado' });
 
     const redemption = db.rewardRedemptions[redIndex];
-    const refundCoins = redemption.cost || 0;
+    const refundCoins = refundCoinsFromRedemption(redemption);
 
     db.userProfile.coins += refundCoins;
 
-    const reward = db.rewards.find(r => r.id === redemption.rewardId);
+    const reward = redemption.rewardId
+      ? db.rewards.find(r => r.id === redemption.rewardId)
+      : null;
     if (reward && reward.timesRedeemed > 0) {
       reward.timesRedeemed -= 1;
     }
 
-    const logIndex = db.actionLogs.findIndex(l => l.type === 'reward_redeem' && l.entityId === redemption.rewardId && l.coins === -refundCoins);
+    const isMoneySpend = redemption.kind === 'money';
+    const logIndex = db.actionLogs.findIndex(l => {
+      if (l.coins !== -refundCoins) return false;
+      if (isMoneySpend) {
+        return l.type === 'money_spend' && l.entityId === redemption.id;
+      }
+      return l.type === 'reward_redeem' && l.entityId === redemption.rewardId;
+    });
     if (logIndex !== -1) {
       db.actionLogs.splice(logIndex, 1);
     } else {
       db.actionLogs.unshift({
         id: uid('log'),
-        type: 'reward_cancel',
-        entityId: redemption.rewardId,
-        title: `Cancelou resgate: ${redemption.rewardTitle}`,
+        type: isMoneySpend ? 'money_spend_cancel' : 'reward_cancel',
+        entityId: redemption.rewardId || redemption.id,
+        title: isMoneySpend
+          ? `Cancelou gasto de ${formatBrl(redemption.amountBrl)}: ${redemption.rewardTitle}`
+          : `Cancelou resgate: ${redemption.rewardTitle}`,
         xp: 0,
         coins: refundCoins,
-        details: { refund: refundCoins },
+        details: { refund: refundCoins, amountBrl: redemption.amountBrl },
         timestamp: new Date().toISOString(),
         hour: getSaoPauloHour(),
         dayOfWeek: getSaoPauloDayOfWeek(),

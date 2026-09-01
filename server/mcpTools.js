@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { getDb, saveDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, createBossRaid, applyCategoryRename } from './db.js';
+import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';
+import { formatBrl } from '../src/utils/coinExchange.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings } from './rankings.js';
 import { computeNextAction } from './nextAction.js';
@@ -1369,6 +1371,30 @@ export const toolsDefinition = [
     }
   },
   {
+    name: 'spend_money',
+    description: 'Registrar um gasto em R$ na Taverna. Cada R$ 1,00 custa 10 moedas de ouro (ex: R$ 25,00 em sorvete debita 250 moedas).',
+    schema: {
+      amountBrl: z.number().describe('Valor gasto em reais (ex: 25 para R$ 25,00)'),
+      item: z.string().describe('O que foi comprado (ex: sorvete, almoço, cinema)'),
+      notes: z.string().optional().describe('Observações sobre o gasto')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = spendMoney(db, {
+        amountBrl: args.amountBrl,
+        item: args.item,
+        notes: args.notes
+      });
+      if (result.error) return formatError(result.error);
+
+      saveDb(db);
+      return formatSuccess({
+        redemption: result.redemption,
+        remainingCoins: db.userProfile.coins
+      }, `💸 Gastou ${formatBrl(result.redemption.amountBrl)} com '${result.redemption.rewardTitle}'. Debitado 🪙 ${result.redemption.cost} moedas. Saldo restante: 🪙 ${db.userProfile.coins}.`);
+    }
+  },
+  {
     name: 'redeem_reward',
     description: 'Resgatar uma recompensa da Taverna debitando as Moedas de Ouro necessárias do herói.',
     schema: {
@@ -1428,14 +1454,15 @@ export const toolsDefinition = [
       if (index === -1) return formatError(`Resgate '${args.id}' não encontrado.`);
 
       const [removed] = db.rewardRedemptions.splice(index, 1);
-      db.userProfile.coins = (db.userProfile.coins || 0) + (removed.costCoins || 0);
+      const refundedCoins = refundCoinsFromRedemption(removed);
+      db.userProfile.coins = (db.userProfile.coins || 0) + refundedCoins;
 
       saveDb(db);
       return formatSuccess({
         removed,
-        refundedCoins: removed.costCoins,
+        refundedCoins,
         newBalance: db.userProfile.coins
-      }, `Resgate cancelado! 🪙 ${removed.costCoins} moedas foram devolvidas.`);
+      }, `Resgate cancelado! 🪙 ${refundedCoins} moedas foram devolvidas.`);
     }
   },
   {

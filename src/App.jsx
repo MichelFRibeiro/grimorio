@@ -69,6 +69,7 @@ export function App() {
     toggleHabit,
     deleteHabit,
     addReward,
+    spendMoney,
     redeemReward,
     cancelRewardRedemption,
     deleteReward,
@@ -329,6 +330,7 @@ export function App() {
             userProfile={userProfile}
             redemptions={rewardRedemptions}
             onAddReward={addReward}
+            onSpendMoney={spendMoney}
             onRedeemReward={redeemReward}
             onCancelRedemption={cancelRewardRedemption}
             onDeleteReward={deleteReward}

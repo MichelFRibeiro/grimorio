@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { useSoundEffects } from './useSoundEffects';
+import { formatBrl } from '../utils/coinExchange.js';
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('grimorio_auth_token');
@@ -463,6 +464,30 @@ export function useGameData() {
     if (res.ok) fetchState();
   };
 
+  const spendMoney = async ({ amountBrl, item, notes } = {}) => {
+    playCoin();
+    const res = await fetch('/api/rewards/spend-money', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ amountBrl, item, notes })
+    });
+    if (res.ok) {
+      const result = await res.json();
+      const spent = result.redemption || {};
+      showRewardToast(
+        0,
+        -(spent.cost || 0),
+        `Gastou ${formatBrl(spent.amountBrl)} com ${spent.rewardTitle}!`
+      );
+      fetchState();
+      return { success: true, result };
+    }
+
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao registrar gasto.');
+    return { success: false, error: errJson.error };
+  };
+
   const redeemReward = async (id) => {
     playCoin();
     const res = await fetch(`/api/rewards/${id}/redeem`, {
@@ -614,6 +639,7 @@ export function useGameData() {
     toggleHabit,
     deleteHabit,
     addReward,
+    spendMoney,
     redeemReward,
     cancelRewardRedemption,
     deleteReward,
