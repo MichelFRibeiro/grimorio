@@ -3,6 +3,8 @@
  * Fuso horário padrão: América/São Paulo (BRT, UTC-3)
  */
 
+import { isPeriodFrequency, getHabitPeriodStatus } from './habitFrequency.js';
+
 export const SAO_PAULO_TZ = 'America/Sao_Paulo';
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -232,7 +234,7 @@ export function getHabitWeeklyStats(habit, date = new Date()) {
   let targetTimesPerWeek = 7;
   if (habit?.frequency === 'weekdays') {
     targetTimesPerWeek = 5;
-  } else if (habit?.frequency === 'weekly') {
+  } else if (habit?.frequency === 'weekly' || isPeriodFrequency(habit?.frequency)) {
     targetTimesPerWeek = 1;
   } else if (habit?.frequency === 'times_per_week') {
     targetTimesPerWeek = Math.max(1, Math.min(7, parseInt(habit?.targetTimesPerWeek || habit?.timesPerWeek, 10) || 3));
@@ -246,12 +248,14 @@ export function getHabitWeeklyStats(habit, date = new Date()) {
   }));
 
   const completionsThisWeek = completedDays.filter(d => d.completed).length;
-  const isGoalMet = completionsThisWeek >= targetTimesPerWeek;
+  const period = isPeriodFrequency(habit?.frequency) ? getHabitPeriodStatus(habit, date) : null;
+  const isGoalMet = period ? !period.due : completionsThisWeek >= targetTimesPerWeek;
 
   return {
     targetTimesPerWeek,
     completionsThisWeek,
     isGoalMet,
-    completedDays
+    completedDays,
+    period
   };
 }

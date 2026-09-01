@@ -131,7 +131,7 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 
 #### 6. 🔥 Rituais Diários (`habits`)
 - `list_habits`: Lista hábitos com métricas semanais (`completionsThisWeek`, `targetTimesPerWeek`, `isGoalMet`).
-- `create_habit`: Cria hábito com frequências (`daily`, `weekdays`, `weekly`, `times_per_week` com `targetTimesPerWeek` 1-7), `priority` (dispensavel→critico) e `difficulty` (baixa/media/alta/epica).
+- `create_habit`: Cria hábito com frequências (`daily`, `weekdays`, `weekly`, `times_per_week` com `targetTimesPerWeek` 1-7, `fortnightly` com `monthDays` [ex: 1 e 16], `monthly` com `monthDay` [ex: 1]), `priority` (dispensavel→critico) e `difficulty` (baixa/media/alta/epica).
 - `toggle_habit`: Marca/desmarca execução diária com cálculo de chamas/streaks.
 - `update_habit`, `delete_habit`.
 

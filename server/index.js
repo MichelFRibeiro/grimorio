@@ -27,6 +27,7 @@ import {
   getSaoPauloDayOfWeek,
   calculateHabitStreak
 } from './timeUtils.js';
+import { applyHabitFrequency } from '../src/utils/habitFrequency.js';
 import { getMcpToken, regenerateMcpToken, mcpAuthMiddleware, mcpSseMessagesAuthMiddleware } from './mcpAuth.js';
 import { handleSseConnection, handleSseMessage, handleDirectJsonRpc, handleMcpDiscoveryGet } from './mcpServer.js';
 import {
@@ -1407,22 +1408,8 @@ app.delete('/api/processes/:id', (req, res) => {
 app.post('/api/habits', (req, res) => {
   try {
     const db = getDb();
-    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty } = req.body;
+    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty } = req.body;
     if (!title) return res.status(400).json({ error: 'Título do hábito é obrigatório' });
-
-    let freq = frequency || 'daily';
-    let target = 7;
-    if (freq === 'times_per_week' || freq === 'n_times_week') {
-      freq = 'times_per_week';
-      target = Math.max(1, Math.min(7, parseInt(targetTimesPerWeek || timesPerWeek, 10) || 3));
-    } else if (freq === 'weekdays') {
-      target = 5;
-    } else if (freq === 'weekly') {
-      target = 1;
-    } else {
-      freq = 'daily';
-      target = 7;
-    }
 
     const scale = resolveActivityScale({
       ...(priority !== undefined ? { priority } : {}),
@@ -1434,8 +1421,6 @@ app.post('/api/habits', (req, res) => {
       description: (description || '').trim(),
       category: (category && category.trim()) ? category.trim() : 'Pessoal',
       icon: icon || 'Flame',
-      frequency: freq,
-      targetTimesPerWeek: target,
       currentStreak: 0,
       bestStreak: 0,
       history: [],
@@ -1443,6 +1428,7 @@ app.post('/api/habits', (req, res) => {
       difficulty: scale.difficulty,
       createdAt: new Date().toISOString()
     };
+    applyHabitFrequency(newHabit, { frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay });
     applyDifficultyFields(newHabit, scale.difficulty);
     if (difficulty === undefined) {
       if (xpReward !== undefined) newHabit.xpReward = parseInt(xpReward, 10) || 30;
@@ -1464,28 +1450,12 @@ app.put('/api/habits/:id', (req, res) => {
     const habit = db.habits.find(h => h.id === req.params.id);
     if (!habit) return res.status(404).json({ error: 'Hábito não encontrado' });
 
-    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty } = req.body;
+    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty } = req.body;
     if (title !== undefined && title.trim()) habit.title = title.trim();
     if (description !== undefined) habit.description = description.trim();
     if (category !== undefined && category.trim()) habit.category = category.trim();
     if (icon !== undefined) habit.icon = icon;
-    
-    if (frequency !== undefined) {
-      let freq = frequency;
-      if (freq === 'times_per_week' || freq === 'n_times_week') {
-        freq = 'times_per_week';
-        habit.targetTimesPerWeek = Math.max(1, Math.min(7, parseInt(targetTimesPerWeek || timesPerWeek || habit.targetTimesPerWeek, 10) || 3));
-      } else if (freq === 'weekdays') {
-        habit.targetTimesPerWeek = 5;
-      } else if (freq === 'weekly') {
-        habit.targetTimesPerWeek = 1;
-      } else if (freq === 'daily') {
-        habit.targetTimesPerWeek = 7;
-      }
-      habit.frequency = freq;
-    } else if (targetTimesPerWeek !== undefined || timesPerWeek !== undefined) {
-      habit.targetTimesPerWeek = Math.max(1, Math.min(7, parseInt(targetTimesPerWeek || timesPerWeek, 10) || 3));
-    }
+    applyHabitFrequency(habit, { frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay }, { isUpdate: true });
 
     if (priority !== undefined || difficulty !== undefined) {
       const scale = resolveActivityScale({

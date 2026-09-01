@@ -11,6 +11,7 @@ import {
   getHabitWeeklyStats,
   getCurrentWeekDays
 } from './timeUtils.js';
+import { canonicalizeHabitFrequency, isPeriodFrequency, padMonthDay } from '../src/utils/habitFrequency.js';
 import {
   normalizeLocation,
   getLocationMeta,
@@ -153,7 +154,7 @@ function nextOpenSubtask(quest) {
 }
 
 function isHabitDueToday(habit, weeklyStats, now, todayStr) {
-  const freq = habit.frequency || 'daily';
+  const freq = canonicalizeHabitFrequency(habit.frequency || 'daily');
   const history = Array.isArray(habit.history) ? habit.history : [];
   const completedToday = history.includes(todayStr);
   const dayOfWeek = getSaoPauloDayOfWeek(now);
@@ -164,6 +165,12 @@ function isHabitDueToday(habit, weeklyStats, now, todayStr) {
   if (freq === 'weekdays') {
     const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
     return { due: isWeekday && !completedToday, extra: false, completedToday };
+  }
+  if (isPeriodFrequency(freq)) {
+    const period = weeklyStats?.period;
+    if (completedToday) return { due: false, extra: false, completedToday };
+    if (period?.completed) return { due: false, extra: false, completedToday };
+    return { due: !!period?.due, extra: false, completedToday };
   }
   // weekly / times_per_week
   const goalMet = !!weeklyStats?.isGoalMet;
@@ -233,8 +240,8 @@ function urgencyScore(quest, todayStr, nowMinutes) {
 }
 
 function ritualRiskScore(habit, weeklyStats, now, todayStr, extra) {
-  if (extra) return { score: 0, label: 'Meta da semana já batida' };
-  const freq = habit.frequency || 'daily';
+  if (extra) return { score: 0, label: 'Meta do período já batida' };
+  const freq = canonicalizeHabitFrequency(habit.frequency || 'daily');
   const streak = habit.currentStreak || 0;
   const dayOfWeek = getSaoPauloDayOfWeek(now);
 
@@ -247,6 +254,27 @@ function ritualRiskScore(habit, weeklyStats, now, todayStr, extra) {
   if (freq === 'weekdays') {
     if (dayOfWeek === 5) return { score: 10, label: 'Sexta: último dia útil da semana' };
     return { score: 6, label: 'Ritual de dia útil pendente' };
+  }
+
+  if (isPeriodFrequency(freq)) {
+    const period = weeklyStats?.period;
+    if (!period?.due) return { score: 0, label: null };
+    const remainingDays = Math.max(0, daysBetween(todayStr, period.end) ?? 0) + 1;
+    const daysLabel = period.monthDays.map(padMonthDay).join(' e ');
+    if (remainingDays <= 2) {
+      return {
+        score: 10,
+        label: freq === 'monthly'
+          ? `Últimos dias do ciclo mensal (dia ${daysLabel})`
+          : `Últimos dias da quinzena (dias ${daysLabel})`
+      };
+    }
+    return {
+      score: 6,
+      label: freq === 'monthly'
+        ? `Ritual mensal pendente desde o dia ${daysLabel}`
+        : `Ritual quinzenal pendente (dias ${daysLabel})`
+    };
   }
 
   const target = weeklyStats?.targetTimesPerWeek || habit.targetTimesPerWeek || 1;

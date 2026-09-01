@@ -460,6 +460,61 @@ function runTests() {
   );
   assert(priorityInsideLowBand.primary?.id === 'q-opcional-sem-prazo', `Na faixa baixa, Opcional sem prazo deve ganhar de Dispensável atrasada (foi ${priorityInsideLowBand.primary?.id})`);
 
+  const nowJan10 = new Date('2026-01-10T13:00:00Z'); // 10:00 BRT
+  const monthlyBill = {
+    id: 'h-mensal',
+    title: 'Pagar contas',
+    category: 'Finanças',
+    frequency: 'monthly',
+    monthDays: [1],
+    location: 'home',
+    timeWindow: null,
+    currentStreak: 0,
+    history: [],
+    createdAt: '2026-01-01T10:00:00.000Z',
+    xpReward: 30,
+    coinReward: 8
+  };
+  const fortnightlyReview = {
+    id: 'h-quinzena',
+    title: 'Revisar investimentos',
+    category: 'Finanças',
+    frequency: 'fortnightly',
+    monthDays: [1, 16],
+    location: 'home',
+    timeWindow: null,
+    currentStreak: 0,
+    history: [],
+    createdAt: '2026-01-01T10:00:00.000Z',
+    xpReward: 30,
+    coinReward: 8
+  };
+
+  const monthlyPending = computeNextAction(baseDb({ habits: [monthlyBill] }), { location: 'home', now: nowJan10 });
+  assert(monthlyPending.primary?.id === 'h-mensal', `Mensal pendente desde o dia 01 entra na fila (foi ${monthlyPending.primary?.id})`);
+
+  const monthlyDone = computeNextAction(
+    baseDb({ habits: [{ ...monthlyBill, history: ['2026-01-04'] }] }),
+    { location: 'home', now: nowJan10 }
+  );
+  assert(!monthlyDone.primary || monthlyDone.primary.id !== 'h-mensal', 'Mensal já concluído no ciclo não entra como pendente');
+
+  const fortnightlyPending = computeNextAction(baseDb({ habits: [fortnightlyReview] }), { location: 'home', now: nowJan10 });
+  assert(fortnightlyPending.primary?.id === 'h-quinzena', 'Quinzenal fica pendente após o dia 01');
+
+  const fortnightlyDoneFirst = computeNextAction(
+    baseDb({ habits: [{ ...fortnightlyReview, history: ['2026-01-03'] }] }),
+    { location: 'home', now: nowJan10 }
+  );
+  assert(!fortnightlyDoneFirst.primary || fortnightlyDoneFirst.primary.id !== 'h-quinzena', 'Quinzenal concluída na 1ª metade não reaparece antes do dia 16');
+
+  const nowJan16 = new Date('2026-01-16T13:00:00Z');
+  const fortnightlyReopened = computeNextAction(
+    baseDb({ habits: [{ ...fortnightlyReview, history: ['2026-01-03'] }] }),
+    { location: 'home', now: nowJan16 }
+  );
+  assert(fortnightlyReopened.primary?.id === 'h-quinzena', 'No dia 16 a quinzena reabre mesmo com a 1ª metade feita');
+
   console.log('\n🏆 Todos os testes do motor de Próxima Atividade passaram.');
 }
 

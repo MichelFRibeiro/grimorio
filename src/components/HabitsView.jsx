@@ -28,8 +28,95 @@ import { ActivityScaleFields, PriorityBadge } from './ActivityScaleFields';
 import { getSaoPauloDateStr, getHabitWeeklyStats, getCurrentWeekDays, addDaysToDateStr } from '../utils/timeUtils';
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, inferDifficultyFromRewards, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
+import { getFrequencyLabel, getHabitPeriodStatus, isPeriodFrequency, padMonthDay } from '../utils/habitFrequency';
 
 const HIDE_SETTLED_STORAGE_KEY = 'grimorio_hide_settled_habits';
+const MONTH_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
+
+function MonthDaySelect({ value, onChange, accent = '#ef4444' }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(parseInt(e.target.value, 10))}
+      style={{
+        flex: 1,
+        padding: '10px 12px',
+        borderRadius: '10px',
+        background: '#1a2030',
+        border: `1px solid ${accent}55`,
+        color: '#fff',
+        fontSize: '0.95rem',
+        fontWeight: 800,
+        fontFamily: 'var(--font-mono)',
+        textAlign: 'center'
+      }}
+    >
+      {MONTH_DAY_OPTIONS.map(day => (
+        <option key={day} value={day}>{padMonthDay(day)}</option>
+      ))}
+    </select>
+  );
+}
+
+function FrequencyDayFields({
+  frequency,
+  fortnightDayA,
+  fortnightDayB,
+  monthDay,
+  onFortnightDayAChange,
+  onFortnightDayBChange,
+  onMonthDayChange,
+  accent = '#ef4444',
+  accentSoft = 'rgba(239, 68, 68, 0.08)',
+  accentBorder = 'rgba(239, 68, 68, 0.25)'
+}) {
+  if (frequency !== 'fortnightly' && frequency !== 'monthly') return null;
+
+  return (
+    <div
+      style={{
+        padding: '12px',
+        borderRadius: '10px',
+        background: accentSoft,
+        border: `1px solid ${accentBorder}`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px'
+      }}
+    >
+      {frequency === 'fortnightly' ? (
+        <>
+          <label style={{ fontSize: '0.8rem', fontWeight: 700, color: accent }}>
+            Dias do mês em que o ritual fica pendente:
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <MonthDaySelect value={fortnightDayA} onChange={onFortnightDayAChange} accent={accent} />
+            <span style={{ color: '#94a3b8', fontWeight: 800 }}>e</span>
+            <MonthDaySelect value={fortnightDayB} onChange={onFortnightDayBChange} accent={accent} />
+          </div>
+          <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
+            A cada quinzena o ritual passa a ficar pendente nos dias {padMonthDay(fortnightDayA)} e {padMonthDay(fortnightDayB)}, até ser concluído.
+          </p>
+        </>
+      ) : (
+        <>
+          <label style={{ fontSize: '0.8rem', fontWeight: 700, color: accent }}>
+            Dia previsto do mês:
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <MonthDaySelect value={monthDay} onChange={onMonthDayChange} accent={accent} />
+            <span style={{ fontSize: '0.82rem', color: '#94a3b8', fontWeight: 700 }}>
+              Todo dia {padMonthDay(monthDay)}
+            </span>
+          </div>
+          <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
+            O ritual fica pendente a partir do dia {padMonthDay(monthDay)} de cada mês, até ser concluído.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function HabitsView({
   habits,
@@ -64,6 +151,9 @@ export function HabitsView({
   const [newCategory, setNewCategory] = useState(defaultCatName);
   const [newFrequency, setNewFrequency] = useState('daily');
   const [newTimesPerWeek, setNewTimesPerWeek] = useState(3);
+  const [newFortnightDayA, setNewFortnightDayA] = useState(1);
+  const [newFortnightDayB, setNewFortnightDayB] = useState(16);
+  const [newMonthDay, setNewMonthDay] = useState(1);
   const [newPriority, setNewPriority] = useState(DEFAULT_PRIORITY);
   const [newDifficulty, setNewDifficulty] = useState(DEFAULT_DIFFICULTY);
   const [newLocation, setNewLocation] = useState(defaultLocationForCategory(defaultCatName, activeCategories));
@@ -85,6 +175,9 @@ export function HabitsView({
   const [editCategory, setEditCategory] = useState(defaultCatName);
   const [editFrequency, setEditFrequency] = useState('daily');
   const [editTimesPerWeek, setEditTimesPerWeek] = useState(3);
+  const [editFortnightDayA, setEditFortnightDayA] = useState(1);
+  const [editFortnightDayB, setEditFortnightDayB] = useState(16);
+  const [editMonthDay, setEditMonthDay] = useState(1);
   const [editPriority, setEditPriority] = useState(DEFAULT_PRIORITY);
   const [editDifficulty, setEditDifficulty] = useState(DEFAULT_DIFFICULTY);
   const [editLocation, setEditLocation] = useState('anywhere');
@@ -156,20 +249,12 @@ export function HabitsView({
     return `${parts[2]}/${parts[1]}`;
   };
 
-  const getFrequencyLabel = (habit) => {
-    if (habit.frequency === 'daily') return 'Diário';
-    if (habit.frequency === 'weekdays') return 'Seg-Sex';
-    if (habit.frequency === 'weekly') return 'Semanal';
-    if (habit.frequency === 'times_per_week' || habit.frequency === 'n_times_week') {
-      const n = habit.targetTimesPerWeek || habit.timesPerWeek || 3;
-      return `${n}x/sem`;
-    }
-    return 'Diário';
-  };
-
   const categoryNames = ['Todas', ...activeCategories.map(c => typeof c === 'string' ? c : c.name)];
 
   const isHabitSettled = (habit) => {
+    if (isPeriodFrequency(habit.frequency)) {
+      return !getHabitPeriodStatus(habit, todayStr)?.due;
+    }
     const isDoneToday = (habit.history || []).includes(todayStr);
     const targetRefDate = addDaysToDateStr(todayStr, weekOffset * 7);
     const weeklyStats = getHabitWeeklyStats(habit, targetRefDate);
@@ -200,6 +285,11 @@ export function HabitsView({
       category: newCategory,
       frequency: newFrequency,
       targetTimesPerWeek: newFrequency === 'times_per_week' ? (parseInt(newTimesPerWeek, 10) || 3) : undefined,
+      monthDays: newFrequency === 'fortnightly'
+        ? [newFortnightDayA, newFortnightDayB]
+        : newFrequency === 'monthly'
+          ? [newMonthDay]
+          : undefined,
       priority: newPriority,
       difficulty: newDifficulty,
       location: newLocation,
@@ -210,6 +300,9 @@ export function HabitsView({
     setNewDesc('');
     setNewFrequency('daily');
     setNewTimesPerWeek(3);
+    setNewFortnightDayA(1);
+    setNewFortnightDayB(16);
+    setNewMonthDay(1);
     setNewPriority(DEFAULT_PRIORITY);
     setNewDifficulty(DEFAULT_DIFFICULTY);
     setNewLocation(defaultLocationForCategory(newCategory, activeCategories));
@@ -225,6 +318,10 @@ export function HabitsView({
     setEditCategory(habit.category || defaultCatName);
     setEditFrequency(habit.frequency || 'daily');
     setEditTimesPerWeek(habit.targetTimesPerWeek || habit.timesPerWeek || 3);
+    const scheduledDays = Array.isArray(habit.monthDays) ? habit.monthDays : [];
+    setEditFortnightDayA(scheduledDays[0] || 1);
+    setEditFortnightDayB(scheduledDays[1] || 16);
+    setEditMonthDay(scheduledDays[0] || habit.monthDay || 1);
     setEditPriority(normalizePriority(habit.priority));
     setEditDifficulty(habit.difficulty
       ? normalizeDifficulty(habit.difficulty)
@@ -246,6 +343,11 @@ export function HabitsView({
         category: editCategory,
         frequency: editFrequency,
         targetTimesPerWeek: editFrequency === 'times_per_week' ? (parseInt(editTimesPerWeek, 10) || 3) : undefined,
+        monthDays: editFrequency === 'fortnightly'
+          ? [editFortnightDayA, editFortnightDayB]
+          : editFrequency === 'monthly'
+            ? [editMonthDay]
+            : null,
         priority: editPriority,
         difficulty: editDifficulty,
         location: editLocation,
@@ -530,6 +632,10 @@ export function HabitsView({
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '16px' }}>
           {filteredHabits.map(habit => {
             const isDoneToday = (habit.history || []).includes(todayStr);
+            const periodStats = isPeriodFrequency(habit.frequency)
+              ? getHabitPeriodStatus(habit, todayStr)
+              : null;
+            const isCycleDone = periodStats ? !periodStats.due : isDoneToday;
             const streak = habit.currentStreak || 0;
             const multiplier = Math.min(2.0, 1 + streak * 0.1).toFixed(1);
             const habitCat = habit.category || 'Pessoal';
@@ -584,8 +690,8 @@ export function HabitsView({
                   gap: '12px',
                   minWidth: 0,
                   overflow: 'hidden',
-                  borderLeft: isDoneToday ? '4px solid #10b981' : '4px solid #ef4444',
-                  background: isDoneToday ? 'rgba(16, 185, 129, 0.04)' : '#131722'
+                  borderLeft: isCycleDone ? '4px solid #10b981' : '4px solid #ef4444',
+                  background: isCycleDone ? 'rgba(16, 185, 129, 0.04)' : '#131722'
                 }}
               >
                 <div style={{ minWidth: 0 }}>
@@ -731,13 +837,15 @@ export function HabitsView({
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '0.78rem', minWidth: 0 }}>
                       <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                        <Target size={13} color={weeklyStats.isGoalMet ? '#10b981' : '#38bdf8'} />
-                        <span>Semana</span>
-                        <strong style={{ color: weeklyStats.isGoalMet ? '#34d399' : '#f8fafc', fontFamily: 'var(--font-mono)' }}>
-                          {weeklyStats.completionsThisWeek}/{weeklyStats.targetTimesPerWeek}
+                        <Target size={13} color={(periodStats ? periodStats.completed : weeklyStats.isGoalMet) ? '#10b981' : '#38bdf8'} />
+                        <span>{periodStats ? (periodStats.frequency === 'monthly' ? 'Mês' : 'Quinzena') : 'Semana'}</span>
+                        <strong style={{ color: (periodStats ? periodStats.completed : weeklyStats.isGoalMet) ? '#34d399' : '#f8fafc', fontFamily: 'var(--font-mono)' }}>
+                          {periodStats
+                            ? `${periodStats.completed ? 1 : 0}/1`
+                            : `${weeklyStats.completionsThisWeek}/${weeklyStats.targetTimesPerWeek}`}
                         </strong>
                       </span>
-                      {weeklyStats.isGoalMet ? (
+                      {(periodStats ? periodStats.completed : weeklyStats.isGoalMet) ? (
                         <span
                           style={{
                             fontSize: '0.68rem',
@@ -758,7 +866,11 @@ export function HabitsView({
                         </span>
                       ) : (
                         <span style={{ fontSize: '0.7rem', color: '#64748b', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                          Faltam {Math.max(0, weeklyStats.targetTimesPerWeek - weeklyStats.completionsThisWeek)}x
+                          {periodStats
+                            ? (periodStats.due
+                              ? `Pendente desde ${formatShortDate(periodStats.start)}`
+                              : `Próximo: ${formatShortDate(periodStats.nextStart)}`)
+                            : `Faltam ${Math.max(0, weeklyStats.targetTimesPerWeek - weeklyStats.completionsThisWeek)}x`}
                         </span>
                       )}
                     </div>
@@ -1065,8 +1177,20 @@ export function HabitsView({
                   <option value="weekdays">Dias de semana (Seg-Sex - 5x/sem)</option>
                   <option value="times_per_week">N vezes por semana (Personalizado)</option>
                   <option value="weekly">1 vez por semana (Semanal)</option>
+                  <option value="fortnightly">01 vez por quinzena</option>
+                  <option value="monthly">01 vez por mês</option>
                 </select>
               </div>
+
+              <FrequencyDayFields
+                frequency={newFrequency}
+                fortnightDayA={newFortnightDayA}
+                fortnightDayB={newFortnightDayB}
+                monthDay={newMonthDay}
+                onFortnightDayAChange={setNewFortnightDayA}
+                onFortnightDayBChange={setNewFortnightDayB}
+                onMonthDayChange={setNewMonthDay}
+              />
 
               {/* N vezes por semana - seletor */}
               {newFrequency === 'times_per_week' && (
@@ -1302,8 +1426,23 @@ export function HabitsView({
                   <option value="weekdays">Dias de semana (Seg-Sex - 5x/sem)</option>
                   <option value="times_per_week">N vezes por semana (Personalizado)</option>
                   <option value="weekly">1 vez por semana (Semanal)</option>
+                  <option value="fortnightly">01 vez por quinzena</option>
+                  <option value="monthly">01 vez por mês</option>
                 </select>
               </div>
+
+              <FrequencyDayFields
+                frequency={editFrequency}
+                fortnightDayA={editFortnightDayA}
+                fortnightDayB={editFortnightDayB}
+                monthDay={editMonthDay}
+                onFortnightDayAChange={setEditFortnightDayA}
+                onFortnightDayBChange={setEditFortnightDayB}
+                onMonthDayChange={setEditMonthDay}
+                accent="#38bdf8"
+                accentSoft="rgba(56, 189, 248, 0.08)"
+                accentBorder="rgba(56, 189, 248, 0.25)"
+              />
 
               {/* N vezes por semana - seletor em Edição */}
               {editFrequency === 'times_per_week' && (

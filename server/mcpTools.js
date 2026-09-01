@@ -25,6 +25,7 @@ import {
   getHabitWeeklyStats,
   calculateHabitStreak
 } from './timeUtils.js';
+import { applyHabitFrequency } from '../src/utils/habitFrequency.js';
 
 const locationEnum = z.enum(['anywhere', 'office', 'home', 'gym']);
 const timeWindowSchema = z.object({
@@ -946,7 +947,7 @@ export const toolsDefinition = [
   // ==========================================
   {
     name: 'list_habits',
-    description: 'Listar todos os rituais/hábitos diários com status de conclusão de hoje, sequências (streaks) e métricas semanais calculadas de acordo com sua frequência (daily, weekdays, weekly, times_per_week).',
+    description: 'Listar todos os rituais/hábitos diários com status de conclusão de hoje, sequências (streaks) e métricas semanais calculadas de acordo com sua frequência (daily, weekdays, weekly, times_per_week, fortnightly, monthly).',
     schema: {},
     handler: async () => {
       const db = getDb();
@@ -966,8 +967,10 @@ export const toolsDefinition = [
           icon: h.icon,
           frequency: h.frequency || 'daily',
           targetTimesPerWeek: weeklyStats.targetTimesPerWeek,
+          monthDays: h.monthDays || null,
           completionsThisWeek: weeklyStats.completionsThisWeek,
           isGoalMet: weeklyStats.isGoalMet,
+          period: weeklyStats.period || null,
           completedToday,
           currentStreak: h.currentStreak || 0,
           bestStreak: h.bestStreak || 0,
@@ -986,14 +989,16 @@ export const toolsDefinition = [
   },
   {
     name: 'create_habit',
-    description: 'Criar um novo ritual diário/hábito com suporte a 4 frequências: daily (Diário), weekdays (Seg-Sex), weekly (Semanal) e times_per_week (N vezes por semana).',
+    description: 'Criar um novo ritual diário/hábito com suporte a 6 frequências: daily (Diário), weekdays (Seg-Sex), weekly (Semanal), times_per_week (N vezes por semana), fortnightly (1x por quinzena, com 2 dias do mês) e monthly (1x por mês, com 1 dia do mês).',
     schema: {
       title: z.string().describe('Nome do ritual (ex: Meditar 10 min, Exercício Físico)'),
       description: z.string().optional().describe('Descrição ou instrução do ritual'),
       category: z.string().optional().default('Pessoal').describe('Categoria'),
       icon: z.string().optional().default('Flame').describe('Ícone Lucide (ex: Flame, Dumbbell, Book, Sun)'),
-      frequency: z.enum(['daily', 'weekdays', 'weekly', 'times_per_week']).optional().default('daily').describe('Frequência do hábito'),
+      frequency: z.enum(['daily', 'weekdays', 'weekly', 'times_per_week', 'fortnightly', 'monthly']).optional().default('daily').describe('Frequência do hábito'),
       targetTimesPerWeek: z.number().min(1).max(7).optional().describe('Meta de vezes por semana (usado quando frequency for times_per_week)'),
+      monthDays: z.array(z.number().min(1).max(31)).min(1).max(2).optional().describe('Dias do mês em que o ritual fica pendente. fortnightly: 2 dias (ex: [1, 16]); monthly: 1 dia (ex: [1])'),
+      monthDay: z.number().min(1).max(31).optional().describe('Dia do mês (atalho para monthly; também aceito como primeiro dia de fortnightly)'),
       priority: z.enum(['dispensavel', 'opcional', 'bom_fazer', 'importante', 'critico']).optional().describe('Prioridade do ritual (dispensavel → critico)'),
       difficulty: z.enum(['baixa', 'media', 'alta', 'epica']).optional().describe('Dificuldade do ritual (define XP e moedas)'),
       xpReward: z.number().optional().describe('XP concedido por execução (legado; preferir difficulty)'),
@@ -1005,19 +1010,6 @@ export const toolsDefinition = [
       const db = getDb();
       if (!args.title || !args.title.trim()) return formatError('Título do hábito é obrigatório.');
 
-      let freq = args.frequency || 'daily';
-      let target = 7;
-      if (freq === 'times_per_week') {
-        target = Math.max(1, Math.min(7, parseInt(args.targetTimesPerWeek, 10) || 3));
-      } else if (freq === 'weekdays') {
-        target = 5;
-      } else if (freq === 'weekly') {
-        target = 1;
-      } else {
-        freq = 'daily';
-        target = 7;
-      }
-
       const scale = resolveActivityScale({
         ...(args.priority !== undefined ? { priority: args.priority } : {}),
         ...(args.difficulty !== undefined ? { difficulty: args.difficulty } : {})
@@ -1028,8 +1020,6 @@ export const toolsDefinition = [
         description: (args.description || '').trim(),
         category: (args.category || 'Pessoal').trim(),
         icon: args.icon || 'Flame',
-        frequency: freq,
-        targetTimesPerWeek: target,
         currentStreak: 0,
         bestStreak: 0,
         history: [],
@@ -1037,6 +1027,12 @@ export const toolsDefinition = [
         difficulty: scale.difficulty,
         createdAt: new Date().toISOString()
       };
+      applyHabitFrequency(newHabit, {
+        frequency: args.frequency,
+        targetTimesPerWeek: args.targetTimesPerWeek,
+        monthDays: args.monthDays,
+        monthDay: args.monthDay
+      });
       applyDifficultyFields(newHabit, scale.difficulty);
       if (args.difficulty === undefined) {
         if (args.xpReward !== undefined) newHabit.xpReward = parseInt(args.xpReward, 10) || 30;
@@ -1047,7 +1043,7 @@ export const toolsDefinition = [
       if (!db.habits) db.habits = [];
       db.habits.unshift(newHabit);
       saveDb(db);
-      return formatSuccess(newHabit, `Ritual '${newHabit.title}' criado com sucesso (${freq}).`);
+      return formatSuccess(newHabit, `Ritual '${newHabit.title}' criado com sucesso (${newHabit.frequency}).`);
     }
   },
   {
@@ -1143,8 +1139,10 @@ export const toolsDefinition = [
       description: z.string().optional().describe('Nova descrição'),
       category: z.string().optional().describe('Nova categoria'),
       icon: z.string().optional().describe('Novo ícone'),
-      frequency: z.enum(['daily', 'weekdays', 'weekly', 'times_per_week']).optional().describe('Nova frequência'),
+      frequency: z.enum(['daily', 'weekdays', 'weekly', 'times_per_week', 'fortnightly', 'monthly']).optional().describe('Nova frequência'),
       targetTimesPerWeek: z.number().min(1).max(7).optional().describe('Nova meta de vezes por semana'),
+      monthDays: z.array(z.number().min(1).max(31)).min(1).max(2).optional().describe('Novos dias do mês (fortnightly: 2 dias; monthly: 1 dia)'),
+      monthDay: z.number().min(1).max(31).optional().describe('Novo dia do mês (atalho para monthly)'),
       priority: z.enum(['dispensavel', 'opcional', 'bom_fazer', 'importante', 'critico']).optional().describe('Nova prioridade (dispensavel → critico)'),
       difficulty: z.enum(['baixa', 'media', 'alta', 'epica']).optional().describe('Nova dificuldade (define XP e moedas)'),
       xpReward: z.number().optional().describe('Novo XP (legado; preferir difficulty)'),
@@ -1162,21 +1160,12 @@ export const toolsDefinition = [
       if (args.category !== undefined) habit.category = args.category.trim();
       if (args.icon !== undefined) habit.icon = args.icon;
 
-      if (args.frequency !== undefined) {
-        let freq = args.frequency;
-        if (freq === 'times_per_week') {
-          habit.targetTimesPerWeek = Math.max(1, Math.min(7, parseInt(args.targetTimesPerWeek || habit.targetTimesPerWeek, 10) || 3));
-        } else if (freq === 'weekdays') {
-          habit.targetTimesPerWeek = 5;
-        } else if (freq === 'weekly') {
-          habit.targetTimesPerWeek = 1;
-        } else if (freq === 'daily') {
-          habit.targetTimesPerWeek = 7;
-        }
-        habit.frequency = freq;
-      } else if (args.targetTimesPerWeek !== undefined) {
-        habit.targetTimesPerWeek = Math.max(1, Math.min(7, parseInt(args.targetTimesPerWeek, 10) || 3));
-      }
+      applyHabitFrequency(habit, {
+        frequency: args.frequency,
+        targetTimesPerWeek: args.targetTimesPerWeek,
+        monthDays: args.monthDays,
+        monthDay: args.monthDay
+      }, { isUpdate: true });
 
       if (args.priority !== undefined || args.difficulty !== undefined) {
         const scale = resolveActivityScale({
