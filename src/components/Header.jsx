@@ -128,9 +128,9 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
               border: '1px solid rgba(245, 158, 11, 0.3)'
             }}
           >
-            <Coins size={18} color="#fbbf24" />
-            <span style={{ color: '#fbbf24', fontWeight: 800, fontSize: '0.95rem', fontFamily: 'var(--font-mono)' }}>
-              {profile.coins}
+            <Coins size={18} color={(profile.coins ?? 0) < 0 ? '#f87171' : '#fbbf24'} />
+            <span style={{ color: (profile.coins ?? 0) < 0 ? '#f87171' : '#fbbf24', fontWeight: 800, fontSize: '0.95rem', fontFamily: 'var(--font-mono)' }}>
+              {profile.coins ?? 0}
             </span>
           </div>
 

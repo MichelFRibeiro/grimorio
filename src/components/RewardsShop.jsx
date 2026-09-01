@@ -48,11 +48,12 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
   const [spendItem, setSpendItem] = useState('');
   const [spendSubmitting, setSpendSubmitting] = useState(false);
 
-  const coins = userProfile?.coins || 0;
+  const coins = userProfile?.coins ?? 0;
   const walletBrl = coinsToBrl(coins);
   const parsedSpendAmount = parseBrlAmount(spendAmount);
   const spendCoins = parsedSpendAmount != null && parsedSpendAmount > 0 ? brlToCoins(parsedSpendAmount) : 0;
-  const canAffordSpend = spendCoins > 0 && coins >= spendCoins;
+  const canSpend = spendCoins > 0;
+  const spendGoesNegative = canSpend && coins < spendCoins;
 
   const handleCreateReward = (e) => {
     e.preventDefault();
@@ -74,7 +75,7 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
 
   const handleSpendMoney = async (e) => {
     e.preventDefault();
-    if (!spendItem.trim() || !canAffordSpend || spendSubmitting || !onSpendMoney) return;
+    if (!spendItem.trim() || !canSpend || spendSubmitting || !onSpendMoney) return;
 
     setSpendSubmitting(true);
     const result = await onSpendMoney({
@@ -136,10 +137,10 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
           >
             <Coins size={20} color="#fbbf24" />
             <div>
-              <span style={{ color: '#fbbf24', fontWeight: 800, fontSize: '1.05rem', fontFamily: 'var(--font-mono)', display: 'block', lineHeight: 1.1 }}>
+              <span style={{ color: coins < 0 ? '#f87171' : '#fbbf24', fontWeight: 800, fontSize: '1.05rem', fontFamily: 'var(--font-mono)', display: 'block', lineHeight: 1.1 }}>
                 {coins} Moedas
               </span>
-              <span style={{ color: '#86efac', fontSize: '0.72rem', fontWeight: 700 }}>
+              <span style={{ color: coins < 0 ? '#fca5a5' : '#86efac', fontSize: '0.72rem', fontWeight: 700 }}>
                 ≈ {formatBrl(walletBrl)}
               </span>
             </div>
@@ -205,8 +206,6 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 240px), 1fr))', gap: '18px', marginBottom: '32px' }}>
           {rewards.map(reward => {
-            const canAfford = coins >= reward.cost;
-
             return (
               <div
                 key={reward.id}
@@ -217,7 +216,7 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
                   flexDirection: 'column',
                   justifyContent: 'space-between',
                   gap: '16px',
-                  border: canAfford ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)'
+                  border: '1px solid rgba(245, 158, 11, 0.3)'
                 }}
               >
                 <div>
@@ -280,26 +279,23 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
 
                   <button
                     onClick={() => onRedeemReward(reward.id)}
-                    disabled={!canAfford}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px',
                       padding: '8px 16px',
                       borderRadius: '10px',
-                      background: canAfford
-                        ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                        : 'rgba(255, 255, 255, 0.06)',
-                      color: canAfford ? '#000' : '#64748b',
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      color: '#000',
                       fontWeight: 800,
                       fontSize: '0.85rem',
                       border: 'none',
-                      cursor: canAfford ? 'pointer' : 'not-allowed',
-                      boxShadow: canAfford ? '0 2px 10px rgba(245, 158, 11, 0.3)' : 'none',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 10px rgba(245, 158, 11, 0.3)',
                       transition: 'transform 0.15s ease'
                     }}
-                    onMouseOver={(e) => canAfford && (e.currentTarget.style.transform = 'scale(1.03)')}
-                    onMouseOut={(e) => canAfford && (e.currentTarget.style.transform = 'scale(1)')}
+                    onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.03)'}
+                    onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
                   >
                     <Sparkles size={15} /> Resgatar
                   </button>
@@ -493,9 +489,9 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
                     {spendCoins} 🪙
                   </span>
                 </div>
-                {spendCoins > 0 && !canAffordSpend && (
+                {spendGoesNegative && (
                   <span style={{ fontSize: '0.75rem', color: '#f87171', fontWeight: 700, textAlign: 'right' }}>
-                    Saldo insuficiente
+                    Saldo ficará negativo ({coins - spendCoins} 🪙)
                   </span>
                 )}
               </div>
@@ -518,17 +514,17 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
                 </button>
                 <button
                   type="submit"
-                  disabled={!spendItem.trim() || !canAffordSpend || spendSubmitting}
+                  disabled={!spendItem.trim() || !canSpend || spendSubmitting}
                   style={{
                     padding: '10px 20px',
                     borderRadius: '10px',
-                    background: canAffordSpend
+                    background: spendItem.trim() && canSpend
                       ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
                       : 'rgba(255, 255, 255, 0.08)',
-                    color: canAffordSpend ? '#022c22' : '#64748b',
+                    color: spendItem.trim() && canSpend ? '#022c22' : '#64748b',
                     fontWeight: 800,
                     border: 'none',
-                    cursor: canAffordSpend ? 'pointer' : 'not-allowed'
+                    cursor: spendItem.trim() && canSpend ? 'pointer' : 'not-allowed'
                   }}
                 >
                   {spendSubmitting ? 'Registrando...' : 'Debitar Moedas'}

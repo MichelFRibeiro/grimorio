@@ -35,10 +35,11 @@ function run() {
   assert.strictEqual(db.actionLogs[0].coins, -250);
   console.log('✅ Gasto de R$ 25,00 debitou 250 moedas.');
 
-  const tooMuch = spendMoney(db, { amountBrl: 80, item: 'jantar' });
-  assert.ok(tooMuch.error);
-  assert.strictEqual(db.userProfile.coins, 750);
-  console.log('✅ Saldo insuficiente é bloqueado.');
+  const overdraft = spendMoney(db, { amountBrl: 80, item: 'jantar' });
+  assert.strictEqual(overdraft.success, true);
+  assert.strictEqual(overdraft.redemption.cost, 800);
+  assert.strictEqual(db.userProfile.coins, -50);
+  console.log('✅ Gasto acima do saldo deixa as moedas negativas.');
 
   const missingItem = spendMoney(db, { amountBrl: 10, item: '   ' });
   assert.ok(missingItem.error);

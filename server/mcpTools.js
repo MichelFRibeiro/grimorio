@@ -1406,12 +1406,8 @@ export const toolsDefinition = [
       const reward = (db.rewards || []).find(r => r.id === args.id);
       if (!reward) return formatError(`Recompensa '${args.id}' não encontrada.`);
 
-      const userCoins = db.userProfile?.coins || 0;
-      if (userCoins < reward.costCoins) {
-        return formatError(`Moedas insuficientes! Você possui 🪙 ${userCoins} moedas, mas o item custa 🪙 ${reward.costCoins}.`);
-      }
-
-      db.userProfile.coins = userCoins - reward.costCoins;
+      const userCoins = db.userProfile?.coins ?? 0;
+      db.userProfile.coins = userCoins - (reward.costCoins ?? reward.cost ?? 0);
 
       const redemption = {
         id: uid('red'),
@@ -1455,7 +1451,7 @@ export const toolsDefinition = [
 
       const [removed] = db.rewardRedemptions.splice(index, 1);
       const refundedCoins = refundCoinsFromRedemption(removed);
-      db.userProfile.coins = (db.userProfile.coins || 0) + refundedCoins;
+      db.userProfile.coins = (db.userProfile.coins ?? 0) + refundedCoins;
 
       saveDb(db);
       return formatSuccess({

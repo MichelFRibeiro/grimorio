@@ -31,14 +31,7 @@ export function spendMoney(db, { amountBrl, item, notes } = {}) {
     return { error: 'Perfil do herói não encontrado.', status: 500 };
   }
 
-  const userCoins = db.userProfile.coins || 0;
-  if (userCoins < cost) {
-    return {
-      error: `Moedas insuficientes! Você tem 🪙 ${userCoins} e precisa de 🪙 ${cost} para gastar ${formatBrl(amount)}.`,
-      status: 400
-    };
-  }
-
+  const userCoins = db.userProfile.coins ?? 0;
   db.userProfile.coins = userCoins - cost;
 
   const redemption = {

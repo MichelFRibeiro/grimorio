@@ -459,7 +459,7 @@ export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpow
   profile.stats.consistency = (profile.stats.consistency || 0) + consistency;
 
   // Add coins
-  profile.coins = (profile.coins || 0) + coins;
+  profile.coins = (profile.coins ?? 0) + coins;
 
   // Add XP and handle level-ups
   profile.xp = (profile.xp || 0) + xp;
@@ -561,8 +561,7 @@ export function revertPlayerReward({ xp = 0, coins = 0, wisdom = 0, focus = 0, w
   profile.stats.willpower = Math.max(0, (profile.stats.willpower || 0) - willpower);
   profile.stats.consistency = Math.max(0, (profile.stats.consistency || 0) - consistency);
 
-  // Deduct coins safely
-  profile.coins = Math.max(0, (profile.coins || 0) - actualCoins);
+  profile.coins = (profile.coins ?? 0) - actualCoins;
 
   // Deduct XP and step down levels if needed
   profile.xp = (profile.xp || 0) - actualXp;
@@ -571,7 +570,7 @@ export function revertPlayerReward({ xp = 0, coins = 0, wisdom = 0, focus = 0, w
     profile.xpToNextLevel = getXpForLevel(profile.level);
     profile.xp += profile.xpToNextLevel;
     profile.title = getTitleForLevel(profile.level);
-    profile.coins = Math.max(0, profile.coins - profile.level * 15);
+    profile.coins = (profile.coins ?? 0) - profile.level * 15;
   }
   if (profile.xp < 0) {
     profile.xp = 0;
@@ -585,14 +584,14 @@ export function revertPlayerReward({ xp = 0, coins = 0, wisdom = 0, focus = 0, w
     if (actionDefeatedBoss && boss.currentHp > 0) {
       boss.defeated = false;
       boss.defeatsCount = Math.max(0, (boss.defeatsCount || 1) - 1);
-      profile.coins = Math.max(0, profile.coins - boss.rewardCoins);
+      profile.coins = (profile.coins ?? 0) - boss.rewardCoins;
       profile.xp -= boss.rewardXp;
       while (profile.xp < 0 && profile.level > 1) {
         profile.level -= 1;
         profile.xpToNextLevel = getXpForLevel(profile.level);
         profile.xp += profile.xpToNextLevel;
         profile.title = getTitleForLevel(profile.level);
-        profile.coins = Math.max(0, profile.coins - profile.level * 15);
+        profile.coins = (profile.coins ?? 0) - profile.level * 15;
       }
       if (profile.xp < 0) {
         profile.xp = 0;

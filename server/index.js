@@ -833,7 +833,7 @@ app.put('/api/reading-sessions/:id', (req, res) => {
     // Apply delta to user profile
     const profile = db.userProfile;
     profile.stats.wisdom = Math.max(0, (profile.stats.wisdom || 0) + deltaWisdom);
-    profile.coins = Math.max(0, (profile.coins || 0) + deltaCoins);
+    profile.coins = (profile.coins ?? 0) + deltaCoins;
     profile.xp += deltaXp;
 
     // Handle level up / level down
@@ -849,7 +849,7 @@ app.put('/api/reading-sessions/:id', (req, res) => {
       profile.xpToNextLevel = getXpForLevel(profile.level);
       profile.xp += profile.xpToNextLevel;
       profile.title = getTitleForLevel(profile.level);
-      profile.coins = Math.max(0, profile.coins - profile.level * 15);
+      profile.coins = (profile.coins ?? 0) - profile.level * 15;
     }
     if (profile.xp < 0) profile.xp = 0;
 
@@ -936,7 +936,7 @@ app.delete('/api/reading-sessions/:id', (req, res) => {
     // Revert player rewards
     const profile = db.userProfile;
     profile.stats.wisdom = Math.max(0, (profile.stats.wisdom || 0) - wisdomToRevert);
-    profile.coins = Math.max(0, (profile.coins || 0) - coinsToRevert);
+    profile.coins = (profile.coins ?? 0) - coinsToRevert;
     profile.xp -= xpToRevert;
 
     while (profile.xp < 0 && profile.level > 1) {
@@ -944,7 +944,7 @@ app.delete('/api/reading-sessions/:id', (req, res) => {
       profile.xpToNextLevel = getXpForLevel(profile.level);
       profile.xp += profile.xpToNextLevel;
       profile.title = getTitleForLevel(profile.level);
-      profile.coins = Math.max(0, profile.coins - profile.level * 15);
+      profile.coins = (profile.coins ?? 0) - profile.level * 15;
     }
     if (profile.xp < 0) profile.xp = 0;
 
@@ -1655,11 +1655,7 @@ app.post('/api/rewards/:id/redeem', (req, res) => {
     const reward = db.rewards.find(r => r.id === req.params.id);
     if (!reward) return res.status(404).json({ error: 'Recompensa não encontrada' });
 
-    if (db.userProfile.coins < reward.cost) {
-      return res.status(400).json({ error: `Moedas insuficientes! Você tem 🪙 ${db.userProfile.coins} e precisa de 🪙 ${reward.cost}.` });
-    }
-
-    db.userProfile.coins -= reward.cost;
+    db.userProfile.coins = (db.userProfile.coins ?? 0) - reward.cost;
     reward.timesRedeemed = (reward.timesRedeemed || 0) + 1;
 
     const redemption = {
