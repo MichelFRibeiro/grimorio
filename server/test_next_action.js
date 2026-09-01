@@ -202,7 +202,7 @@ function runTests() {
     id: 'q-hoje',
     title: 'Entregar peça hoje',
     category: 'Advocacia',
-    priority: 'bom_fazer',
+    priority: 'importante',
     dueDate: '2026-08-29',
     dueTime: '18:00',
     completed: false,
@@ -260,7 +260,7 @@ function runTests() {
     }))
   });
   const dueSoonResult = computeNextAction(dbDueSoon, { location: 'home', now: nowHomeSat });
-  assert(dueSoonResult.primary?.id === 'q-amanha', `Prazo em 2 dias deve ganhar de épica sem prazo com pico horário (foi ${dueSoonResult.primary?.id})`);
+  assert(dueSoonResult.primary?.id === 'q-epica', `Crítico sem prazo deve ganhar de Bom fazer com prazo em 2 dias (foi ${dueSoonResult.primary?.id})`);
 
   // Item fora da janela neste lugar não some: entra em deferredByTime
   const gymMorning = computeNextAction(dbHome, { location: 'home', now: nowHomeSat });
@@ -362,6 +362,103 @@ function runTests() {
   });
   const legacyPriorityResult = computeNextAction(dbLegacyPriority, { location: 'home', now: nowHomeSat });
   assert(legacyPriorityResult.primary?.id === 'q-legada-epica', `Prioridade legado épica deve mapear para crítica (foi ${legacyPriorityResult.primary?.id})`);
+
+  const overdueLow = {
+    id: 'q-bom-fazer-atrasada',
+    title: 'Organizar gaveta atrasada',
+    category: 'Casa',
+    priority: 'bom_fazer',
+    dueDate: '2026-08-20',
+    completed: false,
+    location: 'home',
+    timeWindow: null,
+    createdAt: '2026-08-10T10:00:00.000Z',
+    subtasks: []
+  };
+  const undatedCritical = {
+    id: 'q-critica-sem-prazo',
+    title: 'Protocolar recurso sem prazo',
+    category: 'Advocacia',
+    priority: 'critico',
+    dueDate: null,
+    completed: false,
+    location: 'home',
+    timeWindow: null,
+    createdAt: '2026-08-10T10:00:00.000Z',
+    subtasks: []
+  };
+  const undatedImportant = {
+    id: 'q-importante-sem-prazo',
+    title: 'Estudar edital',
+    category: 'Estudos',
+    priority: 'importante',
+    dueDate: null,
+    completed: false,
+    location: 'home',
+    timeWindow: null,
+    createdAt: '2026-08-10T10:00:00.000Z',
+    subtasks: []
+  };
+  const overdueImportant = {
+    id: 'q-importante-atrasada',
+    title: 'Enviar petição atrasada',
+    category: 'Advocacia',
+    priority: 'importante',
+    dueDate: '2026-08-20',
+    completed: false,
+    location: 'home',
+    timeWindow: null,
+    createdAt: '2026-08-10T10:00:00.000Z',
+    subtasks: []
+  };
+  const overdueDispensable = {
+    id: 'q-dispensavel-atrasada',
+    title: 'Limpar gaveta atrasada',
+    category: 'Casa',
+    priority: 'dispensavel',
+    dueDate: '2026-08-20',
+    completed: false,
+    location: 'home',
+    timeWindow: null,
+    createdAt: '2026-08-10T10:00:00.000Z',
+    subtasks: []
+  };
+  const undatedOptional = {
+    id: 'q-opcional-sem-prazo',
+    title: 'Reorganizar favoritos',
+    category: 'Pessoal',
+    priority: 'opcional',
+    dueDate: null,
+    completed: false,
+    location: 'home',
+    timeWindow: null,
+    createdAt: '2026-08-10T10:00:00.000Z',
+    subtasks: []
+  };
+
+  const highBeatsOverdueLow = computeNextAction(
+    baseDb({ quests: [overdueLow, undatedCritical] }),
+    { location: 'home', now: nowHomeSat }
+  );
+  assert(highBeatsOverdueLow.primary?.id === 'q-critica-sem-prazo', `Crítico sem prazo deve ganhar de Bom fazer atrasada (foi ${highBeatsOverdueLow.primary?.id})`);
+
+  const importantBeatsOverdueLow = computeNextAction(
+    baseDb({ quests: [overdueLow, undatedImportant] }),
+    { location: 'home', now: nowHomeSat }
+  );
+  assert(importantBeatsOverdueLow.primary?.id === 'q-importante-sem-prazo', `Importante sem prazo deve ganhar de Bom fazer atrasada (foi ${importantBeatsOverdueLow.primary?.id})`);
+
+  const deadlineInsideHighBand = computeNextAction(
+    baseDb({ quests: [undatedCritical, overdueImportant] }),
+    { location: 'home', now: nowHomeSat }
+  );
+  assert(deadlineInsideHighBand.primary?.id === 'q-importante-atrasada', `Entre Importante e Crítico, a atrasada deve ganhar (foi ${deadlineInsideHighBand.primary?.id})`);
+
+  const priorityInsideLowBand = computeNextAction(
+    baseDb({ quests: [overdueDispensable, undatedOptional] }),
+    { location: 'home', now: nowHomeSat }
+  );
+  assert(priorityInsideLowBand.primary?.id === 'q-opcional-sem-prazo', `Na faixa baixa, Opcional sem prazo deve ganhar de Dispensável atrasada (foi ${priorityInsideLowBand.primary?.id})`);
 
   console.log('\n🏆 Todos os testes do motor de Próxima Atividade passaram.');
 }

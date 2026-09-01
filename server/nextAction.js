@@ -38,6 +38,11 @@ function resolvePriorityKey(item) {
   if (isPriorityKey(item?.priority)) return item.priority;
   return LEGACY_PRIORITY_MAP[item?.priority] || DEFAULT_PRIORITY;
 }
+
+/** Importante/Crítico formam a faixa alta; o restante, a faixa baixa. */
+function priorityBand(priority) {
+  return (priority === 'importante' || priority === 'critico') ? 1 : 0;
+}
 const HIST_MIN_SAMPLES = 5;
 const WINDOW_GRACE_MINUTES = 15;
 const RELEVANT_LOG_TYPES = new Set(['quest_complete', 'habit_complete']);
@@ -347,7 +352,7 @@ function scoreCandidate({
   }
 
   const score = urgency.score + priorityPts + hourPts + dayPts + risk.score + freshPts;
-  // Prazos concretos não podem perder para pico horário de outro item.
+  // Dentro da mesma faixa de prioridade, prazos concretos não perdem para pico horário.
   const urgencyClass = urgency.overdue ? 3 : urgency.dueToday ? 2 : (urgency.dueSoon ? 1 : 0);
 
   return {
@@ -397,17 +402,47 @@ function serializeCandidate(kind, item, scoring, extra, weeklyStats, completedTo
   };
 }
 
-function compareCandidates(a, b) {
+function compareDueDate(a, b) {
+  const aDue = a.dueDate || '9999-99-99';
+  const bDue = b.dueDate || '9999-99-99';
+  if (aDue === bDue) return 0;
+  return aDue < bDue ? -1 : 1;
+}
+
+function compareUrgencyThenScore(a, b) {
   const aClass = a.urgencyClass || 0;
   const bClass = b.urgencyClass || 0;
   if (bClass !== aClass) return bClass - aClass;
   if (b.score !== a.score) return b.score - a.score;
-  const aDue = a.dueDate || '9999-99-99';
-  const bDue = b.dueDate || '9999-99-99';
-  if (aDue !== bDue) return aDue < bDue ? -1 : 1;
+  return compareDueDate(a, b);
+}
+
+function comparePriorityRank(a, b) {
   const aP = PRIORITY_META[a.priority]?.rank || 0;
   const bP = PRIORITY_META[b.priority]?.rank || 0;
-  if (bP !== aP) return bP - aP;
+  return bP - aP;
+}
+
+function compareCandidates(a, b) {
+  // Faixa alta (Importante/Crítico) sempre vence Dispensável/Opcional/Bom fazer.
+  const aBand = priorityBand(a.priority);
+  const bBand = priorityBand(b.priority);
+  if (bBand !== aBand) return bBand - aBand;
+
+  if (aBand === 1) {
+    // Entre Importante e Crítico, o prazo manda.
+    const urgencyCmp = compareUrgencyThenScore(a, b);
+    if (urgencyCmp) return urgencyCmp;
+    const priorityCmp = comparePriorityRank(a, b);
+    if (priorityCmp) return priorityCmp;
+  } else {
+    // Na faixa baixa, prioridade vale mais que prazo.
+    const priorityCmp = comparePriorityRank(a, b);
+    if (priorityCmp) return priorityCmp;
+    const urgencyCmp = compareUrgencyThenScore(a, b);
+    if (urgencyCmp) return urgencyCmp;
+  }
+
   const aStreak = a.currentStreak || 0;
   const bStreak = b.currentStreak || 0;
   if (bStreak !== aStreak) return bStreak - aStreak;
