@@ -16,9 +16,10 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { FloatingToasts } from './components/FloatingToasts';
 import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass } from 'lucide-react';
 import { getSaoPauloDateStr } from './utils/timeUtils';
+import { hasLiveReadingSession } from './utils/liveReadingSession';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState('quests');
+  const [activeTab, setActiveTab] = useState(() => (hasLiveReadingSession() ? 'books' : 'quests'));
 
   const {
     user,

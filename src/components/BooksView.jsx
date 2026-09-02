@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus,
   BookOpen,
@@ -28,6 +28,12 @@ import {
 } from 'lucide-react';
 import { formatFullAbntCitation } from '../utils/abntFormatter';
 import { ConfirmModal } from './ConfirmModal';
+import { useStopwatch, formatTimer } from '../hooks/useStopwatch';
+import {
+  readLiveReadingSession,
+  writeLiveReadingSession,
+  clearLiveReadingSession
+} from '../utils/liveReadingSession';
 
 export function BooksView({
   books,
@@ -56,10 +62,17 @@ export function BooksView({
     ? questCategories
     : defaultCategoryList;
 
+  const restoredLiveSessionRef = useRef(readLiveReadingSession());
+  const persistSessionRef = useRef(true);
+  const restoredLiveSession = restoredLiveSessionRef.current;
+
   const [subTab, setSubTab] = useState('books'); // 'books' | 'quotes' | 'book-detail'
   const [selectedBookId, setSelectedBookId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [activeSessionBook, setActiveSessionBook] = useState(null);
+  const [activeSessionBook, setActiveSessionBook] = useState(() => {
+    if (!restoredLiveSession?.bookId) return null;
+    return (books || []).find(b => b.id === restoredLiveSession.bookId) || null;
+  });
   const [quoteSearch, setQuoteSearch] = useState('');
   const [bookQuoteSearch, setBookQuoteSearch] = useState('');
   const [copiedId, setCopiedId] = useState(null);
@@ -180,18 +193,28 @@ export function BooksView({
   const [editBookNotes, setEditBookNotes] = useState('');
   const [editBookStatus, setEditBookStatus] = useState('reading');
 
-  // Reading Session Stopwatch & Input
-  const [timerSeconds, setTimerSeconds] = useState(0);
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
-  const [sessionStartPage, setSessionStartPage] = useState(0);
-  const [sessionEndPage, setSessionEndPage] = useState(0);
-  const [sessionNotes, setSessionNotes] = useState('');
+  // Reading Session Stopwatch & Input (wall-clock; survives tab hibernation)
+  const {
+    seconds: timerSeconds,
+    isRunning: isTimerRunning,
+    toggle: toggleTimer,
+    reset: resetTimer,
+    restart: restartTimer,
+    getSnapshot: getTimerSnapshot,
+    getElapsedSeconds
+  } = useStopwatch({
+    initialAccumulatedMs: restoredLiveSession?.timer?.accumulatedMs || 0,
+    initialRunStartedAt: restoredLiveSession?.timer?.runStartedAt || null
+  });
+  const [sessionStartPage, setSessionStartPage] = useState(() => restoredLiveSession?.sessionStartPage ?? 0);
+  const [sessionEndPage, setSessionEndPage] = useState(() => restoredLiveSession?.sessionEndPage ?? 0);
+  const [sessionNotes, setSessionNotes] = useState(() => restoredLiveSession?.sessionNotes || '');
   
   // Reading Session Item-by-item quotes list
-  const [sessionQuotes, setSessionQuotes] = useState([]);
-  const [currentQuoteText, setCurrentQuoteText] = useState('');
-  const [currentQuotePage, setCurrentQuotePage] = useState('');
-  const [currentQuoteNote, setCurrentQuoteNote] = useState('');
+  const [sessionQuotes, setSessionQuotes] = useState(() => Array.isArray(restoredLiveSession?.sessionQuotes) ? restoredLiveSession.sessionQuotes : []);
+  const [currentQuoteText, setCurrentQuoteText] = useState(() => restoredLiveSession?.currentQuoteText || '');
+  const [currentQuotePage, setCurrentQuotePage] = useState(() => restoredLiveSession?.currentQuotePage || '');
+  const [currentQuoteNote, setCurrentQuoteNote] = useState(() => restoredLiveSession?.currentQuoteNote || '');
 
   // Edit Reading Session State
   const [editingSession, setEditingSession] = useState(null);
@@ -211,16 +234,77 @@ export function BooksView({
   const [directQuoteNote, setDirectQuoteNote] = useState('');
 
   useEffect(() => {
-    let interval = null;
-    if (isTimerRunning) {
-      interval = setInterval(() => {
-        setTimerSeconds(s => s + 1);
-      }, 1000);
-    } else {
-      clearInterval(interval);
+    if (activeSessionBook) return;
+    const restored = restoredLiveSessionRef.current;
+    if (!restored?.bookId) return;
+    const book = (books || []).find(b => b.id === restored.bookId);
+    if (book) {
+      persistSessionRef.current = true;
+      setActiveSessionBook(book);
+      return;
     }
-    return () => clearInterval(interval);
-  }, [isTimerRunning]);
+    if (Array.isArray(books)) {
+      restoredLiveSessionRef.current = null;
+      persistSessionRef.current = false;
+      clearLiveReadingSession();
+    }
+  }, [books, activeSessionBook]);
+
+  useEffect(() => {
+    if (!activeSessionBook) {
+      if (!restoredLiveSessionRef.current) clearLiveReadingSession();
+      return;
+    }
+
+    const persist = () => {
+      if (!persistSessionRef.current) return;
+      const snap = getTimerSnapshot();
+      writeLiveReadingSession({
+        bookId: activeSessionBook.id,
+        sessionStartPage,
+        sessionEndPage,
+        sessionNotes,
+        sessionQuotes,
+        currentQuoteText,
+        currentQuotePage,
+        currentQuoteNote,
+        timer: {
+          accumulatedMs: snap.accumulatedMs,
+          runStartedAt: snap.runStartedAt
+        },
+        updatedAt: Date.now()
+      });
+    };
+
+    persist();
+    restoredLiveSessionRef.current = null;
+
+    const persistIfHidden = () => {
+      if (document.visibilityState === 'hidden') persist();
+    };
+    const persistInterval = setInterval(persist, isTimerRunning ? 5000 : 15000);
+    document.addEventListener('visibilitychange', persistIfHidden);
+    window.addEventListener('pagehide', persist);
+    document.addEventListener('freeze', persist);
+    return () => {
+      persist();
+      clearInterval(persistInterval);
+      document.removeEventListener('visibilitychange', persistIfHidden);
+      window.removeEventListener('pagehide', persist);
+      document.removeEventListener('freeze', persist);
+    };
+  }, [
+    activeSessionBook,
+    sessionStartPage,
+    sessionEndPage,
+    sessionNotes,
+    sessionQuotes,
+    currentQuoteText,
+    currentQuotePage,
+    currentQuoteNote,
+    isTimerRunning,
+    getTimerSnapshot
+  ]);
 
   const selectedBook = (books || []).find(b => b.id === selectedBookId);
 
@@ -233,6 +317,8 @@ export function BooksView({
 
   const handleOpenSessionModal = (book, e) => {
     if (e) e.stopPropagation();
+    restoredLiveSessionRef.current = null;
+    persistSessionRef.current = true;
     setActiveSessionBook(book);
     setSessionStartPage(book.currentPage);
     setSessionEndPage(Math.min(book.totalPages, book.currentPage + 15));
@@ -241,14 +327,15 @@ export function BooksView({
     setSessionQuotes([]);
     setCurrentQuoteText('');
     setCurrentQuoteNote('');
-    setTimerSeconds(0);
-    setIsTimerRunning(true);
+    restartTimer();
   };
 
   const handleCloseSessionModal = () => {
+    persistSessionRef.current = false;
+    restoredLiveSessionRef.current = null;
+    clearLiveReadingSession();
     setActiveSessionBook(null);
-    setIsTimerRunning(false);
-    setTimerSeconds(0);
+    resetTimer();
     setSessionQuotes([]);
     setCurrentQuoteText('');
     setCurrentQuoteNote('');
@@ -290,7 +377,7 @@ export function BooksView({
       return;
     }
 
-    const durationMinutes = Math.max(1, Math.round(timerSeconds / 60));
+    const durationMinutes = Math.max(1, Math.round(getElapsedSeconds() / 60));
 
     // If user typed a quote in input but forgot to click "+ Adicionar", include it automatically
     let finalQuotes = [...sessionQuotes];
@@ -303,6 +390,10 @@ export function BooksView({
         createdAt: new Date().toISOString()
       });
     }
+
+    persistSessionRef.current = false;
+    restoredLiveSessionRef.current = null;
+    clearLiveReadingSession();
 
     onLogReadingSession(activeSessionBook.id, {
       startPage: sPage,
@@ -498,12 +589,6 @@ export function BooksView({
     }
 
     handleCloseEditBookModal();
-  };
-
-  const formatTimer = (secs) => {
-    const mins = Math.floor(secs / 60);
-    const remainingSecs = secs % 60;
-    return `${String(mins).padStart(2, '0')}:${String(remainingSecs).padStart(2, '0')}`;
   };
 
   const handleCopyQuote = (quoteObj, bookOverride) => {
@@ -1771,7 +1856,7 @@ export function BooksView({
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   type="button"
-                  onClick={() => setIsTimerRunning(r => !r)}
+                  onClick={toggleTimer}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -1792,7 +1877,7 @@ export function BooksView({
 
                 <button
                   type="button"
-                  onClick={() => { setTimerSeconds(0); setIsTimerRunning(false); }}
+                  onClick={resetTimer}
                   style={{
                     display: 'flex',
                     alignItems: 'center',

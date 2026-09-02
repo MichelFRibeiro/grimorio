@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
+import { useStopwatch, formatTimer } from '../hooks/useStopwatch';
 
 const URL_IN_TEXT = /https?:\/\/[^\s]+/i;
 
@@ -173,21 +174,13 @@ export function QuestionsView({
   const [editNotes, setEditNotes] = useState('');
   const [editNotebookUrl, setEditNotebookUrl] = useState('');
 
-  // Modal Stopwatch State
-  const [timerSeconds, setTimerSeconds] = useState(0);
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
-
-  useEffect(() => {
-    let interval = null;
-    if (isTimerRunning) {
-      interval = setInterval(() => {
-        setTimerSeconds(s => s + 1);
-      }, 1000);
-    } else {
-      clearInterval(interval);
-    }
-    return () => clearInterval(interval);
-  }, [isTimerRunning]);
+  // Modal Stopwatch State (wall-clock; survives tab hibernation)
+  const {
+    seconds: timerSeconds,
+    isRunning: isTimerRunning,
+    toggle: toggleTimer,
+    reset: resetTimer
+  } = useStopwatch();
 
   // Sync timer to duration minutes when timer is updated
   useEffect(() => {
@@ -199,14 +192,12 @@ export function QuestionsView({
   const handleOpenAddModal = () => {
     setDate(getSaoPauloDateStr());
     setShowAddModal(true);
-    setTimerSeconds(0);
-    setIsTimerRunning(false);
+    resetTimer();
   };
 
   const handleCloseAddModal = () => {
     setShowAddModal(false);
-    setIsTimerRunning(false);
-    setTimerSeconds(0);
+    resetTimer();
   };
 
   const handleSaveQuestions = (e) => {
@@ -272,12 +263,6 @@ export function QuestionsView({
     }
 
     setEditingQuestion(null);
-  };
-
-  const formatTimer = (secs) => {
-    const mins = Math.floor(secs / 60);
-    const remainingSecs = secs % 60;
-    return `${String(mins).padStart(2, '0')}:${String(remainingSecs).padStart(2, '0')}`;
   };
 
   // Real-time calculation inside form
@@ -924,7 +909,7 @@ export function QuestionsView({
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   type="button"
-                  onClick={() => setIsTimerRunning(r => !r)}
+                  onClick={toggleTimer}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -945,7 +930,7 @@ export function QuestionsView({
 
                 <button
                   type="button"
-                  onClick={() => { setTimerSeconds(0); setIsTimerRunning(false); }}
+                  onClick={resetTimer}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
