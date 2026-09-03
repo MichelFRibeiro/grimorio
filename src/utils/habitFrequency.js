@@ -1,7 +1,11 @@
 /**
  * Frequências de rituais (hábitos) — compartilhado entre UI, API, MCP e Oráculo.
  *
- * Além das frequências semanais, suporta:
+ * times_per_week e weekly aceitam weekDays opcionais (0=Dom … 6=Sáb).
+ * Sem weekDays o ritual continua flexível; com weekDays ele só fica devido
+ * nos dias previstos, ou em catch-up se a cota da semana já não cabe no restante.
+ *
+ * Além das frequências de período, suporta:
  * - fortnightly: 1x por quinzena, com dois dias do mês em que o ritual passa a ficar pendente
  * - monthly: 1x por mês, com o dia do mês em que o ritual passa a ficar pendente
  */
@@ -74,11 +78,65 @@ export function padMonthDay(day) {
   return String(normalizeMonthDay(day, 1)).padStart(2, '0');
 }
 
+/** 0=Domingo … 6=Sábado, na ordem de exibição Seg→Dom. */
+export const WEEKDAY_OPTIONS = [
+  { value: 1, label: 'Seg' },
+  { value: 2, label: 'Ter' },
+  { value: 3, label: 'Qua' },
+  { value: 4, label: 'Qui' },
+  { value: 5, label: 'Sex' },
+  { value: 6, label: 'Sáb' },
+  { value: 0, label: 'Dom' }
+];
+
+const WEEKDAY_INDEX_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const WEEKDAY_SORT_ORDER = WEEKDAY_OPTIONS.map(d => d.value);
+
+function supportsWeekDays(frequency) {
+  const freq = canonicalizeHabitFrequency(frequency);
+  return freq === 'times_per_week' || freq === 'weekly';
+}
+
+/**
+ * Normaliza dias da semana (0=Dom … 6=Sáb), únicos, ordenados Seg→Dom.
+ * Array vazio / inválido → null (rituais flexíveis, qualquer dia até a meta).
+ */
+export function normalizeWeekDays(days, { max = 7 } = {}) {
+  const limit = Math.max(1, Math.min(7, parseInt(max, 10) || 7));
+  if (days == null) return null;
+
+  const raw = Array.isArray(days) ? days : [days];
+  const unique = [...new Set(
+    raw
+      .map(value => parseInt(value, 10))
+      .filter(value => Number.isInteger(value) && value >= 0 && value <= 6)
+  )];
+
+  if (unique.length === 0) return null;
+
+  unique.sort((a, b) => WEEKDAY_SORT_ORDER.indexOf(a) - WEEKDAY_SORT_ORDER.indexOf(b));
+  return unique.slice(0, limit);
+}
+
+export function formatWeekDaysLabel(weekDays) {
+  const days = normalizeWeekDays(weekDays);
+  if (!days) return '';
+  return days.map(day => WEEKDAY_INDEX_LABELS[day]).join(', ');
+}
+
+export function getHabitWeekDays(habit) {
+  const freq = canonicalizeHabitFrequency(habit?.frequency || 'daily');
+  if (freq === 'weekdays') return [1, 2, 3, 4, 5];
+  if (!supportsWeekDays(freq)) return null;
+  return normalizeWeekDays(habit?.weekDays, { max: freq === 'weekly' ? 1 : 7 });
+}
+
 export function getFrequencyLabel(habit) {
   const freq = canonicalizeHabitFrequency(habit?.frequency || 'daily');
+  const weekDaysLabel = formatWeekDaysLabel(habit?.weekDays);
   if (freq === 'times_per_week') {
     const n = habit?.targetTimesPerWeek || habit?.timesPerWeek || 3;
-    return `${n}x/sem`;
+    return weekDaysLabel ? `${n}x/sem (${weekDaysLabel})` : `${n}x/sem`;
   }
   if (freq === 'fortnightly') {
     const days = normalizeFortnightDays(habit?.monthDays, [1, 16]).map(padMonthDay);
@@ -93,7 +151,7 @@ export function getFrequencyLabel(habit) {
     return `Mensal (dia ${day})`;
   }
   if (freq === 'weekdays') return 'Seg-Sex';
-  if (freq === 'weekly') return 'Semanal';
+  if (freq === 'weekly') return weekDaysLabel ? `Semanal (${weekDaysLabel})` : 'Semanal';
   return 'Diário';
 }
 
@@ -210,8 +268,9 @@ export function getHabitPeriodStatus(habit, date = new Date()) {
   };
 }
 
-function pickTargetTimesPerWeek(freq, input, existing) {
+function pickTargetTimesPerWeek(freq, input, existing, weekDays) {
   if (freq === 'times_per_week') {
+    if (weekDays?.length) return weekDays.length;
     const raw = input.targetTimesPerWeek ?? input.timesPerWeek ?? existing.targetTimesPerWeek ?? existing.timesPerWeek;
     return Math.max(1, Math.min(7, parseInt(raw, 10) || 3));
   }
@@ -220,8 +279,27 @@ function pickTargetTimesPerWeek(freq, input, existing) {
   return 7;
 }
 
+function pickWeekDays(freq, input, existing) {
+  if (!supportsWeekDays(freq)) return null;
+
+  const max = freq === 'weekly' ? 1 : 7;
+  if (input.weekDays !== undefined) {
+    return normalizeWeekDays(input.weekDays, { max });
+  }
+
+  if (input.frequency != null && String(input.frequency).trim() !== '') {
+    const existingFreq = canonicalizeHabitFrequency(existing.frequency || 'daily');
+    if (existingFreq === freq) {
+      return normalizeWeekDays(existing.weekDays, { max });
+    }
+    return null;
+  }
+
+  return normalizeWeekDays(existing.weekDays, { max });
+}
+
 /**
- * Normaliza frequência + dias do mês a partir do payload (create/update) e do hábito existente.
+ * Normaliza frequência + dias do mês / da semana a partir do payload (create/update) e do hábito existente.
  */
 export function resolveFrequencyConfig(input = {}, existing = {}) {
   const frequencyProvided = input.frequency != null && String(input.frequency).trim() !== '';
@@ -233,9 +311,11 @@ export function resolveFrequencyConfig(input = {}, existing = {}) {
     freq = 'daily';
   }
 
+  const weekDays = pickWeekDays(freq, input, existing);
   const config = {
     frequency: freq,
-    targetTimesPerWeek: pickTargetTimesPerWeek(freq, input, existing),
+    weekDays,
+    targetTimesPerWeek: pickTargetTimesPerWeek(freq, input, existing, weekDays),
     monthDays: null
   };
 
@@ -261,7 +341,8 @@ export function applyHabitFrequency(habit, payload = {}, { isUpdate = false } = 
     || payload.targetTimesPerWeek !== undefined
     || payload.timesPerWeek !== undefined
     || payload.monthDays !== undefined
-    || payload.monthDay !== undefined;
+    || payload.monthDay !== undefined
+    || payload.weekDays !== undefined;
 
   if (isUpdate && !hasFrequencyPayload) return habit;
 
@@ -273,5 +354,141 @@ export function applyHabitFrequency(habit, payload = {}, { isUpdate = false } = 
   } else if (habit.monthDays !== undefined) {
     delete habit.monthDays;
   }
+  if (config.weekDays) {
+    habit.weekDays = config.weekDays;
+  } else if (habit.weekDays !== undefined) {
+    delete habit.weekDays;
+  }
   return habit;
+}
+
+/**
+ * Status unificado de "está devido hoje?" para Oráculo e lista de rituais.
+ *
+ * @param {object} habit
+ * @param {object} [weeklyStats]
+ * @param {Date|string|number} [date=new Date()]
+ * @param {string} [todayStr]
+ * @returns {{ due: boolean, extra: boolean, completedToday: boolean, scheduledToday: boolean, overdue: boolean, remainingNeeded: number, remainingScheduledDays: number }}
+ */
+export function getHabitDueStatus(habit, weeklyStats = null, date = new Date(), todayStr = null) {
+  const freq = canonicalizeHabitFrequency(habit?.frequency || 'daily');
+  const dateStr = todayStr || toDateStr(date);
+  const history = Array.isArray(habit?.history) ? habit.history : [];
+  const completedToday = history.includes(dateStr);
+  const { year, month, day } = parseDateStr(dateStr);
+  const weekdayDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  const dayOfWeek = weekdayDate.getUTCDay();
+
+  const empty = {
+    due: false,
+    extra: false,
+    completedToday,
+    scheduledToday: false,
+    overdue: false,
+    remainingNeeded: 0,
+    remainingScheduledDays: 0
+  };
+
+  if (freq === 'daily') {
+    return { ...empty, due: !completedToday, scheduledToday: true, remainingNeeded: completedToday ? 0 : 1, remainingScheduledDays: 1 };
+  }
+
+  if (freq === 'weekdays') {
+    const scheduledToday = dayOfWeek >= 1 && dayOfWeek <= 5;
+    return {
+      ...empty,
+      due: scheduledToday && !completedToday,
+      scheduledToday,
+      remainingNeeded: scheduledToday && !completedToday ? 1 : 0,
+      remainingScheduledDays: scheduledToday ? 1 : 0
+    };
+  }
+
+  if (isPeriodFrequency(freq)) {
+    const period = weeklyStats?.period || getHabitPeriodStatus(habit, dateStr);
+    if (completedToday) return empty;
+    if (period?.completed) return empty;
+    return { ...empty, due: !!period?.due };
+  }
+
+  const weekDays = getHabitWeekDays(habit);
+  const target = weekDays?.length
+    ?? weeklyStats?.targetTimesPerWeek
+    ?? habit?.targetTimesPerWeek
+    ?? habit?.timesPerWeek
+    ?? (freq === 'weekly' ? 1 : 3);
+  const completionsThisWeek = weeklyStats?.completionsThisWeek ?? countCompletionsInWeek(history, dateStr);
+  const remainingNeeded = Math.max(0, target - completionsThisWeek);
+  const scheduledToday = Array.isArray(weekDays) ? weekDays.includes(dayOfWeek) : true;
+
+  if (completedToday) {
+    return { ...empty, extra: false, remainingNeeded: 0, remainingScheduledDays: 0, scheduledToday };
+  }
+  if (weeklyStats?.isGoalMet || remainingNeeded <= 0) {
+    return { ...empty, extra: scheduledToday, scheduledToday };
+  }
+
+  if (!weekDays) {
+    return {
+      ...empty,
+      due: true,
+      scheduledToday: true,
+      remainingNeeded,
+      remainingScheduledDays: remainingCalendarDaysInWeek(dateStr)
+    };
+  }
+
+  const schedule = inspectWeekSchedule(weekDays, dateStr);
+  const overdue = !scheduledToday && remainingNeeded > schedule.remainingScheduledDays;
+  const due = scheduledToday || overdue;
+  const remainingScheduledDays = overdue
+    ? remainingCalendarDaysInWeek(dateStr)
+    : schedule.remainingScheduledDays;
+
+  return {
+    ...empty,
+    due,
+    scheduledToday,
+    overdue,
+    remainingNeeded,
+    remainingScheduledDays
+  };
+}
+
+function dayOfWeekFromDateStr(dateStr) {
+  const { year, month, day } = parseDateStr(dateStr);
+  return new Date(Date.UTC(year, month - 1, day, 12, 0, 0)).getUTCDay();
+}
+
+function mondayOfWeek(dateStr) {
+  const dayOfWeek = dayOfWeekFromDateStr(dateStr);
+  const diffToMonday = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek;
+  return addDaysToDateStr(dateStr, diffToMonday);
+}
+
+function remainingCalendarDaysInWeek(dateStr) {
+  const dayOfWeek = dayOfWeekFromDateStr(dateStr);
+  const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+  return daysUntilSunday + 1;
+}
+
+function countCompletionsInWeek(history, dateStr) {
+  const monday = mondayOfWeek(dateStr);
+  const sunday = addDaysToDateStr(monday, 6);
+  return history.filter(d => typeof d === 'string' && d >= monday && d <= sunday).length;
+}
+
+function inspectWeekSchedule(weekDays, dateStr) {
+  const monday = mondayOfWeek(dateStr);
+  let remainingScheduledDays = 0;
+
+  for (let i = 0; i < 7; i += 1) {
+    const candidate = addDaysToDateStr(monday, i);
+    if (candidate < dateStr) continue;
+    if (!weekDays.includes(dayOfWeekFromDateStr(candidate))) continue;
+    remainingScheduledDays += 1;
+  }
+
+  return { remainingScheduledDays };
 }

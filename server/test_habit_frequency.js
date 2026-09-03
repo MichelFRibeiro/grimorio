@@ -1,9 +1,11 @@
 import {
   applyHabitFrequency,
   getFrequencyLabel,
+  getHabitDueStatus,
   getHabitPeriodStatus,
   isPeriodFrequency,
   normalizeFortnightDays,
+  normalizeWeekDays,
   resolveFrequencyConfig
 } from '../src/utils/habitFrequency.js';
 import { getHabitWeeklyStats } from './timeUtils.js';
@@ -113,7 +115,103 @@ function runTests() {
   }, '2026-01-01');
   assert(createdOnStart.due === true, 'Ritual criado no próprio dia previsto já nasce pendente');
 
-  console.log('\n🎉 TODOS OS TESTES DE FREQUÊNCIA QUINZENAL/MENSAL PASSARAM!');
+  console.log('\n🧪 Testes de dias previstos (weekDays) em times_per_week e weekly...\n');
+
+  const sortedDays = normalizeWeekDays([5, 1, 3, 3, 9, -1]);
+  assert(JSON.stringify(sortedDays) === JSON.stringify([1, 3, 5]), 'weekDays inválidos são filtrados e ordenados Seg→Sex');
+  assert(normalizeWeekDays([]) === null, 'weekDays vazio vira null (agenda flexível)');
+  assert(JSON.stringify(normalizeWeekDays([3], { max: 1 })) === JSON.stringify([3]), 'weekly aceita um único dia previsto');
+
+  const scheduled = applyHabitFrequency({}, {
+    frequency: 'times_per_week',
+    weekDays: [5, 1, 3]
+  });
+  assert(JSON.stringify(scheduled.weekDays) === JSON.stringify([1, 3, 5]), 'Criação persiste weekDays ordenados');
+  assert(scheduled.targetTimesPerWeek === 3, 'Marcar 3 dias define a meta 3x/sem');
+  assert(getFrequencyLabel(scheduled) === '3x/sem (Seg, Qua, Sex)', 'Label inclui os dias previstos');
+
+  const weeklyWed = applyHabitFrequency({}, { frequency: 'weekly', weekDays: [3, 5] });
+  assert(JSON.stringify(weeklyWed.weekDays) === JSON.stringify([3]), 'weekly guarda só o primeiro dia previsto');
+  assert(getFrequencyLabel(weeklyWed) === 'Semanal (Qua)', 'Label semanal inclui o dia previsto');
+
+  const flexibleKept = applyHabitFrequency({}, { frequency: 'times_per_week', targetTimesPerWeek: 3 });
+  assert(flexibleKept.weekDays === undefined, 'Sem weekDays o ritual 3x/sem continua flexível');
+
+  const clearedDays = applyHabitFrequency({ ...scheduled }, { weekDays: null }, { isUpdate: true });
+  assert(clearedDays.weekDays === undefined, 'weekDays=null remove a agenda rígida');
+
+  const switchedDaily = applyHabitFrequency({ ...scheduled }, { frequency: 'daily' }, { isUpdate: true });
+  assert(switchedDaily.weekDays === undefined, 'Trocar para diário remove weekDays');
+
+  const mwf = {
+    frequency: 'times_per_week',
+    targetTimesPerWeek: 3,
+    weekDays: [1, 3, 5],
+    history: ['2026-03-23']
+  };
+  const tueOnTrack = getHabitDueStatus(mwf, getHabitWeeklyStats(mwf, '2026-03-24'), '2026-03-24');
+  assert(tueOnTrack.due === false && tueOnTrack.scheduledToday === false && tueOnTrack.overdue === false, 'Terça em dia (segunda feita) não está devida');
+
+  const tueLate = getHabitDueStatus(
+    { ...mwf, history: [] },
+    getHabitWeeklyStats({ ...mwf, history: [] }, '2026-03-24'),
+    '2026-03-24'
+  );
+  assert(tueLate.due === true && tueLate.overdue === true, 'Terça aparece se a segunda prevista foi perdida');
+
+  const wedDue = getHabitDueStatus(mwf, getHabitWeeklyStats(mwf, '2026-03-25'), '2026-03-25');
+  assert(wedDue.due === true && wedDue.scheduledToday === true, 'Quarta prevista aparece mesmo em dia');
+
+  const satLate = getHabitDueStatus(
+    { ...mwf, history: ['2026-03-23', '2026-03-25'] },
+    getHabitWeeklyStats({ ...mwf, history: ['2026-03-23', '2026-03-25'] }, '2026-03-28'),
+    '2026-03-28'
+  );
+  assert(satLate.due === true && satLate.overdue === true, 'Sábado recupera a sexta perdida');
+
+  const satDone = getHabitDueStatus(
+    { ...mwf, history: ['2026-03-23', '2026-03-25', '2026-03-27'] },
+    getHabitWeeklyStats({ ...mwf, history: ['2026-03-23', '2026-03-25', '2026-03-27'] }, '2026-03-28'),
+    '2026-03-28'
+  );
+  assert(satDone.due === false && satDone.extra === false, 'Sábado some quando a meta 3/3 já foi batida (nem como extra)');
+
+  const wedDone = getHabitDueStatus(
+    { ...mwf, history: ['2026-03-23', '2026-03-25'] },
+    getHabitWeeklyStats({ ...mwf, history: ['2026-03-23', '2026-03-25'] }, '2026-03-25'),
+    '2026-03-25'
+  );
+  assert(wedDone.due === false && wedDone.completedToday === true, 'Quarta feita hoje não fica devida');
+
+  const flexibleTue = getHabitDueStatus(
+    { frequency: 'times_per_week', targetTimesPerWeek: 3, history: [] },
+    getHabitWeeklyStats({ frequency: 'times_per_week', targetTimesPerWeek: 3, history: [] }, '2026-03-24'),
+    '2026-03-24'
+  );
+  assert(flexibleTue.due === true && flexibleTue.scheduledToday === true, '3x/sem sem weekDays continua devido qualquer dia');
+
+  const weeklyTue = getHabitDueStatus(
+    { frequency: 'weekly', weekDays: [3], history: [] },
+    getHabitWeeklyStats({ frequency: 'weekly', weekDays: [3], history: [] }, '2026-03-24'),
+    '2026-03-24'
+  );
+  assert(weeklyTue.due === false, 'Semanal previsto na quarta não aparece na terça');
+
+  const weeklyThuLate = getHabitDueStatus(
+    { frequency: 'weekly', weekDays: [3], history: [] },
+    getHabitWeeklyStats({ frequency: 'weekly', weekDays: [3], history: [] }, '2026-03-26'),
+    '2026-03-26'
+  );
+  assert(weeklyThuLate.due === true && weeklyThuLate.overdue === true, 'Semanal previsto na quarta aparece na quinta se atrasado');
+
+  const satLateStats = getHabitWeeklyStats({ ...mwf, history: ['2026-03-23', '2026-03-25'] }, '2026-03-28');
+  const satLateDue = getHabitDueStatus({ ...mwf, history: ['2026-03-23', '2026-03-25'] }, satLateStats, '2026-03-28');
+  assert(satLateDue.remainingNeeded === 1 && satLateDue.remainingScheduledDays === 2, 'Atraso no sábado conta os dias civis restantes da semana');
+
+  const wedDueDays = getHabitDueStatus(mwf, getHabitWeeklyStats(mwf, '2026-03-25'), '2026-03-25');
+  assert(wedDueDays.remainingScheduledDays === 2, 'Quarta prevista em dia conta só qua e sex restantes');
+
+  console.log('\n🎉 TODOS OS TESTES DE FREQUÊNCIA QUINZENAL/MENSAL/WEEKDAYS PASSARAM!');
 }
 
 runTests();

@@ -191,6 +191,34 @@ function runTests() {
   assert(gymPending.primary?.id === 'h-forca', `Na academia, treino pendente é o próximo (foi ${gymPending.primary?.id})`);
   assert(![gymPending.primary, ...gymPending.queue].some(i => i && i.id === 'q-socorro'), 'Peticionar não entra na academia');
 
+  // times_per_week com dias previstos some fora da agenda, salvo atraso
+  const tueMorning = new Date('2026-03-24T12:00:00Z'); // 09:00 BRT terça
+  const mwfHabit = {
+    id: 'h-mwf',
+    title: 'Treino Seg Qua Sex',
+    category: 'Saúde',
+    frequency: 'times_per_week',
+    targetTimesPerWeek: 3,
+    weekDays: [1, 3, 5],
+    location: 'gym',
+    timeWindow: null,
+    history: ['2026-03-23'],
+    createdAt: '2026-03-01T12:00:00.000Z',
+    xpReward: 50,
+    coinReward: 10
+  };
+  const mwfOnTrack = computeNextAction(baseDb({ habits: [mwfHabit] }), { location: 'gym', now: tueMorning });
+  assert(![mwfOnTrack.primary, ...mwfOnTrack.queue].some(i => i && i.id === 'h-mwf'), 'Seg/Qua/Sex em dia não entra na terça');
+
+  const mwfLate = computeNextAction(baseDb({
+    habits: [{ ...mwfHabit, history: [] }]
+  }), { location: 'gym', now: tueMorning });
+  assert(mwfLate.primary?.id === 'h-mwf', 'Seg/Qua/Sex atrasado (segunda perdida) entra na terça');
+
+  const wedMorning = new Date('2026-03-25T12:00:00Z'); // 09:00 BRT quarta
+  const mwfWed = computeNextAction(baseDb({ habits: [mwfHabit] }), { location: 'gym', now: wedMorning });
+  assert(mwfWed.primary?.id === 'h-mwf', 'Quarta prevista entra mesmo em dia');
+
   // Contexto anywhere lista escritório + casa
   const anyResult = computeNextAction(dbHome, { location: 'anywhere', now: nowHomeSat });
   const anyIds = [anyResult.primary, ...anyResult.queue].filter(Boolean).map(i => i.id);

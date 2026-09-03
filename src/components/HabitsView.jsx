@@ -28,7 +28,7 @@ import { ActivityScaleFields, PriorityBadge } from './ActivityScaleFields';
 import { getSaoPauloDateStr, getHabitWeeklyStats, getCurrentWeekDays, addDaysToDateStr } from '../utils/timeUtils';
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, inferDifficultyFromRewards, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
-import { getFrequencyLabel, getHabitPeriodStatus, isPeriodFrequency, padMonthDay } from '../utils/habitFrequency';
+import { getFrequencyLabel, getHabitDueStatus, getHabitPeriodStatus, getHabitWeekDays, isPeriodFrequency, padMonthDay, WEEKDAY_OPTIONS } from '../utils/habitFrequency';
 
 const HIDE_SETTLED_STORAGE_KEY = 'grimorio_hide_settled_habits';
 const MONTH_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
@@ -55,6 +55,87 @@ function MonthDaySelect({ value, onChange, accent = '#ef4444' }) {
         <option key={day} value={day}>{padMonthDay(day)}</option>
       ))}
     </select>
+  );
+}
+
+function WeekDayFields({
+  frequency,
+  weekDays = [],
+  onChange,
+  accent = '#ef4444',
+  accentSoft = 'rgba(239, 68, 68, 0.08)',
+  accentBorder = 'rgba(239, 68, 68, 0.25)'
+}) {
+  if (frequency !== 'times_per_week' && frequency !== 'weekly') return null;
+
+  const maxDays = frequency === 'weekly' ? 1 : 7;
+  const selected = Array.isArray(weekDays) ? weekDays : [];
+
+  const toggleDay = (value) => {
+    const has = selected.includes(value);
+    if (has) {
+      onChange(selected.filter(day => day !== value));
+      return;
+    }
+    if (maxDays === 1) {
+      onChange([value]);
+      return;
+    }
+    onChange(WEEKDAY_OPTIONS.map(d => d.value).filter(day => selected.includes(day) || day === value));
+  };
+
+  return (
+    <div
+      style={{
+        padding: '12px',
+        borderRadius: '10px',
+        background: accentSoft,
+        border: `1px solid ${accentBorder}`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px'
+      }}
+    >
+      <label style={{ fontSize: '0.8rem', fontWeight: 700, color: accent }}>
+        {frequency === 'weekly' ? 'Melhor dia da semana (opcional):' : 'Melhores dias da semana (opcional):'}
+      </label>
+      <div style={{ display: 'flex', gap: '6px' }}>
+        {WEEKDAY_OPTIONS.map(day => {
+          const active = selected.includes(day.value);
+          return (
+            <button
+              key={day.value}
+              type="button"
+              onClick={() => toggleDay(day.value)}
+              style={{
+                flex: 1,
+                padding: '7px 0',
+                borderRadius: '8px',
+                background: active
+                  ? `linear-gradient(135deg, ${accent} 0%, ${accent}cc 100%)`
+                  : 'rgba(255, 255, 255, 0.05)',
+                border: active ? `1px solid ${accent}` : '1px solid rgba(255, 255, 255, 0.1)',
+                color: active ? '#0f172a' : '#fff',
+                fontWeight: 800,
+                fontSize: '0.78rem',
+                cursor: 'pointer'
+              }}
+            >
+              {day.label}
+            </button>
+          );
+        })}
+      </div>
+      <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
+        {selected.length === 0
+          ? (frequency === 'weekly'
+            ? 'Sem dia marcado, o ritual aparece qualquer dia até ser feito nesta semana.'
+            : 'Sem dias marcados, o ritual aparece qualquer dia até bater a meta da semana.')
+          : (frequency === 'weekly'
+            ? `Previsto ${WEEKDAY_OPTIONS.find(d => d.value === selected[0])?.label}. Fora desse dia só aparece se estiver atrasado.`
+            : `Previsto ${selected.length}x (${selected.map(v => WEEKDAY_OPTIONS.find(d => d.value === v)?.label).join(', ')}). Fora desses dias só aparece se estiver atrasado.`)}
+      </p>
+    </div>
   );
 }
 
@@ -151,6 +232,7 @@ export function HabitsView({
   const [newCategory, setNewCategory] = useState(defaultCatName);
   const [newFrequency, setNewFrequency] = useState('daily');
   const [newTimesPerWeek, setNewTimesPerWeek] = useState(3);
+  const [newWeekDays, setNewWeekDays] = useState([]);
   const [newFortnightDayA, setNewFortnightDayA] = useState(1);
   const [newFortnightDayB, setNewFortnightDayB] = useState(16);
   const [newMonthDay, setNewMonthDay] = useState(1);
@@ -175,6 +257,7 @@ export function HabitsView({
   const [editCategory, setEditCategory] = useState(defaultCatName);
   const [editFrequency, setEditFrequency] = useState('daily');
   const [editTimesPerWeek, setEditTimesPerWeek] = useState(3);
+  const [editWeekDays, setEditWeekDays] = useState([]);
   const [editFortnightDayA, setEditFortnightDayA] = useState(1);
   const [editFortnightDayB, setEditFortnightDayB] = useState(16);
   const [editMonthDay, setEditMonthDay] = useState(1);
@@ -252,14 +335,8 @@ export function HabitsView({
   const categoryNames = ['Todas', ...activeCategories.map(c => typeof c === 'string' ? c : c.name)];
 
   const isHabitSettled = (habit) => {
-    if (isPeriodFrequency(habit.frequency)) {
-      return !getHabitPeriodStatus(habit, todayStr)?.due;
-    }
-    const isDoneToday = (habit.history || []).includes(todayStr);
-    const targetRefDate = addDaysToDateStr(todayStr, weekOffset * 7);
-    const weeklyStats = getHabitWeeklyStats(habit, targetRefDate);
-    // Feito hoje (rituais diários) ou meta da semana já atingida (semanal / Nx).
-    return isDoneToday || weeklyStats.isGoalMet;
+    const weeklyStats = getHabitWeeklyStats(habit, todayStr);
+    return !getHabitDueStatus(habit, weeklyStats, todayStr).due;
   };
 
   const categoryFilteredHabits = (habits || []).filter(h => {
@@ -285,6 +362,9 @@ export function HabitsView({
       category: newCategory,
       frequency: newFrequency,
       targetTimesPerWeek: newFrequency === 'times_per_week' ? (parseInt(newTimesPerWeek, 10) || 3) : undefined,
+      weekDays: (newFrequency === 'times_per_week' || newFrequency === 'weekly')
+        ? (newWeekDays.length ? newWeekDays : null)
+        : undefined,
       monthDays: newFrequency === 'fortnightly'
         ? [newFortnightDayA, newFortnightDayB]
         : newFrequency === 'monthly'
@@ -300,6 +380,7 @@ export function HabitsView({
     setNewDesc('');
     setNewFrequency('daily');
     setNewTimesPerWeek(3);
+    setNewWeekDays([]);
     setNewFortnightDayA(1);
     setNewFortnightDayB(16);
     setNewMonthDay(1);
@@ -318,6 +399,7 @@ export function HabitsView({
     setEditCategory(habit.category || defaultCatName);
     setEditFrequency(habit.frequency || 'daily');
     setEditTimesPerWeek(habit.targetTimesPerWeek || habit.timesPerWeek || 3);
+    setEditWeekDays(Array.isArray(habit.weekDays) ? habit.weekDays : []);
     const scheduledDays = Array.isArray(habit.monthDays) ? habit.monthDays : [];
     setEditFortnightDayA(scheduledDays[0] || 1);
     setEditFortnightDayB(scheduledDays[1] || 16);
@@ -343,6 +425,9 @@ export function HabitsView({
         category: editCategory,
         frequency: editFrequency,
         targetTimesPerWeek: editFrequency === 'times_per_week' ? (parseInt(editTimesPerWeek, 10) || 3) : undefined,
+        weekDays: (editFrequency === 'times_per_week' || editFrequency === 'weekly')
+          ? (editWeekDays.length ? editWeekDays : null)
+          : null,
         monthDays: editFrequency === 'fortnightly'
           ? [editFortnightDayA, editFortnightDayB]
           : editFrequency === 'monthly'
@@ -534,8 +619,8 @@ export function HabitsView({
           type="button"
           role="switch"
           aria-checked={hideSettledHabits}
-          aria-label="Ocultar hábitos já realizados hoje ou com meta semanal atingida"
-          title="Oculta rituais já feitos hoje e os que já bateram a meta da semana visível"
+          aria-label="Ocultar hábitos já realizados, com meta batida ou fora do dia previsto"
+          title="Oculta rituais já feitos, com meta da semana batida e os que não estão previstos para hoje (salvo atraso)"
           onClick={() => setHideSettledHabits(prev => !prev)}
           style={{
             display: 'inline-flex',
@@ -878,10 +963,12 @@ export function HabitsView({
                     {/* 7 Days Interactive Tracker (Seg a Dom - Clicável para marcar dias passados e hoje) */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
                       {weeklyStats.completedDays.map(day => {
+                        const scheduledWeekDays = getHabitWeekDays(habit);
+                        const isScheduledDay = !scheduledWeekDays || scheduledWeekDays.includes(day.dayOfWeek);
                         const isClickable = !day.isFuture;
                         const tooltipText = day.isFuture
                           ? `Dia futuro (${day.dateStr})`
-                          : `${day.completed ? 'Desmarcar' : 'Marcar'} ${day.label} (${formatShortDate(day.dateStr)})${day.isToday ? ' - Hoje' : day.dateStr === yesterdayStr ? ' - Ontem' : ''}`;
+                          : `${day.completed ? 'Desmarcar' : 'Marcar'} ${day.label} (${formatShortDate(day.dateStr)})${day.isToday ? ' - Hoje' : day.dateStr === yesterdayStr ? ' - Ontem' : ''}${!isScheduledDay ? ' — fora do previsto' : ''}`;
 
                         return (
                           <button
@@ -905,17 +992,21 @@ export function HabitsView({
                                 ? 'rgba(16, 185, 129, 0.22)'
                                 : day.isToday
                                   ? 'rgba(56, 189, 248, 0.12)'
-                                  : 'rgba(255, 255, 255, 0.03)',
+                                  : isScheduledDay
+                                    ? 'rgba(255, 255, 255, 0.03)'
+                                    : 'rgba(255, 255, 255, 0.015)',
                               border: day.completed
                                 ? '1px solid rgba(16, 185, 129, 0.55)'
                                 : day.isToday
                                   ? '1px solid rgba(56, 189, 248, 0.5)'
-                                  : '1px solid rgba(255, 255, 255, 0.07)',
+                                  : isScheduledDay
+                                    ? '1px solid rgba(255, 255, 255, 0.07)'
+                                    : '1px dashed rgba(255, 255, 255, 0.08)',
                               color: day.completed ? '#34d399' : day.isToday ? '#38bdf8' : day.isFuture ? '#475569' : '#94a3b8',
                               fontSize: '0.68rem',
                               fontWeight: day.completed || day.isToday ? 800 : 500,
                               cursor: isClickable ? 'pointer' : 'not-allowed',
-                              opacity: day.isFuture ? 0.4 : 1,
+                              opacity: day.isFuture ? 0.4 : (isScheduledDay || day.completed ? 1 : 0.55),
                               transition: 'all 0.15s ease',
                               outline: 'none'
                             }}
@@ -928,8 +1019,16 @@ export function HabitsView({
                             }}
                             onMouseOut={(e) => {
                               if (isClickable && !day.completed) {
-                                e.currentTarget.style.background = day.isToday ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.03)';
-                                e.currentTarget.style.borderColor = day.isToday ? 'rgba(56, 189, 248, 0.5)' : 'rgba(255, 255, 255, 0.07)';
+                                e.currentTarget.style.background = day.isToday
+                                  ? 'rgba(56, 189, 248, 0.12)'
+                                  : isScheduledDay
+                                    ? 'rgba(255, 255, 255, 0.03)'
+                                    : 'rgba(255, 255, 255, 0.015)';
+                                e.currentTarget.style.borderColor = day.isToday
+                                  ? 'rgba(56, 189, 248, 0.5)'
+                                  : isScheduledDay
+                                    ? 'rgba(255, 255, 255, 0.07)'
+                                    : 'rgba(255, 255, 255, 0.08)';
                                 e.currentTarget.style.transform = 'scale(1)';
                               }
                             }}
@@ -1162,7 +1261,13 @@ export function HabitsView({
                 </label>
                 <select
                   value={newFrequency}
-                  onChange={(e) => setNewFrequency(e.target.value)}
+                  onChange={(e) => {
+                    const freq = e.target.value;
+                    setNewFrequency(freq);
+                    if (freq === 'weekly' && newWeekDays.length > 1) {
+                      setNewWeekDays(newWeekDays.slice(0, 1));
+                    }
+                  }}
                   style={{
                     width: '100%',
                     padding: '10px 12px',
@@ -1218,7 +1323,10 @@ export function HabitsView({
                       <button
                         key={n}
                         type="button"
-                        onClick={() => setNewTimesPerWeek(n)}
+                        onClick={() => {
+                          setNewTimesPerWeek(n);
+                          if (newWeekDays.length) setNewWeekDays([]);
+                        }}
                         style={{
                           flex: 1,
                           padding: '7px 0',
@@ -1241,10 +1349,23 @@ export function HabitsView({
                     ))}
                   </div>
                   <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
-                    O ritual terá como meta ser realizado {newTimesPerWeek} {newTimesPerWeek === 1 ? 'vez' : 'vezes'} entre Segunda e Domingo.
+                    {newWeekDays.length > 0
+                      ? `A meta acompanha os dias marcados: ${newWeekDays.length}x por semana.`
+                      : `O ritual terá como meta ser realizado ${newTimesPerWeek} ${newTimesPerWeek === 1 ? 'vez' : 'vezes'} entre Segunda e Domingo.`}
                   </p>
                 </div>
               )}
+
+              <WeekDayFields
+                frequency={newFrequency}
+                weekDays={newWeekDays}
+                onChange={(days) => {
+                  setNewWeekDays(days);
+                  if (newFrequency === 'times_per_week' && days.length > 0) {
+                    setNewTimesPerWeek(days.length);
+                  }
+                }}
+              />
 
               <ActivityContextFields
                 location={newLocation}
@@ -1411,7 +1532,13 @@ export function HabitsView({
                 </label>
                 <select
                   value={editFrequency}
-                  onChange={(e) => setEditFrequency(e.target.value)}
+                  onChange={(e) => {
+                    const freq = e.target.value;
+                    setEditFrequency(freq);
+                    if (freq === 'weekly' && editWeekDays.length > 1) {
+                      setEditWeekDays(editWeekDays.slice(0, 1));
+                    }
+                  }}
                   style={{
                     width: '100%',
                     padding: '10px 12px',
@@ -1470,7 +1597,10 @@ export function HabitsView({
                       <button
                         key={n}
                         type="button"
-                        onClick={() => setEditTimesPerWeek(n)}
+                        onClick={() => {
+                          setEditTimesPerWeek(n);
+                          if (editWeekDays.length) setEditWeekDays([]);
+                        }}
                         style={{
                           flex: 1,
                           padding: '7px 0',
@@ -1493,10 +1623,26 @@ export function HabitsView({
                     ))}
                   </div>
                   <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
-                    O ritual terá como meta ser realizado {editTimesPerWeek} {editTimesPerWeek === 1 ? 'vez' : 'vezes'} entre Segunda e Domingo.
+                    {editWeekDays.length > 0
+                      ? `A meta acompanha os dias marcados: ${editWeekDays.length}x por semana.`
+                      : `O ritual terá como meta ser realizado ${editTimesPerWeek} ${editTimesPerWeek === 1 ? 'vez' : 'vezes'} entre Segunda e Domingo.`}
                   </p>
                 </div>
               )}
+
+              <WeekDayFields
+                frequency={editFrequency}
+                weekDays={editWeekDays}
+                onChange={(days) => {
+                  setEditWeekDays(days);
+                  if (editFrequency === 'times_per_week' && days.length > 0) {
+                    setEditTimesPerWeek(days.length);
+                  }
+                }}
+                accent="#38bdf8"
+                accentSoft="rgba(56, 189, 248, 0.08)"
+                accentBorder="rgba(56, 189, 248, 0.25)"
+              />
 
               <ActivityContextFields
                 location={editLocation}

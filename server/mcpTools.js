@@ -967,6 +967,7 @@ export const toolsDefinition = [
           icon: h.icon,
           frequency: h.frequency || 'daily',
           targetTimesPerWeek: weeklyStats.targetTimesPerWeek,
+          weekDays: h.weekDays || null,
           monthDays: h.monthDays || null,
           completionsThisWeek: weeklyStats.completionsThisWeek,
           isGoalMet: weeklyStats.isGoalMet,
@@ -989,14 +990,15 @@ export const toolsDefinition = [
   },
   {
     name: 'create_habit',
-    description: 'Criar um novo ritual diário/hábito com suporte a 6 frequências: daily (Diário), weekdays (Seg-Sex), weekly (Semanal), times_per_week (N vezes por semana), fortnightly (1x por quinzena, com 2 dias do mês) e monthly (1x por mês, com 1 dia do mês).',
+    description: 'Criar um novo ritual diário/hábito com suporte a 6 frequências: daily (Diário), weekdays (Seg-Sex), weekly (Semanal, com dia previsto opcional), times_per_week (N vezes por semana, com dias previstos opcionais), fortnightly (1x por quinzena, com 2 dias do mês) e monthly (1x por mês, com 1 dia do mês).',
     schema: {
       title: z.string().describe('Nome do ritual (ex: Meditar 10 min, Exercício Físico)'),
       description: z.string().optional().describe('Descrição ou instrução do ritual'),
       category: z.string().optional().default('Pessoal').describe('Categoria'),
       icon: z.string().optional().default('Flame').describe('Ícone Lucide (ex: Flame, Dumbbell, Book, Sun)'),
       frequency: z.enum(['daily', 'weekdays', 'weekly', 'times_per_week', 'fortnightly', 'monthly']).optional().default('daily').describe('Frequência do hábito'),
-      targetTimesPerWeek: z.number().min(1).max(7).optional().describe('Meta de vezes por semana (usado quando frequency for times_per_week)'),
+      targetTimesPerWeek: z.number().min(1).max(7).optional().describe('Meta de vezes por semana (usado quando frequency for times_per_week e weekDays não for informado)'),
+      weekDays: z.array(z.number().int().min(0).max(6)).min(1).max(7).optional().describe('Dias previstos da semana (0=Dom … 6=Sáb). times_per_week e weekly. Ex: [1, 3, 5] = Seg, Qua, Sex. Define também a meta quando informado.'),
       monthDays: z.array(z.number().min(1).max(31)).min(1).max(2).optional().describe('Dias do mês em que o ritual fica pendente. fortnightly: 2 dias (ex: [1, 16]); monthly: 1 dia (ex: [1])'),
       monthDay: z.number().min(1).max(31).optional().describe('Dia do mês (atalho para monthly; também aceito como primeiro dia de fortnightly)'),
       priority: z.enum(['dispensavel', 'opcional', 'bom_fazer', 'importante', 'critico']).optional().describe('Prioridade do ritual (dispensavel → critico)'),
@@ -1030,6 +1032,7 @@ export const toolsDefinition = [
       applyHabitFrequency(newHabit, {
         frequency: args.frequency,
         targetTimesPerWeek: args.targetTimesPerWeek,
+        weekDays: args.weekDays,
         monthDays: args.monthDays,
         monthDay: args.monthDay
       });
@@ -1141,6 +1144,7 @@ export const toolsDefinition = [
       icon: z.string().optional().describe('Novo ícone'),
       frequency: z.enum(['daily', 'weekdays', 'weekly', 'times_per_week', 'fortnightly', 'monthly']).optional().describe('Nova frequência'),
       targetTimesPerWeek: z.number().min(1).max(7).optional().describe('Nova meta de vezes por semana'),
+      weekDays: z.array(z.number().int().min(0).max(6)).max(7).nullable().optional().describe('Novos dias previstos da semana (0=Dom … 6=Sáb). Null ou [] remove a agenda rígida'),
       monthDays: z.array(z.number().min(1).max(31)).min(1).max(2).optional().describe('Novos dias do mês (fortnightly: 2 dias; monthly: 1 dia)'),
       monthDay: z.number().min(1).max(31).optional().describe('Novo dia do mês (atalho para monthly)'),
       priority: z.enum(['dispensavel', 'opcional', 'bom_fazer', 'importante', 'critico']).optional().describe('Nova prioridade (dispensavel → critico)'),
@@ -1163,6 +1167,7 @@ export const toolsDefinition = [
       applyHabitFrequency(habit, {
         frequency: args.frequency,
         targetTimesPerWeek: args.targetTimesPerWeek,
+        weekDays: args.weekDays,
         monthDays: args.monthDays,
         monthDay: args.monthDay
       }, { isUpdate: true });

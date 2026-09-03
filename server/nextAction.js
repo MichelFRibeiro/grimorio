@@ -8,10 +8,9 @@ import {
   getSaoPauloHour,
   getSaoPauloMinute,
   getSaoPauloDayOfWeek,
-  getHabitWeeklyStats,
-  getCurrentWeekDays
+  getHabitWeeklyStats
 } from './timeUtils.js';
-import { canonicalizeHabitFrequency, isPeriodFrequency, padMonthDay } from '../src/utils/habitFrequency.js';
+import { canonicalizeHabitFrequency, getHabitDueStatus, isPeriodFrequency, padMonthDay } from '../src/utils/habitFrequency.js';
 import {
   normalizeLocation,
   getLocationMeta,
@@ -154,29 +153,7 @@ function nextOpenSubtask(quest) {
 }
 
 function isHabitDueToday(habit, weeklyStats, now, todayStr) {
-  const freq = canonicalizeHabitFrequency(habit.frequency || 'daily');
-  const history = Array.isArray(habit.history) ? habit.history : [];
-  const completedToday = history.includes(todayStr);
-  const dayOfWeek = getSaoPauloDayOfWeek(now);
-
-  if (freq === 'daily') {
-    return { due: !completedToday, extra: false, completedToday };
-  }
-  if (freq === 'weekdays') {
-    const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
-    return { due: isWeekday && !completedToday, extra: false, completedToday };
-  }
-  if (isPeriodFrequency(freq)) {
-    const period = weeklyStats?.period;
-    if (completedToday) return { due: false, extra: false, completedToday };
-    if (period?.completed) return { due: false, extra: false, completedToday };
-    return { due: !!period?.due, extra: false, completedToday };
-  }
-  // weekly / times_per_week
-  const goalMet = !!weeklyStats?.isGoalMet;
-  if (completedToday) return { due: false, extra: false, completedToday };
-  if (goalMet) return { due: false, extra: true, completedToday };
-  return { due: true, extra: false, completedToday };
+  return getHabitDueStatus(habit, weeklyStats, now, todayStr);
 }
 
 function urgencyScore(quest, todayStr, nowMinutes) {
@@ -277,15 +254,18 @@ function ritualRiskScore(habit, weeklyStats, now, todayStr, extra) {
     };
   }
 
-  const target = weeklyStats?.targetTimesPerWeek || habit.targetTimesPerWeek || 1;
-  const done = weeklyStats?.completionsThisWeek || 0;
-  const remainingNeeded = Math.max(0, target - done);
-  const weekDays = getCurrentWeekDays(now);
-  // Compara datas civis da semana de `now`, não o "hoje" real do relógio.
-  const remainingDays = weekDays.filter(d => d.dateStr >= todayStr).length;
+  const due = getHabitDueStatus(habit, weeklyStats, now, todayStr);
+  const remainingNeeded = due.remainingNeeded;
+  const remainingDays = due.remainingScheduledDays;
   if (remainingNeeded <= 0) return { score: 0, label: null };
+  if (due.overdue && remainingNeeded >= remainingDays) {
+    return { score: 10, label: `Atrasado: faltam ${remainingNeeded}x e restam ${remainingDays} dia(s)` };
+  }
   if (remainingNeeded >= remainingDays) {
     return { score: 10, label: `Faltam ${remainingNeeded}x e restam ${remainingDays} dia(s)` };
+  }
+  if (due.overdue) {
+    return { score: 8, label: `Atrasado: faltam ${remainingNeeded}x nesta semana` };
   }
   return { score: 5, label: `Faltam ${remainingNeeded}x nesta semana` };
 }

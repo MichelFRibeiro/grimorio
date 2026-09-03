@@ -3,7 +3,7 @@
  * Fuso horário padrão: América/São Paulo (BRT, UTC-3)
  */
 
-import { isPeriodFrequency, getHabitPeriodStatus } from '../src/utils/habitFrequency.js';
+import { isPeriodFrequency, getHabitPeriodStatus, getHabitWeekDays } from '../src/utils/habitFrequency.js';
 
 export const SAO_PAULO_TZ = 'America/Sao_Paulo';
 
@@ -277,7 +277,9 @@ export function getHabitWeeklyStats(habit, date = new Date()) {
   } else if (habit?.frequency === 'weekly' || isPeriodFrequency(habit?.frequency)) {
     targetTimesPerWeek = 1;
   } else if (habit?.frequency === 'times_per_week') {
-    targetTimesPerWeek = Math.max(1, Math.min(7, parseInt(habit?.targetTimesPerWeek || habit?.timesPerWeek, 10) || 3));
+    const scheduled = getHabitWeekDays(habit);
+    targetTimesPerWeek = scheduled?.length
+      || Math.max(1, Math.min(7, parseInt(habit?.targetTimesPerWeek || habit?.timesPerWeek, 10) || 3));
   } else {
     targetTimesPerWeek = 7;
   }

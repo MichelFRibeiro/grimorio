@@ -1408,7 +1408,7 @@ app.delete('/api/processes/:id', (req, res) => {
 app.post('/api/habits', (req, res) => {
   try {
     const db = getDb();
-    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty } = req.body;
+    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay, weekDays, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty } = req.body;
     if (!title) return res.status(400).json({ error: 'Título do hábito é obrigatório' });
 
     const scale = resolveActivityScale({
@@ -1428,7 +1428,7 @@ app.post('/api/habits', (req, res) => {
       difficulty: scale.difficulty,
       createdAt: new Date().toISOString()
     };
-    applyHabitFrequency(newHabit, { frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay });
+    applyHabitFrequency(newHabit, { frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay, weekDays });
     applyDifficultyFields(newHabit, scale.difficulty);
     if (difficulty === undefined) {
       if (xpReward !== undefined) newHabit.xpReward = parseInt(xpReward, 10) || 30;
@@ -1450,12 +1450,12 @@ app.put('/api/habits/:id', (req, res) => {
     const habit = db.habits.find(h => h.id === req.params.id);
     if (!habit) return res.status(404).json({ error: 'Hábito não encontrado' });
 
-    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty } = req.body;
+    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay, weekDays, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty } = req.body;
     if (title !== undefined && title.trim()) habit.title = title.trim();
     if (description !== undefined) habit.description = description.trim();
     if (category !== undefined && category.trim()) habit.category = category.trim();
     if (icon !== undefined) habit.icon = icon;
-    applyHabitFrequency(habit, { frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay }, { isUpdate: true });
+    applyHabitFrequency(habit, { frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay, weekDays }, { isUpdate: true });
 
     if (priority !== undefined || difficulty !== undefined) {
       const scale = resolveActivityScale({
