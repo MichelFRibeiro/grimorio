@@ -121,11 +121,12 @@ export function useGameData() {
     if (res.ok) fetchState();
   };
 
-  const completeQuest = async (id) => {
+  const completeQuest = async (id, extra = {}) => {
     playClick();
     const res = await fetch(`/api/quests/${id}/complete`, {
       method: 'POST',
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
+      body: JSON.stringify(extra || {})
     });
     if (res.ok) {
       const result = await res.json();
@@ -406,12 +407,15 @@ export function useGameData() {
     if (res.ok) fetchState();
   };
 
-  const toggleHabit = async (id, date = null) => {
+  const toggleHabit = async (id, date = null, extra = {}) => {
     playClick();
     const res = await fetch(`/api/habits/${id}/toggle`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify(date ? { date } : {})
+      body: JSON.stringify({
+        ...(date ? { date } : {}),
+        ...(extra || {})
+      })
     });
     if (res.ok) {
       const result = await res.json();

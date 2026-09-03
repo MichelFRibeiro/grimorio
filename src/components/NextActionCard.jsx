@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { Compass, CheckCircle2, Clock, MapPin, Sparkles, Flame, Scroll, RefreshCw } from 'lucide-react';
 import { LOCATIONS, getLocationMeta } from '../utils/locations';
 import { PriorityBadge } from './ActivityScaleFields';
+import { ActivityTimerBox } from './ActivityTimerBox';
+import { consumeActivityTimerMinutes } from '../utils/liveActivityTimers';
 
 export function NextActionCard({
   nextAction,
@@ -43,7 +45,8 @@ export function NextActionCard({
   const handleDo = (item) => {
     if (!item) return;
     if (item.kind === 'habit' && onToggleHabit) {
-      onToggleHabit(item.id);
+      const durationMinutes = consumeActivityTimerMinutes('habit', item.id);
+      onToggleHabit(item.id, null, durationMinutes > 0 ? { durationMinutes } : {});
       return;
     }
     if (item.kind === 'quest') {
@@ -57,7 +60,10 @@ export function NextActionCard({
           return;
         }
       }
-      if (onCompleteQuest) onCompleteQuest(item.id);
+      if (onCompleteQuest) {
+        const durationMinutes = consumeActivityTimerMinutes('quest', item.id);
+        onCompleteQuest(item.id, durationMinutes > 0 ? { durationMinutes } : {});
+      }
     }
   };
 
@@ -390,6 +396,16 @@ function PrimaryRow({ item, onDo, onSnooze, onOpen }) {
           <span style={{ color: '#38bdf8' }}>+{item.coinReward || 0} 🪙</span>
         </div>
       )}
+
+      <div style={{ marginTop: '12px' }}>
+        <ActivityTimerBox
+          kind={isHabit ? 'habit' : 'quest'}
+          id={item.id}
+          label={isHabit ? 'Cronômetro do Ritual' : 'Cronômetro da Missão'}
+          accent={isHabit ? '#f87171' : '#fbbf24'}
+          compact
+        />
+      </div>
     </div>
   );
 }

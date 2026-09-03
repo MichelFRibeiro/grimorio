@@ -26,6 +26,7 @@ import {
   calculateHabitStreak
 } from './timeUtils.js';
 import { applyHabitFrequency } from '../src/utils/habitFrequency.js';
+import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, sumDurationMap } from '../src/utils/activityDuration.js';
 
 const locationEnum = z.enum(['anywhere', 'office', 'home', 'gym']);
 const timeWindowSchema = z.object({
@@ -238,7 +239,8 @@ export const toolsDefinition = [
     description: 'Alternar ou definir o status de conclusão de uma missão. Concluir concede XP, Moedas de Ouro, Vontade, Foco e ataca o Boss Semanal. Desmarcar estorna as recompensas.',
     schema: {
       id: z.string().describe('ID da missão'),
-      completed: z.boolean().optional().describe('Definir explicitamente como concluída (true) ou pendente (false). Se omitido, alterna o estado atual.')
+      completed: z.boolean().optional().describe('Definir explicitamente como concluída (true) ou pendente (false). Se omitido, alterna o estado atual.'),
+      durationMinutes: z.number().optional().describe('Tempo cronometrado da missão em minutos (igual às sessões de leitura e baterias de questões)')
     },
     handler: async (args) => {
       const db = getDb();
@@ -255,6 +257,8 @@ export const toolsDefinition = [
 
       let rewardResult = null;
       if (willComplete) {
+        const durationMinutes = parseDurationMinutes(args.durationMinutes);
+        quest.durationMinutes = durationMinutes || null;
         const willpower = willpowerForDifficulty(quest.difficulty);
         const focus = 10;
         rewardResult = rewardPlayer({
@@ -265,9 +269,16 @@ export const toolsDefinition = [
           actionType: 'quest_complete',
           entityId: quest.id,
           title: quest.title,
-          details: { category: quest.category, priority: quest.priority, difficulty: quest.difficulty, location: quest.location || null }
+          details: {
+            category: quest.category,
+            priority: quest.priority,
+            difficulty: quest.difficulty,
+            location: quest.location || null,
+            durationMinutes
+          }
         });
       } else {
+        quest.durationMinutes = null;
         const willpower = willpowerForDifficulty(quest.difficulty);
         const focus = 10;
         rewardResult = revertPlayerReward({
@@ -981,6 +992,8 @@ export const toolsDefinition = [
           coinReward: h.coinReward || 8,
           location: h.location || 'anywhere',
           timeWindow: h.timeWindow || null,
+          durationsByDate: h.durationsByDate || {},
+          totalDurationMinutes: sumDurationMap(h.durationsByDate),
           createdAt: h.createdAt
         };
       });
@@ -1054,7 +1067,8 @@ export const toolsDefinition = [
     description: 'Marcar ou desmarcar a execução de um ritual diário para hoje (ou para uma data específica YYYY-MM-DD no passado). Concede/estorna XP, Moedas, Consistência e atualiza a sequência de chamas.',
     schema: {
       id: z.string().describe('ID do ritual/hábito'),
-      date: z.string().optional().describe('Data da execução YYYY-MM-DD (se omitido, usa a data atual)')
+      date: z.string().optional().describe('Data da execução YYYY-MM-DD (se omitido, usa a data atual)'),
+      durationMinutes: z.number().optional().describe('Tempo cronometrado do ritual em minutos (igual às sessões de leitura e baterias de questões)')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1074,6 +1088,8 @@ export const toolsDefinition = [
       let rewardResult = null;
       if (!isAlreadyCompleted) {
         habit.history.push(targetDate);
+        const durationMinutes = parseDurationMinutes(args.durationMinutes);
+        setHabitDurationForDate(habit, targetDate, durationMinutes);
         const streakData = calculateHabitStreak(habit.history, new Date(), habit.bestStreak || 0);
         habit.currentStreak = streakData.currentStreak;
         habit.bestStreak = streakData.bestStreak;
@@ -1094,10 +1110,17 @@ export const toolsDefinition = [
           actionType: 'habit_complete',
           entityId: habit.id,
           title: `Ritual Concluído: ${habit.title} (${formattedDate})`,
-          details: { category: habit.category || 'Pessoal', date: targetDate, streak: habit.currentStreak, location: habit.location || null }
+          details: {
+            category: habit.category || 'Pessoal',
+            date: targetDate,
+            streak: habit.currentStreak,
+            location: habit.location || null,
+            durationMinutes
+          }
         });
       } else {
         habit.history = habit.history.filter(d => d !== targetDate);
+        clearHabitDurationForDate(habit, targetDate);
         const streakData = calculateHabitStreak(habit.history, new Date(), habit.bestStreak || 0);
         habit.currentStreak = streakData.currentStreak;
         habit.bestStreak = streakData.bestStreak;

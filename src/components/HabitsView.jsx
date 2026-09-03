@@ -25,10 +25,13 @@ import {
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityContextFields } from './ActivityContextFields';
 import { ActivityScaleFields, PriorityBadge } from './ActivityScaleFields';
+import { ActivityTimerBox } from './ActivityTimerBox';
 import { getSaoPauloDateStr, getHabitWeeklyStats, getCurrentWeekDays, addDaysToDateStr } from '../utils/timeUtils';
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, inferDifficultyFromRewards, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
 import { getFrequencyLabel, getHabitDueStatus, getHabitPeriodStatus, getHabitWeekDays, isPeriodFrequency, padMonthDay, WEEKDAY_OPTIONS } from '../utils/habitFrequency';
+import { formatDurationLabel, getHabitDurationForDate, sumDurationMap } from '../utils/activityDuration';
+import { consumeActivityTimerMinutes } from '../utils/liveActivityTimers';
 
 const HIDE_SETTLED_STORAGE_KEY = 'grimorio_hide_settled_habits';
 const MONTH_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
@@ -302,6 +305,24 @@ export function HabitsView({
   const todayStr = getSaoPauloDateStr();
   const yesterdayStr = addDaysToDateStr(todayStr, -1);
   const dayBeforeYesterdayStr = addDaysToDateStr(todayStr, -2);
+
+  const handleToggleHabit = (habitId, date = null) => {
+    const isToday = !date || date === todayStr;
+    const alreadyDone = (habits || []).some((h) => {
+      if (h.id !== habitId) return false;
+      return (h.history || []).includes(date || todayStr);
+    });
+    const extra = {};
+    if (isToday) {
+      if (!alreadyDone) {
+        const durationMinutes = consumeActivityTimerMinutes('habit', habitId);
+        if (durationMinutes > 0) extra.durationMinutes = durationMinutes;
+      } else {
+        consumeActivityTimerMinutes('habit', habitId);
+      }
+    }
+    onToggleHabit(habitId, date, extra);
+  };
 
   // Week View & Retroactive Completion State
   const [weekOffset, setWeekOffset] = useState(0);
@@ -906,6 +927,16 @@ export function HabitsView({
                         <Clock size={12} /> {habit.timeWindow.start}–{habit.timeWindow.end}
                       </span>
                     )}
+                    {getHabitDurationForDate(habit, todayStr) > 0 && (
+                      <span style={{ ...metaChipStyle, color: '#f87171' }} title="Tempo cronometrado hoje">
+                        <Clock size={12} /> {formatDurationLabel(getHabitDurationForDate(habit, todayStr))} hoje
+                      </span>
+                    )}
+                    {sumDurationMap(habit.durationsByDate) > 0 && (
+                      <span style={metaChipStyle} title="Tempo total acumulado neste ritual">
+                        <Clock size={12} /> {formatDurationLabel(sumDurationMap(habit.durationsByDate))} no total
+                      </span>
+                    )}
                   </div>
 
                   {/* Weekly Progress Tracker */}
@@ -966,9 +997,10 @@ export function HabitsView({
                         const scheduledWeekDays = getHabitWeekDays(habit);
                         const isScheduledDay = !scheduledWeekDays || scheduledWeekDays.includes(day.dayOfWeek);
                         const isClickable = !day.isFuture;
+                        const dayDuration = getHabitDurationForDate(habit, day.dateStr);
                         const tooltipText = day.isFuture
                           ? `Dia futuro (${day.dateStr})`
-                          : `${day.completed ? 'Desmarcar' : 'Marcar'} ${day.label} (${formatShortDate(day.dateStr)})${day.isToday ? ' - Hoje' : day.dateStr === yesterdayStr ? ' - Ontem' : ''}${!isScheduledDay ? ' — fora do previsto' : ''}`;
+                          : `${day.completed ? 'Desmarcar' : 'Marcar'} ${day.label} (${formatShortDate(day.dateStr)})${day.isToday ? ' - Hoje' : day.dateStr === yesterdayStr ? ' - Ontem' : ''}${!isScheduledDay ? ' — fora do previsto' : ''}${dayDuration > 0 ? ` · ${formatDurationLabel(dayDuration)}` : ''}`;
 
                         return (
                           <button
@@ -977,7 +1009,7 @@ export function HabitsView({
                             disabled={!isClickable}
                             onClick={() => {
                               if (isClickable) {
-                                onToggleHabit(habit.id, day.dateStr);
+                                handleToggleHabit(habit.id, day.dateStr);
                               }
                             }}
                             title={tooltipText}
@@ -1108,7 +1140,7 @@ export function HabitsView({
                     </button>
 
                     <button
-                      onClick={() => onToggleHabit(habit.id)}
+                      onClick={() => handleToggleHabit(habit.id)}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -1141,6 +1173,16 @@ export function HabitsView({
                       )}
                     </button>
                   </div>
+
+                  {!isDoneToday && (
+                    <ActivityTimerBox
+                      kind="habit"
+                      id={habit.id}
+                      label="Cronômetro do Ritual"
+                      accent="#f87171"
+                      compact
+                    />
+                  )}
                 </div>
               </div>
             );
@@ -1711,8 +1753,9 @@ export function HabitsView({
           const isDone = habitHistory.includes(dStr);
           const isToday = dStr === todayStr;
           const isYesterday = dStr === yesterdayStr;
+          const durationMinutes = getHabitDurationForDate(activeHabit, dStr);
           const label = isToday ? 'Hoje' : isYesterday ? 'Ontem' : `${parts[2]}/${parts[1]}`;
-          return { dateStr: dStr, label, shortDate: `${parts[2]}/${parts[1]}`, isDone, isToday, isYesterday };
+          return { dateStr: dStr, label, shortDate: `${parts[2]}/${parts[1]}`, isDone, isToday, isYesterday, durationMinutes };
         });
 
         return (
@@ -1794,7 +1837,7 @@ export function HabitsView({
                   {/* Ontem */}
                   <button
                     type="button"
-                    onClick={() => onToggleHabit(activeHabit.id, yesterdayStr)}
+                    onClick={() => handleToggleHabit(activeHabit.id, yesterdayStr)}
                     style={{
                       padding: '12px 14px',
                       borderRadius: '10px',
@@ -1824,7 +1867,7 @@ export function HabitsView({
                   {/* Anteontem */}
                   <button
                     type="button"
-                    onClick={() => onToggleHabit(activeHabit.id, dayBeforeYesterdayStr)}
+                    onClick={() => handleToggleHabit(activeHabit.id, dayBeforeYesterdayStr)}
                     style={{
                       padding: '12px 14px',
                       borderRadius: '10px',
@@ -1891,7 +1934,7 @@ export function HabitsView({
                     disabled={!customRetroDate || customRetroDate > todayStr}
                     onClick={() => {
                       if (customRetroDate && customRetroDate <= todayStr) {
-                        onToggleHabit(activeHabit.id, customRetroDate);
+                        handleToggleHabit(activeHabit.id, customRetroDate);
                       }
                     }}
                     style={{
@@ -1938,8 +1981,8 @@ export function HabitsView({
                     <button
                       key={item.dateStr}
                       type="button"
-                      onClick={() => onToggleHabit(activeHabit.id, item.dateStr)}
-                      title={`${item.isDone ? 'Desmarcar' : 'Marcar'} ${item.label} (${item.dateStr})`}
+                      onClick={() => handleToggleHabit(activeHabit.id, item.dateStr)}
+                      title={`${item.isDone ? 'Desmarcar' : 'Marcar'} ${item.label} (${item.dateStr})${item.durationMinutes > 0 ? ` · ${formatDurationLabel(item.durationMinutes)}` : ''}`}
                       style={{
                         padding: '6px 4px',
                         borderRadius: '8px',
@@ -1977,6 +2020,11 @@ export function HabitsView({
                       }}
                     >
                       <span>{item.label}</span>
+                      {item.durationMinutes > 0 && (
+                        <span style={{ fontSize: '0.58rem', color: '#fbbf24', fontWeight: 800 }}>
+                          {formatDurationLabel(item.durationMinutes)}
+                        </span>
+                      )}
                       <div
                         style={{
                           width: '6px',

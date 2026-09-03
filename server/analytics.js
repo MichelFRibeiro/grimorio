@@ -1,4 +1,5 @@
 import { getDb } from './db.js';
+import { parseDurationMinutes, sumDurationMap } from '../src/utils/activityDuration.js';
 import { computeCategoryRankings } from './rankings.js';
 import {
   getSaoPauloDateStr,
@@ -247,7 +248,8 @@ export function computeAnalytics() {
       isGoalMet: weeklyStats.isGoalMet,
       currentStreak: h.currentStreak || 0,
       bestStreak: h.bestStreak || 0,
-      totalCompletions: (h.history || []).length
+      totalCompletions: (h.history || []).length,
+      totalDurationMinutes: sumDurationMap(h.durationsByDate)
     };
   });
 
@@ -333,6 +335,8 @@ export function computeAnalytics() {
   // Insight 5: Urgency & Procrastination Pattern
   const completedQuests = quests.filter(q => q.completed);
   const pendingQuests = quests.filter(q => !q.completed);
+  const totalQuestMinutes = completedQuests.reduce((acc, q) => acc + parseDurationMinutes(q.durationMinutes), 0);
+  const totalHabitMinutes = habits.reduce((acc, h) => acc + sumDurationMap(h.durationsByDate), 0);
   const highPriorityPending = pendingQuests.filter(q => q.priority === 'importante' || q.priority === 'critico' || q.priority === 'alta' || q.priority === 'epica').length;
 
   if (highPriorityPending > 0) {
@@ -384,6 +388,8 @@ export function computeAnalytics() {
   const summary = {
     totalQuestsCompleted: completedQuests.length,
     totalQuestsPending: pendingQuests.length,
+    totalQuestMinutes,
+    totalHabitMinutes,
     totalPagesRead,
     totalReadingSessions: readingSessions.length,
     totalQuestionsSolved: totalQuestionsStats.totalSolved,

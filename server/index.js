@@ -37,6 +37,7 @@ import {
 } from '../src/utils/activityScale.js';
 import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
+import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate } from '../src/utils/activityDuration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -566,6 +567,8 @@ app.post('/api/quests/:id/complete', (req, res) => {
 
     let rewardResult = null;
     if (willComplete) {
+      const durationMinutes = parseDurationMinutes(req.body?.durationMinutes);
+      quest.durationMinutes = durationMinutes || null;
       // Award willpower and focus
       const willpower = willpowerForDifficulty(quest.difficulty);
       const focus = 10;
@@ -577,10 +580,17 @@ app.post('/api/quests/:id/complete', (req, res) => {
         actionType: 'quest_complete',
         entityId: quest.id,
         title: quest.title,
-        details: { category: quest.category, priority: quest.priority, difficulty: quest.difficulty, location: quest.location || null }
+        details: {
+          category: quest.category,
+          priority: quest.priority,
+          difficulty: quest.difficulty,
+          location: quest.location || null,
+          durationMinutes
+        }
       });
     } else {
       // Revert willpower, focus, xp and coins
+      quest.durationMinutes = null;
       const willpower = willpowerForDifficulty(quest.difficulty);
       const focus = 10;
       rewardResult = revertPlayerReward({
@@ -1502,6 +1512,7 @@ app.post('/api/habits/:id/toggle', (req, res) => {
 
     if (isAlreadyDone) {
       habit.history = habit.history.filter(d => d !== targetDate);
+      clearHabitDurationForDate(habit, targetDate);
       const streakData = calculateHabitStreak(habit.history, new Date(), habit.bestStreak || 0);
       habit.currentStreak = streakData.currentStreak;
       habit.bestStreak = streakData.bestStreak;
@@ -1515,6 +1526,8 @@ app.post('/api/habits/:id/toggle', (req, res) => {
       });
     } else {
       habit.history.push(targetDate);
+      const durationMinutes = parseDurationMinutes(req.body?.durationMinutes);
+      setHabitDurationForDate(habit, targetDate, durationMinutes);
       const streakData = calculateHabitStreak(habit.history, new Date(), habit.bestStreak || 0);
       habit.currentStreak = streakData.currentStreak;
       habit.bestStreak = streakData.bestStreak;
@@ -1534,7 +1547,13 @@ app.post('/api/habits/:id/toggle', (req, res) => {
         actionType: 'habit_complete',
         entityId: habit.id,
         title: `${habit.title} (${formattedDate} - Sequência 🔥 ${habit.currentStreak})`,
-        details: { category: habit.category || 'Pessoal', streak: habit.currentStreak, date: targetDate, location: habit.location || null }
+        details: {
+          category: habit.category || 'Pessoal',
+          streak: habit.currentStreak,
+          date: targetDate,
+          location: habit.location || null,
+          durationMinutes
+        }
       });
     }
 

@@ -22,9 +22,12 @@ import {
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityContextFields } from './ActivityContextFields';
 import { ActivityScaleFields, PriorityBadge } from './ActivityScaleFields';
+import { ActivityTimerBox } from './ActivityTimerBox';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, getPriorityMeta, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
+import { formatDurationLabel } from '../utils/activityDuration';
+import { consumeActivityTimerMinutes } from '../utils/liveActivityTimers';
 
 export function QuestsView({
   quests,
@@ -255,12 +258,14 @@ export function QuestsView({
         confirmVariant: 'warning',
         icon: RotateCcw,
         onConfirm: () => {
+          consumeActivityTimerMinutes('quest', quest.id);
           onCompleteQuest(quest.id);
           closeConfirmModal();
         }
       });
     } else {
-      onCompleteQuest(quest.id);
+      const durationMinutes = consumeActivityTimerMinutes('quest', quest.id);
+      onCompleteQuest(quest.id, durationMinutes > 0 ? { durationMinutes } : {});
     }
   };
 
@@ -640,6 +645,11 @@ export function QuestsView({
                             <Clock size={14} /> {quest.timeWindow.start}–{quest.timeWindow.end}
                           </span>
                         )}
+                        {quest.completed && quest.durationMinutes > 0 && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#fbbf24', fontWeight: 700 }}>
+                            <Clock size={14} /> {formatDurationLabel(quest.durationMinutes)}
+                          </span>
+                        )}
 
                         {totalSubtasks > 0 && (
                           <button
@@ -748,6 +758,18 @@ export function QuestsView({
                   </div>
 
                 </div>
+
+                {!quest.completed && (
+                  <div style={{ marginTop: '12px' }}>
+                    <ActivityTimerBox
+                      kind="quest"
+                      id={quest.id}
+                      label="Cronômetro da Missão"
+                      accent="#fbbf24"
+                      compact
+                    />
+                  </div>
+                )}
 
                 {/* Expanded Subtasks Checklist */}
                 {isSubtasksOpen && totalSubtasks > 0 && (

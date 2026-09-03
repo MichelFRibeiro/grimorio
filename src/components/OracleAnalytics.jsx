@@ -12,6 +12,7 @@ import {
   LineElement
 } from 'chart.js';
 import { Bar, Doughnut } from 'react-chartjs-2';
+import { formatDurationLabel } from '../utils/activityDuration';
 import {
   Compass,
   Clock,
@@ -328,6 +329,11 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh }) {
             <span style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase' }}>Missões Concluídas</span>
             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f8fafc', fontFamily: 'var(--font-mono)' }}>
               {analytics.summary?.totalQuestsCompleted || 0}
+              {analytics.summary?.totalQuestMinutes > 0 && (
+                <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, marginLeft: '6px' }}>
+                  · {formatDurationLabel(analytics.summary.totalQuestMinutes)}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -1095,6 +1101,11 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh }) {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {log.details?.durationMinutes > 0 && (
+                  <span style={{ color: '#94a3b8', fontWeight: 700, fontFamily: 'var(--font-mono)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <Clock size={12} /> {formatDurationLabel(log.details.durationMinutes)}
+                  </span>
+                )}
                 {log.xp > 0 && (
                   <span style={{ color: '#fbbf24', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                     +{log.xp} XP
