@@ -26,7 +26,7 @@ import {
   calculateHabitStreak
 } from './timeUtils.js';
 import { applyHabitFrequency } from '../src/utils/habitFrequency.js';
-import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, sumDurationMap } from '../src/utils/activityDuration.js';
+import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, sumDurationMap, clearLiveActivityTimer } from '../src/utils/activityDuration.js';
 
 const locationEnum = z.enum(['anywhere', 'office', 'home', 'gym']);
 const timeWindowSchema = z.object({
@@ -277,8 +277,10 @@ export const toolsDefinition = [
             durationMinutes
           }
         });
+        db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'quest', quest.id);
       } else {
         quest.durationMinutes = null;
+        db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'quest', quest.id);
         const willpower = willpowerForDifficulty(quest.difficulty);
         const focus = 10;
         rewardResult = revertPlayerReward({
@@ -1118,9 +1120,15 @@ export const toolsDefinition = [
             durationMinutes
           }
         });
+        if (isToday) {
+          db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'habit', habit.id);
+        }
       } else {
         habit.history = habit.history.filter(d => d !== targetDate);
         clearHabitDurationForDate(habit, targetDate);
+        if (targetDate === todayStr) {
+          db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'habit', habit.id);
+        }
         const streakData = calculateHabitStreak(habit.history, new Date(), habit.bestStreak || 0);
         habit.currentStreak = streakData.currentStreak;
         habit.bestStreak = streakData.bestStreak;

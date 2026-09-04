@@ -37,7 +37,7 @@ import {
 } from '../src/utils/activityScale.js';
 import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
-import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate } from '../src/utils/activityDuration.js';
+import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, mergeLiveActivityTimers, sanitizeLiveActivityTimers, clearLiveActivityTimer } from '../src/utils/activityDuration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -322,6 +322,28 @@ app.post('/api/profile', (req, res) => {
   }
 });
 
+app.get('/api/live-timers', (req, res) => {
+  try {
+    const db = getDb();
+    db.liveActivityTimers = sanitizeLiveActivityTimers(db.liveActivityTimers);
+    res.json({ success: true, liveActivityTimers: db.liveActivityTimers });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/live-timers', (req, res) => {
+  try {
+    const db = getDb();
+    const incoming = req.body?.items || req.body?.liveActivityTimers || req.body;
+    db.liveActivityTimers = mergeLiveActivityTimers(incoming, db.liveActivityTimers);
+    saveDb(db);
+    res.json({ success: true, liveActivityTimers: db.liveActivityTimers });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==========================================
 // 2.2. NEXT ACTION (ORACLE SUGGESTION)
 // ==========================================
@@ -588,9 +610,11 @@ app.post('/api/quests/:id/complete', (req, res) => {
           durationMinutes
         }
       });
+      db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'quest', quest.id);
     } else {
       // Revert willpower, focus, xp and coins
       quest.durationMinutes = null;
+      db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'quest', quest.id);
       const willpower = willpowerForDifficulty(quest.difficulty);
       const focus = 10;
       rewardResult = revertPlayerReward({
@@ -1524,6 +1548,9 @@ app.post('/api/habits/:id/toggle', (req, res) => {
         actionType: 'habit_complete',
         entityId: habit.id
       });
+      if (targetDate === todayStr) {
+        db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'habit', habit.id);
+      }
     } else {
       habit.history.push(targetDate);
       const durationMinutes = parseDurationMinutes(req.body?.durationMinutes);
@@ -1555,6 +1582,9 @@ app.post('/api/habits/:id/toggle', (req, res) => {
           durationMinutes
         }
       });
+      if (isToday) {
+        db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'habit', habit.id);
+      }
     }
 
     saveDb(db);

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { useSoundEffects } from './useSoundEffects';
 import { formatBrl } from '../utils/coinExchange.js';
+import { hydrateLiveActivityTimers, setLiveActivityTimerSync, flushLiveActivityTimers } from '../utils/liveActivityTimers.js';
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('grimorio_auth_token');
@@ -38,6 +39,7 @@ export function useGameData() {
       const json = await res.json();
       setData(json);
       setError(null);
+      hydrateLiveActivityTimers(json.liveActivityTimers || {}, { sync: true });
     } catch (err) {
       console.error(err);
       setError(err.message);
@@ -45,6 +47,28 @@ export function useGameData() {
       setLoading(false);
     }
   }, []);
+
+  const syncLiveTimers = useCallback(async (items) => {
+    try {
+      const res = await fetch('/api/live-timers', {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ items })
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json?.liveActivityTimers) {
+        hydrateLiveActivityTimers(json.liveActivityTimers);
+      }
+    } catch {
+      // Offline: o cronômetro local continua válido até a próxima sincronização.
+    }
+  }, []);
+
+  useEffect(() => {
+    setLiveActivityTimerSync(syncLiveTimers);
+    return () => setLiveActivityTimerSync(null);
+  }, [syncLiveTimers]);
 
   useEffect(() => {
     fetchState();
@@ -54,7 +78,38 @@ export function useGameData() {
       fetch('/api/health').catch(() => {});
     }, 7 * 60 * 1000);
 
-    return () => clearInterval(heartbeat);
+    const pollTimers = setInterval(() => {
+      fetch('/api/live-timers', { headers: getAuthHeaders() })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((json) => {
+          if (json?.liveActivityTimers) hydrateLiveActivityTimers(json.liveActivityTimers);
+        })
+        .catch(() => {});
+    }, 8000);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetch('/api/live-timers', { headers: getAuthHeaders() })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((json) => {
+            if (json?.liveActivityTimers) hydrateLiveActivityTimers(json.liveActivityTimers);
+          })
+          .catch(() => {});
+      } else {
+        flushLiveActivityTimers();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+
+    return () => {
+      clearInterval(heartbeat);
+      clearInterval(pollTimers);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      flushLiveActivityTimers();
+    };
   }, [fetchState]);
 
   // Trigger floating reward popup

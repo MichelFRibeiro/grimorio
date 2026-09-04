@@ -1,69 +1,59 @@
-import { secondsToDurationMinutes } from './activityDuration.js';
+import {
+  elapsedMsFrom,
+  liveTimerKey,
+  mergeLiveActivityTimers,
+  sanitizeLiveActivityTimers,
+  secondsToDurationMinutes,
+  tombstoneLiveTimer
+} from './activityDuration.js';
 
 export const LIVE_ACTIVITY_TIMERS_KEY = 'grimorio_live_activity_timers';
-const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const SYNC_DEBOUNCE_MS = 400;
 
-function elapsedMsFrom(accumulatedMs, runStartedAt, now = Date.now()) {
-  const extra = runStartedAt != null ? Math.max(0, now - runStartedAt) : 0;
-  return Math.max(0, (accumulatedMs || 0) + extra);
-}
-
-function canUseSessionStorage() {
+function canUseStorage() {
   try {
-    return typeof sessionStorage !== 'undefined';
+    return typeof localStorage !== 'undefined';
   } catch {
     return false;
   }
 }
 
 function readPersisted() {
-  if (!canUseSessionStorage()) return {};
+  if (!canUseStorage()) return {};
   try {
-    const raw = sessionStorage.getItem(LIVE_ACTIVITY_TIMERS_KEY);
+    const raw = localStorage.getItem(LIVE_ACTIVITY_TIMERS_KEY)
+      || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(LIVE_ACTIVITY_TIMERS_KEY) : null);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     const items = parsed?.items && typeof parsed.items === 'object' ? parsed.items : parsed;
-    if (!items || typeof items !== 'object') return {};
-    const now = Date.now();
-    const next = {};
-    Object.entries(items).forEach(([key, value]) => {
-      if (!value || typeof value !== 'object') return;
-      const updatedAt = Number(value.updatedAt) || 0;
-      if (updatedAt && now - updatedAt > MAX_AGE_MS) return;
-      next[key] = {
-        accumulatedMs: Math.max(0, Number(value.accumulatedMs) || 0),
-        runStartedAt: typeof value.runStartedAt === 'number' && Number.isFinite(value.runStartedAt)
-          ? value.runStartedAt
-          : null,
-        updatedAt: updatedAt || now
-      };
-    });
-    return next;
+    return sanitizeLiveActivityTimers(items);
   } catch {
     return {};
   }
 }
 
 function persist(items) {
-  if (!canUseSessionStorage()) return;
+  if (!canUseStorage()) return;
   try {
-    sessionStorage.setItem(LIVE_ACTIVITY_TIMERS_KEY, JSON.stringify({
+    const payload = JSON.stringify({
       items,
       updatedAt: Date.now()
-    }));
+    });
+    localStorage.setItem(LIVE_ACTIVITY_TIMERS_KEY, payload);
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(LIVE_ACTIVITY_TIMERS_KEY);
+    }
   } catch {
     // Quota / modo privado: o cronômetro em memória continua válido nesta aba.
   }
-}
-
-function timerKey(kind, id) {
-  return `${kind}:${id}`;
 }
 
 let timers = readPersisted();
 const listeners = new Set();
 const keyedListeners = new Map();
 let tickInterval = null;
+let remoteSyncFn = null;
+let syncTimer = null;
 
 function notify(key) {
   listeners.forEach((fn) => {
@@ -109,10 +99,21 @@ function ensureTick() {
   }
 }
 
-function commit(key) {
+function scheduleRemoteSync() {
+  if (!remoteSyncFn) return;
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncTimer = null;
+    const payload = { ...timers };
+    Promise.resolve(remoteSyncFn(payload)).catch(() => {});
+  }, SYNC_DEBOUNCE_MS);
+}
+
+function commit(key, { sync = true } = {}) {
   persist(timers);
   ensureTick();
   notify(key);
+  if (sync) scheduleRemoteSync();
 }
 
 function emptySnap() {
@@ -121,7 +122,7 @@ function emptySnap() {
 
 export function subscribeActivityTimers(fn, kind, id) {
   if (kind && id) {
-    const key = timerKey(kind, id);
+    const key = liveTimerKey(kind, id);
     if (!keyedListeners.has(key)) keyedListeners.set(key, new Set());
     keyedListeners.get(key).add(fn);
     return () => {
@@ -136,8 +137,8 @@ export function subscribeActivityTimers(fn, kind, id) {
 }
 
 export function getActivityTimerSnapshot(kind, id) {
-  const snap = timers[timerKey(kind, id)];
-  if (!snap) return emptySnap();
+  const snap = timers[liveTimerKey(kind, id)];
+  if (!snap || snap.cleared) return emptySnap();
   const accumulatedMs = snap.accumulatedMs || 0;
   const runStartedAt = snap.runStartedAt ?? null;
   return {
@@ -153,10 +154,14 @@ export function hasLiveActivityTimer(kind, id) {
   return snap.isRunning || snap.accumulatedMs > 0;
 }
 
+export function getLiveActivityTimers() {
+  return { ...timers };
+}
+
 export function pauseActivityTimer(kind, id) {
-  const key = timerKey(kind, id);
+  const key = liveTimerKey(kind, id);
   const snap = timers[key];
-  if (!snap || snap.runStartedAt == null) return getActivityTimerSnapshot(kind, id);
+  if (!snap || snap.cleared || snap.runStartedAt == null) return getActivityTimerSnapshot(kind, id);
   timers[key] = {
     accumulatedMs: elapsedMsFrom(snap.accumulatedMs, snap.runStartedAt),
     runStartedAt: null,
@@ -167,10 +172,10 @@ export function pauseActivityTimer(kind, id) {
 }
 
 function pauseAllRunningExcept(kind, id) {
-  const keep = timerKey(kind, id);
+  const keep = liveTimerKey(kind, id);
   const pausedKeys = [];
   Object.entries(timers).forEach(([key, snap]) => {
-    if (key === keep || !snap || snap.runStartedAt == null) return;
+    if (key === keep || !snap || snap.cleared || snap.runStartedAt == null) return;
     timers[key] = {
       accumulatedMs: elapsedMsFrom(snap.accumulatedMs, snap.runStartedAt),
       runStartedAt: null,
@@ -183,8 +188,8 @@ function pauseAllRunningExcept(kind, id) {
 
 export function startActivityTimer(kind, id) {
   const pausedKeys = pauseAllRunningExcept(kind, id);
-  const key = timerKey(kind, id);
-  const snap = timers[key] || { accumulatedMs: 0, runStartedAt: null };
+  const key = liveTimerKey(kind, id);
+  const snap = timers[key] && !timers[key].cleared ? timers[key] : { accumulatedMs: 0, runStartedAt: null };
   if (snap.runStartedAt == null) {
     timers[key] = {
       accumulatedMs: Math.max(0, snap.accumulatedMs || 0),
@@ -196,6 +201,7 @@ export function startActivityTimer(kind, id) {
   ensureTick();
   pausedKeys.forEach((pausedKey) => notify(pausedKey));
   notify(key);
+  scheduleRemoteSync();
   return getActivityTimerSnapshot(kind, id);
 }
 
@@ -206,11 +212,9 @@ export function toggleActivityTimer(kind, id) {
 }
 
 export function resetActivityTimer(kind, id) {
-  const key = timerKey(kind, id);
-  if (timers[key]) {
-    delete timers[key];
-    commit(key);
-  }
+  const key = liveTimerKey(kind, id);
+  Object.assign(timers, tombstoneLiveTimer(kind, id));
+  commit(key);
   return emptySnap();
 }
 
@@ -225,19 +229,70 @@ export function resetAllActivityTimers() {
   persist(timers);
   ensureTick();
   notify();
+  scheduleRemoteSync();
+}
+
+export function hydrateLiveActivityTimers(remoteItems, { sync = false, persistLocal = true } = {}) {
+  const merged = mergeLiveActivityTimers(timers, remoteItems);
+  const prevKeys = new Set(Object.keys(timers));
+  const nextKeys = new Set(Object.keys(merged));
+  const changed = [...prevKeys, ...nextKeys].some((key) => {
+    const a = timers[key];
+    const b = merged[key];
+    if (!a && !b) return false;
+    if (!a || !b) return true;
+    return a.accumulatedMs !== b.accumulatedMs
+      || a.runStartedAt !== b.runStartedAt
+      || !!a.cleared !== !!b.cleared
+      || a.updatedAt !== b.updatedAt;
+  });
+  timers = merged;
+  if (persistLocal && changed) persist(timers);
+  ensureTick();
+  if (changed) notify();
+  if (sync) scheduleRemoteSync();
+  return timers;
+}
+
+export function setLiveActivityTimerSync(fn) {
+  remoteSyncFn = typeof fn === 'function' ? fn : null;
+}
+
+export function flushLiveActivityTimers() {
+  if (syncTimer) {
+    clearTimeout(syncTimer);
+    syncTimer = null;
+  }
+  persist(timers);
+  if (remoteSyncFn) {
+    Promise.resolve(remoteSyncFn({ ...timers })).catch(() => {});
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key !== LIVE_ACTIVITY_TIMERS_KEY) return;
+    try {
+      const parsed = event.newValue ? JSON.parse(event.newValue) : { items: {} };
+      const items = parsed?.items && typeof parsed.items === 'object' ? parsed.items : {};
+      hydrateLiveActivityTimers(items, { persistLocal: false });
+    } catch {
+      // ignore
+    }
+  });
 }
 
 if (typeof document !== 'undefined') {
   const persistIfHidden = () => {
-    if (document.visibilityState === 'hidden') persist(timers);
+    if (document.visibilityState === 'hidden') flushLiveActivityTimers();
   };
   const catchUp = () => notify();
   document.addEventListener('visibilitychange', () => {
     persistIfHidden();
     if (document.visibilityState === 'visible') catchUp();
   });
-  window.addEventListener('pagehide', () => persist(timers));
-  document.addEventListener('freeze', () => persist(timers));
+  window.addEventListener('pagehide', () => flushLiveActivityTimers());
+  document.addEventListener('freeze', () => flushLiveActivityTimers());
   window.addEventListener('focus', catchUp);
   window.addEventListener('pageshow', catchUp);
 }
