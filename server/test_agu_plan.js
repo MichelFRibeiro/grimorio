@@ -44,10 +44,13 @@ const stats = buildSubjectStats(exams);
 assert(stats.constitucional.solved === 20, 'Constitucional deve somar 20');
 assert(stats.portugues.accuracy === 52.4, `Português 52.4%, veio ${stats.portugues.accuracy}`);
 
-const today = getDaySchedule(plan, monday, stats);
+const today = getDaySchedule(plan, monday, stats, exams);
 assert(today.blocks.length >= 2, 'Dia 1 tem ao menos 2 blocos');
 assert(today.blocks[0].subjectId === 'constitucional', 'Dia 1 abre com constitucional');
 assert(today.blocks.some((b) => b.subjectId === 'portugues'), 'Dia 1 inclui português');
+assert(today.blocks[0].todayProgress.solved === 20, 'Bloco constitucional conta as 20 de hoje');
+assert(today.blocks[0].remaining === 10, 'Meta 30, feitas 20, faltam 10');
+assert(today.blocks[0].metTarget === false, 'Ainda não bateu a meta de 30');
 
 const key = today.blocks[0].key;
 plan = toggleCompletedBlock(plan, key);

@@ -118,7 +118,23 @@ export function getSubjectMastery(stats) {
   return { id: 'gap', label: 'Furo', color: '#f43f5e' };
 }
 
-export function getDaySchedule(plan, dateStr, subjectStats = {}) {
+export function getSubjectProgressOnDate(examQuestions = [], subject, dateStr) {
+  const entries = (examQuestions || []).filter((entry) => (
+    (entry.date || '') === dateStr && matchExamToSubject(entry, subject)
+  ));
+  const progress = entries.reduce((acc, entry) => {
+    acc.solved += entry.totalQuestions || 0;
+    acc.correct += entry.correctAnswers || 0;
+    acc.sessions += 1;
+    return acc;
+  }, { solved: 0, correct: 0, sessions: 0, accuracy: 0 });
+  progress.accuracy = progress.solved > 0
+    ? Math.round((progress.correct / progress.solved) * 1000) / 10
+    : 0;
+  return progress;
+}
+
+export function getDaySchedule(plan, dateStr, subjectStats = {}, examQuestions = []) {
   const cycleIndex = getCycleDayIndex(plan, dateStr);
   const template = getTemplateDay(cycleIndex);
   const weekday = getSaoPauloDayOfWeek(dateStr);
@@ -129,9 +145,17 @@ export function getDaySchedule(plan, dateStr, subjectStats = {}) {
     const stats = subjectStats[block.subjectId] || emptyStats();
     const platform = recommendPlatform(subject, stats);
     const key = blockKey(dateStr, block.subjectId, block.kind);
-    const done = Boolean(completed[key]);
+    const markedDone = Boolean(completed[key]);
     const kindMeta = AGU_KIND_META[block.kind] || AGU_KIND_META.questoes;
     const group = AGU_GROUPS[subject?.group] || AGU_GROUPS.extra;
+    const todayProgress = getSubjectProgressOnDate(examQuestions, subject, dateStr);
+    const target = block.target || 0;
+    const remaining = Math.max(0, target - todayProgress.solved);
+    const metTarget = target > 0 && todayProgress.solved >= target;
+    const done = markedDone || metTarget;
+    const progressPercent = target > 0
+      ? Math.min(100, Math.round((todayProgress.solved / target) * 100))
+      : (done ? 100 : 0);
 
     return {
       ...block,
@@ -139,6 +163,11 @@ export function getDaySchedule(plan, dateStr, subjectStats = {}) {
       key,
       dateStr,
       done,
+      markedDone,
+      metTarget,
+      remaining,
+      progressPercent,
+      todayProgress,
       subject,
       stats,
       platform,
@@ -168,14 +197,14 @@ export function getDaySchedule(plan, dateStr, subjectStats = {}) {
   };
 }
 
-export function getCycleCalendar(plan, todayStr, subjectStats = {}) {
+export function getCycleCalendar(plan, todayStr, subjectStats = {}, examQuestions = []) {
   const start = getCycleStartDate(plan, todayStr);
   const cycleNumber = getCycleNumber(plan, todayStr);
   const cycleStart = addDaysToDateStr(start, (cycleNumber - 1) * AGU_CYCLE_LENGTH);
   const days = [];
   for (let i = 0; i < AGU_CYCLE_LENGTH; i += 1) {
     const dateStr = addDaysToDateStr(cycleStart, i);
-    days.push(getDaySchedule(plan, dateStr, subjectStats));
+    days.push(getDaySchedule(plan, dateStr, subjectStats, examQuestions));
   }
   return {
     cycleNumber,
@@ -198,8 +227,8 @@ export function getTodayQuestionProgress(examQuestions = [], todayStr) {
 export function summarizePlan(plan, examQuestions = [], todayStr) {
   const subjectStats = buildSubjectStats(examQuestions);
   const today = todayStr || getSaoPauloDateStr();
-  const schedule = getDaySchedule(plan, today, subjectStats);
-  const calendar = getCycleCalendar(plan, today, subjectStats);
+  const schedule = getDaySchedule(plan, today, subjectStats, examQuestions);
+  const calendar = getCycleCalendar(plan, today, subjectStats, examQuestions);
   const todayProgress = getTodayQuestionProgress(examQuestions, today);
 
   const subjects = AGU_SUBJECTS.map((subject) => {

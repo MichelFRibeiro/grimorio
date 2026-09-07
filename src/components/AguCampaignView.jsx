@@ -12,7 +12,8 @@ import {
   AlertTriangle,
   Landmark,
   ScrollText,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import {
@@ -33,7 +34,7 @@ const PROTOCOL = [
   'Abaixo de 90% depois do volume mínimo: Decorando (lei seca) ou Qconcursos (filtro/banca), e volta ao Tec.',
   'Português entra todo dia útil mesmo fora do edital — é overlap de tribunais e discursiva.',
   'Sábado = volume + caderno de erros. Domingo = lei seca AGU + discursiva (parecer / peça / dissertação).',
-  'Cada sessão vira registro na aba Questões. Sem log, o ciclo não enxerga o desempenho.'
+  'Parcial vale. Fez 5 de 30? Lance as 5 no próprio bloco. O restante fica para quando voltar.'
 ];
 
 function ProgressBar({ percent, color = '#f59e0b' }) {
@@ -68,7 +69,8 @@ export function AguCampaignView({
   onToggleBlock,
   onRealignCycle,
   onResetPlan,
-  onOpenQuestions
+  onOpenQuestions,
+  onAddQuestions
 }) {
   const todayStr = getSaoPauloDateStr();
   const summary = useMemo(
@@ -77,6 +79,51 @@ export function AguCampaignView({
   );
   const [selectedSubjectId, setSelectedSubjectId] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [logBlock, setLogBlock] = useState(null);
+  const [logTotal, setLogTotal] = useState('');
+  const [logCorrect, setLogCorrect] = useState('');
+  const [logError, setLogError] = useState('');
+
+  const openLog = (block) => {
+    const remaining = block.remaining > 0 ? String(block.remaining) : '';
+    setLogBlock(block);
+    setLogTotal(remaining);
+    setLogCorrect('');
+    setLogError('');
+  };
+
+  const closeLog = () => {
+    setLogBlock(null);
+    setLogError('');
+  };
+
+  const submitLog = (e) => {
+    e.preventDefault();
+    if (!logBlock || !onAddQuestions) return;
+    const total = parseInt(logTotal, 10);
+    const correct = parseInt(logCorrect, 10);
+    if (!total || total <= 0) {
+      setLogError('Informe quantas questões você fez agora (pode ser 5 de 30).');
+      return;
+    }
+    if (Number.isNaN(correct) || correct < 0 || correct > total) {
+      setLogError('Acertos devem ficar entre 0 e o total feito agora.');
+      return;
+    }
+    onAddQuestions({
+      category: 'Estudos',
+      subject: logBlock.subject?.name || 'Geral',
+      topic: logBlock.kindMeta?.label || '',
+      institution: 'Cebraspe',
+      totalQuestions: total,
+      correctAnswers: correct,
+      durationMinutes: 0,
+      notes: `Campanha AGU · ${logBlock.kindMeta?.label || 'bloco'} · parcial ${total}/${logBlock.target || total}`,
+      notebookUrl: logBlock.subject?.tecCadernoUrl || '',
+      date: todayStr
+    });
+    closeLog();
+  };
 
   const selected = summary.subjects.find((subject) => subject.id === selectedSubjectId) || summary.subjects[0];
   const todayTarget = Math.max(summary.today.questionTarget, 1);
@@ -199,8 +246,9 @@ export function AguCampaignView({
                         {block.kindMeta.icon} {block.kindMeta.label}
                       </span>
                       {block.target > 0 && (
-                        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>
-                          {block.target} q
+                        <span style={{ fontSize: '0.75rem', color: block.metTarget ? '#10b981' : '#fbbf24', fontFamily: 'var(--font-mono)' }}>
+                          {block.todayProgress.solved}/{block.target} q
+                          {block.remaining > 0 ? ` · faltam ${block.remaining}` : ''}
                         </span>
                       )}
                     </div>
@@ -208,11 +256,21 @@ export function AguCampaignView({
                       {block.platform.reason}
                     </p>
                     <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
-                      {block.group.short} · {block.mastery.label} · {block.stats.solved} feitas · {block.stats.accuracy}% no histórico
+                      {block.group.short} · {block.mastery.label} · {block.stats.solved} no histórico · {block.stats.accuracy}%
                     </p>
+                    {block.target > 0 && (
+                      <div style={{ marginTop: '8px', maxWidth: '280px' }}>
+                        <ProgressBar percent={block.progressPercent} color={block.metTarget ? '#10b981' : '#f59e0b'} />
+                      </div>
+                    )}
                   </div>
                 </button>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {onAddQuestions && (
+                    <button onClick={() => openLog(block)} style={ghostBtnStyle}>
+                      <Target size={14} /> Lançar o que fiz
+                    </button>
+                  )}
                   {block.subject?.tecCadernoUrl && (
                     <a href={block.subject.tecCadernoUrl} target="_blank" rel="noreferrer" style={linkBtnStyle('#f59e0b')}>
                       <ExternalLink size={14} /> Caderno Tec
@@ -406,6 +464,65 @@ export function AguCampaignView({
         </p>
       </section>
 
+      {logBlock && (
+        <div
+          className="modal-overlay"
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)',
+            backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex',
+            alignItems: 'center', justifyContent: 'center', padding: '16px'
+          }}
+          onClick={closeLog}
+        >
+          <form
+            onSubmit={submitLog}
+            className="glass-panel modal-sheet"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '440px', width: '100%', padding: '24px', border: '1px solid rgba(245,158,11,0.4)', borderRadius: '20px' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
+              <div>
+                <h3 className="font-cinzel" style={{ fontSize: '1.15rem', color: '#f8fafc' }}>Lançar sessão parcial</h3>
+                <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '4px' }}>
+                  {logBlock.subject?.name} · meta {logBlock.target || 0} · já {logBlock.todayProgress.solved} hoje
+                </p>
+              </div>
+              <button type="button" onClick={closeLog} style={{ ...ghostBtnStyle, padding: '8px' }}><X size={16} /></button>
+            </div>
+            <p style={{ color: '#cbd5e1', fontSize: '0.85rem', marginBottom: '14px', lineHeight: 1.5 }}>
+              Fez 5 de 30 e precisa sair? Lance só as 5. O bloco fica em andamento; o restante entra quando você voltar.
+            </p>
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, marginBottom: '6px' }}>
+              Questões feitas agora
+            </label>
+            <input
+              type="number" min="1" value={logTotal} onChange={(e) => setLogTotal(e.target.value)}
+              placeholder="5"
+              style={inputStyle}
+            />
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, margin: '12px 0 6px' }}>
+              Acertos nessas questões
+            </label>
+            <input
+              type="number" min="0" value={logCorrect} onChange={(e) => setLogCorrect(e.target.value)}
+              placeholder="4"
+              style={inputStyle}
+            />
+            {logError && <p style={{ color: '#fb7185', fontSize: '0.8rem', marginTop: '10px' }}>{logError}</p>}
+            <div style={{ display: 'flex', gap: '8px', marginTop: '16px', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={closeLog} style={ghostBtnStyle}>Cancelar</button>
+              <button type="submit" style={{
+                ...ghostBtnStyle,
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                color: '#000', border: 'none'
+              }}>
+                Salvar {logTotal || '0'} questões
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <ConfirmModal
         isOpen={confirmReset}
         title="Reiniciar campanha AGU?"
@@ -450,4 +567,16 @@ const ghostBtnStyle = {
   fontWeight: 700,
   fontSize: '0.78rem',
   cursor: 'pointer'
+};
+
+const inputStyle = {
+  width: '100%',
+  padding: '10px 12px',
+  borderRadius: '10px',
+  background: '#1a2030',
+  border: '1px solid rgba(245, 158, 11, 0.35)',
+  color: '#fff',
+  fontSize: '1rem',
+  fontWeight: 800,
+  fontFamily: 'var(--font-mono)'
 };

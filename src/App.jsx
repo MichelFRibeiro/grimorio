@@ -357,6 +357,7 @@ export function App() {
             onRealignCycle={realignAguCycle}
             onResetPlan={resetAguPlan}
             onOpenQuestions={() => setActiveTab('questions')}
+            onAddQuestions={addExamQuestions}
           />
         )}
 
