@@ -650,6 +650,73 @@ export function useGameData() {
   };
 
   // 7. Profile Actions
+  const startAguPlan = async () => {
+    playClick();
+    const res = await fetch('/api/agu-plan/start', {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) fetchState();
+    else {
+      const errJson = await res.json().catch(() => ({}));
+      showRewardToast(0, 0, errJson.error || 'Erro ao iniciar a campanha AGU.');
+    }
+  };
+
+  const updateAguPlan = async (planPatch) => {
+    playClick();
+    const res = await fetch('/api/agu-plan', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ plan: planPatch })
+    });
+    if (res.ok) fetchState();
+    else {
+      const errJson = await res.json().catch(() => ({}));
+      showRewardToast(0, 0, errJson.error || 'Erro ao atualizar o plano AGU.');
+    }
+  };
+
+  const toggleAguBlock = async (key) => {
+    playClick();
+    const res = await fetch('/api/agu-plan/toggle-block', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ key })
+    });
+    if (res.ok) fetchState();
+    else {
+      const errJson = await res.json().catch(() => ({}));
+      showRewardToast(0, 0, errJson.error || 'Erro ao marcar o bloco do ciclo.');
+    }
+  };
+
+  const realignAguCycle = async () => {
+    playClick();
+    const res = await fetch('/api/agu-plan/realign', {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) fetchState();
+    else {
+      const errJson = await res.json().catch(() => ({}));
+      showRewardToast(0, 0, errJson.error || 'Erro ao realinhar o ciclo AGU.');
+    }
+  };
+
+  const resetAguPlan = async () => {
+    playClick();
+    const res = await fetch('/api/agu-plan/reset', {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) fetchState();
+    else {
+      const errJson = await res.json().catch(() => ({}));
+      showRewardToast(0, 0, errJson.error || 'Erro ao reiniciar a campanha AGU.');
+    }
+  };
+
   const updateProfile = async (profileData) => {
     playClick();
     const res = await fetch('/api/profile', {
@@ -705,6 +772,11 @@ export function useGameData() {
     resetBoss,
     updateProfile,
     setCurrentLocation,
-    refreshNextAction
+    refreshNextAction,
+    startAguPlan,
+    updateAguPlan,
+    toggleAguBlock,
+    realignAguCycle,
+    resetAguPlan
   };
 }

@@ -38,6 +38,8 @@ import {
 import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, mergeLiveActivityTimers, sanitizeLiveActivityTimers, clearLiveActivityTimer } from '../src/utils/activityDuration.js';
+import { AGU_SUBJECTS, createDefaultAguPlan } from '../src/data/aguCurriculum.js';
+import { sanitizeAguPlan, startAguPlan, realignAguCycle, summarizePlan, toggleCompletedBlock } from '../src/utils/aguCycle.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1835,6 +1837,114 @@ app.get('/api/backup/export', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename=grimorio-backup-${getSaoPauloDateStr()}.json`);
     res.send(JSON.stringify(db, null, 2));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 8.5. CAMPANHA AGU — PROCURADOR FEDERAL
+// ==========================================
+app.get('/api/agu-plan', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
+    res.json({
+      success: true,
+      plan: db.aguPlan,
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr),
+      subjects: AGU_SUBJECTS
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/agu-plan', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    const incoming = req.body?.plan || req.body || {};
+    db.aguPlan = sanitizeAguPlan({
+      ...sanitizeAguPlan(db.aguPlan, todayStr),
+      ...incoming,
+      updatedAt: new Date().toISOString()
+    }, todayStr);
+    saveDb(db);
+    res.json({
+      success: true,
+      plan: db.aguPlan,
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/agu-plan/start', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.aguPlan = startAguPlan(sanitizeAguPlan(db.aguPlan, todayStr), todayStr);
+    saveDb(db);
+    res.json({
+      success: true,
+      plan: db.aguPlan,
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/agu-plan/realign', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.aguPlan = realignAguCycle(sanitizeAguPlan(db.aguPlan, todayStr), todayStr);
+    saveDb(db);
+    res.json({
+      success: true,
+      plan: db.aguPlan,
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/agu-plan/toggle-block', (req, res) => {
+  try {
+    const { key } = req.body || {};
+    if (!key || typeof key !== 'string') {
+      return res.status(400).json({ error: 'Informe a chave do bloco (key).' });
+    }
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.aguPlan = toggleCompletedBlock(sanitizeAguPlan(db.aguPlan, todayStr), key);
+    saveDb(db);
+    res.json({
+      success: true,
+      plan: db.aguPlan,
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/agu-plan/reset', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.aguPlan = createDefaultAguPlan(todayStr);
+    saveDb(db);
+    res.json({
+      success: true,
+      plan: db.aguPlan,
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -11,6 +11,8 @@ import {
 import { applyLocationDefaults } from './locations.js';
 import { migrateActivityScale } from '../src/utils/activityScale.js';
 import { sanitizeLiveActivityTimers } from '../src/utils/activityDuration.js';
+import { createDefaultAguPlan } from '../src/data/aguCurriculum.js';
+import { sanitizeAguPlan } from '../src/utils/aguCycle.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -266,7 +268,8 @@ export const defaultDatabase = () => {
     rewards: [],
     rewardRedemptions: [],
     actionLogs: [],
-    liveActivityTimers: {}
+    liveActivityTimers: {},
+    aguPlan: createDefaultAguPlan(todayStr)
   };
 };
 
@@ -288,6 +291,7 @@ export function sanitizeDb(db) {
   if (!db.users) db.users = [];
   if (!db.userProfile) db.userProfile = defaultDatabase().userProfile;
   db.liveActivityTimers = sanitizeLiveActivityTimers(db.liveActivityTimers);
+  db.aguPlan = sanitizeAguPlan(db.aguPlan, getSaoPauloDateStr());
   if (!db.bossRaid) {
     db.bossRaid = createBossRaid({ level: 1 });
   } else {

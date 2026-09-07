@@ -5,6 +5,7 @@ import { formatBrl } from '../src/utils/coinExchange.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings } from './rankings.js';
 import { computeNextAction } from './nextAction.js';
+import { summarizePlan, startAguPlan, toggleCompletedBlock, sanitizeAguPlan } from '../src/utils/aguCycle.js';
 import {
   applyDifficultyFields,
   DEFAULT_DIFFICULTY,
@@ -1682,6 +1683,66 @@ export const toolsDefinition = [
         locationManual: db.userProfile.locationManual,
         nextAction: result
       }, `Lugar atual: ${result.context.locationLabel}.`);
+    }
+  },
+  {
+    name: 'get_agu_plan',
+    description: 'Obter o plano de estudos da Campanha AGU (Procurador Federal): ciclo atual, blocos de hoje, matérias e maestria.',
+    schema: {},
+    handler: async () => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      const plan = sanitizeAguPlan(db.aguPlan, todayStr);
+      const summary = summarizePlan(plan, db.examQuestions || [], todayStr);
+      return formatSuccess({
+        plan,
+        today: summary.today,
+        cycle: {
+          number: summary.calendar.cycleNumber,
+          start: summary.calendar.cycleStart,
+          end: summary.calendar.cycleEnd,
+          percent: summary.cyclePercent
+        },
+        masteredSubjects: summary.masteredSubjects,
+        totalSubjects: summary.totalSubjects,
+        overallAccuracy: summary.overallAccuracy,
+        totalSolved: summary.totalSolved
+      }, summary.today
+        ? `AGU hoje: ${summary.today.label} (${summary.today.doneCount}/${summary.today.totalBlocks} blocos).`
+        : 'Campanha AGU carregada.');
+    }
+  },
+  {
+    name: 'start_agu_campaign',
+    description: 'Iniciar (ou reiniciar a data de início) da Campanha AGU — Procurador Federal a partir de hoje.',
+    schema: {},
+    handler: async () => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      db.aguPlan = startAguPlan(sanitizeAguPlan(db.aguPlan, todayStr), todayStr);
+      saveDb(db);
+      const summary = summarizePlan(db.aguPlan, db.examQuestions || [], todayStr);
+      return formatSuccess({ plan: db.aguPlan, today: summary.today }, `Campanha AGU iniciada em ${todayStr}.`);
+    }
+  },
+  {
+    name: 'complete_agu_block',
+    description: 'Marcar ou desmarcar um bloco do ciclo AGU de hoje (ou de uma data YYYY-MM-DD).',
+    schema: {
+      subjectId: z.string().describe('ID da matéria (ex: constitucional, administrativo, portugues)'),
+      kind: z.string().optional().describe('Tipo do bloco: questoes, erros, revisao, lei-seca, discursiva, simulado'),
+      date: z.string().optional().describe('Data YYYY-MM-DD (padrão: hoje)')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      const dateStr = args.date || todayStr;
+      const kind = args.kind || 'questoes';
+      const key = `${dateStr}|${args.subjectId}|${kind}`;
+      db.aguPlan = toggleCompletedBlock(sanitizeAguPlan(db.aguPlan, todayStr), key);
+      saveDb(db);
+      const summary = summarizePlan(db.aguPlan, db.examQuestions || [], todayStr);
+      return formatSuccess({ key, plan: db.aguPlan, today: summary.today }, `Bloco ${key} alternado.`);
     }
   }
 ];

@@ -14,9 +14,11 @@ import { OracleAnalytics } from './components/OracleAnalytics';
 import { NextActionCard } from './components/NextActionCard';
 import { LevelUpModal } from './components/LevelUpModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass } from 'lucide-react';
+import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale } from 'lucide-react';
+import { AguCampaignView } from './components/AguCampaignView';
 import { getSaoPauloDateStr } from './utils/timeUtils';
 import { hasLiveReadingSession } from './utils/liveReadingSession';
+import { summarizePlan } from './utils/aguCycle';
 
 export function App() {
   const [activeTab, setActiveTab] = useState(() => (hasLiveReadingSession() ? 'books' : 'quests'));
@@ -76,7 +78,11 @@ export function App() {
     deleteReward,
     resetBoss,
     setCurrentLocation,
-    refreshNextAction
+    refreshNextAction,
+    startAguPlan,
+    toggleAguBlock,
+    realignAguCycle,
+    resetAguPlan
   } = useGameData();
 
   if (loadingAuth || (isAuthenticated && loading)) {
@@ -135,6 +141,7 @@ export function App() {
     books,
     readingSessions,
     examQuestions,
+    aguPlan,
     processes,
     processSteps,
     habits,
@@ -153,6 +160,8 @@ export function App() {
   }).length;
   const activeBooksCount = (books || []).filter(b => b.status === 'reading').length;
   const activeProcessesCount = (processes || []).filter(p => p.status === 'in_progress').length;
+  const aguToday = summarizePlan(aguPlan, examQuestions || [], getSaoPauloDateStr()).today;
+  const aguTodayRemaining = Math.max(0, (aguToday.totalBlocks || 0) - (aguToday.doneCount || 0));
 
   const tabs = [
     { id: 'quests', label: 'Missões', icon: Scroll, badge: pendingQuestsCount },
@@ -161,6 +170,7 @@ export function App() {
     { id: 'processes', label: 'Processos', icon: Layers, badge: activeProcessesCount },
     { id: 'habits', label: 'Rituais', icon: Flame, badge: habits?.length },
     { id: 'rewards', label: 'Taverna', icon: Gift },
+    { id: 'agu', label: 'AGU', icon: Scale, badge: aguTodayRemaining },
     { id: 'oracle', label: 'Oráculo', icon: Compass }
   ];
 
@@ -335,6 +345,18 @@ export function App() {
             onRedeemReward={redeemReward}
             onCancelRedemption={cancelRewardRedemption}
             onDeleteReward={deleteReward}
+          />
+        )}
+
+        {activeTab === 'agu' && (
+          <AguCampaignView
+            aguPlan={aguPlan}
+            examQuestions={examQuestions}
+            onStartPlan={startAguPlan}
+            onToggleBlock={toggleAguBlock}
+            onRealignCycle={realignAguCycle}
+            onResetPlan={resetAguPlan}
+            onOpenQuestions={() => setActiveTab('questions')}
           />
         )}
 

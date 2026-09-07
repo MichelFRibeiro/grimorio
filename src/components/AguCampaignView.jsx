@@ -1,0 +1,453 @@
+import React, { useMemo, useState } from 'react';
+import {
+  Scale,
+  Target,
+  Play,
+  CheckCircle2,
+  Circle,
+  ExternalLink,
+  RotateCcw,
+  CalendarDays,
+  Swords,
+  AlertTriangle,
+  Landmark,
+  ScrollText,
+  Sparkles
+} from 'lucide-react';
+import { ConfirmModal } from './ConfirmModal';
+import {
+  AGU_FOLDER_URL,
+  AGU_GROUPS,
+  AGU_PLATFORMS,
+  AGU_TARGET_ACCURACY,
+  AGU_THEORY_URL
+} from '../data/aguCurriculum.js';
+import { summarizePlan } from '../utils/aguCycle.js';
+import { getSaoPauloDateStr } from '../utils/timeUtils.js';
+
+const PROTOCOL = [
+  'Tec Concursos é a referência. Questão nova nasce no caderno do guia AGU 2023.',
+  'Modo CESPE ligado. Certo/errado com penalidade — chute custa ponto.',
+  'Comentário de professor no erro e no acerto chutado. Sem isso, o bloco não conta.',
+  `Meta de maestria: ${AGU_TARGET_ACCURACY}% com pelo menos 40 questões no tópico.`,
+  'Abaixo de 90% depois do volume mínimo: Decorando (lei seca) ou Qconcursos (filtro/banca), e volta ao Tec.',
+  'Português entra todo dia útil mesmo fora do edital — é overlap de tribunais e discursiva.',
+  'Sábado = volume + caderno de erros. Domingo = lei seca AGU + discursiva (parecer / peça / dissertação).',
+  'Cada sessão vira registro na aba Questões. Sem log, o ciclo não enxerga o desempenho.'
+];
+
+function ProgressBar({ percent, color = '#f59e0b' }) {
+  return (
+    <div className="progress-container" style={{ height: '8px' }}>
+      <div style={{
+        width: `${Math.min(100, Math.max(0, percent))}%`,
+        height: '100%',
+        borderRadius: '999px',
+        background: color,
+        boxShadow: `0 0 10px ${color}66`,
+        transition: 'width 0.35s ease'
+      }} />
+    </div>
+  );
+}
+
+function StatChip({ label, value, color, sub }) {
+  return (
+    <div className="rpg-card" style={{ padding: '14px 16px', flex: '1 1 140px', minWidth: '140px' }}>
+      <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: '1.35rem', fontWeight: 800, color: color || '#fbbf24', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>{value}</div>
+      {sub && <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>{sub}</div>}
+    </div>
+  );
+}
+
+export function AguCampaignView({
+  aguPlan,
+  examQuestions,
+  onStartPlan,
+  onToggleBlock,
+  onRealignCycle,
+  onResetPlan,
+  onOpenQuestions
+}) {
+  const todayStr = getSaoPauloDateStr();
+  const summary = useMemo(
+    () => summarizePlan(aguPlan, examQuestions || [], todayStr),
+    [aguPlan, examQuestions, todayStr]
+  );
+  const [selectedSubjectId, setSelectedSubjectId] = useState(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  const selected = summary.subjects.find((subject) => subject.id === selectedSubjectId) || summary.subjects[0];
+  const todayTarget = Math.max(summary.today.questionTarget, 1);
+  const todayPercent = Math.round((summary.todayProgress.solved / todayTarget) * 100);
+
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', marginBottom: '20px' }}>
+        <div>
+          <h2 className="font-cinzel" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Scale size={22} color="#fbbf24" /> Campanha AGU — Procurador Federal
+          </h2>
+          <p style={{ color: '#94a3b8', fontSize: '0.88rem', maxWidth: '720px', marginTop: '6px' }}>
+            Ciclo de 14 dias sobre o Guia Tec 2023. Foco AGU; tribunais e procuradorias entram como overlap.
+            Banca de treino: Cebraspe. Plataforma-mãe: Tec Avançado.
+          </p>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {!summary.started ? (
+            <button
+              onClick={onStartPlan}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '10px 18px', borderRadius: '12px',
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                color: '#000', fontWeight: 800, border: 'none', cursor: 'pointer'
+              }}
+            >
+              <Play size={16} /> Iniciar campanha hoje
+            </button>
+          ) : (
+            <button
+              onClick={onRealignCycle}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '10px 16px', borderRadius: '12px',
+                background: 'rgba(245, 158, 11, 0.12)', color: '#fbbf24',
+                fontWeight: 700, border: '1px solid rgba(245, 158, 11, 0.35)', cursor: 'pointer'
+              }}
+            >
+              <RotateCcw size={15} /> Realinhar ciclo para hoje
+            </button>
+          )}
+          <button
+            onClick={() => setConfirmReset(true)}
+            style={{
+              padding: '10px 14px', borderRadius: '12px',
+              background: 'transparent', color: '#94a3b8',
+              border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', fontWeight: 700
+            }}
+          >
+            Reiniciar
+          </button>
+        </div>
+      </div>
+
+      <div className="glass-panel-gold" style={{ padding: '16px 18px', marginBottom: '18px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', fontSize: '0.8rem', color: '#fde68a' }}>
+          <span>Guia Tec 2023 · 20 cadernos · 0 resolvidas no Tec</span>
+          <span>•</span>
+          <span>Edital de referência: nº 1/2022 AGU (Cebraspe) — estrutura analogada; cargo-alvo: Procurador Federal</span>
+          <span>•</span>
+          <span>Português incluso por decisão sua (fora do edital)</span>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '18px' }}>
+        <StatChip label="Ciclo" value={`${summary.calendar.cycleNumber}`} sub={`Dia ${summary.today.cycleDay}/14 · ${summary.today.weekdayLabel}`} />
+        <StatChip label="Blocos do ciclo" value={`${summary.cycleDoneBlocks}/${summary.cycleTotalBlocks}`} sub={`${summary.cyclePercent}% concluído`} color="#38bdf8" />
+        <StatChip label="Questões hoje" value={`${summary.todayProgress.solved}/${summary.today.questionTarget}`} sub={summary.todayProgress.solved ? `${Math.round((summary.todayProgress.correct / Math.max(summary.todayProgress.solved, 1)) * 1000) / 10}% acerto` : 'Nada registrado'} color="#10b981" />
+        <StatChip label="Maestria 90%" value={`${summary.masteredSubjects}/${summary.totalSubjects}`} sub={`${summary.startedSubjects} matérias já tocadas`} color="#c084fc" />
+        <StatChip label="Acerto AGU" value={`${summary.overallAccuracy}%`} sub={`${summary.totalSolved} questões no histórico`} />
+      </div>
+
+      <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '14px' }}>
+          <div>
+            <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24' }}>Hoje — {summary.today.label}</h3>
+            <p style={{ color: '#94a3b8', fontSize: '0.82rem' }}>
+              {summary.today.weekdayLabel} · {todayStr} · meta {summary.today.questionTarget} questões
+            </p>
+          </div>
+          <div style={{ minWidth: '180px', flex: '1 1 180px', maxWidth: '280px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '6px' }}>
+              <span>Volume do dia</span>
+              <span style={{ color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>{todayPercent}%</span>
+            </div>
+            <ProgressBar percent={todayPercent} />
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gap: '10px' }}>
+          {summary.today.blocks.map((block) => (
+            <div
+              key={block.key}
+              className="rpg-card"
+              style={{
+                padding: '14px 16px',
+                borderColor: block.done ? 'rgba(16, 185, 129, 0.45)' : 'rgba(255,255,255,0.07)'
+              }}
+            >
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => onToggleBlock(block.key)}
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    display: 'flex', gap: '12px', alignItems: 'flex-start', textAlign: 'left', flex: '1 1 240px', color: 'inherit'
+                  }}
+                >
+                  {block.done
+                    ? <CheckCircle2 size={22} color="#10b981" />
+                    : <Circle size={22} color="#64748b" />}
+                  <div>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <strong style={{ color: '#f8fafc' }}>{block.subject?.name}</strong>
+                      <span style={{
+                        fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px',
+                        background: `${block.kindMeta.color}22`, color: block.kindMeta.color, border: `1px solid ${block.kindMeta.color}55`
+                      }}>
+                        {block.kindMeta.icon} {block.kindMeta.label}
+                      </span>
+                      {block.target > 0 && (
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>
+                          {block.target} q
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>
+                      {block.platform.reason}
+                    </p>
+                    <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
+                      {block.group.short} · {block.mastery.label} · {block.stats.solved} feitas · {block.stats.accuracy}% no histórico
+                    </p>
+                  </div>
+                </button>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {block.subject?.tecCadernoUrl && (
+                    <a href={block.subject.tecCadernoUrl} target="_blank" rel="noreferrer" style={linkBtnStyle('#f59e0b')}>
+                      <ExternalLink size={14} /> Caderno Tec
+                    </a>
+                  )}
+                  {block.kind === 'lei-seca' && (
+                    <a href={AGU_PLATFORMS.decorando.url} target="_blank" rel="noreferrer" style={linkBtnStyle('#a855f7')}>
+                      Decorando
+                    </a>
+                  )}
+                  {block.platform.id === 'qconcursos' && (
+                    <a href={AGU_PLATFORMS.qconcursos.url} target="_blank" rel="noreferrer" style={linkBtnStyle('#38bdf8')}>
+                      Qconcursos
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '14px' }}>
+          <button onClick={onOpenQuestions} style={ghostBtnStyle}>
+            <Target size={14} /> Registrar sessão na Arena
+          </button>
+          <a href={AGU_FOLDER_URL} target="_blank" rel="noreferrer" style={linkBtnStyle('#f59e0b')}>
+            Pasta Tec do guia
+          </a>
+          <a href={AGU_THEORY_URL} target="_blank" rel="noreferrer" style={linkBtnStyle('#10b981')}>
+            Biblioteca de teoria
+          </a>
+        </div>
+      </section>
+
+      <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
+        <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <CalendarDays size={18} /> Ciclo {summary.calendar.cycleNumber}
+        </h3>
+        <p style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '12px' }}>
+          {summary.calendar.cycleStart} → {summary.calendar.cycleEnd}
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '8px' }}>
+          {summary.calendar.days.map((day) => {
+            const isToday = day.dateStr === todayStr;
+            return (
+              <div
+                key={day.dateStr}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '12px',
+                  background: isToday ? 'rgba(245, 158, 11, 0.12)' : '#131722',
+                  border: isToday ? '1px solid rgba(245, 158, 11, 0.45)' : '1px solid rgba(255,255,255,0.07)'
+                }}
+              >
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700 }}>{day.weekdayLabel}</div>
+                <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: 700, margin: '4px 0' }}>{day.label}</div>
+                <div style={{ fontSize: '0.72rem', color: day.complete ? '#10b981' : '#64748b', fontFamily: 'var(--font-mono)' }}>
+                  {day.doneCount}/{day.totalBlocks} blocos · {day.questionTarget} q
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
+        <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Landmark size={18} /> Matérias da campanha
+        </h3>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
+          {Object.values(AGU_GROUPS).map((group) => (
+            <span key={group.id} style={{
+              fontSize: '0.72rem', fontWeight: 800, padding: '4px 10px', borderRadius: '999px',
+              color: group.color, border: `1px solid ${group.color}55`, background: `${group.color}14`
+            }}>
+              {group.short}
+            </span>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
+          {summary.subjects.map((subject) => (
+            <button
+              key={subject.id}
+              onClick={() => setSelectedSubjectId(subject.id)}
+              className="rpg-card"
+              style={{
+                padding: '14px',
+                textAlign: 'left',
+                cursor: 'pointer',
+                borderColor: selected?.id === subject.id ? 'rgba(245, 158, 11, 0.5)' : undefined,
+                background: selected?.id === subject.id ? '#1a2030' : undefined
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                <strong style={{ color: '#f8fafc', fontSize: '0.9rem' }}>{subject.name}</strong>
+                <span style={{ color: subject.mastery.color, fontSize: '0.72rem', fontWeight: 800 }}>{subject.mastery.label}</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: subject.groupMeta.color, marginTop: '4px' }}>{subject.groupMeta.short}{subject.extra ? ' · extra' : ''}</div>
+              <div style={{ marginTop: '10px' }}>
+                <ProgressBar percent={subject.stats.accuracy} color={subject.mastery.color} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>
+                <span>{subject.stats.solved} q</span>
+                <span>{subject.stats.accuracy}%</span>
+                <span>{subject.tecQuestions || '—'} no Tec</span>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {selected && (
+          <div className="rpg-card" style={{ marginTop: '14px', padding: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+              <div>
+                <h4 className="font-cinzel" style={{ color: '#fde68a' }}>{selected.name}</h4>
+                <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '4px' }}>{selected.platform.reason}</p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {selected.tecCadernoUrl && (
+                  <a href={selected.tecCadernoUrl} target="_blank" rel="noreferrer" style={linkBtnStyle('#f59e0b')}>Caderno Tec</a>
+                )}
+                {selected.tecGuideUrl && (
+                  <a href={selected.tecGuideUrl} target="_blank" rel="noreferrer" style={linkBtnStyle('#38bdf8')}>Guia Tec</a>
+                )}
+                {selected.leiSeca && (
+                  <a href={AGU_PLATFORMS.decorando.url} target="_blank" rel="noreferrer" style={linkBtnStyle('#a855f7')}>Lei seca</a>
+                )}
+              </div>
+            </div>
+            <ul style={{ marginTop: '12px', paddingLeft: '18px', color: '#cbd5e1', fontSize: '0.85rem', lineHeight: 1.6 }}>
+              {(selected.topics || []).map((topic) => (
+                <li key={topic.id}>
+                  {topic.name}
+                  {topic.questions ? <span style={{ color: '#64748b', fontFamily: 'var(--font-mono)' }}> · {topic.questions} q</span> : null}
+                </li>
+              ))}
+            </ul>
+            {selected.overlap?.length > 0 && (
+              <p style={{ marginTop: '10px', fontSize: '0.78rem', color: '#10b981' }}>
+                Overlap: {selected.overlap.join(' · ')}
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
+        <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Swords size={18} /> Protocolo de execução
+        </h3>
+        <ol style={{ paddingLeft: '18px', color: '#cbd5e1', fontSize: '0.88rem', lineHeight: 1.7 }}>
+          {PROTOCOL.map((item) => <li key={item}>{item}</li>)}
+        </ol>
+        {summary.gapSubjects.length > 0 && (
+          <div style={{ marginTop: '14px', padding: '12px', borderRadius: '12px', background: 'rgba(244, 63, 94, 0.08)', border: '1px solid rgba(244, 63, 94, 0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fb7185', fontWeight: 800, marginBottom: '6px' }}>
+              <AlertTriangle size={16} /> Furos abaixo da meta
+            </div>
+            <p style={{ color: '#fda4af', fontSize: '0.82rem' }}>
+              {summary.gapSubjects.map((subject) => `${subject.name} (${subject.stats.accuracy}%)`).join(' · ')}
+            </p>
+          </div>
+        )}
+      </section>
+
+      <section className="glass-panel" style={{ padding: '20px' }}>
+        <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <ScrollText size={18} /> Como a prova é lida neste plano
+        </h3>
+        <p style={{ color: '#94a3b8', fontSize: '0.85rem', lineHeight: 1.65, marginBottom: '10px' }}>
+          O PDF da pasta Editais é o Edital nº 1 — AGU, de 26/12/2022, <strong style={{ color: '#e2e8f0' }}>Advogado da União</strong> (Cebraspe).
+          O guia Tec é <strong style={{ color: '#e2e8f0' }}>Procurador Federal 2023</strong>. O plano usa o guia Tec como currículo e a estrutura Cebraspe do edital como analogia da carreira AGU:
+          objetiva por grupos, 50% mínimo por grupo, discursivas (parecer, peça, dissertação) e oral.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+          {Object.values(AGU_GROUPS).filter((g) => g.id !== 'extra').map((group) => (
+            <div key={group.id} className="rpg-card" style={{ padding: '12px' }}>
+              <div style={{ color: group.color, fontWeight: 800, fontSize: '0.85rem' }}>{group.short}</div>
+              <p style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '6px' }}>{group.examShare}</p>
+              {group.analogQuestions > 0 && (
+                <p style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '6px', fontFamily: 'var(--font-mono)' }}>
+                  Analogia AU 2023: {group.analogQuestions} itens
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+        <p style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Sparkles size={14} color="#fbbf24" />
+          Quando sair o edital novo de Procurador Federal, o ciclo permanece; só se recalibra peso e caderno.
+        </p>
+      </section>
+
+      <ConfirmModal
+        isOpen={confirmReset}
+        title="Reiniciar campanha AGU?"
+        message="Os blocos marcados do ciclo serão zerados. O histórico da Arena de Questões permanece intacto."
+        confirmText="Reiniciar plano"
+        confirmVariant="danger"
+        onCancel={() => setConfirmReset(false)}
+        onConfirm={() => {
+          setConfirmReset(false);
+          onResetPlan();
+        }}
+      />
+    </div>
+  );
+}
+
+function linkBtnStyle(color) {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 12px',
+    borderRadius: '10px',
+    background: `${color}18`,
+    color,
+    border: `1px solid ${color}55`,
+    fontWeight: 700,
+    fontSize: '0.78rem',
+    textDecoration: 'none'
+  };
+}
+
+const ghostBtnStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  padding: '8px 12px',
+  borderRadius: '10px',
+  background: 'rgba(255,255,255,0.04)',
+  color: '#e2e8f0',
+  border: '1px solid rgba(255,255,255,0.1)',
+  fontWeight: 700,
+  fontSize: '0.78rem',
+  cursor: 'pointer'
+};
