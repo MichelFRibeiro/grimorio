@@ -496,7 +496,7 @@ export const AGU_SUBJECTS = [
     leiSeca: false,
     overlap: ['tribunais', 'procuradorias'],
     extra: true,
-    tecCadernoUrl: 'https://www.tecconcursos.com.br/materias/lingua-portuguesa-portugues',
+    tecCadernoUrl: 'https://www.tecconcursos.com.br/questoes/cadernos/65829511',
     tecGuideUrl: 'https://www.tecconcursos.com.br/materias/lingua-portuguesa-portugues',
     topics: [
       t('ortografia', 'Ortografia e emprego das letras', 19951),
