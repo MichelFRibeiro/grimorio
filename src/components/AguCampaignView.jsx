@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Scale,
   Target,
@@ -13,9 +13,13 @@ import {
   Landmark,
   ScrollText,
   Sparkles,
-  X
+  X,
+  Clock
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { ActivityTimerBox } from './ActivityTimerBox';
+import { consumeActivityTimerMinutes, getActivityTimerSnapshot, subscribeActivityTimers } from '../utils/liveActivityTimers';
+import { elapsedMsFrom, formatStudyDuration, parseDurationMinutes } from '../utils/activityDuration';
 import {
   AGU_FOLDER_URL,
   AGU_GROUPS,
@@ -62,6 +66,64 @@ function StatChip({ label, value, color, sub }) {
   );
 }
 
+function liveMinutesForKeys(keys = []) {
+  let ms = 0;
+  keys.forEach((key) => {
+    const snap = getActivityTimerSnapshot('agu', key);
+    if (!snap) return;
+    ms += elapsedMsFrom(snap.accumulatedMs || 0, snap.runStartedAt || null);
+  });
+  return Math.floor(ms / 60000);
+}
+
+function useLiveAguMinutes(blockKeys) {
+  const keySig = (blockKeys || []).join('\n');
+  const [minutes, setMinutes] = useState(() => liveMinutesForKeys(blockKeys));
+
+  useEffect(() => {
+    const keys = keySig ? keySig.split('\n').filter(Boolean) : [];
+    const update = () => setMinutes(liveMinutesForKeys(keys));
+    update();
+    return subscribeActivityTimers(update);
+  }, [keySig]);
+
+  return minutes;
+}
+
+function StudyTimeCard({ studyTime, liveMinutes = 0 }) {
+  const rows = [
+    { id: 'day', label: 'Hoje', value: (studyTime?.day || 0) + liveMinutes, color: '#fbbf24' },
+    { id: 'week', label: 'Semana', value: (studyTime?.week || 0) + liveMinutes, color: '#38bdf8' },
+    { id: 'cycle', label: 'Ciclo', value: (studyTime?.cycle || 0) + liveMinutes, color: '#c084fc' },
+    { id: 'month', label: 'Mês', value: (studyTime?.month || 0) + liveMinutes, color: '#10b981' },
+    { id: 'year', label: 'Ano', value: (studyTime?.year || 0) + liveMinutes, color: '#f472b6' },
+    { id: 'total', label: 'Total', value: (studyTime?.total || 0) + liveMinutes, color: '#f59e0b' }
+  ];
+
+  return (
+    <section className="glass-panel-gold" style={{ padding: '18px 20px', marginBottom: '18px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+        <Clock size={18} color="#fbbf24" />
+        <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24' }}>Tempo total estudado</h3>
+      </div>
+      <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '12px' }}>
+        Soma o cronômetro dos blocos da campanha e as sessões lançadas na Arena com matérias AGU.
+        {liveMinutes > 0 ? ' Inclui o tempo em andamento agora.' : ''}
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
+        {rows.map((row) => (
+          <div key={row.id} className="rpg-card" style={{ padding: '12px 14px' }}>
+            <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{row.label}</div>
+            <div style={{ fontSize: '1.15rem', fontWeight: 800, color: row.color, fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
+              {formatStudyDuration(row.value)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function AguCampaignView({
   aguPlan,
   examQuestions,
@@ -83,6 +145,10 @@ export function AguCampaignView({
   const [logTotal, setLogTotal] = useState('');
   const [logCorrect, setLogCorrect] = useState('');
   const [logError, setLogError] = useState('');
+  const todayBlockKeys = (summary.today?.blocks || []).map((block) => block.key);
+  const liveMinutes = useLiveAguMinutes(todayBlockKeys);
+
+  const consumeBlockTimer = (blockKey) => consumeActivityTimerMinutes('agu', blockKey);
 
   const openLog = (block) => {
     const remaining = block.remaining > 0 ? String(block.remaining) : '';
@@ -117,12 +183,21 @@ export function AguCampaignView({
       institution: 'Cebraspe',
       totalQuestions: total,
       correctAnswers: correct,
-      durationMinutes: 0,
+      durationMinutes: consumeBlockTimer(logBlock.key),
       notes: `Campanha AGU · ${logBlock.kindMeta?.label || 'bloco'} · parcial ${total}/${logBlock.target || total}`,
       notebookUrl: logBlock.subject?.tecCadernoUrl || '',
       date: todayStr
     });
     closeLog();
+  };
+
+  const handleToggleBlock = (block) => {
+    const extra = {};
+    if (!block.markedDone) {
+      const durationMinutes = consumeBlockTimer(block.key);
+      if (durationMinutes > 0) extra.durationMinutes = durationMinutes;
+    }
+    onToggleBlock(block.key, extra);
   };
 
   const selected = summary.subjects.find((subject) => subject.id === selectedSubjectId) || summary.subjects[0];
@@ -198,6 +273,8 @@ export function AguCampaignView({
         <StatChip label="Acerto AGU" value={`${summary.overallAccuracy}%`} sub={`${summary.totalSolved} questões no histórico`} />
       </div>
 
+      <StudyTimeCard studyTime={summary.studyTime} liveMinutes={liveMinutes} />
+
       <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '14px' }}>
           <div>
@@ -227,7 +304,7 @@ export function AguCampaignView({
             >
               <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
                 <button
-                  onClick={() => onToggleBlock(block.key)}
+                  onClick={() => handleToggleBlock(block)}
                   style={{
                     background: 'transparent', border: 'none', cursor: 'pointer',
                     display: 'flex', gap: '12px', alignItems: 'flex-start', textAlign: 'left', flex: '1 1 240px', color: 'inherit'
@@ -263,6 +340,11 @@ export function AguCampaignView({
                         <ProgressBar percent={block.progressPercent} color={block.metTarget ? '#10b981' : '#f59e0b'} />
                       </div>
                     )}
+                    {parseDurationMinutes(aguPlan?.blockDurations?.[block.key]) > 0 && (
+                      <p style={{ fontSize: '0.75rem', color: '#fbbf24', marginTop: '6px', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Clock size={12} /> {formatStudyDuration(aguPlan.blockDurations[block.key])} neste bloco
+                      </p>
+                    )}
                   </div>
                 </button>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -287,6 +369,15 @@ export function AguCampaignView({
                     </a>
                   )}
                 </div>
+              </div>
+              <div style={{ marginTop: '12px' }}>
+                <ActivityTimerBox
+                  kind="agu"
+                  id={block.key}
+                  label={`Cronômetro · ${block.subject?.name || 'bloco'}`}
+                  accent={block.kindMeta?.color || '#fbbf24'}
+                  compact
+                />
               </div>
             </div>
           ))}

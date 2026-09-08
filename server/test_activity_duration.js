@@ -3,6 +3,7 @@ import {
   parseDurationMinutes,
   secondsToDurationMinutes,
   formatDurationLabel,
+  formatStudyDuration,
   sumDurationMap,
   getHabitDurationForDate,
   setHabitDurationForDate,
@@ -32,6 +33,8 @@ function run() {
   assert.strictEqual(formatDurationLabel(18), '18 min');
   assert.strictEqual(formatDurationLabel(60), '1h');
   assert.strictEqual(formatDurationLabel(75), '1h 15 min');
+  assert.strictEqual(formatStudyDuration(0), '0 min');
+  assert.strictEqual(formatStudyDuration(75), '1h 15 min');
   console.log('✅ formatDurationLabel formata minutos e horas.');
 
   const habit = { history: [] };

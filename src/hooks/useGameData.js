@@ -677,12 +677,12 @@ export function useGameData() {
     }
   };
 
-  const toggleAguBlock = async (key) => {
+  const toggleAguBlock = async (key, extra = {}) => {
     playClick();
     const res = await fetch('/api/agu-plan/toggle-block', {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ key })
+      body: JSON.stringify({ key, ...extra })
     });
     if (res.ok) fetchState();
     else {

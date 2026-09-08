@@ -12,7 +12,8 @@ import {
   getAguSubject,
   recommendPlatform
 } from '../data/aguCurriculum.js';
-import { addDaysToDateStr, getSaoPauloDateStr, getSaoPauloDayOfWeek } from './timeUtils.js';
+import { parseDurationMinutes } from './activityDuration.js';
+import { addDaysToDateStr, getCurrentWeekDays, getSaoPauloDateStr, getSaoPauloDayOfWeek } from './timeUtils.js';
 
 const DAY_LABELS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
@@ -49,6 +50,58 @@ export function getTemplateDay(index) {
 
 function emptyStats() {
   return { solved: 0, correct: 0, wrong: 0, accuracy: 0, sessions: 0, minutes: 0 };
+}
+
+export function isAguExamEntry(entry) {
+  if (!entry) return false;
+  if (AGU_SUBJECTS.some((subject) => matchExamToSubject(entry, subject))) return true;
+  return String(entry.notes || '').includes('Campanha AGU');
+}
+
+function examEntryDate(entry) {
+  if (entry?.date) return entry.date;
+  if (entry?.timestamp) return getSaoPauloDateStr(entry.timestamp);
+  return '';
+}
+
+function dateFromBlockKey(key) {
+  const dateStr = String(key || '').split('|')[0];
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : '';
+}
+
+export function getAguStudyTimeTotals(plan, examQuestions = [], todayStr, calendar) {
+  const today = todayStr || getSaoPauloDateStr();
+  const weekDays = getCurrentWeekDays(today);
+  const weekStart = weekDays[0]?.dateStr || today;
+  const weekEnd = weekDays[6]?.dateStr || today;
+  const monthPrefix = today.slice(0, 7);
+  const yearPrefix = today.slice(0, 4);
+  const cycleStart = calendar?.cycleStart || today;
+  const cycleEnd = calendar?.cycleEnd || today;
+
+  const totals = { day: 0, week: 0, cycle: 0, month: 0, year: 0, total: 0 };
+
+  const addMinutes = (dateStr, minutes) => {
+    const amount = parseDurationMinutes(minutes);
+    if (!amount || !dateStr) return;
+    totals.total += amount;
+    if (dateStr === today) totals.day += amount;
+    if (dateStr >= weekStart && dateStr <= weekEnd) totals.week += amount;
+    if (dateStr >= cycleStart && dateStr <= cycleEnd) totals.cycle += amount;
+    if (dateStr.startsWith(monthPrefix)) totals.month += amount;
+    if (dateStr.startsWith(yearPrefix)) totals.year += amount;
+  };
+
+  (examQuestions || []).forEach((entry) => {
+    if (!isAguExamEntry(entry)) return;
+    addMinutes(examEntryDate(entry), entry.durationMinutes);
+  });
+
+  Object.entries(plan?.blockDurations || {}).forEach(([key, minutes]) => {
+    addMinutes(dateFromBlockKey(key), minutes);
+  });
+
+  return totals;
 }
 
 export function matchExamToSubject(entry, subject) {
@@ -269,7 +322,8 @@ export function summarizePlan(plan, examQuestions = [], todayStr) {
     overallAccuracy,
     cycleDoneBlocks,
     cycleTotalBlocks,
-    cyclePercent: cycleTotalBlocks > 0 ? Math.round((cycleDoneBlocks / cycleTotalBlocks) * 100) : 0
+    cyclePercent: cycleTotalBlocks > 0 ? Math.round((cycleDoneBlocks / cycleTotalBlocks) * 100) : 0,
+    studyTime: getAguStudyTimeTotals(plan, examQuestions, today, calendar)
   };
 }
 
@@ -280,6 +334,18 @@ export function toggleCompletedBlock(plan, key) {
   return {
     ...plan,
     completedBlocks: completed,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function addBlockDuration(plan, key, minutes) {
+  const amount = parseDurationMinutes(minutes);
+  if (!plan || !key || amount <= 0) return plan;
+  const blockDurations = { ...(plan.blockDurations || {}) };
+  blockDurations[key] = parseDurationMinutes(blockDurations[key]) + amount;
+  return {
+    ...plan,
+    blockDurations,
     updatedAt: new Date().toISOString()
   };
 }
@@ -314,6 +380,7 @@ export function sanitizeAguPlan(plan, todayStr) {
     targetAccuracy: Number(plan.targetAccuracy) > 0 ? Number(plan.targetAccuracy) : AGU_TARGET_ACCURACY,
     dailyQuestionTarget: Number(plan.dailyQuestionTarget) > 0 ? Number(plan.dailyQuestionTarget) : AGU_WEEKDAY_QUESTION_TARGET,
     completedBlocks: plan.completedBlocks && typeof plan.completedBlocks === 'object' ? plan.completedBlocks : {},
+    blockDurations: plan.blockDurations && typeof plan.blockDurations === 'object' ? plan.blockDurations : {},
     topicStatus: plan.topicStatus && typeof plan.topicStatus === 'object' ? plan.topicStatus : {},
     subjectNotes: plan.subjectNotes && typeof plan.subjectNotes === 'object' ? plan.subjectNotes : {},
     currentTopic: plan.currentTopic && typeof plan.currentTopic === 'object' ? plan.currentTopic : {},

@@ -5,7 +5,7 @@ import { formatBrl } from '../src/utils/coinExchange.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings } from './rankings.js';
 import { computeNextAction } from './nextAction.js';
-import { summarizePlan, startAguPlan, toggleCompletedBlock, sanitizeAguPlan } from '../src/utils/aguCycle.js';
+import { summarizePlan, startAguPlan, toggleCompletedBlock, sanitizeAguPlan, addBlockDuration } from '../src/utils/aguCycle.js';
 import {
   applyDifficultyFields,
   DEFAULT_DIFFICULTY,
@@ -1706,7 +1706,8 @@ export const toolsDefinition = [
         masteredSubjects: summary.masteredSubjects,
         totalSubjects: summary.totalSubjects,
         overallAccuracy: summary.overallAccuracy,
-        totalSolved: summary.totalSolved
+        totalSolved: summary.totalSolved,
+        studyTime: summary.studyTime
       }, summary.today
         ? `AGU hoje: ${summary.today.label} (${summary.today.doneCount}/${summary.today.totalBlocks} blocos).`
         : 'Campanha AGU carregada.');
@@ -1731,7 +1732,8 @@ export const toolsDefinition = [
     schema: {
       subjectId: z.string().describe('ID da matéria (ex: constitucional, administrativo, portugues)'),
       kind: z.string().optional().describe('Tipo do bloco: questoes, erros, revisao, lei-seca, discursiva, simulado'),
-      date: z.string().optional().describe('Data YYYY-MM-DD (padrão: hoje)')
+      date: z.string().optional().describe('Data YYYY-MM-DD (padrão: hoje)'),
+      durationMinutes: z.number().optional().describe('Tempo cronometrado do bloco em minutos')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1740,6 +1742,7 @@ export const toolsDefinition = [
       const kind = args.kind || 'questoes';
       const key = `${dateStr}|${args.subjectId}|${kind}`;
       db.aguPlan = toggleCompletedBlock(sanitizeAguPlan(db.aguPlan, todayStr), key);
+      db.aguPlan = addBlockDuration(db.aguPlan, key, args.durationMinutes);
       saveDb(db);
       const summary = summarizePlan(db.aguPlan, db.examQuestions || [], todayStr);
       return formatSuccess({ key, plan: db.aguPlan, today: summary.today }, `Bloco ${key} alternado.`);

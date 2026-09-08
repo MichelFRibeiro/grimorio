@@ -27,6 +27,12 @@ export function formatDurationLabel(minutes) {
   return rest ? `${hours}h ${rest} min` : `${hours}h`;
 }
 
+export function formatStudyDuration(minutes) {
+  const m = parseDurationMinutes(minutes);
+  if (m <= 0) return '0 min';
+  return formatDurationLabel(m);
+}
+
 export function sumDurationMap(map) {
   if (!map || typeof map !== 'object') return 0;
   return Object.values(map).reduce((acc, value) => acc + parseDurationMinutes(value), 0);

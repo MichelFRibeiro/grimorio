@@ -684,6 +684,7 @@ export function createDefaultAguPlan(todayStr) {
     targetAccuracy: AGU_TARGET_ACCURACY,
     dailyQuestionTarget: AGU_WEEKDAY_QUESTION_TARGET,
     completedBlocks: {},
+    blockDurations: {},
     topicStatus: {},
     subjectNotes: {},
     currentTopic: {},

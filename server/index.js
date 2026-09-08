@@ -39,7 +39,7 @@ import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, mergeLiveActivityTimers, sanitizeLiveActivityTimers, clearLiveActivityTimer } from '../src/utils/activityDuration.js';
 import { AGU_SUBJECTS, createDefaultAguPlan } from '../src/data/aguCurriculum.js';
-import { sanitizeAguPlan, startAguPlan, realignAguCycle, summarizePlan, toggleCompletedBlock } from '../src/utils/aguCycle.js';
+import { sanitizeAguPlan, startAguPlan, realignAguCycle, summarizePlan, toggleCompletedBlock, addBlockDuration } from '../src/utils/aguCycle.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1916,13 +1916,14 @@ app.post('/api/agu-plan/realign', (req, res) => {
 
 app.post('/api/agu-plan/toggle-block', (req, res) => {
   try {
-    const { key } = req.body || {};
+    const { key, durationMinutes } = req.body || {};
     if (!key || typeof key !== 'string') {
       return res.status(400).json({ error: 'Informe a chave do bloco (key).' });
     }
     const db = getDb();
     const todayStr = getSaoPauloDateStr();
     db.aguPlan = toggleCompletedBlock(sanitizeAguPlan(db.aguPlan, todayStr), key);
+    db.aguPlan = addBlockDuration(db.aguPlan, key, durationMinutes);
     saveDb(db);
     res.json({
       success: true,
