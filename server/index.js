@@ -92,6 +92,102 @@ app.get(['/api/health', '/api/ping'], (req, res) => {
 });
 
 // ==========================================
+// FOCUS AUDIO (az-vault/audios/focus)
+// ==========================================
+const FOCUS_AUDIO_REL = path.join('audios', 'focus', 'focus_mp3.mp3');
+
+function resolveAzVaultDir() {
+  const candidates = [
+    process.env.AZ_VAULT_PATH,
+    '/a0/usr/workdir/az-vault',
+    path.resolve(process.cwd(), 'az-vault'),
+    path.resolve(__dirname, '../../../az-vault'),
+    path.resolve(__dirname, '../../../../az-vault')
+  ].filter(Boolean);
+
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, FOCUS_AUDIO_REL))) return dir;
+  }
+  return candidates[0] || '/a0/usr/workdir/az-vault';
+}
+
+function getFocusAudioPath() {
+  return path.join(resolveAzVaultDir(), FOCUS_AUDIO_REL);
+}
+
+function streamFocusAudio(req, res) {
+  const filePath = getFocusAudioPath();
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({
+      error: 'Áudio de foco não encontrado no az-vault (audios/focus/focus_mp3.mp3).'
+    });
+  }
+
+  const stat = fs.statSync(filePath);
+  const fileSize = stat.size;
+  const range = req.headers.range;
+
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Content-Type', 'audio/mpeg');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.setHeader('Content-Disposition', 'inline; filename="focus_mp3.mp3"');
+
+  if (req.method === 'HEAD') {
+    res.setHeader('Content-Length', fileSize);
+    return res.status(200).end();
+  }
+
+  if (range) {
+    const match = /bytes=(\d*)-(\d*)/.exec(range);
+    if (!match) {
+      res.status(416).setHeader('Content-Range', `bytes */${fileSize}`);
+      return res.end();
+    }
+
+    const start = match[1] ? parseInt(match[1], 10) : 0;
+    const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+
+    if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= fileSize) {
+      res.status(416).setHeader('Content-Range', `bytes */${fileSize}`);
+      return res.end();
+    }
+
+    const safeEnd = Math.min(end, fileSize - 1);
+    const chunkSize = safeEnd - start + 1;
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${start}-${safeEnd}/${fileSize}`);
+    res.setHeader('Content-Length', chunkSize);
+    return fs.createReadStream(filePath, { start, end: safeEnd }).pipe(res);
+  }
+
+  res.setHeader('Content-Length', fileSize);
+  return fs.createReadStream(filePath).pipe(res);
+}
+
+app.get('/api/focus/track', (req, res) => {
+  const filePath = getFocusAudioPath();
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({
+      error: 'Áudio de foco não encontrado no az-vault (audios/focus/focus_mp3.mp3).'
+    });
+  }
+
+  const stat = fs.statSync(filePath);
+  res.json({
+    id: 'focus-mp3',
+    title: 'Câmara do Foco',
+    filename: 'focus_mp3.mp3',
+    src: '/api/focus/audio',
+    contentType: 'audio/mpeg',
+    sizeBytes: stat.size,
+    durationHintSeconds: 7160
+  });
+});
+
+app.head('/api/focus/audio', streamFocusAudio);
+app.get('/api/focus/audio', streamFocusAudio);
+
+// ==========================================
 // MCP (MODEL CONTEXT PROTOCOL) & EXTERNAL AI AGENTS
 // ==========================================
 

@@ -14,14 +14,17 @@ import { OracleAnalytics } from './components/OracleAnalytics';
 import { NextActionCard } from './components/NextActionCard';
 import { LevelUpModal } from './components/LevelUpModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale } from 'lucide-react';
+import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale, Headphones } from 'lucide-react';
 import { AguCampaignView } from './components/AguCampaignView';
+import { FocusChamberView, FocusMiniPlayer } from './components/FocusPlayer';
+import { useFocusPlayer } from './hooks/useFocusPlayer';
 import { getSaoPauloDateStr } from './utils/timeUtils';
 import { hasLiveReadingSession } from './utils/liveReadingSession';
 import { summarizePlan } from './utils/aguCycle';
 
 export function App() {
   const [activeTab, setActiveTab] = useState(() => (hasLiveReadingSession() ? 'books' : 'quests'));
+  const focusPlayer = useFocusPlayer();
 
   const {
     user,
@@ -169,13 +172,16 @@ export function App() {
     { id: 'books', label: 'Biblioteca', icon: BookOpen, badge: activeBooksCount },
     { id: 'processes', label: 'Processos', icon: Layers, badge: activeProcessesCount },
     { id: 'habits', label: 'Rituais', icon: Flame, badge: habits?.length },
+    { id: 'focus', label: 'Foco', icon: Headphones },
     { id: 'rewards', label: 'Taverna', icon: Gift },
     { id: 'agu', label: 'AGU', icon: Scale, badge: aguTodayRemaining },
     { id: 'oracle', label: 'Oráculo', icon: Compass }
   ];
 
+  const showFocusMini = activeTab !== 'focus' && (focusPlayer.playing || focusPlayer.currentTime >= 1);
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell${showFocusMini ? ' has-focus-mini' : ''}`}>
       
       {/* Top Header */}
       <Header
@@ -335,6 +341,10 @@ export function App() {
           />
         )}
 
+        {activeTab === 'focus' && (
+          <FocusChamberView player={focusPlayer} playClick={playClick} />
+        )}
+
         {activeTab === 'rewards' && (
           <RewardsShop
             rewards={rewards}
@@ -375,6 +385,14 @@ export function App() {
 
       {/* Floating XP & Coins Notification Toasts */}
       <FloatingToasts toasts={rewardPopups} />
+
+      {activeTab !== 'focus' && (
+        <FocusMiniPlayer
+          player={focusPlayer}
+          playClick={playClick}
+          onOpen={() => setActiveTab('focus')}
+        />
+      )}
 
     </div>
   );

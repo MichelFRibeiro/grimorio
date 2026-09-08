@@ -405,3 +405,226 @@ img, video, canvas {
   transition: width 0.4s ease-out;
   box-shadow: 0 0 12px rgba(6, 182, 212, 0.4);
 }
+
+/* Focus Chamber Player */
+.focus-chamber {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.focus-orb {
+  position: absolute;
+  inset: -40px auto auto 50%;
+  width: 280px;
+  height: 280px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.focus-orb span {
+  position: absolute;
+  inset: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(56, 189, 248, 0.18);
+}
+
+.focus-orb span:nth-child(2) {
+  inset: 70px;
+  border-color: rgba(168, 85, 247, 0.18);
+}
+
+.focus-orb span:nth-child(3) {
+  inset: 100px;
+  border-color: rgba(245, 158, 11, 0.18);
+}
+
+.focus-orb.is-playing span {
+  animation: focusPulse 4.2s ease-in-out infinite;
+}
+
+.focus-orb.is-playing span:nth-child(2) {
+  animation-delay: 0.4s;
+}
+
+.focus-orb.is-playing span:nth-child(3) {
+  animation-delay: 0.8s;
+}
+
+@keyframes focusPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+.focus-play-btn {
+  width: 68px;
+  height: 68px;
+  border-radius: 22px;
+  border: none;
+  cursor: pointer;
+  color: #041018;
+  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+  box-shadow: 0 10px 24px rgba(56, 189, 248, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.focus-play-btn:hover {
+  transform: scale(1.04);
+}
+
+.focus-seek {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38bdf8 var(--progress, 0%), #1e293b var(--progress, 0%));
+  outline: none;
+  cursor: pointer;
+}
+
+.focus-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f8fafc;
+  border: 2px solid #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+}
+
+.focus-seek::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f8fafc;
+  border: 2px solid #38bdf8;
+}
+
+.focus-volume {
+  height: 6px;
+}
+
+.focus-mini-player {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 80;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 10px 12px 12px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 8px 12px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(12, 16, 29, 0.94);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+.focus-mini-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.focus-mini-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38bdf8 var(--progress, 0%), #1e293b var(--progress, 0%));
+}
+
+.focus-mini-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.focus-mini-actions button {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.focus-mini-actions button.is-primary {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #38bdf8;
+}
+
+.focus-mini-eq {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.16);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 0;
+  flex-shrink: 0;
+}
+
+.focus-mini-eq i {
+  display: block;
+  width: 3px;
+  height: 8px;
+  border-radius: 999px;
+  background: #38bdf8;
+}
+
+.focus-mini-eq.is-playing i {
+  animation: eqBounce 0.9s ease-in-out infinite;
+}
+
+.focus-mini-eq.is-playing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.focus-mini-eq.is-playing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes eqBounce {
+  0%, 100% { height: 6px; }
+  50% { height: 14px; }
+}
+
+.app-shell.has-focus-mini {
+  padding-bottom: 120px;
+}
+
+@media (max-width: 768px) {
+  .focus-mini-player {
+    left: 12px;
+    right: 12px;
+  }
+
+  .app-shell.has-focus-mini {
+    padding-bottom: calc(120px + env(safe-area-inset-bottom));
+  }
+}
