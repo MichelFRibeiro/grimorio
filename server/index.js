@@ -92,34 +92,31 @@ app.get(['/api/health', '/api/ping'], (req, res) => {
 });
 
 // ==========================================
-// FOCUS AUDIO (az-vault/audios/focus)
+// FOCUS AUDIO
+// Prefers the bundled copy in data/audio, then az-vault/audios/focus.
 // ==========================================
 const FOCUS_AUDIO_REL = path.join('audios', 'focus', 'focus_mp3.mp3');
-
-function resolveAzVaultDir() {
-  const candidates = [
-    process.env.AZ_VAULT_PATH,
-    '/a0/usr/workdir/az-vault',
-    path.resolve(process.cwd(), 'az-vault'),
-    path.resolve(__dirname, '../../../az-vault'),
-    path.resolve(__dirname, '../../../../az-vault')
-  ].filter(Boolean);
-
-  for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, FOCUS_AUDIO_REL))) return dir;
-  }
-  return candidates[0] || '/a0/usr/workdir/az-vault';
-}
+const BUNDLED_FOCUS_AUDIO = path.join(__dirname, '..', 'data', 'audio', 'focus_mp3.mp3');
 
 function getFocusAudioPath() {
-  return path.join(resolveAzVaultDir(), FOCUS_AUDIO_REL);
+  const candidates = [
+    process.env.FOCUS_AUDIO_PATH,
+    BUNDLED_FOCUS_AUDIO,
+    process.env.AZ_VAULT_PATH && path.join(process.env.AZ_VAULT_PATH, FOCUS_AUDIO_REL),
+    path.join('/a0/usr/workdir/az-vault', FOCUS_AUDIO_REL),
+    path.resolve(process.cwd(), 'az-vault', FOCUS_AUDIO_REL),
+    path.resolve(__dirname, '../../../az-vault', FOCUS_AUDIO_REL),
+    path.resolve(__dirname, '../../../../az-vault', FOCUS_AUDIO_REL)
+  ].filter(Boolean);
+
+  return candidates.find(filePath => fs.existsSync(filePath)) || BUNDLED_FOCUS_AUDIO;
 }
 
 function streamFocusAudio(req, res) {
   const filePath = getFocusAudioPath();
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({
-      error: 'Áudio de foco não encontrado no az-vault (audios/focus/focus_mp3.mp3).'
+      error: 'Áudio de foco não encontrado (data/audio/focus_mp3.mp3 ou az-vault/audios/focus/focus_mp3.mp3).'
     });
   }
 
@@ -168,7 +165,7 @@ app.get('/api/focus/track', (req, res) => {
   const filePath = getFocusAudioPath();
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({
-      error: 'Áudio de foco não encontrado no az-vault (audios/focus/focus_mp3.mp3).'
+      error: 'Áudio de foco não encontrado (data/audio/focus_mp3.mp3 ou az-vault/audios/focus/focus_mp3.mp3).'
     });
   }
 

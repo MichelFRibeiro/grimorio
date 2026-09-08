@@ -81,7 +81,7 @@ export function useFocusPlayer() {
     const onError = () => {
       setLoading(false);
       setPlaying(false);
-      setError('Não foi possível carregar o áudio de foco. Confira se focus_mp3.mp3 está em az-vault/audios/focus.');
+      setError('Não foi possível carregar o áudio de foco. O servidor não encontrou data/audio/focus_mp3.mp3.');
     };
 
     audio.addEventListener('loadedmetadata', onLoaded);

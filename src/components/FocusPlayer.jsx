@@ -246,8 +246,7 @@ export function FocusChamberView({ player, playClick }) {
           Como usar
         </h3>
         <p style={{ fontSize: '0.88rem', color: '#94a3b8', lineHeight: 1.55, margin: 0 }}>
-          Fonte: <code style={{ color: '#7dd3fc' }}>az-vault/audios/focus/focus_mp3.mp3</code>. Aproximadamente 2 horas de trilha.
-          O mini-player aparece no rodapé enquanto a música toca em qualquer outra aba do Grimório.
+          Trilha de cerca de 2 horas. O mini-player aparece no rodapé enquanto a música toca em qualquer outra aba do Grimório.
         </p>
       </section>
     </div>
