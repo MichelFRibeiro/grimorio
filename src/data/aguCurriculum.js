@@ -8,10 +8,72 @@
 
 export const AGU_TARGET_ACCURACY = 90;
 export const AGU_CYCLE_LENGTH = 14;
-export const AGU_WEEKDAY_QUESTION_TARGET = 50;
-export const AGU_SATURDAY_QUESTION_TARGET = 80;
-export const AGU_SUNDAY_QUESTION_TARGET = 25;
+export const AGU_WEEKDAY_QUESTION_TARGET = 25;
+export const AGU_SATURDAY_QUESTION_TARGET = 40;
+export const AGU_SUNDAY_QUESTION_TARGET = 15;
 export const AGU_MASTER_MIN_SOLVED = 40;
+export const AGU_STALE_DAYS = 21;
+export const AGU_TOPIC_ADVANCE_MIN = 25;
+export const AGU_TOPIC_ADVANCE_ACCURACY = 85;
+export const AGU_SUBJECT_MASTERY_TOPIC_RATIO = 0.7;
+export const AGU_PLAN_VERSION = 2;
+export const AGU_DEFAULT_EDITAL_PROFILE_ID = 'pf-tec-2023';
+
+/** Minutos de TARDE por weekday (0=Dom … 6=Sáb). Noite fechada. */
+export const AGU_DEFAULT_CAPACITY_BY_WEEKDAY = {
+  0: 0,
+  1: 225,
+  2: 110,
+  3: 225,
+  4: 110,
+  5: 225,
+  6: 0
+};
+
+export const AGU_WEEKDAY_MORNING_MINUTES = 60;
+export const AGU_LONG_AFTERNOON_BLOCKS = 3;
+export const AGU_SHORT_AFTERNOON_BLOCKS = 2;
+export const AGU_LONG_DAY_MINUTES = 180;
+
+export const AGU_PHASES = {
+  fundacao: {
+    id: 'fundacao',
+    label: 'A — Fundação',
+    short: 'Fundação',
+    color: '#38bdf8',
+    next: 'aprofundamento'
+  },
+  aprofundamento: {
+    id: 'aprofundamento',
+    label: 'B — Aprofundamento',
+    short: 'Aprofundamento',
+    color: '#a855f7',
+    next: 'simulados'
+  },
+  simulados: {
+    id: 'simulados',
+    label: 'C — Simulados',
+    short: 'Simulados',
+    color: '#f59e0b',
+    next: 'lock'
+  },
+  lock: {
+    id: 'lock',
+    label: 'D — Lock de edital',
+    short: 'Lock',
+    color: '#f43f5e',
+    next: null
+  }
+};
+
+export const AGU_DISCURSIVE_ROTATION = ['parecer', 'peca', 'dissertacao', 'oral'];
+
+export const AGU_WINDOW_N_BY_PHASE = {
+  fundacao: 3,
+  aprofundamento: 2,
+  simulados: 2,
+  lock: 1
+};
 
 export const AGU_PLATFORMS = {
   tec: {
@@ -636,8 +698,47 @@ export const AGU_KIND_META = {
   'lei-seca': { label: 'Lei seca', icon: '📜', color: '#a855f7' },
   discursiva: { label: 'Discursiva', icon: '✒️', color: '#c084fc' },
   simulado: { label: 'Simulado', icon: '⚔️', color: '#fb7185' },
-  teoria: { label: 'Teoria', icon: '📖', color: '#10b981' }
+  teoria: { label: 'Teoria', icon: '📖', color: '#10b981' },
+  informativo: { label: 'Informativo', icon: '📰', color: '#22d3ee' }
 };
+
+export const AGU_PRODUCT_META = {
+  parecer: { label: 'Parecer', vaultFolder: 'Discursivas' },
+  peca: { label: 'Peça', vaultFolder: 'Discursivas' },
+  dissertacao: { label: 'Dissertação', vaultFolder: 'Discursivas' },
+  oral: { label: 'Oral', vaultFolder: 'Discursivas' },
+  esqueleto: { label: 'Esqueleto de parecer', vaultFolder: 'Discursivas' }
+};
+
+export const AGU_EDITAL_PROFILES = {
+  'pf-tec-2023': {
+    id: 'pf-tec-2023',
+    cargo: 'Procurador Federal',
+    banca: 'Cebraspe',
+    year: 2023,
+    keepPortugueseDefault: true,
+    subjects: AGU_SUBJECTS.filter((s) => !s.extra).map((s) => ({
+      id: s.id,
+      weight: s.weight,
+      inObjective: true,
+      inDiscursive: s.group === 1 || s.id === 'processual-civil' || s.id === 'civil',
+      inOral: s.group === 1
+    })),
+    removedSubjectIds: [],
+    addedSubjects: []
+  }
+};
+
+export const AGU_WINDOW_SUBJECTS = ['leg-penal-esp', 'educacao-cti', 'agrario'];
+
+export const AGU_CORE_SUBJECTS = [
+  'constitucional',
+  'administrativo',
+  'seguridade',
+  'leg-agu',
+  'tributario',
+  'financeiro'
+];
 
 export function getAguSubject(id) {
   return AGU_SUBJECTS.find((subject) => subject.id === id) || null;
@@ -649,20 +750,36 @@ export function getAguTopic(subjectId, topicId) {
   return (subject.topics || []).find((topic) => topic.id === topicId) || null;
 }
 
-export function blockKey(dateStr, subjectId, kind) {
-  return `${dateStr}|${subjectId}|${kind}`;
+export function blockKey(dateStr, subjectId, kind, topicId) {
+  const base = `${dateStr}|${subjectId}|${kind}`;
+  return topicId ? `${base}|${topicId}` : base;
+}
+
+export function parseBlockKey(key) {
+  const parts = String(key || '').split('|');
+  return {
+    dateStr: parts[0] || '',
+    subjectId: parts[1] || '',
+    kind: parts[2] || 'questoes',
+    topicId: parts[3] || null
+  };
+}
+
+export function getEditalProfile(id) {
+  return AGU_EDITAL_PROFILES[id] || AGU_EDITAL_PROFILES[AGU_DEFAULT_EDITAL_PROFILE_ID];
 }
 
 export function recommendPlatform(subject, stats) {
   const solved = stats?.solved || 0;
-  const accuracy = stats?.accuracy || 0;
+  const accuracy = stats?.accuracy || stats?.accSmooth || 0;
+  const accuracyPct = accuracy <= 1 ? Math.round(accuracy * 1000) / 10 : accuracy;
   if (solved < AGU_MASTER_MIN_SOLVED) {
     return { id: 'tec', reason: 'Ainda no Tec. Meta: 40 questões no tópico antes de julgar esgotamento.' };
   }
-  if (accuracy >= AGU_TARGET_ACCURACY) {
+  if (accuracyPct >= AGU_TARGET_ACCURACY) {
     return { id: 'tec', reason: 'Meta de 90% atingida. Mantenha no Tec (revisão e caderno de erros).' };
   }
-  if (subject.leiSeca) {
+  if (subject?.leiSeca) {
     return {
       id: 'decorando',
       reason: 'Tec abaixo de 90% após volume mínimo. Abra a lei seca no Decorando e volte ao Tec no mesmo tópico.'
@@ -676,18 +793,31 @@ export function recommendPlatform(subject, stats) {
 
 export function createDefaultAguPlan(todayStr) {
   return {
-    version: 1,
+    version: AGU_PLAN_VERSION,
     startedAt: null,
+    phase: 'fundacao',
+    editalPublished: false,
+    keepPortuguese: true,
+    capacityByWeekday: { ...AGU_DEFAULT_CAPACITY_BY_WEEKDAY },
+    weekdaysMorning: AGU_WEEKDAY_MORNING_MINUTES,
     cycleNumber: 1,
     cycleStartDate: todayStr || null,
     cycleLengthDays: AGU_CYCLE_LENGTH,
     targetAccuracy: AGU_TARGET_ACCURACY,
     dailyQuestionTarget: AGU_WEEKDAY_QUESTION_TARGET,
+    masterMinSolved: AGU_MASTER_MIN_SOLVED,
+    staleDays: AGU_STALE_DAYS,
     completedBlocks: {},
     blockDurations: {},
     topicStatus: {},
     subjectNotes: {},
     currentTopic: {},
+    currentCycle: null,
+    generatedCycles: [],
+    debt: [],
+    discursiveRotationIndex: 0,
+    editalProfileId: AGU_DEFAULT_EDITAL_PROFILE_ID,
+    removedSubjectIds: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };

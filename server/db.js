@@ -12,7 +12,7 @@ import { applyLocationDefaults } from './locations.js';
 import { migrateActivityScale } from '../src/utils/activityScale.js';
 import { sanitizeLiveActivityTimers } from '../src/utils/activityDuration.js';
 import { createDefaultAguPlan } from '../src/data/aguCurriculum.js';
-import { sanitizeAguPlan } from '../src/utils/aguCycle.js';
+import { sanitizeAguPlan, ensureCurrentCycle } from '../src/utils/aguCycle.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -291,7 +291,11 @@ export function sanitizeDb(db) {
   if (!db.users) db.users = [];
   if (!db.userProfile) db.userProfile = defaultDatabase().userProfile;
   db.liveActivityTimers = sanitizeLiveActivityTimers(db.liveActivityTimers);
-  db.aguPlan = sanitizeAguPlan(db.aguPlan, getSaoPauloDateStr());
+  const todayStr = getSaoPauloDateStr();
+  db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
+  if (db.aguPlan?.startedAt) {
+    db.aguPlan = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);
+  }
   if (!db.bossRaid) {
     db.bossRaid = createBossRaid({ level: 1 });
   } else {

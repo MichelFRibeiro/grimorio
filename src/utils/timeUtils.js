@@ -124,6 +124,29 @@ export function addDaysToDateStr(dateStr, daysOffset) {
 }
 
 /**
+ * Segunda-feira da semana civil (São Paulo) que contém a data.
+ * @param {string} dateStr 'YYYY-MM-DD'
+ * @returns {string}
+ */
+export function mondayOfDateStr(dateStr) {
+  const dow = getSaoPauloDayOfWeek(dateStr);
+  const diffToMonday = (dow === 0 ? -6 : 1) - dow;
+  return addDaysToDateStr(dateStr, diffToMonday);
+}
+
+/**
+ * Diferença em dias civis (b - a).
+ * @param {string} a 'YYYY-MM-DD'
+ * @param {string} b 'YYYY-MM-DD'
+ * @returns {number}
+ */
+export function daysBetweenDateStr(a, b) {
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+}
+
+/**
  * Retorna os 7 dias da semana corrente (Segunda a Domingo) no fuso de São Paulo.
  * @param {Date|string|number} [date=new Date()]
  * @returns {Array<{dateStr: string, dayOfWeek: number, label: string, shortName: string, isToday: boolean, isPast: boolean, isFuture: boolean}>}

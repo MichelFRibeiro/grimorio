@@ -663,6 +663,33 @@ export function useGameData() {
     }
   };
 
+  const advanceAguCycle = async () => {
+    playClick();
+    const res = await fetch('/api/agu-plan/advance', {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) fetchState();
+    else {
+      const errJson = await res.json().catch(() => ({}));
+      showRewardToast(0, 0, errJson.error || 'Erro ao gerar o próximo ciclo AGU.');
+    }
+  };
+
+  const logAguProduct = async (key, note) => {
+    playClick();
+    const res = await fetch('/api/agu-plan/log-product', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ key, note })
+    });
+    if (res.ok) fetchState();
+    else {
+      const errJson = await res.json().catch(() => ({}));
+      showRewardToast(0, 0, errJson.error || 'Erro ao lançar o produto discursivo.');
+    }
+  };
+
   const updateAguPlan = async (planPatch) => {
     playClick();
     const res = await fetch('/api/agu-plan', {
@@ -777,6 +804,8 @@ export function useGameData() {
     updateAguPlan,
     toggleAguBlock,
     realignAguCycle,
-    resetAguPlan
+    resetAguPlan,
+    advanceAguCycle,
+    logAguProduct
   };
 }

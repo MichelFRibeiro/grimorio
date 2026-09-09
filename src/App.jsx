@@ -85,7 +85,10 @@ export function App() {
     startAguPlan,
     toggleAguBlock,
     realignAguCycle,
-    resetAguPlan
+    resetAguPlan,
+    advanceAguCycle,
+    logAguProduct,
+    updateAguPlan
   } = useGameData();
 
   if (loadingAuth || (isAuthenticated && loading)) {
@@ -366,6 +369,9 @@ export function App() {
             onToggleBlock={toggleAguBlock}
             onRealignCycle={realignAguCycle}
             onResetPlan={resetAguPlan}
+            onAdvanceCycle={advanceAguCycle}
+            onLogProduct={logAguProduct}
+            onUpdatePlan={updateAguPlan}
             onOpenQuestions={() => setActiveTab('questions')}
             onAddQuestions={addExamQuestions}
           />

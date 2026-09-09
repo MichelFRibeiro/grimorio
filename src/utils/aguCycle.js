@@ -1,23 +1,53 @@
 import {
   AGU_CYCLE_LENGTH,
   AGU_CYCLE_TEMPLATE,
+  AGU_DEFAULT_CAPACITY_BY_WEEKDAY,
+  AGU_DEFAULT_EDITAL_PROFILE_ID,
   AGU_GROUPS,
   AGU_KIND_META,
   AGU_MASTER_MIN_SOLVED,
+  AGU_PHASES,
+  AGU_PLAN_VERSION,
+  AGU_PRODUCT_META,
+  AGU_STALE_DAYS,
   AGU_SUBJECTS,
   AGU_TARGET_ACCURACY,
+  AGU_WEEKDAY_MORNING_MINUTES,
   AGU_WEEKDAY_QUESTION_TARGET,
   blockKey,
   createDefaultAguPlan,
   getAguSubject,
+  parseBlockKey,
   recommendPlatform
 } from '../data/aguCurriculum.js';
 import { parseDurationMinutes } from './activityDuration.js';
 import { addDaysToDateStr, getCurrentWeekDays, getSaoPauloDateStr, getSaoPauloDayOfWeek } from './timeUtils.js';
+import {
+  buildSubjectStats as buildSubjectStatsDetailed,
+  buildTopicStats,
+  currentTopicForSubject,
+  detectPhase,
+  getSubjectMastery,
+  getTopicMastery,
+  matchExamToSubject as matchExamToSubjectDetailed,
+  phaseMeta,
+  rankSubjects,
+  resolveExamSubject,
+  topicKey
+} from './aguFragility.js';
+import {
+  collectDebtFromCycle,
+  fortnightStartFor,
+  generateFortnight
+} from './aguCycleGenerator.js';
 
 const DAY_LABELS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
+export { matchExamToSubjectDetailed as matchExamToSubject };
+export { detectPhase, phaseMeta, rankSubjects, collectDebtFromCycle, generateFortnight };
+
 export function getCycleStartDate(plan, todayStr) {
+  if (plan?.currentCycle?.start) return plan.currentCycle.start;
   if (plan?.startedAt) return plan.startedAt;
   if (plan?.cycleStartDate) return plan.cycleStartDate;
   return todayStr;
@@ -35,6 +65,7 @@ export function getCycleDayIndex(plan, dateStr) {
 }
 
 export function getCycleNumber(plan, dateStr) {
+  if (plan?.currentCycle?.number) return plan.currentCycle.number;
   const start = getCycleStartDate(plan, dateStr);
   const [sy, sm, sd] = start.split('-').map(Number);
   const [ty, tm, td] = dateStr.split('-').map(Number);
@@ -48,13 +79,14 @@ export function getTemplateDay(index) {
   return AGU_CYCLE_TEMPLATE[index] || AGU_CYCLE_TEMPLATE[0];
 }
 
-function emptyStats() {
-  return { solved: 0, correct: 0, wrong: 0, accuracy: 0, sessions: 0, minutes: 0 };
+export function buildSubjectStats(examQuestions = [], todayStr) {
+  return buildSubjectStatsDetailed(examQuestions, todayStr).byId;
 }
 
 export function isAguExamEntry(entry) {
   if (!entry) return false;
-  if (AGU_SUBJECTS.some((subject) => matchExamToSubject(entry, subject))) return true;
+  if (entry.subjectId && getAguSubject(entry.subjectId)) return true;
+  if (AGU_SUBJECTS.some((subject) => matchExamToSubjectDetailed(entry, subject))) return true;
   return String(entry.notes || '').includes('Campanha AGU');
 }
 
@@ -76,8 +108,8 @@ export function getAguStudyTimeTotals(plan, examQuestions = [], todayStr, calend
   const weekEnd = weekDays[6]?.dateStr || today;
   const monthPrefix = today.slice(0, 7);
   const yearPrefix = today.slice(0, 4);
-  const cycleStart = calendar?.cycleStart || today;
-  const cycleEnd = calendar?.cycleEnd || today;
+  const cycleStart = calendar?.cycleStart || plan?.currentCycle?.start || today;
+  const cycleEnd = calendar?.cycleEnd || plan?.currentCycle?.end || today;
 
   const totals = { day: 0, week: 0, cycle: 0, month: 0, year: 0, total: 0 };
 
@@ -104,76 +136,9 @@ export function getAguStudyTimeTotals(plan, examQuestions = [], todayStr, calend
   return totals;
 }
 
-export function matchExamToSubject(entry, subject) {
-  if (!entry || !subject) return false;
-  const hay = `${entry.subject || ''} ${entry.topic || ''}`.toLowerCase();
-  const name = subject.name.toLowerCase();
-  if (hay.includes(name.toLowerCase())) return true;
-  const aliases = {
-    constitucional: ['constitucional'],
-    administrativo: ['administrativo'],
-    financeiro: ['financeiro', 'afo', 'orçamento'],
-    economico: ['econômico', 'economico'],
-    tributario: ['tributário', 'tributario'],
-    seguridade: ['seguridade', 'previdenci'],
-    ambiental: ['ambiental'],
-    'leg-agu': ['legislação da agu', 'legislacao da agu', 'lc 73', 'lei orgânica da agu'],
-    civil: ['direito civil', 'lindb'],
-    'processual-civil': ['processual civil', 'processo civil'],
-    'leg-civil-esp': ['legislação civil', 'mandado de segurança', 'ação popular'],
-    empresarial: ['empresarial', 'comercial'],
-    internacional: ['internacional', 'direitos humanos'],
-    penal: ['direito penal'],
-    'processual-penal': ['processual penal', 'processo penal'],
-    'leg-penal-esp': ['legislação penal', 'lei 8.137', 'lavagem'],
-    trabalho: ['direito do trabalho'],
-    'processual-trabalho': ['processual do trabalho', 'processo do trabalho'],
-    agrario: ['agrário', 'agrario'],
-    'educacao-cti': ['educação', 'ldb', 'inovação'],
-    portugues: ['português', 'portugues', 'língua portuguesa', 'lingua portuguesa', 'ortografia']
-  };
-  return (aliases[subject.id] || []).some((alias) => hay.includes(alias));
-}
-
-export function buildSubjectStats(examQuestions = []) {
-  const byId = {};
-  AGU_SUBJECTS.forEach((subject) => {
-    byId[subject.id] = emptyStats();
-  });
-
-  examQuestions.forEach((entry) => {
-    const subject = AGU_SUBJECTS.find((item) => matchExamToSubject(entry, item));
-    if (!subject) return;
-    const stats = byId[subject.id];
-    stats.solved += entry.totalQuestions || 0;
-    stats.correct += entry.correctAnswers || 0;
-    stats.wrong += entry.wrongAnswers || 0;
-    stats.sessions += 1;
-    stats.minutes += entry.durationMinutes || 0;
-  });
-
-  Object.values(byId).forEach((stats) => {
-    stats.accuracy = stats.solved > 0
-      ? Math.round((stats.correct / stats.solved) * 1000) / 10
-      : 0;
-  });
-
-  return byId;
-}
-
-export function getSubjectMastery(stats) {
-  const solved = stats?.solved || 0;
-  const accuracy = stats?.accuracy || 0;
-  if (solved === 0) return { id: 'idle', label: 'Não iniciado', color: '#64748b' };
-  if (solved < AGU_MASTER_MIN_SOLVED) return { id: 'opening', label: 'Abertura', color: '#38bdf8' };
-  if (accuracy >= AGU_TARGET_ACCURACY) return { id: 'mastered', label: 'Maestria 90%', color: '#10b981' };
-  if (accuracy >= 80) return { id: 'close', label: 'Quase lá', color: '#f59e0b' };
-  return { id: 'gap', label: 'Furo', color: '#f43f5e' };
-}
-
 export function getSubjectProgressOnDate(examQuestions = [], subject, dateStr) {
   const entries = (examQuestions || []).filter((entry) => (
-    (entry.date || '') === dateStr && matchExamToSubject(entry, subject)
+    (entry.date || '') === dateStr && matchExamToSubjectDetailed(entry, subject)
   ));
   const progress = entries.reduce((acc, entry) => {
     acc.solved += entry.totalQuestions || 0;
@@ -187,70 +152,114 @@ export function getSubjectProgressOnDate(examQuestions = [], subject, dateStr) {
   return progress;
 }
 
-export function getDaySchedule(plan, dateStr, subjectStats = {}, examQuestions = []) {
+function hydrateBlock(raw, dateStr, plan, subjectStats, topicStats, examQuestions) {
+  const subject = getAguSubject(raw.subjectId);
+  const stats = subjectStats[raw.subjectId] || { solved: 0, correct: 0, wrong: 0, accuracy: 0, accSmooth: 0.5, sessions: 0, minutes: 0 };
+  const tStats = raw.topicId ? topicStats[topicKey(raw.subjectId, raw.topicId)] : null;
+  const platform = recommendPlatform(subject, tStats || stats);
+  const key = raw.key || blockKey(dateStr, raw.subjectId, raw.kind, raw.topicId);
+  const markedDone = Boolean(plan?.completedBlocks?.[key]) || Boolean(raw.done);
+  const kindMeta = AGU_KIND_META[raw.kind] || AGU_KIND_META.questoes;
+  const group = AGU_GROUPS[subject?.group] || AGU_GROUPS.extra;
+  const todayProgress = getSubjectProgressOnDate(examQuestions, subject, dateStr);
+  const target = raw.target || 0;
+  const remaining = Math.max(0, target - todayProgress.solved);
+  const metTarget = target > 0 && todayProgress.solved >= target;
+  const productLogged = Boolean(raw.productLogged) || Boolean(plan?.completedBlocks?.[`${key}|product`]);
+  const done = raw.kind === 'discursiva'
+    ? productLogged
+    : (markedDone || metTarget);
+  const progressPercent = target > 0
+    ? Math.min(100, Math.round((todayProgress.solved / target) * 100))
+    : (done ? 100 : 0);
+  const cursor = subject ? currentTopicForSubject(plan, subject) : null;
+
+  return {
+    ...raw,
+    key,
+    dateStr,
+    done,
+    markedDone,
+    metTarget,
+    remaining,
+    progressPercent,
+    todayProgress,
+    productLogged,
+    subject,
+    stats,
+    platform,
+    kindMeta,
+    group,
+    productMeta: raw.targetProduct ? AGU_PRODUCT_META[raw.targetProduct] : null,
+    mastery: getTopicMastery(tStats || stats, plan?.staleDays || AGU_STALE_DAYS),
+    topicName: raw.topicName || cursor?.topicName || null,
+    optional: Boolean(raw.optional)
+  };
+}
+
+function templateBlocksForDate(plan, dateStr) {
   const cycleIndex = getCycleDayIndex(plan, dateStr);
   const template = getTemplateDay(cycleIndex);
+  return {
+    label: template.label,
+    cycleIndex,
+    blocks: (template.blocks || []).map((block) => ({ ...block }))
+  };
+}
+
+export function getDaySchedule(plan, dateStr, subjectStats = {}, examQuestions = []) {
   const weekday = getSaoPauloDayOfWeek(dateStr);
-  const completed = plan?.completedBlocks || {};
+  const topicStats = buildTopicStats(examQuestions, dateStr);
+  const generated = (plan?.currentCycle?.days || []).find((day) => day.dateStr === dateStr);
+  const source = generated
+    ? { label: generated.label, cycleIndex: getCycleDayIndex(plan, dateStr), blocks: generated.blocks || [], optional: generated.optional }
+    : { ...templateBlocksForDate(plan, dateStr), optional: weekday === 0 || weekday === 6 };
 
-  const blocks = (template.blocks || []).map((block, index) => {
-    const subject = getAguSubject(block.subjectId);
-    const stats = subjectStats[block.subjectId] || emptyStats();
-    const platform = recommendPlatform(subject, stats);
-    const key = blockKey(dateStr, block.subjectId, block.kind);
-    const markedDone = Boolean(completed[key]);
-    const kindMeta = AGU_KIND_META[block.kind] || AGU_KIND_META.questoes;
-    const group = AGU_GROUPS[subject?.group] || AGU_GROUPS.extra;
-    const todayProgress = getSubjectProgressOnDate(examQuestions, subject, dateStr);
-    const target = block.target || 0;
-    const remaining = Math.max(0, target - todayProgress.solved);
-    const metTarget = target > 0 && todayProgress.solved >= target;
-    const done = markedDone || metTarget;
-    const progressPercent = target > 0
-      ? Math.min(100, Math.round((todayProgress.solved / target) * 100))
-      : (done ? 100 : 0);
-
-    return {
-      ...block,
-      index,
-      key,
-      dateStr,
-      done,
-      markedDone,
-      metTarget,
-      remaining,
-      progressPercent,
-      todayProgress,
-      subject,
-      stats,
-      platform,
-      kindMeta,
-      group,
-      mastery: getSubjectMastery(stats)
-    };
-  });
+  const blocks = (source.blocks || []).map((block, index) => ({
+    ...hydrateBlock(block, dateStr, plan, subjectStats, topicStats, examQuestions),
+    index
+  }));
 
   const questionTarget = blocks.reduce((sum, block) => sum + (block.target || 0), 0);
   const doneCount = blocks.filter((block) => block.done).length;
+  const requiredBlocks = blocks.filter((block) => !block.optional);
+  const requiredDone = requiredBlocks.filter((block) => block.done).length;
 
   return {
     dateStr,
-    cycleIndex,
-    cycleDay: cycleIndex + 1,
+    cycleIndex: source.cycleIndex,
+    cycleDay: (source.cycleIndex || 0) + 1,
     cycleNumber: getCycleNumber(plan, dateStr),
     weekday,
     weekdayLabel: DAY_LABELS[weekday],
-    label: template.label,
+    label: source.label,
     isWeekend: weekday === 0 || weekday === 6,
+    optional: Boolean(source.optional),
     blocks,
+    morning: blocks.filter((b) => b.window === 'morning'),
+    afternoon: blocks.filter((b) => b.window === 'afternoon' || !b.window),
     questionTarget,
     doneCount,
     totalBlocks: blocks.length,
-    complete: blocks.length > 0 && doneCount === blocks.length
+    complete: requiredBlocks.length > 0
+      ? requiredDone === requiredBlocks.length
+      : (blocks.length > 0 && doneCount === blocks.length)
   };
 }
 
 export function getCycleCalendar(plan, todayStr, subjectStats = {}, examQuestions = []) {
+  if (plan?.currentCycle?.days?.length) {
+    const days = plan.currentCycle.days.map((day) => getDaySchedule(plan, day.dateStr, subjectStats, examQuestions));
+    return {
+      cycleNumber: plan.currentCycle.number,
+      cycleStart: plan.currentCycle.start,
+      cycleEnd: plan.currentCycle.end,
+      phase: plan.currentCycle.phase || plan.phase,
+      reasons: plan.currentCycle.reasons || [],
+      warnings: plan.currentCycle.warnings || [],
+      days
+    };
+  }
   const start = getCycleStartDate(plan, todayStr);
   const cycleNumber = getCycleNumber(plan, todayStr);
   const cycleStart = addDaysToDateStr(start, (cycleNumber - 1) * AGU_CYCLE_LENGTH);
@@ -263,6 +272,9 @@ export function getCycleCalendar(plan, todayStr, subjectStats = {}, examQuestion
     cycleNumber,
     cycleStart,
     cycleEnd: addDaysToDateStr(cycleStart, AGU_CYCLE_LENGTH - 1),
+    phase: plan?.phase || 'fundacao',
+    reasons: [],
+    warnings: [],
     days
   };
 }
@@ -278,26 +290,29 @@ export function getTodayQuestionProgress(examQuestions = [], todayStr) {
 }
 
 export function summarizePlan(plan, examQuestions = [], todayStr) {
-  const subjectStats = buildSubjectStats(examQuestions);
   const today = todayStr || getSaoPauloDateStr();
-  const schedule = getDaySchedule(plan, today, subjectStats, examQuestions);
-  const calendar = getCycleCalendar(plan, today, subjectStats, examQuestions);
+  const { byId, topicStats } = buildSubjectStatsDetailed(examQuestions, today);
+  const schedule = getDaySchedule(plan, today, byId, examQuestions);
+  const calendar = getCycleCalendar(plan, today, byId, examQuestions);
   const todayProgress = getTodayQuestionProgress(examQuestions, today);
+  const phase = plan?.phase || calendar.phase || 'fundacao';
 
   const subjects = AGU_SUBJECTS.map((subject) => {
-    const stats = subjectStats[subject.id] || emptyStats();
+    const stats = byId[subject.id] || { solved: 0, correct: 0, accuracy: 0, accSmooth: 0.5 };
+    const cursor = currentTopicForSubject(plan, subject);
     return {
       ...subject,
       groupMeta: AGU_GROUPS[subject.group] || AGU_GROUPS.extra,
       stats,
-      mastery: getSubjectMastery(stats),
+      cursor,
+      mastery: getSubjectMastery(stats, topicStats, subject, plan?.staleDays || AGU_STALE_DAYS),
       platform: recommendPlatform(subject, stats)
     };
   });
 
   const started = subjects.filter((subject) => subject.stats.solved > 0).length;
   const mastered = subjects.filter((subject) => subject.mastery.id === 'mastered').length;
-  const gaps = subjects.filter((subject) => subject.mastery.id === 'gap' || subject.mastery.id === 'close');
+  const gaps = subjects.filter((subject) => subject.mastery.id === 'gap' || subject.mastery.id === 'close' || subject.mastery.id === 'repair');
   const totalSolved = subjects.reduce((sum, subject) => sum + subject.stats.solved, 0);
   const totalCorrect = subjects.reduce((sum, subject) => sum + subject.stats.correct, 0);
   const overallAccuracy = totalSolved > 0 ? Math.round((totalCorrect / totalSolved) * 1000) / 10 : 0;
@@ -308,8 +323,13 @@ export function summarizePlan(plan, examQuestions = [], todayStr) {
   return {
     started: Boolean(plan?.startedAt),
     startedAt: plan?.startedAt || null,
+    phase,
+    phaseMeta: AGU_PHASES[phase] || AGU_PHASES.fundacao,
+    editalPublished: Boolean(plan?.editalPublished),
+    keepPortuguese: plan?.keepPortuguese !== false,
     targetAccuracy: plan?.targetAccuracy || AGU_TARGET_ACCURACY,
-    subjectStats,
+    subjectStats: byId,
+    topicStats,
     subjects,
     today: schedule,
     calendar,
@@ -323,7 +343,10 @@ export function summarizePlan(plan, examQuestions = [], todayStr) {
     cycleDoneBlocks,
     cycleTotalBlocks,
     cyclePercent: cycleTotalBlocks > 0 ? Math.round((cycleDoneBlocks / cycleTotalBlocks) * 100) : 0,
-    studyTime: getAguStudyTimeTotals(plan, examQuestions, today, calendar)
+    studyTime: getAguStudyTimeTotals(plan, examQuestions, today, calendar),
+    debt: plan?.debt || [],
+    reasons: calendar.reasons || [],
+    warnings: calendar.warnings || []
   };
 }
 
@@ -350,21 +373,187 @@ export function addBlockDuration(plan, key, minutes) {
   };
 }
 
-export function startAguPlan(plan, todayStr) {
+export function logDiscursiveProduct(plan, key, payload = {}) {
+  const completed = { ...(plan.completedBlocks || {}) };
+  completed[key] = new Date().toISOString();
+  completed[`${key}|product`] = new Date().toISOString();
+  const currentCycle = plan.currentCycle
+    ? {
+      ...plan.currentCycle,
+      days: (plan.currentCycle.days || []).map((day) => ({
+        ...day,
+        blocks: (day.blocks || []).map((block) => (
+          block.key === key
+            ? { ...block, productLogged: true, productNote: payload.note || '', done: true }
+            : block
+        ))
+      }))
+    }
+    : plan.currentCycle;
+  const rotation = Number(plan.discursiveRotationIndex || 0) + 1;
   return {
     ...plan,
-    startedAt: todayStr,
-    cycleStartDate: todayStr,
-    cycleNumber: 1,
+    completedBlocks: completed,
+    currentCycle,
+    discursiveRotationIndex: rotation,
     updatedAt: new Date().toISOString()
   };
 }
 
-export function realignAguCycle(plan, todayStr) {
+function archiveCurrentCycle(plan) {
+  if (!plan?.currentCycle) return plan.generatedCycles || [];
+  const generated = [...(plan.generatedCycles || [])];
+  const last = generated[generated.length - 1];
+  if (last && last.start === plan.currentCycle.start && last.number === plan.currentCycle.number) {
+    generated[generated.length - 1] = plan.currentCycle;
+    return generated;
+  }
+  generated.push(plan.currentCycle);
+  return generated;
+}
+
+export function generateAndAttachCycle(plan, examQuestions, todayStr, options = {}) {
+  const phase = detectPhase(plan, examQuestions, todayStr);
+  const cycle = generateFortnight({ ...plan, phase }, examQuestions, todayStr, {
+    ...options,
+    phase,
+    cycleNumber: options.cycleNumber || (plan.generatedCycles?.length || 0) + 1
+  });
   return {
     ...plan,
-    cycleStartDate: todayStr,
-    startedAt: plan?.startedAt || todayStr,
+    phase,
+    currentCycle: cycle,
+    cycleNumber: cycle.number,
+    cycleStartDate: cycle.start,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function startAguPlan(plan, todayStr, examQuestions = []) {
+  const started = {
+    ...plan,
+    startedAt: todayStr,
+    cycleStartDate: fortnightStartFor(todayStr),
+    cycleNumber: 1,
+    phase: plan?.editalPublished ? 'lock' : 'fundacao',
+    generatedCycles: [],
+    debt: [],
+    updatedAt: new Date().toISOString()
+  };
+  return generateAndAttachCycle(started, examQuestions, todayStr, {
+    startDate: fortnightStartFor(todayStr),
+    cycleNumber: 1
+  });
+}
+
+export function realignAguCycle(plan, todayStr, examQuestions = []) {
+  const current = plan?.currentCycle;
+  const start = current?.start && todayStr <= current.end
+    ? current.start
+    : fortnightStartFor(todayStr);
+  const regenerated = generateFortnight(plan, examQuestions, todayStr, {
+    startDate: start,
+    cycleNumber: current?.number || plan.cycleNumber || 1,
+    phase: detectPhase(plan, examQuestions, todayStr)
+  });
+  regenerated.days = regenerated.days.map((day) => {
+    if (day.dateStr < todayStr && current?.days) {
+      const prev = current.days.find((d) => d.dateStr === day.dateStr);
+      return prev || day;
+    }
+    return day;
+  });
+  return {
+    ...plan,
+    currentCycle: regenerated,
+    cycleStartDate: start,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function advanceAguCycle(plan, todayStr, examQuestions = []) {
+  const generatedCycles = archiveCurrentCycle(plan);
+  const debt = collectDebtFromCycle(plan.currentCycle, todayStr, plan.completedBlocks, examQuestions);
+  const nextNumber = (plan.currentCycle?.number || generatedCycles.length || 1) + 1;
+  const nextStart = plan.currentCycle?.end
+    ? addDaysToDateStr(plan.currentCycle.end, 1)
+    : fortnightStartFor(todayStr);
+  const nextPlan = {
+    ...plan,
+    generatedCycles,
+    debt: [...(plan.debt || []).filter((d) => d.remainingQuestions > 0 || d.productMissing), ...debt],
+    cycleNumber: nextNumber,
+    cycleStartDate: nextStart
+  };
+  return generateAndAttachCycle(nextPlan, examQuestions, todayStr, {
+    startDate: nextStart,
+    cycleNumber: nextNumber
+  });
+}
+
+export function ensureCurrentCycle(plan, examQuestions = [], todayStr) {
+  let next = plan;
+  const today = todayStr || getSaoPauloDateStr();
+  if (!next?.startedAt) return next;
+  if (!next.currentCycle) {
+    next = generateAndAttachCycle(next, examQuestions, today, {
+      startDate: fortnightStartFor(next.cycleStartDate || next.startedAt || today),
+      cycleNumber: next.cycleNumber || 1
+    });
+  }
+  let guard = 0;
+  while (next.currentCycle?.end && today > next.currentCycle.end && guard < 24) {
+    next = advanceAguCycle(next, today, examQuestions);
+    guard += 1;
+  }
+  const detected = detectPhase(next, examQuestions, today);
+  if (detected !== next.phase) {
+    next = { ...next, phase: detected, updatedAt: new Date().toISOString() };
+  }
+  return next;
+}
+
+export function applyExamToPlan(plan, entry, todayStr) {
+  if (!plan || !entry) return plan;
+  const subject = resolveExamSubject(entry);
+  if (!subject) return plan;
+  const currentTopic = { ...(plan.currentTopic || {}) };
+  const topicStatus = { ...(plan.topicStatus || {}) };
+  const cursor = currentTopicForSubject(plan, subject);
+  const topicId = entry.topicId || cursor?.topicId;
+  if (topicId) {
+    const key = topicKey(subject.id, topicId);
+    const prev = topicStatus[key] || { status: 'open', solved: 0, correct: 0 };
+    topicStatus[key] = {
+      ...prev,
+      status: 'open',
+      lastTouchedAt: entry.date || todayStr,
+      solved: (prev.solved || 0) + (entry.totalQuestions || 0),
+      correct: (prev.correct || 0) + (entry.correctAnswers || 0)
+    };
+    currentTopic[subject.id] = {
+      ...(currentTopic[subject.id] || {}),
+      topicId,
+      topicName: cursor?.topicName,
+      status: 'open',
+      questionsOnTopic: (currentTopic[subject.id]?.questionsOnTopic || 0) + (entry.totalQuestions || 0),
+      correctOnTopic: (currentTopic[subject.id]?.correctOnTopic || 0) + (entry.correctAnswers || 0)
+    };
+  }
+  let debt = [...(plan.debt || [])];
+  if (entry.blockKey || (entry.subjectId && entry.date)) {
+    debt = debt.map((item) => {
+      if (item.subjectId !== (entry.subjectId || subject.id)) return item;
+      if (item.topicId && entry.topicId && item.topicId !== entry.topicId) return item;
+      const remaining = Math.max(0, (item.remainingQuestions || 0) - (entry.totalQuestions || 0));
+      return { ...item, remainingQuestions: remaining };
+    }).filter((item) => item.productMissing || (item.remainingQuestions || 0) > 0);
+  }
+  return {
+    ...plan,
+    currentTopic,
+    topicStatus,
+    debt,
     updatedAt: new Date().toISOString()
   };
 }
@@ -372,18 +561,35 @@ export function realignAguCycle(plan, todayStr) {
 export function sanitizeAguPlan(plan, todayStr) {
   const base = createDefaultAguPlan(todayStr);
   if (!plan || typeof plan !== 'object') return base;
+  const capacity = plan.capacityByWeekday && typeof plan.capacityByWeekday === 'object'
+    ? { ...AGU_DEFAULT_CAPACITY_BY_WEEKDAY, ...plan.capacityByWeekday }
+    : { ...AGU_DEFAULT_CAPACITY_BY_WEEKDAY };
   return {
     ...base,
     ...plan,
-    version: 1,
+    version: AGU_PLAN_VERSION,
+    phase: AGU_PHASES[plan.phase] ? plan.phase : 'fundacao',
+    editalPublished: Boolean(plan.editalPublished),
+    keepPortuguese: plan.keepPortuguese !== false,
+    capacityByWeekday: capacity,
+    weekdaysMorning: Number(plan.weekdaysMorning) > 0 ? Number(plan.weekdaysMorning) : AGU_WEEKDAY_MORNING_MINUTES,
     cycleLengthDays: AGU_CYCLE_LENGTH,
     targetAccuracy: Number(plan.targetAccuracy) > 0 ? Number(plan.targetAccuracy) : AGU_TARGET_ACCURACY,
     dailyQuestionTarget: Number(plan.dailyQuestionTarget) > 0 ? Number(plan.dailyQuestionTarget) : AGU_WEEKDAY_QUESTION_TARGET,
+    masterMinSolved: Number(plan.masterMinSolved) > 0 ? Number(plan.masterMinSolved) : AGU_MASTER_MIN_SOLVED,
+    staleDays: Number(plan.staleDays) > 0 ? Number(plan.staleDays) : AGU_STALE_DAYS,
     completedBlocks: plan.completedBlocks && typeof plan.completedBlocks === 'object' ? plan.completedBlocks : {},
     blockDurations: plan.blockDurations && typeof plan.blockDurations === 'object' ? plan.blockDurations : {},
     topicStatus: plan.topicStatus && typeof plan.topicStatus === 'object' ? plan.topicStatus : {},
     subjectNotes: plan.subjectNotes && typeof plan.subjectNotes === 'object' ? plan.subjectNotes : {},
     currentTopic: plan.currentTopic && typeof plan.currentTopic === 'object' ? plan.currentTopic : {},
+    currentCycle: plan.currentCycle && typeof plan.currentCycle === 'object' ? plan.currentCycle : null,
+    generatedCycles: Array.isArray(plan.generatedCycles) ? plan.generatedCycles : [],
+    debt: Array.isArray(plan.debt) ? plan.debt : [],
+    discursiveRotationIndex: Number(plan.discursiveRotationIndex) || 0,
+    editalProfileId: plan.editalProfileId || AGU_DEFAULT_EDITAL_PROFILE_ID,
     updatedAt: plan.updatedAt || new Date().toISOString()
   };
 }
+
+export { parseBlockKey };

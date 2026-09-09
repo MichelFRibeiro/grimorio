@@ -39,7 +39,18 @@ import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, mergeLiveActivityTimers, sanitizeLiveActivityTimers, clearLiveActivityTimer } from '../src/utils/activityDuration.js';
 import { AGU_SUBJECTS, createDefaultAguPlan } from '../src/data/aguCurriculum.js';
-import { sanitizeAguPlan, startAguPlan, realignAguCycle, summarizePlan, toggleCompletedBlock, addBlockDuration } from '../src/utils/aguCycle.js';
+import {
+  sanitizeAguPlan,
+  startAguPlan,
+  realignAguCycle,
+  summarizePlan,
+  toggleCompletedBlock,
+  addBlockDuration,
+  ensureCurrentCycle,
+  advanceAguCycle,
+  applyExamToPlan,
+  logDiscursiveProduct
+} from '../src/utils/aguCycle.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -358,6 +369,15 @@ app.post('/api/auth/logout', (req, res) => {
 app.get('/api/state', (req, res) => {
   try {
     const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
+    if (db.aguPlan?.startedAt) {
+      const next = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);
+      if (next !== db.aguPlan) {
+        db.aguPlan = next;
+        saveDb(db);
+      }
+    }
     const analytics = computeAnalytics();
     const nextAction = computeNextAction(db);
     res.json({
@@ -1253,7 +1273,7 @@ app.post('/api/questions', (req, res) => {
     const db = getDb();
     if (!db.examQuestions) db.examQuestions = [];
 
-    const { subject, topic, institution, totalQuestions, correctAnswers, durationMinutes, notes, notebookUrl, date, category } = req.body;
+    const { subject, topic, institution, totalQuestions, correctAnswers, durationMinutes, notes, notebookUrl, date, category, subjectId, topicId, kind, cycleNumber, blockKey, platform } = req.body;
     const total = parseInt(totalQuestions, 10);
     const correct = parseInt(correctAnswers, 10);
     const duration = parseInt(durationMinutes, 10) || 0;
@@ -1284,6 +1304,12 @@ app.post('/api/questions', (req, res) => {
       category: chosenCategory,
       subject: (subject || 'Geral').trim(),
       topic: (topic || '').trim(),
+      subjectId: (subjectId || '').trim() || undefined,
+      topicId: (topicId || '').trim() || undefined,
+      kind: (kind || '').trim() || undefined,
+      cycleNumber: cycleNumber || undefined,
+      blockKey: (blockKey || '').trim() || undefined,
+      platform: (platform || '').trim() || undefined,
       institution: (institution || '').trim(),
       totalQuestions: total,
       correctAnswers: correct,
@@ -1299,6 +1325,9 @@ app.post('/api/questions', (req, res) => {
     };
 
     db.examQuestions.unshift(newQuestionLog);
+    if (db.aguPlan) {
+      db.aguPlan = applyExamToPlan(sanitizeAguPlan(db.aguPlan, entryDate), newQuestionLog, entryDate);
+    }
 
     const rewardResult = rewardPlayer({
       xp: totalXp,
@@ -1938,11 +1967,23 @@ app.get('/api/backup/export', (req, res) => {
 // ==========================================
 // 8.5. CAMPANHA AGU — PROCURADOR FEDERAL
 // ==========================================
+function persistAguPlan(db, todayStr, examQuestions) {
+  db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
+  if (db.aguPlan?.startedAt) {
+    const next = ensureCurrentCycle(db.aguPlan, examQuestions || db.examQuestions || [], todayStr);
+    if (next !== db.aguPlan) {
+      db.aguPlan = next;
+      saveDb(db);
+    }
+  }
+  return db.aguPlan;
+}
+
 app.get('/api/agu-plan', (req, res) => {
   try {
     const db = getDb();
     const todayStr = getSaoPauloDateStr();
-    db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
+    persistAguPlan(db, todayStr);
     res.json({
       success: true,
       plan: db.aguPlan,
@@ -1979,7 +2020,7 @@ app.post('/api/agu-plan/start', (req, res) => {
   try {
     const db = getDb();
     const todayStr = getSaoPauloDateStr();
-    db.aguPlan = startAguPlan(sanitizeAguPlan(db.aguPlan, todayStr), todayStr);
+    db.aguPlan = startAguPlan(sanitizeAguPlan(db.aguPlan, todayStr), todayStr, db.examQuestions || []);
     saveDb(db);
     res.json({
       success: true,
@@ -1995,7 +2036,45 @@ app.post('/api/agu-plan/realign', (req, res) => {
   try {
     const db = getDb();
     const todayStr = getSaoPauloDateStr();
-    db.aguPlan = realignAguCycle(sanitizeAguPlan(db.aguPlan, todayStr), todayStr);
+    db.aguPlan = realignAguCycle(sanitizeAguPlan(db.aguPlan, todayStr), todayStr, db.examQuestions || []);
+    saveDb(db);
+    res.json({
+      success: true,
+      plan: db.aguPlan,
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/agu-plan/advance', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
+    if (!db.aguPlan.startedAt) {
+      return res.status(400).json({ error: 'Inicie a campanha antes de gerar o próximo ciclo.' });
+    }
+    db.aguPlan = advanceAguCycle(db.aguPlan, todayStr, db.examQuestions || []);
+    saveDb(db);
+    res.json({
+      success: true,
+      plan: db.aguPlan,
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/agu-plan/log-product', (req, res) => {
+  try {
+    const { key, note } = req.body || {};
+    if (!key) return res.status(400).json({ error: 'Informe a chave do bloco discursivo.' });
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.aguPlan = logDiscursiveProduct(sanitizeAguPlan(db.aguPlan, todayStr), key, { note });
     saveDb(db);
     res.json({
       success: true,

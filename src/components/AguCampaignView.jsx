@@ -14,11 +14,15 @@ import {
   ScrollText,
   Sparkles,
   X,
-  Clock
+  Clock,
+  Sunrise,
+  Sunset,
+  SkipForward,
+  PenLine
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityTimerBox } from './ActivityTimerBox';
-import { consumeActivityTimerMinutes, getActivityTimerSnapshot, subscribeActivityTimers } from '../utils/liveActivityTimers';
+import { consumeActivityTimerMinutes, getActivityTimerSnapshot, startActivityTimer, subscribeActivityTimers } from '../utils/liveActivityTimers';
 import { elapsedMsFrom, formatStudyDuration, parseDurationMinutes } from '../utils/activityDuration';
 import {
   AGU_FOLDER_URL,
@@ -31,14 +35,14 @@ import { summarizePlan } from '../utils/aguCycle.js';
 import { getSaoPauloDateStr } from '../utils/timeUtils.js';
 
 const PROTOCOL = [
-  'Tec Concursos é a referência. Questão nova nasce no caderno do guia AGU 2023.',
-  'Modo CESPE ligado. Certo/errado com penalidade — chute custa ponto.',
-  'Comentário de professor no erro e no acerto chutado. Sem isso, o bloco não conta.',
-  `Meta de maestria: ${AGU_TARGET_ACCURACY}% com pelo menos 40 questões no tópico.`,
-  'Abaixo de 90% depois do volume mínimo: Decorando (lei seca) ou Qconcursos (filtro/banca), e volta ao Tec.',
-  'Português entra todo dia útil mesmo fora do edital — é overlap de tribunais e discursiva.',
-  'Sábado = volume + caderno de erros. Domingo = lei seca AGU + discursiva (parecer / peça / dissertação).',
-  'Parcial vale. Fez 5 de 30? Lance as 5 no próprio bloco. O restante fica para quando voltar.'
+  'O Grimório manda o dia. Sem rituais paralelos de questões.',
+  'Manhã = lei seca ou erros. Tarde = teoria curta + questões do mesmo tópico.',
+  'Tec é a referência. Modo CESPE com penalidade. Comentário no erro e no acerto chutado.',
+  `Maestria é por tópico: ${AGU_TARGET_ACCURACY}% com ≥ 40 questões e toque há menos de 21 dias.`,
+  'Abaixo de 90% depois do volume mínimo: Decorando (lei seca) ou Qconcursos, e volta ao Tec.',
+  'Sábado e domingo são cinza — bônus. Pular não gera culpa; vira dívida limitada.',
+  'Discursiva só fecha com produto (parecer, peça, dissertação ou oral).',
+  'Parcial vale. Fez 5 de 25? Lance as 5. O resto vira dívida do tópico.'
 ];
 
 function ProgressBar({ percent, color = '#f59e0b' }) {
@@ -131,6 +135,9 @@ export function AguCampaignView({
   onToggleBlock,
   onRealignCycle,
   onResetPlan,
+  onAdvanceCycle,
+  onLogProduct,
+  onUpdatePlan,
   onOpenQuestions,
   onAddQuestions
 }) {
@@ -149,6 +156,16 @@ export function AguCampaignView({
   const liveMinutes = useLiveAguMinutes(todayBlockKeys);
 
   const consumeBlockTimer = (blockKey) => consumeActivityTimerMinutes('agu', blockKey);
+
+  useEffect(() => {
+    const firstOpen = (summary.today?.blocks || []).find((b) => !b.done);
+    if (!firstOpen?.key) return undefined;
+    const snap = getActivityTimerSnapshot('agu', firstOpen.key);
+    if (!snap.isRunning && snap.accumulatedMs === 0) {
+      startActivityTimer('agu', firstOpen.key);
+    }
+    return undefined;
+  }, [summary.today?.dateStr]);
 
   const openLog = (block) => {
     const remaining = block.remaining > 0 ? String(block.remaining) : '';
@@ -179,12 +196,18 @@ export function AguCampaignView({
     onAddQuestions({
       category: 'Estudos',
       subject: logBlock.subject?.name || 'Geral',
-      topic: logBlock.kindMeta?.label || '',
+      topic: logBlock.topicName || logBlock.kindMeta?.label || '',
+      subjectId: logBlock.subjectId,
+      topicId: logBlock.topicId,
+      kind: logBlock.kind,
+      cycleNumber: summary.calendar.cycleNumber,
+      blockKey: logBlock.key,
+      platform: logBlock.platform?.id,
       institution: 'Cebraspe',
       totalQuestions: total,
       correctAnswers: correct,
       durationMinutes: consumeBlockTimer(logBlock.key),
-      notes: `Campanha AGU · ${logBlock.kindMeta?.label || 'bloco'} · parcial ${total}/${logBlock.target || total}`,
+      notes: `Campanha AGU · ${logBlock.kindMeta?.label || 'bloco'} · ${logBlock.topicName || ''} · parcial ${total}/${logBlock.target || total}`,
       notebookUrl: logBlock.subject?.tecCadernoUrl || '',
       date: todayStr
     });
@@ -212,8 +235,8 @@ export function AguCampaignView({
             <Scale size={22} color="#fbbf24" /> Campanha AGU — Procurador Federal
           </h2>
           <p style={{ color: '#94a3b8', fontSize: '0.88rem', maxWidth: '720px', marginTop: '6px' }}>
-            Ciclo de 14 dias sobre o Guia Tec 2023. Foco AGU; tribunais e procuradorias entram como overlap.
-            Banca de treino: Cebraspe. Plataforma-mãe: Tec Avançado.
+            Quinzena gerada, não copiada. O dia cabe na sua janela (pilates ter/qui, noite fechada).
+            Banca: Cebraspe. Plataforma-mãe: Tec. Discursiva só fecha com produto.
           </p>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -230,17 +253,32 @@ export function AguCampaignView({
               <Play size={16} /> Iniciar campanha hoje
             </button>
           ) : (
-            <button
-              onClick={onRealignCycle}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px',
-                padding: '10px 16px', borderRadius: '12px',
-                background: 'rgba(245, 158, 11, 0.12)', color: '#fbbf24',
-                fontWeight: 700, border: '1px solid rgba(245, 158, 11, 0.35)', cursor: 'pointer'
-              }}
-            >
-              <RotateCcw size={15} /> Realinhar ciclo para hoje
-            </button>
+            <>
+              <button
+                onClick={onRealignCycle}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '10px 16px', borderRadius: '12px',
+                  background: 'rgba(245, 158, 11, 0.12)', color: '#fbbf24',
+                  fontWeight: 700, border: '1px solid rgba(245, 158, 11, 0.35)', cursor: 'pointer'
+                }}
+              >
+                <RotateCcw size={15} /> Regenerar o que resta
+              </button>
+              {onAdvanceCycle && (
+                <button
+                  onClick={onAdvanceCycle}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: '10px 16px', borderRadius: '12px',
+                    background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8',
+                    fontWeight: 700, border: '1px solid rgba(56, 189, 248, 0.35)', cursor: 'pointer'
+                  }}
+                >
+                  <SkipForward size={15} /> Gerar próximo ciclo
+                </button>
+              )}
+            </>
           )}
           <button
             onClick={() => setConfirmReset(true)}
@@ -257,20 +295,30 @@ export function AguCampaignView({
 
       <div className="glass-panel-gold" style={{ padding: '16px 18px', marginBottom: '18px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', fontSize: '0.8rem', color: '#fde68a' }}>
-          <span>Guia Tec 2023 · 20 cadernos · 0 resolvidas no Tec</span>
+          <span>Guia Tec 2023 · {summary.totalSolved} questões no Grimório · {summary.overallAccuracy}% acerto</span>
           <span>•</span>
-          <span>Edital de referência: nº 1/2022 AGU (Cebraspe) — estrutura analogada; cargo-alvo: Procurador Federal</span>
+          <span>Fase {summary.phaseMeta?.label || 'A — Fundação'} · cargo-alvo Procurador Federal</span>
           <span>•</span>
-          <span>Português incluso por decisão sua (fora do edital)</span>
+          <span>{summary.keepPortuguese ? 'Português incluso (fora do edital, overlap)' : 'Português desligado'}</span>
+          {onUpdatePlan && summary.started && (
+            <button
+              type="button"
+              onClick={() => onUpdatePlan({ editalPublished: !summary.editalPublished })}
+              style={{ ...ghostBtnStyle, padding: '4px 10px', fontSize: '0.72rem' }}
+            >
+              {summary.editalPublished ? 'Edital lock ON' : 'Ligar lock de edital'}
+            </button>
+          )}
         </div>
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '18px' }}>
-        <StatChip label="Ciclo" value={`${summary.calendar.cycleNumber}`} sub={`Dia ${summary.today.cycleDay}/14 · ${summary.today.weekdayLabel}`} />
-        <StatChip label="Blocos do ciclo" value={`${summary.cycleDoneBlocks}/${summary.cycleTotalBlocks}`} sub={`${summary.cyclePercent}% concluído`} color="#38bdf8" />
+        <StatChip label="Fase" value={summary.phaseMeta?.short || 'Fundação'} sub={summary.editalPublished ? 'Lock de edital' : 'Automática'} color={summary.phaseMeta?.color || '#38bdf8'} />
+        <StatChip label="Ciclo" value={`${summary.calendar.cycleNumber}`} sub={`${summary.today.weekdayLabel} · ${summary.today.optional ? 'bônus' : 'dia útil'}`} />
+        <StatChip label="Blocos da quinzena" value={`${summary.cycleDoneBlocks}/${summary.cycleTotalBlocks}`} sub={`${summary.cyclePercent}% concluído`} color="#38bdf8" />
         <StatChip label="Questões hoje" value={`${summary.todayProgress.solved}/${summary.today.questionTarget}`} sub={summary.todayProgress.solved ? `${Math.round((summary.todayProgress.correct / Math.max(summary.todayProgress.solved, 1)) * 1000) / 10}% acerto` : 'Nada registrado'} color="#10b981" />
-        <StatChip label="Maestria 90%" value={`${summary.masteredSubjects}/${summary.totalSubjects}`} sub={`${summary.startedSubjects} matérias já tocadas`} color="#c084fc" />
-        <StatChip label="Acerto AGU" value={`${summary.overallAccuracy}%`} sub={`${summary.totalSolved} questões no histórico`} />
+        <StatChip label="Maestria tópico" value={`${summary.masteredSubjects}/${summary.totalSubjects}`} sub={`${summary.startedSubjects} matérias tocadas`} color="#c084fc" />
+        <StatChip label="Dívida" value={`${(summary.debt || []).length}`} sub="blocos / restos" color="#f43f5e" />
       </div>
 
       <StudyTimeCard studyTime={summary.studyTime} liveMinutes={liveMinutes} />
@@ -280,7 +328,9 @@ export function AguCampaignView({
           <div>
             <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24' }}>Hoje — {summary.today.label}</h3>
             <p style={{ color: '#94a3b8', fontSize: '0.82rem' }}>
-              {summary.today.weekdayLabel} · {todayStr} · meta {summary.today.questionTarget} questões
+              {summary.today.weekdayLabel} · {todayStr}
+              {summary.today.optional ? ' · bônus (família primeiro)' : ` · manhã 60 min · tarde ${summary.today.weekday === 2 || summary.today.weekday === 4 ? '1h50 (pilates)' : '3h45'}`}
+              {' · '}meta {summary.today.questionTarget} questões
             </p>
           </div>
           <div style={{ minWidth: '180px', flex: '1 1 180px', maxWidth: '280px' }}>
@@ -292,96 +342,46 @@ export function AguCampaignView({
           </div>
         </div>
 
-        <div style={{ display: 'grid', gap: '10px' }}>
-          {summary.today.blocks.map((block) => (
-            <div
-              key={block.key}
-              className="rpg-card"
-              style={{
-                padding: '14px 16px',
-                borderColor: block.done ? 'rgba(16, 185, 129, 0.45)' : 'rgba(255,255,255,0.07)'
-              }}
-            >
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                <button
-                  onClick={() => handleToggleBlock(block)}
-                  style={{
-                    background: 'transparent', border: 'none', cursor: 'pointer',
-                    display: 'flex', gap: '12px', alignItems: 'flex-start', textAlign: 'left', flex: '1 1 240px', color: 'inherit'
-                  }}
-                >
-                  {block.done
-                    ? <CheckCircle2 size={22} color="#10b981" />
-                    : <Circle size={22} color="#64748b" />}
-                  <div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <strong style={{ color: '#f8fafc' }}>{block.subject?.name}</strong>
-                      <span style={{
-                        fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px',
-                        background: `${block.kindMeta.color}22`, color: block.kindMeta.color, border: `1px solid ${block.kindMeta.color}55`
-                      }}>
-                        {block.kindMeta.icon} {block.kindMeta.label}
-                      </span>
-                      {block.target > 0 && (
-                        <span style={{ fontSize: '0.75rem', color: block.metTarget ? '#10b981' : '#fbbf24', fontFamily: 'var(--font-mono)' }}>
-                          {block.todayProgress.solved}/{block.target} q
-                          {block.remaining > 0 ? ` · faltam ${block.remaining}` : ''}
-                        </span>
-                      )}
-                    </div>
-                    <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>
-                      {block.platform.reason}
-                    </p>
-                    <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
-                      {block.group.short} · {block.mastery.label} · {block.stats.solved} no histórico · {block.stats.accuracy}%
-                    </p>
-                    {block.target > 0 && (
-                      <div style={{ marginTop: '8px', maxWidth: '280px' }}>
-                        <ProgressBar percent={block.progressPercent} color={block.metTarget ? '#10b981' : '#f59e0b'} />
-                      </div>
-                    )}
-                    {parseDurationMinutes(aguPlan?.blockDurations?.[block.key]) > 0 && (
-                      <p style={{ fontSize: '0.75rem', color: '#fbbf24', marginTop: '6px', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Clock size={12} /> {formatStudyDuration(aguPlan.blockDurations[block.key])} neste bloco
-                      </p>
-                    )}
-                  </div>
-                </button>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {onAddQuestions && (
-                    <button onClick={() => openLog(block)} style={ghostBtnStyle}>
-                      <Target size={14} /> Lançar o que fiz
-                    </button>
-                  )}
-                  {block.subject?.tecCadernoUrl && (
-                    <a href={block.subject.tecCadernoUrl} target="_blank" rel="noreferrer" style={linkBtnStyle('#f59e0b')}>
-                      <ExternalLink size={14} /> Caderno Tec
-                    </a>
-                  )}
-                  {block.kind === 'lei-seca' && (
-                    <a href={AGU_PLATFORMS.decorando.url} target="_blank" rel="noreferrer" style={linkBtnStyle('#a855f7')}>
-                      Decorando
-                    </a>
-                  )}
-                  {block.platform.id === 'qconcursos' && (
-                    <a href={AGU_PLATFORMS.qconcursos.url} target="_blank" rel="noreferrer" style={linkBtnStyle('#38bdf8')}>
-                      Qconcursos
-                    </a>
-                  )}
-                </div>
+        {['morning', 'afternoon'].map((windowId) => {
+          const windowBlocks = (summary.today.blocks || []).filter((b) => (b.window || 'afternoon') === windowId);
+          if (windowBlocks.length === 0) return null;
+          const WindowIcon = windowId === 'morning' ? Sunrise : Sunset;
+          return (
+            <div key={windowId} style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: windowId === 'morning' ? '#fde68a' : '#38bdf8', fontWeight: 800, fontSize: '0.78rem', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                <WindowIcon size={14} /> {windowId === 'morning' ? 'Manhã · 07:00–08:00' : (summary.today.weekday === 2 || summary.today.weekday === 4 ? 'Tarde · 14:00–15:50' : 'Tarde · 14:00–17:45')}
               </div>
-              <div style={{ marginTop: '12px' }}>
-                <ActivityTimerBox
-                  kind="agu"
-                  id={block.key}
-                  label={`Cronômetro · ${block.subject?.name || 'bloco'}`}
-                  accent={block.kindMeta?.color || '#fbbf24'}
-                  compact
-                />
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {windowBlocks.map((block) => (
+                  <AguBlockCard
+                    key={block.key}
+                    block={block}
+                    aguPlan={aguPlan}
+                    onToggle={() => handleToggleBlock(block)}
+                    onLog={onAddQuestions ? () => openLog(block) : null}
+                    onProduct={onLogProduct && block.kind === 'discursiva' ? () => onLogProduct(block.key) : null}
+                  />
+                ))}
               </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
+        {(summary.today.blocks || []).every((b) => b.window) ? null : (
+          (summary.today.blocks || []).some((b) => !b.window) && (
+            <div style={{ display: 'grid', gap: '10px' }}>
+              {summary.today.blocks.filter((b) => !b.window).map((block) => (
+                <AguBlockCard
+                  key={block.key}
+                  block={block}
+                  aguPlan={aguPlan}
+                  onToggle={() => handleToggleBlock(block)}
+                  onLog={onAddQuestions ? () => openLog(block) : null}
+                  onProduct={onLogProduct && block.kind === 'discursiva' ? () => onLogProduct(block.key) : null}
+                />
+              ))}
+            </div>
+          )
+        )}
 
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '14px' }}>
           <button onClick={onOpenQuestions} style={ghostBtnStyle}>
@@ -398,25 +398,42 @@ export function AguCampaignView({
 
       <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
         <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <CalendarDays size={18} /> Ciclo {summary.calendar.cycleNumber}
+          <CalendarDays size={18} /> Quinzena {summary.calendar.cycleNumber}
         </h3>
         <p style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '12px' }}>
           {summary.calendar.cycleStart} → {summary.calendar.cycleEnd}
+          {(summary.reasons || []).length > 0 ? ' · gerada pela fragilidade do histórico' : ''}
         </p>
+        {(summary.reasons || []).length > 0 && (
+          <div style={{ marginBottom: '12px', fontSize: '0.78rem', color: '#cbd5e1', lineHeight: 1.5 }}>
+            {(summary.reasons || []).slice(0, 5).map((reason) => (
+              <div key={reason}>• {reason}</div>
+            ))}
+          </div>
+        )}
+        {(summary.debt || []).length > 0 && (
+          <div style={{ marginBottom: '12px', fontSize: '0.78rem', color: '#fda4af' }}>
+            Dívida: {(summary.debt || []).slice(0, 4).map((d) => `${d.subjectId} ${d.kind}${d.remainingQuestions ? ` (${d.remainingQuestions})` : ''}`).join(' · ')}
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '8px' }}>
           {summary.calendar.days.map((day) => {
             const isToday = day.dateStr === todayStr;
+            const bonus = day.optional || day.isWeekend;
             return (
               <div
                 key={day.dateStr}
                 style={{
                   padding: '10px 12px',
                   borderRadius: '12px',
-                  background: isToday ? 'rgba(245, 158, 11, 0.12)' : '#131722',
-                  border: isToday ? '1px solid rgba(245, 158, 11, 0.45)' : '1px solid rgba(255,255,255,0.07)'
+                  background: isToday ? 'rgba(245, 158, 11, 0.12)' : (bonus ? '#0f1218' : '#131722'),
+                  border: isToday ? '1px solid rgba(245, 158, 11, 0.45)' : (bonus ? '1px dashed rgba(148,163,184,0.25)' : '1px solid rgba(255,255,255,0.07)'),
+                  opacity: bonus && !isToday ? 0.72 : 1
                 }}
               >
-                <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700 }}>{day.weekdayLabel}</div>
+                <div style={{ fontSize: '0.72rem', color: bonus ? '#64748b' : '#94a3b8', fontWeight: 700 }}>
+                  {day.weekdayLabel}{bonus ? ' · bônus' : ''}
+                </div>
                 <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: 700, margin: '4px 0' }}>{day.label}</div>
                 <div style={{ fontSize: '0.72rem', color: day.complete ? '#10b981' : '#64748b', fontFamily: 'var(--font-mono)' }}>
                   {day.doneCount}/{day.totalBlocks} blocos · {day.questionTarget} q
@@ -494,8 +511,9 @@ export function AguCampaignView({
             <ul style={{ marginTop: '12px', paddingLeft: '18px', color: '#cbd5e1', fontSize: '0.85rem', lineHeight: 1.6 }}>
               {(selected.topics || []).map((topic) => (
                 <li key={topic.id}>
-                  {topic.name}
+                  {selected.cursor?.topicId === topic.id ? '▶ ' : ''}{topic.name}
                   {topic.questions ? <span style={{ color: '#64748b', fontFamily: 'var(--font-mono)' }}> · {topic.questions} q</span> : null}
+                  {selected.cursor?.topicId === topic.id ? <span style={{ color: '#fbbf24' }}> · cursor</span> : null}
                 </li>
               ))}
             </ul>
@@ -551,7 +569,7 @@ export function AguCampaignView({
         </div>
         <p style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Sparkles size={14} color="#fbbf24" />
-          Quando sair o edital novo de Procurador Federal, o ciclo permanece; só se recalibra peso e caderno.
+          Quando sair o edital novo, ligue o lock na configuração do plano (editalPublished). O motor congela o que sair do edital.
         </p>
       </section>
 
@@ -575,13 +593,13 @@ export function AguCampaignView({
               <div>
                 <h3 className="font-cinzel" style={{ fontSize: '1.15rem', color: '#f8fafc' }}>Lançar sessão parcial</h3>
                 <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '4px' }}>
-                  {logBlock.subject?.name} · meta {logBlock.target || 0} · já {logBlock.todayProgress.solved} hoje
+                  {logBlock.subject?.name} · {logBlock.topicName || 'tópico corrente'} · meta {logBlock.target || 0} · já {logBlock.todayProgress.solved} hoje
                 </p>
               </div>
               <button type="button" onClick={closeLog} style={{ ...ghostBtnStyle, padding: '8px' }}><X size={16} /></button>
             </div>
             <p style={{ color: '#cbd5e1', fontSize: '0.85rem', marginBottom: '14px', lineHeight: 1.5 }}>
-              Fez 5 de 30 e precisa sair? Lance só as 5. O bloco fica em andamento; o restante entra quando você voltar.
+              Fez 5 de 25 e precisa sair? Lance só as 5. O restante vira dívida do tópico, não fracasso do dia.
             </p>
             <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, marginBottom: '6px' }}>
               Questões feitas agora
@@ -626,6 +644,111 @@ export function AguCampaignView({
           onResetPlan();
         }}
       />
+    </div>
+  );
+}
+
+function AguBlockCard({ block, aguPlan, onToggle, onLog, onProduct }) {
+  return (
+    <div
+      className="rpg-card"
+      style={{
+        padding: '14px 16px',
+        borderColor: block.done ? 'rgba(16, 185, 129, 0.45)' : 'rgba(255,255,255,0.07)'
+      }}
+    >
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <button
+          onClick={onToggle}
+          disabled={block.kind === 'discursiva'}
+          style={{
+            background: 'transparent', border: 'none', cursor: block.kind === 'discursiva' ? 'default' : 'pointer',
+            display: 'flex', gap: '12px', alignItems: 'flex-start', textAlign: 'left', flex: '1 1 240px', color: 'inherit'
+          }}
+        >
+          {block.done
+            ? <CheckCircle2 size={22} color="#10b981" />
+            : <Circle size={22} color="#64748b" />}
+          <div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <strong style={{ color: '#f8fafc' }}>{block.subject?.name}</strong>
+              <span style={{
+                fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px',
+                background: `${block.kindMeta.color}22`, color: block.kindMeta.color, border: `1px solid ${block.kindMeta.color}55`
+              }}>
+                {block.kindMeta.icon} {block.kindMeta.label}
+              </span>
+              {block.optional && (
+                <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>bônus</span>
+              )}
+              {block.target > 0 && (
+                <span style={{ fontSize: '0.75rem', color: block.metTarget ? '#10b981' : '#fbbf24', fontFamily: 'var(--font-mono)' }}>
+                  {block.todayProgress.solved}/{block.target} q
+                  {block.remaining > 0 ? ` · faltam ${block.remaining}` : ''}
+                </span>
+              )}
+            </div>
+            {block.topicName && (
+              <p style={{ fontSize: '0.8rem', color: '#fde68a', marginTop: '4px' }}>Tópico: {block.topicName}</p>
+            )}
+            {block.prompt && (
+              <p style={{ fontSize: '0.8rem', color: '#e2e8f0', marginTop: '6px', lineHeight: 1.45 }}>{block.prompt}</p>
+            )}
+            <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>
+              {(block.reasons || []).join(' · ') || block.platform?.reason}
+            </p>
+            <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
+              {block.group?.short} · {block.mastery?.label} · {block.stats?.solved || 0} no histórico · {block.stats?.accuracy || 0}%
+            </p>
+            {block.target > 0 && (
+              <div style={{ marginTop: '8px', maxWidth: '280px' }}>
+                <ProgressBar percent={block.progressPercent} color={block.metTarget ? '#10b981' : '#f59e0b'} />
+              </div>
+            )}
+            {parseDurationMinutes(aguPlan?.blockDurations?.[block.key]) > 0 && (
+              <p style={{ fontSize: '0.75rem', color: '#fbbf24', marginTop: '6px', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Clock size={12} /> {formatStudyDuration(aguPlan.blockDurations[block.key])} neste bloco
+              </p>
+            )}
+          </div>
+        </button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {onLog && ['questoes', 'erros', 'simulado', 'revisao', 'lei-seca'].includes(block.kind) && (
+            <button onClick={onLog} style={ghostBtnStyle}>
+              <Target size={14} /> Lançar o que fiz
+            </button>
+          )}
+          {onProduct && (
+            <button onClick={onProduct} style={ghostBtnStyle}>
+              <PenLine size={14} /> {block.productLogged ? 'Produto lançado' : `Lançar ${block.productMeta?.label || 'produto'}`}
+            </button>
+          )}
+          {block.subject?.tecCadernoUrl && (
+            <a href={block.subject.tecCadernoUrl} target="_blank" rel="noreferrer" style={linkBtnStyle('#f59e0b')}>
+              <ExternalLink size={14} /> Caderno Tec
+            </a>
+          )}
+          {block.kind === 'lei-seca' && (
+            <a href={AGU_PLATFORMS.decorando.url} target="_blank" rel="noreferrer" style={linkBtnStyle('#a855f7')}>
+              Decorando
+            </a>
+          )}
+          {block.platform?.id === 'qconcursos' && (
+            <a href={AGU_PLATFORMS.qconcursos.url} target="_blank" rel="noreferrer" style={linkBtnStyle('#38bdf8')}>
+              Qconcursos
+            </a>
+          )}
+        </div>
+      </div>
+      <div style={{ marginTop: '12px' }}>
+        <ActivityTimerBox
+          kind="agu"
+          id={block.key}
+          label={`Cronômetro · ${block.subject?.name || 'bloco'}`}
+          accent={block.kindMeta?.color || '#fbbf24'}
+          compact
+        />
+      </div>
     </div>
   );
 }

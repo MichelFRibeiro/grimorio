@@ -5,7 +5,17 @@ import { formatBrl } from '../src/utils/coinExchange.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings } from './rankings.js';
 import { computeNextAction } from './nextAction.js';
-import { summarizePlan, startAguPlan, toggleCompletedBlock, sanitizeAguPlan, addBlockDuration } from '../src/utils/aguCycle.js';
+import {
+  summarizePlan,
+  startAguPlan,
+  toggleCompletedBlock,
+  sanitizeAguPlan,
+  addBlockDuration,
+  ensureCurrentCycle,
+  advanceAguCycle,
+  logDiscursiveProduct,
+  applyExamToPlan
+} from '../src/utils/aguCycle.js';
 import {
   applyDifficultyFields,
   DEFAULT_DIFFICULTY,
@@ -1313,6 +1323,9 @@ export const toolsDefinition = [
 
       if (!db.examQuestions) db.examQuestions = [];
       db.examQuestions.unshift(newEntry);
+      if (db.aguPlan) {
+        db.aguPlan = applyExamToPlan(sanitizeAguPlan(db.aguPlan, newEntry.date), newEntry, newEntry.date);
+      }
 
       const rewardResult = rewardPlayer({
         xp,
@@ -1692,7 +1705,15 @@ export const toolsDefinition = [
     handler: async () => {
       const db = getDb();
       const todayStr = getSaoPauloDateStr();
-      const plan = sanitizeAguPlan(db.aguPlan, todayStr);
+      let plan = sanitizeAguPlan(db.aguPlan, todayStr);
+      if (plan.startedAt) {
+        const next = ensureCurrentCycle(plan, db.examQuestions || [], todayStr);
+        if (next !== plan) {
+          db.aguPlan = next;
+          saveDb(db);
+          plan = next;
+        }
+      }
       const summary = summarizePlan(plan, db.examQuestions || [], todayStr);
       return formatSuccess({
         plan,
@@ -1701,15 +1722,18 @@ export const toolsDefinition = [
           number: summary.calendar.cycleNumber,
           start: summary.calendar.cycleStart,
           end: summary.calendar.cycleEnd,
-          percent: summary.cyclePercent
+          phase: summary.phase,
+          percent: summary.cyclePercent,
+          reasons: summary.reasons
         },
+        debt: summary.debt,
         masteredSubjects: summary.masteredSubjects,
         totalSubjects: summary.totalSubjects,
         overallAccuracy: summary.overallAccuracy,
         totalSolved: summary.totalSolved,
         studyTime: summary.studyTime
       }, summary.today
-        ? `AGU hoje: ${summary.today.label} (${summary.today.doneCount}/${summary.today.totalBlocks} blocos).`
+        ? `AGU hoje: ${summary.today.label} (${summary.today.doneCount}/${summary.today.totalBlocks} blocos). Fase ${summary.phaseMeta?.short || summary.phase}.`
         : 'Campanha AGU carregada.');
     }
   },
@@ -1720,10 +1744,40 @@ export const toolsDefinition = [
     handler: async () => {
       const db = getDb();
       const todayStr = getSaoPauloDateStr();
-      db.aguPlan = startAguPlan(sanitizeAguPlan(db.aguPlan, todayStr), todayStr);
+      db.aguPlan = startAguPlan(sanitizeAguPlan(db.aguPlan, todayStr), todayStr, db.examQuestions || []);
       saveDb(db);
       const summary = summarizePlan(db.aguPlan, db.examQuestions || [], todayStr);
       return formatSuccess({ plan: db.aguPlan, today: summary.today }, `Campanha AGU iniciada em ${todayStr}.`);
+    }
+  },
+  {
+    name: 'advance_agu_cycle',
+    description: 'Arquivar o ciclo AGU atual e gerar o próximo (fragilidade + dívida).',
+    schema: {},
+    handler: async () => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
+      if (!db.aguPlan.startedAt) return formatError('Inicie a campanha antes de gerar o próximo ciclo.');
+      db.aguPlan = advanceAguCycle(db.aguPlan, todayStr, db.examQuestions || []);
+      saveDb(db);
+      const summary = summarizePlan(db.aguPlan, db.examQuestions || [], todayStr);
+      return formatSuccess({ plan: db.aguPlan, today: summary.today, reasons: summary.reasons }, `Ciclo ${summary.calendar.cycleNumber} gerado.`);
+    }
+  },
+  {
+    name: 'log_agu_discursive',
+    description: 'Marcar o produto de um bloco discursivo AGU (parecer, peça, dissertação ou oral).',
+    schema: {
+      key: z.string().describe('Chave do bloco discursivo'),
+      note: z.string().optional().describe('Caminho ou nota do produto')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      db.aguPlan = logDiscursiveProduct(sanitizeAguPlan(db.aguPlan, todayStr), args.key, { note: args.note });
+      saveDb(db);
+      return formatSuccess({ key: args.key }, 'Produto discursivo lançado.');
     }
   },
   {
@@ -1731,7 +1785,9 @@ export const toolsDefinition = [
     description: 'Marcar ou desmarcar um bloco do ciclo AGU de hoje (ou de uma data YYYY-MM-DD).',
     schema: {
       subjectId: z.string().describe('ID da matéria (ex: constitucional, administrativo, portugues)'),
-      kind: z.string().optional().describe('Tipo do bloco: questoes, erros, revisao, lei-seca, discursiva, simulado'),
+      kind: z.string().optional().describe('Tipo do bloco: questoes, erros, revisao, lei-seca, discursiva, simulado, teoria'),
+      topicId: z.string().optional().describe('ID do tópico, se conhecido'),
+      key: z.string().optional().describe('Chave completa do bloco (se já conhecida)'),
       date: z.string().optional().describe('Data YYYY-MM-DD (padrão: hoje)'),
       durationMinutes: z.number().optional().describe('Tempo cronometrado do bloco em minutos')
     },
@@ -1740,12 +1796,20 @@ export const toolsDefinition = [
       const todayStr = getSaoPauloDateStr();
       const dateStr = args.date || todayStr;
       const kind = args.kind || 'questoes';
-      const key = `${dateStr}|${args.subjectId}|${kind}`;
-      db.aguPlan = toggleCompletedBlock(sanitizeAguPlan(db.aguPlan, todayStr), key);
+      const plan = sanitizeAguPlan(db.aguPlan, todayStr);
+      const summary = summarizePlan(plan, db.examQuestions || [], todayStr);
+      const day = (summary.calendar?.days || []).find((d) => d.dateStr === dateStr) || summary.today;
+      const match = (day?.blocks || []).find((b) => (
+        b.subjectId === args.subjectId
+        && (!args.kind || b.kind === kind)
+        && (!args.topicId || b.topicId === args.topicId)
+      ));
+      const key = args.key || match?.key || `${dateStr}|${args.subjectId}|${kind}`;
+      db.aguPlan = toggleCompletedBlock(plan, key);
       db.aguPlan = addBlockDuration(db.aguPlan, key, args.durationMinutes);
       saveDb(db);
-      const summary = summarizePlan(db.aguPlan, db.examQuestions || [], todayStr);
-      return formatSuccess({ key, plan: db.aguPlan, today: summary.today }, `Bloco ${key} alternado.`);
+      const next = summarizePlan(db.aguPlan, db.examQuestions || [], todayStr);
+      return formatSuccess({ key, plan: db.aguPlan, today: next.today }, `Bloco ${key} alternado.`);
     }
   }
 ];
