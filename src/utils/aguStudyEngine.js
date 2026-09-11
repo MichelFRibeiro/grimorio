@@ -58,16 +58,24 @@ function normalizeKind(kind, review = false) {
   return kind || 'estudo';
 }
 
-export function isBlockComplete({ questions = 0, minutes = 0, markedDone = false } = {}) {
-  if (markedDone) return true;
-  return (Number(questions) || 0) >= AGU_BLOCK_QUESTION_TARGET
-    || parseDurationMinutes(minutes) >= AGU_BLOCK_MINUTES;
+function blockQuestions(input = {}) {
+  return Number(input.questions ?? input.totalQuestions ?? input.solved) || 0;
 }
 
-export function blockCompletionReason({ questions = 0, minutes = 0, markedDone = false } = {}) {
-  if ((Number(questions) || 0) >= AGU_BLOCK_QUESTION_TARGET) return 'questions';
-  if (parseDurationMinutes(minutes) >= AGU_BLOCK_MINUTES) return 'time';
-  if (markedDone) return 'manual';
+function blockMinutes(input = {}) {
+  return parseDurationMinutes(input.minutes ?? input.durationMinutes);
+}
+
+export function isBlockComplete(input = {}) {
+  if (input.markedDone) return true;
+  return blockQuestions(input) >= AGU_BLOCK_QUESTION_TARGET
+    || blockMinutes(input) >= AGU_BLOCK_MINUTES;
+}
+
+export function blockCompletionReason(input = {}) {
+  if (blockQuestions(input) >= AGU_BLOCK_QUESTION_TARGET) return 'questions';
+  if (blockMinutes(input) >= AGU_BLOCK_MINUTES) return 'time';
+  if (input.markedDone) return 'manual';
   return null;
 }
 
@@ -163,6 +171,60 @@ function blockIdentity(entry, subject, topic) {
   return `${dateStr}|${subject.id}|${kind}|${topicId}`;
 }
 
+export function slotFromKey(key) {
+  const parts = String(key || '').split('|');
+  return {
+    key: key || '',
+    dateStr: parts[0] || '',
+    subjectId: parts[1] || '',
+    kind: normalizeKind(parts[2] || 'estudo'),
+    topicId: parts[3] && parts[3] !== 'product' ? parts[3] : null
+  };
+}
+
+export function canonicalSlot(blockOrKey) {
+  if (!blockOrKey) return { dateStr: '', subjectId: '', kind: 'estudo', topicId: null };
+  const parsed = typeof blockOrKey === 'string' ? slotFromKey(blockOrKey) : slotFromKey(blockOrKey.key);
+  const extra = typeof blockOrKey === 'string' ? {} : blockOrKey;
+  return {
+    dateStr: extra.dateStr || parsed.dateStr || '',
+    subjectId: extra.subjectId || parsed.subjectId || '',
+    kind: normalizeKind(extra.kind || parsed.kind),
+    topicId: extra.topicId || parsed.topicId || null
+  };
+}
+
+export function sameStudySlot(a, b, options = {}) {
+  if (!a || !b) return false;
+  if (typeof a !== 'string' && typeof b !== 'string' && a.key && b.key && a.key === b.key) return true;
+  const left = canonicalSlot(a);
+  const right = canonicalSlot(b);
+  if (left.dateStr !== right.dateStr || left.subjectId !== right.subjectId) return false;
+  if (left.topicId && right.topicId && left.topicId !== right.topicId) return false;
+  if (options.ignoreKind) return true;
+  return left.kind === right.kind;
+}
+
+export function durationForStudySlot(plan, block) {
+  const durations = plan?.blockDurations || {};
+  let minutes = parseDurationMinutes(durations[block?.key]);
+  Object.entries(durations).forEach(([key, value]) => {
+    if (sameStudySlot(key, block) || sameStudySlot(key, block, { ignoreKind: true })) {
+      minutes = Math.max(minutes, parseDurationMinutes(value));
+    }
+  });
+  return minutes;
+}
+
+export function isSlotMarkedDone(plan, block) {
+  const completed = plan?.completedBlocks || {};
+  if (block?.key && completed[block.key]) return true;
+  return Object.keys(completed).some((key) => (
+    !key.endsWith('|product')
+    && (sameStudySlot(key, block) || sameStudySlot(key, block, { ignoreKind: true }))
+  ));
+}
+
 export function collectStudyBlocks(plan, examQuestions = []) {
   const byKey = {};
 
@@ -193,15 +255,19 @@ export function collectStudyBlocks(plan, examQuestions = []) {
   ingestCycle(plan?.currentCycle);
   (plan?.generatedCycles || []).forEach(ingestCycle);
 
+  const findSlot = (partial) => Object.values(byKey).find((rec) => (
+    sameStudySlot(rec, partial) || sameStudySlot(rec, partial, { ignoreKind: true })
+  ));
+
   Object.keys(plan?.completedBlocks || {}).forEach((key) => {
     if (key.endsWith('|product')) return;
-    const parts = String(key).split('|');
-    const rec = ensure({
+    const parsed = slotFromKey(key);
+    const rec = findSlot(parsed) || ensure({
       key,
-      dateStr: parts[0],
-      subjectId: parts[1],
-      topicId: parts[3] || null,
-      kind: parts[2] || 'estudo'
+      dateStr: parsed.dateStr,
+      subjectId: parsed.subjectId,
+      topicId: parsed.topicId,
+      kind: parsed.kind
     });
     if (rec) rec.markedDone = true;
   });
@@ -211,14 +277,15 @@ export function collectStudyBlocks(plan, examQuestions = []) {
     if (!subject) return;
     const topic = resolveExamTopic(entry, subject);
     const key = blockIdentity(entry, subject, topic);
-    const rec = ensure({
+    const partial = {
       key,
       dateStr: examDate(entry),
       subjectId: subject.id,
       topicId: topic?.id || entry.topicId || null,
       kind: entry.kind || 'estudo',
       topicName: topic?.name || entry.topic || null
-    });
+    };
+    const rec = findSlot(partial) || ensure(partial);
     if (!rec) return;
     rec.totalQuestions += Number(entry.totalQuestions) || 0;
     rec.correctAnswers += Number(entry.correctAnswers) || 0;
@@ -228,13 +295,13 @@ export function collectStudyBlocks(plan, examQuestions = []) {
   });
 
   Object.entries(plan?.blockDurations || {}).forEach(([key, minutes]) => {
-    const parts = String(key).split('|');
-    const rec = ensure({
+    const parsed = slotFromKey(key);
+    const rec = findSlot(parsed) || ensure({
       key,
-      dateStr: parts[0],
-      subjectId: parts[1],
-      topicId: parts[3] || null,
-      kind: parts[2] || 'estudo'
+      dateStr: parsed.dateStr,
+      subjectId: parsed.subjectId,
+      topicId: parsed.topicId,
+      kind: parsed.kind
     });
     if (rec) rec.durationMinutes = Math.max(rec.durationMinutes, parseDurationMinutes(minutes));
   });
@@ -244,8 +311,16 @@ export function collectStudyBlocks(plan, examQuestions = []) {
     rec.accuracy = accuracyOf(rec.correctAnswers, rec.totalQuestions);
     rec.subject = getAguSubject(rec.subjectId);
     rec.topic = rec.topicId ? getAguTopic(rec.subjectId, rec.topicId) : null;
-    rec.done = isBlockComplete(rec);
-    rec.completionReason = blockCompletionReason(rec);
+    rec.done = isBlockComplete({
+      questions: rec.totalQuestions,
+      minutes: rec.durationMinutes,
+      markedDone: rec.markedDone
+    });
+    rec.completionReason = blockCompletionReason({
+      questions: rec.totalQuestions,
+      minutes: rec.durationMinutes,
+      markedDone: rec.markedDone
+    });
   });
 
   return Object.values(byKey).sort((a, b) => {
@@ -516,10 +591,35 @@ export function suggestNextBlock(plan, examQuestions, todayStr, options = {}) {
   return null;
 }
 
+export function overlayLoggedDayBlocks(sourceBlocks, plan, examQuestions, dateStr) {
+  const pinned = pinExistingTodayBlocks(plan, examQuestions, dateStr);
+  if (!pinned.length) return sourceBlocks || [];
+  const used = new Set(pinned.map((block) => topicKey(block.subjectId, block.topicId)));
+  const merged = [...pinned];
+  (sourceBlocks || []).forEach((block) => {
+    if (merged.length >= AGU_DAILY_BLOCKS) return;
+    const stamp = topicKey(block.subjectId, block.topicId);
+    if (used.has(stamp)) return;
+    used.add(stamp);
+    merged.push(block);
+  });
+  return merged;
+}
+
 function pinExistingTodayBlocks(plan, examQuestions, dateStr) {
+  const seen = new Set();
   const blocks = collectStudyBlocks(plan, examQuestions)
     .filter((block) => block.dateStr === dateStr && (block.done || (block.totalQuestions || 0) > 0 || parseDurationMinutes(block.durationMinutes) > 0))
-    .sort((a, b) => (a.key || '').localeCompare(b.key || ''));
+    .sort((a, b) => {
+      if (Boolean(b.done) !== Boolean(a.done)) return b.done ? 1 : -1;
+      return (a.key || '').localeCompare(b.key || '');
+    })
+    .filter((block) => {
+      const stamp = `${block.subjectId}|${normalizeKind(block.kind)}|${block.topicId || ''}`;
+      if (seen.has(stamp)) return false;
+      seen.add(stamp);
+      return true;
+    });
   return blocks.slice(0, AGU_DAILY_BLOCKS).map((block, index) => ({
     subjectId: block.subjectId,
     kind: normalizeKind(block.kind),

@@ -165,5 +165,21 @@ assert(isPortugueseRequired(collectStudyBlocks(createDefaultAguPlan(monday), por
 const next = suggestNextBlock(createDefaultAguPlan(monday), [], monday);
 assert(next.subjectId === 'portugues', `próximo bloco sem histórico começa em português, veio ${next.subjectId}`);
 
+let theoryPlan = startAguPlan(createDefaultAguPlan(monday), monday, []);
+const generatedPort = getDaySchedule(theoryPlan, monday, {}, []).blocks.find((b) => b.subjectId === 'portugues');
+assert(generatedPort, 'ciclo inicial tem bloco de português');
+theoryPlan = {
+  ...theoryPlan,
+  blockDurations: {
+    ...(theoryPlan.blockDurations || {}),
+    [`${monday}|portugues|estudo|acentuacao`]: 67
+  }
+};
+const afterRefresh = getDaySchedule(theoryPlan, monday, {}, []);
+const loggedPort = afterRefresh.blocks.find((b) => b.subjectId === 'portugues');
+assert(loggedPort, 'português lançado permanece no dia');
+assert((loggedPort.minutes || 0) >= 60, `bloco de português herda 67 min, veio ${loggedPort.minutes}`);
+assert(loggedPort.done === true, 'bloco de português com 67 min fica concluído após refresh');
+
 console.log('🎉 Teste do motor adaptativo AGU PASSOU.');
 process.exit(0);

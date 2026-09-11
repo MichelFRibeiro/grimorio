@@ -50,8 +50,12 @@ import {
   buildTopicProgress,
   collectStudyBlocks,
   currentOpenTopic,
+  durationForStudySlot,
   isBlockComplete,
   isPortugueseRequired,
+  isSlotMarkedDone,
+  overlayLoggedDayBlocks,
+  sameStudySlot,
   serializeTopicStatus,
   suggestNextBlock
 } from './aguStudyEngine.js';
@@ -154,14 +158,23 @@ export function getSubjectProgressOnDate(examQuestions = [], subject, dateStr) {
 function blockProgressOnDate(examQuestions = [], block, dateStr) {
   const entries = (examQuestions || []).filter((entry) => {
     if ((entry.date || '') !== dateStr) return false;
-    if (entry.blockKey && block.key && entry.blockKey === block.key) return true;
-    if (entry.subjectId && entry.subjectId === block.subjectId) {
-      if (block.topicId) return (entry.topicId || '') === block.topicId;
+    const entrySlot = {
+      key: entry.blockKey,
+      dateStr,
+      subjectId: entry.subjectId,
+      topicId: entry.topicId,
+      kind: entry.kind
+    };
+    if (entry.blockKey && (sameStudySlot(entrySlot, block) || sameStudySlot(entrySlot, block, { ignoreKind: true }))) {
       return true;
     }
-    if (block.topicId) return false;
-    const subject = getAguSubject(block.subjectId);
-    return matchExamToSubjectDetailed(entry, subject);
+    const subject = resolveExamSubject(entry) || getAguSubject(entry.subjectId);
+    if (!subject || subject.id !== block.subjectId) {
+      return matchExamToSubjectDetailed(entry, getAguSubject(block.subjectId)) && !block.topicId;
+    }
+    const topic = resolveExamTopic(entry, subject);
+    if (block.topicId) return (topic?.id || entry.topicId || '') === block.topicId;
+    return true;
   });
   return entries.reduce((acc, entry) => {
     acc.solved += entry.totalQuestions || 0;
@@ -178,17 +191,18 @@ function hydrateBlock(raw, dateStr, plan, subjectStats, topicStats, examQuestion
   const tStats = raw.topicId ? topicStats[topicKey(raw.subjectId, raw.topicId)] : null;
   const platform = recommendPlatform(subject, tStats || stats);
   const key = raw.key || blockKey(dateStr, raw.subjectId, raw.kind, raw.topicId);
-  const markedDone = Boolean(plan?.completedBlocks?.[key]) || Boolean(raw.done);
+  const slot = { ...raw, key, dateStr, subjectId: raw.subjectId, topicId: raw.topicId, kind: raw.kind };
+  const markedDone = Boolean(raw.done) || isSlotMarkedDone(plan, slot);
   const kind = raw.kind === 'revisao' ? 'revisao' : (raw.kind === 'estudo' ? 'estudo' : raw.kind);
   const kindMeta = AGU_KIND_META[kind] || (kind === 'estudo' ? { label: 'Estudo inicial', icon: '🎯', color: '#f59e0b' } : AGU_KIND_META.questoes);
   const group = AGU_GROUPS[subject?.group] || AGU_GROUPS.extra;
-  const todayProgress = blockProgressOnDate(examQuestions, { ...raw, key, subjectId: raw.subjectId, topicId: raw.topicId }, dateStr);
+  const todayProgress = blockProgressOnDate(examQuestions, slot, dateStr);
   todayProgress.accuracy = todayProgress.solved > 0
     ? Math.round((todayProgress.correct / todayProgress.solved) * 1000) / 10
     : 0;
   const target = raw.target != null ? raw.target : AGU_BLOCK_QUESTION_TARGET;
   const targetMinutes = raw.targetMinutes != null ? raw.targetMinutes : AGU_BLOCK_MINUTES;
-  const storedMinutes = parseDurationMinutes(plan?.blockDurations?.[key]);
+  const storedMinutes = durationForStudySlot(plan, slot);
   const minutes = Math.max(storedMinutes, todayProgress.minutes);
   const remaining = Math.max(0, target - todayProgress.solved);
   const remainingMinutes = Math.max(0, targetMinutes - minutes);
@@ -259,7 +273,8 @@ export function getDaySchedule(plan, dateStr, subjectStats = {}, examQuestions =
       optional: false
     };
 
-  const blocks = (source.blocks || []).map((block, index) => ({
+  const sourceBlocks = overlayLoggedDayBlocks(source.blocks || [], plan, examQuestions, dateStr);
+  const blocks = sourceBlocks.map((block, index) => ({
     ...hydrateBlock(block, dateStr, plan, subjectStats, topicStats, examQuestions),
     index
   }));
