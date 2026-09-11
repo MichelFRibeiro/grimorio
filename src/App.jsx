@@ -369,7 +369,7 @@ export function App() {
             onStartPlan={startAguPlan}
             onToggleBlock={toggleAguBlock}
             onSetBlockDuration={setAguBlockDuration}
-            onRealignCycle={realignAguCycle,
+            onRealignCycle={realignAguCycle}
             onResetPlan={resetAguPlan}
             onAdvanceCycle={advanceAguCycle}
             onLogProduct={logAguProduct}
