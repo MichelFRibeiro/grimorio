@@ -1,5 +1,7 @@
 import {
+  AGU_BLOCK_QUESTION_TARGET,
   AGU_CORE_SUBJECTS,
+  AGU_DAILY_BLOCKS,
   AGU_DISCURSIVE_ROTATION,
   AGU_LONG_AFTERNOON_BLOCKS,
   AGU_PRODUCT_META,
@@ -18,6 +20,7 @@ import {
   rankSubjects,
   windowN
 } from './aguFragility.js';
+import { buildDayBlocks, buildTopicProgress, collectStudyBlocks } from './aguStudyEngine.js';
 
 const DAY_LABELS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
@@ -64,22 +67,16 @@ export function isLongAfternoon(weekday) {
 }
 
 export function afternoonBlockCap(weekday, capacityByWeekday) {
-  if (weekday === 0 || weekday === 6) return 2;
+  if (weekday === 0 || weekday === 6) return AGU_DAILY_BLOCKS;
   const minutes = Number(capacityByWeekday?.[weekday] ?? 0);
-  if (minutes > 0 && minutes < 180) return AGU_SHORT_AFTERNOON_BLOCKS;
-  if (isLongAfternoon(weekday)) return AGU_LONG_AFTERNOON_BLOCKS;
-  return AGU_SHORT_AFTERNOON_BLOCKS;
+  if (minutes > 0 && minutes < 180) return Math.min(AGU_DAILY_BLOCKS, AGU_SHORT_AFTERNOON_BLOCKS);
+  if (isLongAfternoon(weekday)) return AGU_DAILY_BLOCKS;
+  return AGU_DAILY_BLOCKS;
 }
 
 export function questionTargetFor(kind, weekday, longAfternoon) {
   if (kind === 'teoria' || kind === 'informativo' || kind === 'discursiva') return 0;
-  if (kind === 'lei-seca') return weekday === 0 ? 15 : 12;
-  if (kind === 'erros') return weekday === 6 ? 30 : 12;
-  if (kind === 'simulado') return 40;
-  if (kind === 'revisao') return 15;
-  if (weekday === 6) return 40;
-  if (weekday === 0) return 15;
-  return longAfternoon ? 25 : 20;
+  return AGU_BLOCK_QUESTION_TARGET;
 }
 
 function allowedSubjectIds(plan) {
@@ -659,156 +656,50 @@ export function generateFortnight(plan, examQuestions, todayStr, options = {}) {
   const start = options.startDate || fortnightStartFor(options.anchorDate || todayStr);
   const cycleNumber = options.cycleNumber || (plan?.generatedCycles?.length || 0) + 1;
   const { ranked } = rankSubjects({ ...plan, phase }, examQuestions, todayStr);
-  const allowed = allowedSubjectIds({ ...plan, phase });
-  const useSeed = cycleNumber === 1;
-  const pairings1 = seedPairings();
-  const pairings2 = week2Pairings();
-
+  const topicProgress = JSON.parse(JSON.stringify(buildTopicProgress(plan, examQuestions, todayStr)));
+  const historyBlocks = collectStudyBlocks(plan, examQuestions);
   const days = [];
+
   for (let i = 0; i < 14; i += 1) {
     const dateStr = addDaysToDateStr(start, i);
     const weekday = getSaoPauloDayOfWeek(dateStr);
     const weekIndex = i < 7 ? 0 : 1;
+    const built = buildDayBlocks(plan, examQuestions, dateStr, {
+      topicProgress,
+      blocks: historyBlocks,
+      preview: dateStr !== todayStr,
+      pinExisting: dateStr === todayStr,
+      advanceProgress: true
+    });
+    const blocks = (built.blocks || []).map((block, index) => ({
+      ...block,
+      window: index === 0 ? 'morning' : 'afternoon',
+      optional: false,
+      target: AGU_BLOCK_QUESTION_TARGET,
+      targetMinutes: block.targetMinutes || 60,
+      key: block.key || blockKey(dateStr, block.subjectId, block.kind, block.topicId)
+    }));
     days.push({
       dateStr,
       weekday,
       weekdayLabel: DAY_LABELS[weekday],
       weekIndex,
-      optional: weekday === 0 || weekday === 6,
-      blocks: [],
-      label: ''
+      optional: false,
+      blocks,
+      label: labelForDay(weekday, weekIndex, blocks),
+      questionTarget: blocks.reduce((sum, b) => sum + (b.target || 0), 0),
+      portugueseRequired: built.portugueseRequired,
+      portugueseToday: built.portugueseToday
     });
   }
 
-  if (useSeed) {
-    days.forEach((day) => {
-      const pairing = (day.weekIndex === 0 ? pairings1 : pairings2)[day.weekday];
-      if (pairing) fillFromPairing(day, pairing, plan, ranked, phase, day.weekIndex);
-    });
-    const weakest = ranked.filter((r) => allowed.has(r.subject.id) && r.stats.solved > 0 && r.stats.accSmooth < 0.85);
-    if (weakest[0] && weakest[0].subject.id !== 'constitucional') {
-      const long = days.find((d) => d.weekday === 3 && d.weekIndex === 1);
-      if (long) {
-        const extra = (long.blocks || []).filter((b) => b.window === 'afternoon' && b.kind === 'questoes' && b.subjectId === 'portugues').pop();
-        if (extra) {
-          const cursor = weakest[0].cursor;
-          const idx = long.blocks.indexOf(extra);
-          long.blocks[idx] = makeBlock({
-            dateStr: long.dateStr,
-            weekday: long.weekday,
-            window: 'afternoon',
-            subjectId: weakest[0].subject.id,
-            kind: 'questoes',
-            topicId: cursor?.topicId,
-            topicName: cursor?.topicName,
-            reasons: [`ciclo 1 overlay: acerto suavizado ${Math.round(weakest[0].stats.accSmooth * 100)}%`]
-          });
-        }
-      }
-    }
-  } else {
-    let prevAfternoon = null;
-    days.forEach((day) => {
-      if (day.weekday === 6) {
-        const worst = ranked.filter((r) => allowed.has(r.subject.id)).slice(0, 2);
-        const kind = phase === 'fundacao' && day.weekIndex === 1 ? 'questoes' : (phase === 'fundacao' ? 'erros' : (day.weekIndex === 1 ? 'simulado' : 'erros'));
-        (worst.length ? worst : ranked.slice(0, 2)).forEach((row, idx) => {
-          day.blocks.push(makeBlock({
-            dateStr: day.dateStr,
-            weekday: 6,
-            window: 'afternoon',
-            subjectId: row.subject.id,
-            kind: idx === 0 && day.weekIndex === 1 && phase !== 'fundacao' ? 'simulado' : (idx === 0 ? kind : 'erros'),
-            topicId: row.cursor?.topicId,
-            topicName: row.cursor?.topicName,
-            reasons: [`sábado bônus · score ${row.score}`],
-            optional: true
-          }));
-        });
-        return;
-      }
-      if (day.weekday === 0) {
-        const product = discursiveProduct(plan, phase);
-        const disc = ranked.find((r) => ['administrativo', 'constitucional', 'seguridade', 'processual-civil'].includes(r.subject.id) && allowed.has(r.subject.id))
-          || ranked[0];
-        day.blocks.push(makeBlock({
-          dateStr: day.dateStr, weekday: 0, window: 'afternoon',
-          subjectId: disc.subject.id, kind: 'discursiva',
-          topicId: disc.cursor?.topicId, topicName: disc.cursor?.topicName,
-          reasons: ['domingo bônus — produto discursivo'],
-          optional: true, target: 0,
-          targetProduct: product,
-          prompt: discursivePrompt(product, disc.subject.id)
-        }));
-        if (day.weekIndex === 0) {
-          day.blocks.push(makeBlock({
-            dateStr: day.dateStr, weekday: 0, window: 'afternoon',
-            subjectId: 'leg-agu', kind: 'lei-seca',
-            reasons: ['lei seca AGU'],
-            optional: true, target: 15
-          }));
-        } else {
-          day.blocks.push(makeBlock({
-            dateStr: day.dateStr, weekday: 0, window: 'afternoon',
-            subjectId: 'constitucional', kind: 'informativo',
-            reasons: ['informativo'],
-            optional: true, target: 0
-          }));
-        }
-        return;
-      }
-      prevAfternoon = fillByScore(day, plan, ranked, allowed, prevAfternoon);
-    });
-  }
-
-  injectDebt(days, plan, ranked);
-  applyWindowConstraint(days, plan, ranked, phase);
-
-  let missing = validateCycleGuarantees(days, phase, plan);
-  let guard = 0;
-  while (missing.length && guard < 20) {
-    const token = missing[0];
-    if (token.startsWith('constitucional')) injectGuarantee(days, 'constitucional', 'questoes', ranked, plan, 'garantia constitucional');
-    else if (token.startsWith('administrativo')) injectGuarantee(days, 'administrativo', 'questoes', ranked, plan, 'garantia administrativo');
-    else if (token.startsWith('português')) injectGuarantee(days, 'portugues', 'questoes', ranked, plan, 'garantia português');
-    else if (token.startsWith('seguridade')) injectGuarantee(days, 'seguridade', 'questoes', ranked, plan, 'garantia seguridade');
-    else if (token.includes('leg-agu lei')) injectGuarantee(days, 'leg-agu', 'lei-seca', ranked, plan, 'garantia lei seca AGU');
-    else if (token.includes('leg-agu questões')) injectGuarantee(days, 'leg-agu', 'questoes', ranked, plan, 'garantia questões AGU');
-    else if (token.startsWith('tribut')) injectGuarantee(days, 'tributario', 'questoes', ranked, plan, 'garantia tributário');
-    else if (token.startsWith('financeiro')) injectGuarantee(days, 'financeiro', 'questoes', ranked, plan, 'garantia financeiro');
-    else if (token.startsWith('civil')) injectGuarantee(days, 'civil', 'questoes', ranked, plan, 'garantia civil');
-    else if (token.startsWith('processual-civil')) injectGuarantee(days, 'processual-civil', 'questoes', ranked, plan, 'garantia processo civil');
-    else if (token.startsWith('erros')) injectGuarantee(days, ranked[0]?.subject.id || 'constitucional', 'erros', ranked, plan, 'garantia caderno de erros');
-    else if (token.startsWith('lei-seca')) injectGuarantee(days, 'constitucional', 'lei-seca', ranked, plan, 'garantia lei seca');
-    else if (token.startsWith('discursiva')) {
-      const sunday = days.find((d) => d.weekday === 0);
-      if (sunday && !sunday.blocks.some((b) => b.kind === 'discursiva')) {
-        const product = discursiveProduct(plan, phase);
-        sunday.blocks.push(makeBlock({
-          dateStr: sunday.dateStr, weekday: 0, window: 'afternoon',
-          subjectId: 'administrativo', kind: 'discursiva',
-          reasons: ['garantia discursiva'],
-          optional: true, target: 0,
-          targetProduct: product,
-          prompt: discursivePrompt(product, 'administrativo')
-        }));
-      }
-    }
-    missing = validateCycleGuarantees(days, phase, plan);
-    guard += 1;
-  }
-
-  days.forEach((day) => {
-    day.label = labelForDay(day.weekday, day.weekIndex, day.blocks);
-    day.questionTarget = (day.blocks || []).reduce((sum, b) => sum + (b.target || 0), 0);
+  const reasons = [
+    '3 blocos/dia · 60 min ou 20 questões · 1 tópico por bloco',
+    builtPortugueseReason(days, topicProgress)
+  ].filter(Boolean);
+  ranked.slice(0, 4).forEach((row) => {
+    reasons.push(`${row.subject.name}: score ${row.score} · ${row.stats.solved} q · ${row.mastery.label}`);
   });
-
-  const reasons = ranked.slice(0, 5).map((row) => (
-    `${row.subject.name}: score ${row.score} · ${row.stats.solved} q · acerto suavizado ${Math.round((row.stats.accSmooth || 0) * 100)}% · ${row.mastery.label}`
-  ));
-  if (missing.length) {
-    reasons.push(`Aviso: ${missing.join('; ')}`);
-  }
 
   return {
     number: cycleNumber,
@@ -817,9 +708,16 @@ export function generateFortnight(plan, examQuestions, todayStr, options = {}) {
     phase,
     days,
     reasons,
-    warnings: missing,
+    warnings: [],
     generatedAt: new Date().toISOString()
   };
+}
+
+function builtPortugueseReason(days, topicProgress) {
+  const hasPort = days.some((day) => (day.blocks || []).some((b) => b.subjectId === 'portugues'));
+  if (hasPort) return 'Português obrigatório em 1 bloco/dia até 95% nos 10 últimos blocos da matéria.';
+  const row = Object.values(topicProgress || {}).find((t) => t.subjectId === 'portugues');
+  return row ? 'Português dispensado (10 últimos blocos ≥ 95%).' : '';
 }
 
 export { DISCURSIVE_PROMPTS, AGU_PRODUCT_META };

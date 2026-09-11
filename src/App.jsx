@@ -84,6 +84,7 @@ export function App() {
     refreshNextAction,
     startAguPlan,
     toggleAguBlock,
+    setAguBlockDuration,
     realignAguCycle,
     resetAguPlan,
     advanceAguCycle,
@@ -367,7 +368,8 @@ export function App() {
             examQuestions={examQuestions}
             onStartPlan={startAguPlan}
             onToggleBlock={toggleAguBlock}
-            onRealignCycle={realignAguCycle}
+            onSetBlockDuration={setAguBlockDuration}
+            onRealignCycle={realignAguCycle,
             onResetPlan={resetAguPlan}
             onAdvanceCycle={advanceAguCycle}
             onLogProduct={logAguProduct}

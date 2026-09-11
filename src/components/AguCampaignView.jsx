@@ -15,10 +15,11 @@ import {
   Sparkles,
   X,
   Clock,
-  Sunrise,
-  Sunset,
   SkipForward,
-  PenLine
+  PenLine,
+  History,
+  Table2,
+  Compass
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityTimerBox } from './ActivityTimerBox';
@@ -28,6 +29,7 @@ import {
   AGU_FOLDER_URL,
   AGU_GROUPS,
   AGU_PLATFORMS,
+  AGU_SUBJECTS,
   AGU_TARGET_ACCURACY,
   AGU_THEORY_URL
 } from '../data/aguCurriculum.js';
@@ -35,14 +37,13 @@ import { summarizePlan } from '../utils/aguCycle.js';
 import { getSaoPauloDateStr } from '../utils/timeUtils.js';
 
 const PROTOCOL = [
-  'O Grimório manda o dia. Sem rituais paralelos de questões.',
-  'Manhã = lei seca ou erros. Tarde = teoria curta + questões do mesmo tópico.',
-  'Tec é a referência. Modo CESPE com penalidade. Comentário no erro e no acerto chutado.',
-  `Maestria é por tópico: ${AGU_TARGET_ACCURACY}% com ≥ 40 questões e toque há menos de 21 dias.`,
-  'Abaixo de 90% depois do volume mínimo: Decorando (lei seca) ou Qconcursos, e volta ao Tec.',
-  'Sábado e domingo são cinza — bônus. Pular não gera culpa; vira dívida limitada.',
-  'Discursiva só fecha com produto (parecer, peça, dissertação ou oral).',
-  'Parcial vale. Fez 5 de 25? Lance as 5. O resto vira dívida do tópico.'
+  'Três blocos por dia, 60 min cada. Um tópico de uma matéria por bloco.',
+  'O bloco fecha com 60 minutos ou com 20 questões — o que ocorrer primeiro.',
+  'Um dos três blocos é de Língua Portuguesa (ortografia em prioridade) até 95%+ nos 10 últimos blocos da matéria.',
+  'Tópico só conclui com ≥ 60 questões no estudo inicial. Se o último bloco ficar abaixo de 80%, o tópico volta a pendente.',
+  'Depois de concluir: revisões em 1, 7, 21, 30, 90 e 120 dias (esta última, recorrente). Revisão = 1 bloco (60 min ou 20 q).',
+  'O próximo bloco é calculado na hora: revisões devidas primeiro, depois tópicos pendentes, com a trava de português.',
+  `Tec é a referência. Meta geral de acerto: ${AGU_TARGET_ACCURACY}%.`
 ];
 
 function ProgressBar({ percent, color = '#f59e0b' }) {
@@ -133,6 +134,7 @@ export function AguCampaignView({
   examQuestions,
   onStartPlan,
   onToggleBlock,
+  onSetBlockDuration,
   onRealignCycle,
   onResetPlan,
   onAdvanceCycle,
@@ -151,7 +153,9 @@ export function AguCampaignView({
   const [logBlock, setLogBlock] = useState(null);
   const [logTotal, setLogTotal] = useState('');
   const [logCorrect, setLogCorrect] = useState('');
+  const [logMinutes, setLogMinutes] = useState('');
   const [logError, setLogError] = useState('');
+  const [screen, setScreen] = useState('hoje');
   const todayBlockKeys = (summary.today?.blocks || []).map((block) => block.key);
   const liveMinutes = useLiveAguMinutes(todayBlockKeys);
 
@@ -168,10 +172,13 @@ export function AguCampaignView({
   }, [summary.today?.dateStr]);
 
   const openLog = (block) => {
-    const remaining = block.remaining > 0 ? String(block.remaining) : '';
+    const remaining = block.remaining > 0 ? String(block.remaining) : '20';
+    const snap = getActivityTimerSnapshot('agu', block.key);
+    const live = snap ? Math.floor(elapsedMsFrom(snap.accumulatedMs || 0, snap.runStartedAt || null) / 60000) : 0;
     setLogBlock(block);
     setLogTotal(remaining);
     setLogCorrect('');
+    setLogMinutes(live > 0 ? String(live) : (block.minutes > 0 ? String(block.minutes) : '60'));
     setLogError('');
   };
 
@@ -193,6 +200,9 @@ export function AguCampaignView({
       setLogError('Acertos devem ficar entre 0 e o total feito agora.');
       return;
     }
+    const minutes = parseInt(logMinutes, 10);
+    consumeBlockTimer(logBlock.key);
+    const durationMinutes = Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
     onAddQuestions({
       category: 'Estudos',
       subject: logBlock.subject?.name || 'Geral',
@@ -206,11 +216,14 @@ export function AguCampaignView({
       institution: 'Cebraspe',
       totalQuestions: total,
       correctAnswers: correct,
-      durationMinutes: consumeBlockTimer(logBlock.key),
-      notes: `Campanha AGU · ${logBlock.kindMeta?.label || 'bloco'} · ${logBlock.topicName || ''} · parcial ${total}/${logBlock.target || total}`,
+      durationMinutes,
+      notes: `Campanha AGU · ${logBlock.kindMeta?.label || 'bloco'} · ${logBlock.topicName || ''} · ${total}/${logBlock.target || 20} q`,
       notebookUrl: logBlock.subject?.tecCadernoUrl || '',
       date: todayStr
     });
+    if (onSetBlockDuration && durationMinutes > 0) {
+      onSetBlockDuration(logBlock.key, durationMinutes);
+    }
     closeLog();
   };
 
@@ -235,8 +248,8 @@ export function AguCampaignView({
             <Scale size={22} color="#fbbf24" /> Campanha AGU — Procurador Federal
           </h2>
           <p style={{ color: '#94a3b8', fontSize: '0.88rem', maxWidth: '720px', marginTop: '6px' }}>
-            Quinzena gerada, não copiada. O dia cabe na sua janela (pilates ter/qui, noite fechada).
-            Banca: Cebraspe. Plataforma-mãe: Tec. Discursiva só fecha com produto.
+            Três blocos de 60 min por dia, um tópico por bloco. Fecha com o tempo ou com 20 questões.
+            Português é obrigatório até 95% nos 10 últimos blocos. Banca: Cebraspe. Plataforma-mãe: Tec.
           </p>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -299,7 +312,7 @@ export function AguCampaignView({
           <span>•</span>
           <span>Fase {summary.phaseMeta?.label || 'A — Fundação'} · cargo-alvo Procurador Federal</span>
           <span>•</span>
-          <span>{summary.keepPortuguese ? 'Português incluso (fora do edital, overlap)' : 'Português desligado'}</span>
+          <span>{summary.portugueseRequired ? 'Português obrigatório (1 bloco/dia)' : 'Português dispensado (≥95% nos 10 últimos)'}</span>
           {onUpdatePlan && summary.started && (
             <button
               type="button"
@@ -314,23 +327,58 @@ export function AguCampaignView({
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '18px' }}>
         <StatChip label="Fase" value={summary.phaseMeta?.short || 'Fundação'} sub={summary.editalPublished ? 'Lock de edital' : 'Automática'} color={summary.phaseMeta?.color || '#38bdf8'} />
-        <StatChip label="Ciclo" value={`${summary.calendar.cycleNumber}`} sub={`${summary.today.weekdayLabel} · ${summary.today.optional ? 'bônus' : 'dia útil'}`} />
+        <StatChip label="Ciclo" value={`${summary.calendar.cycleNumber}`} sub={`${summary.today.weekdayLabel} · 3 blocos`} />
         <StatChip label="Blocos da quinzena" value={`${summary.cycleDoneBlocks}/${summary.cycleTotalBlocks}`} sub={`${summary.cyclePercent}% concluído`} color="#38bdf8" />
-        <StatChip label="Questões hoje" value={`${summary.todayProgress.solved}/${summary.today.questionTarget}`} sub={summary.todayProgress.solved ? `${Math.round((summary.todayProgress.correct / Math.max(summary.todayProgress.solved, 1)) * 1000) / 10}% acerto` : 'Nada registrado'} color="#10b981" />
+        <StatChip label="Hoje" value={`${summary.today.doneCount}/3`} sub={`${summary.todayProgress.solved}/${summary.today.questionTarget} q · 60 min ou 20 q`} color="#10b981" />
         <StatChip label="Maestria tópico" value={`${summary.masteredSubjects}/${summary.totalSubjects}`} sub={`${summary.startedSubjects} matérias tocadas`} color="#c084fc" />
         <StatChip label="Dívida" value={`${(summary.debt || []).length}`} sub="blocos / restos" color="#f43f5e" />
       </div>
 
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+        {[
+          { id: 'hoje', label: 'Hoje', icon: Target },
+          { id: 'edital', label: 'Edital verticalizado', icon: Table2 },
+          { id: 'historico', label: 'Histórico de blocos', icon: History }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setScreen(tab.id)}
+            style={{
+              ...ghostBtnStyle,
+              background: screen === tab.id ? 'rgba(245, 158, 11, 0.16)' : 'rgba(255,255,255,0.04)',
+              color: screen === tab.id ? '#fbbf24' : '#e2e8f0',
+              borderColor: screen === tab.id ? 'rgba(245, 158, 11, 0.45)' : 'rgba(255,255,255,0.1)'
+            }}
+          >
+            <tab.icon size={14} /> {tab.label}
+          </button>
+        ))}
+      </div>
+
       <StudyTimeCard studyTime={summary.studyTime} liveMinutes={liveMinutes} />
 
-      <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
+      {summary.nextBlock && (
+        <section className="glass-panel-gold" style={{ padding: '16px 18px', marginBottom: '18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', color: '#fbbf24', fontWeight: 800 }}>
+            <Compass size={16} /> Próximo bloco sugerido
+          </div>
+          <p style={{ color: '#e2e8f0', fontSize: '0.95rem', fontWeight: 700 }}>
+            {summary.nextBlock.subject?.name || getSubjectName(summary.nextBlock.subjectId)} · {summary.nextBlock.topicName || 'tópico'}
+          </p>
+          <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '4px' }}>
+            {(summary.nextBlock.reasons || []).join(' · ') || (summary.nextBlock.kind === 'revisao' ? 'Revisão espaçada' : 'Estudo inicial')}
+            {' · '}fecha com 60 min ou 20 questões
+          </p>
+        </section>
+      )}
+
+      {screen === 'hoje' && <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '14px' }}>
           <div>
             <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24' }}>Hoje — {summary.today.label}</h3>
             <p style={{ color: '#94a3b8', fontSize: '0.82rem' }}>
-              {summary.today.weekdayLabel} · {todayStr}
-              {summary.today.optional ? ' · bônus (família primeiro)' : ` · manhã 60 min · tarde ${summary.today.weekday === 2 || summary.today.weekday === 4 ? '1h50 (pilates)' : '3h45'}`}
-              {' · '}meta {summary.today.questionTarget} questões
+              {summary.today.weekdayLabel} · {todayStr} · 3 blocos de 60 min (ou 20 questões) · 1 tópico por bloco
             </p>
           </div>
           <div style={{ minWidth: '180px', flex: '1 1 180px', maxWidth: '280px' }}>
@@ -342,46 +390,20 @@ export function AguCampaignView({
           </div>
         </div>
 
-        {['morning', 'afternoon'].map((windowId) => {
-          const windowBlocks = (summary.today.blocks || []).filter((b) => (b.window || 'afternoon') === windowId);
-          if (windowBlocks.length === 0) return null;
-          const WindowIcon = windowId === 'morning' ? Sunrise : Sunset;
-          return (
-            <div key={windowId} style={{ marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: windowId === 'morning' ? '#fde68a' : '#38bdf8', fontWeight: 800, fontSize: '0.78rem', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                <WindowIcon size={14} /> {windowId === 'morning' ? 'Manhã · 07:00–08:00' : (summary.today.weekday === 2 || summary.today.weekday === 4 ? 'Tarde · 14:00–15:50' : 'Tarde · 14:00–17:45')}
-              </div>
-              <div style={{ display: 'grid', gap: '10px' }}>
-                {windowBlocks.map((block) => (
-                  <AguBlockCard
-                    key={block.key}
-                    block={block}
-                    aguPlan={aguPlan}
-                    onToggle={() => handleToggleBlock(block)}
-                    onLog={onAddQuestions ? () => openLog(block) : null}
-                    onProduct={onLogProduct && block.kind === 'discursiva' ? () => onLogProduct(block.key) : null}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-        {(summary.today.blocks || []).every((b) => b.window) ? null : (
-          (summary.today.blocks || []).some((b) => !b.window) && (
-            <div style={{ display: 'grid', gap: '10px' }}>
-              {summary.today.blocks.filter((b) => !b.window).map((block) => (
-                <AguBlockCard
-                  key={block.key}
-                  block={block}
-                  aguPlan={aguPlan}
-                  onToggle={() => handleToggleBlock(block)}
-                  onLog={onAddQuestions ? () => openLog(block) : null}
-                  onProduct={onLogProduct && block.kind === 'discursiva' ? () => onLogProduct(block.key) : null}
-                />
-              ))}
-            </div>
-          )
-        )}
+        <div style={{ display: 'grid', gap: '10px' }}>
+          {(summary.today.blocks || []).map((block, index) => (
+            <AguBlockCard
+              key={block.key}
+              block={block}
+              index={index}
+              aguPlan={aguPlan}
+              onToggle={() => handleToggleBlock(block)}
+              onLog={onAddQuestions ? () => openLog(block) : null}
+              onSetDuration={onSetBlockDuration}
+              onProduct={onLogProduct && block.kind === 'discursiva' ? () => onLogProduct(block.key) : null}
+            />
+          ))}
+        </div>
 
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '14px' }}>
           <button onClick={onOpenQuestions} style={ghostBtnStyle}>
@@ -394,9 +416,9 @@ export function AguCampaignView({
             Biblioteca de teoria
           </a>
         </div>
-      </section>
+      </section>}
 
-      <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
+      {screen === 'hoje' && <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
         <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <CalendarDays size={18} /> Quinzena {summary.calendar.cycleNumber}
         </h3>
@@ -419,20 +441,18 @@ export function AguCampaignView({
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '8px' }}>
           {summary.calendar.days.map((day) => {
             const isToday = day.dateStr === todayStr;
-            const bonus = day.optional || day.isWeekend;
             return (
               <div
                 key={day.dateStr}
                 style={{
                   padding: '10px 12px',
                   borderRadius: '12px',
-                  background: isToday ? 'rgba(245, 158, 11, 0.12)' : (bonus ? '#0f1218' : '#131722'),
-                  border: isToday ? '1px solid rgba(245, 158, 11, 0.45)' : (bonus ? '1px dashed rgba(148,163,184,0.25)' : '1px solid rgba(255,255,255,0.07)'),
-                  opacity: bonus && !isToday ? 0.72 : 1
+                  background: isToday ? 'rgba(245, 158, 11, 0.12)' : '#131722',
+                  border: isToday ? '1px solid rgba(245, 158, 11, 0.45)' : '1px solid rgba(255,255,255,0.07)'
                 }}
               >
-                <div style={{ fontSize: '0.72rem', color: bonus ? '#64748b' : '#94a3b8', fontWeight: 700 }}>
-                  {day.weekdayLabel}{bonus ? ' · bônus' : ''}
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700 }}>
+                  {day.weekdayLabel}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: 700, margin: '4px 0' }}>{day.label}</div>
                 <div style={{ fontSize: '0.72rem', color: day.complete ? '#10b981' : '#64748b', fontFamily: 'var(--font-mono)' }}>
@@ -442,9 +462,17 @@ export function AguCampaignView({
             );
           })}
         </div>
-      </section>
+      </section>}
 
-      <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
+      {screen === 'edital' && (
+        <EditalTable subjects={summary.edital?.subjects || []} />
+      )}
+
+      {screen === 'historico' && (
+        <BlockHistoryList blocks={summary.studyBlocks || []} />
+      )}
+
+      {screen === 'hoje' && <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
         <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Landmark size={18} /> Matérias da campanha
         </h3>
@@ -524,9 +552,9 @@ export function AguCampaignView({
             )}
           </div>
         )}
-      </section>
+      </section>}
 
-      <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
+      {screen === 'hoje' && <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
         <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Swords size={18} /> Protocolo de execução
         </h3>
@@ -543,9 +571,9 @@ export function AguCampaignView({
             </p>
           </div>
         )}
-      </section>
+      </section>}
 
-      <section className="glass-panel" style={{ padding: '20px' }}>
+      {screen === 'hoje' && <section className="glass-panel" style={{ padding: '20px' }}>
         <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <ScrollText size={18} /> Como a prova é lida neste plano
         </h3>
@@ -571,7 +599,7 @@ export function AguCampaignView({
           <Sparkles size={14} color="#fbbf24" />
           Quando sair o edital novo, ligue o lock na configuração do plano (editalPublished). O motor congela o que sair do edital.
         </p>
-      </section>
+      </section>}
 
       {logBlock && (
         <div
@@ -591,15 +619,15 @@ export function AguCampaignView({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
               <div>
-                <h3 className="font-cinzel" style={{ fontSize: '1.15rem', color: '#f8fafc' }}>Lançar sessão parcial</h3>
+                <h3 className="font-cinzel" style={{ fontSize: '1.15rem', color: '#f8fafc' }}>Lançar bloco</h3>
                 <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '4px' }}>
-                  {logBlock.subject?.name} · {logBlock.topicName || 'tópico corrente'} · meta {logBlock.target || 0} · já {logBlock.todayProgress.solved} hoje
+                  {logBlock.subject?.name} · {logBlock.topicName || 'tópico corrente'} · fecha com 20 q ou 60 min
                 </p>
               </div>
               <button type="button" onClick={closeLog} style={{ ...ghostBtnStyle, padding: '8px' }}><X size={16} /></button>
             </div>
             <p style={{ color: '#cbd5e1', fontSize: '0.85rem', marginBottom: '14px', lineHeight: 1.5 }}>
-              Fez 5 de 25 e precisa sair? Lance só as 5. O restante vira dívida do tópico, não fracasso do dia.
+              Informe as questões deste bloco e, se quiser, o tempo estudado (cronômetro ou digitado).
             </p>
             <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, marginBottom: '6px' }}>
               Questões feitas agora
@@ -615,6 +643,14 @@ export function AguCampaignView({
             <input
               type="number" min="0" value={logCorrect} onChange={(e) => setLogCorrect(e.target.value)}
               placeholder="4"
+              style={inputStyle}
+            />
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, margin: '12px 0 6px' }}>
+              Tempo estudado (minutos)
+            </label>
+            <input
+              type="number" min="0" value={logMinutes} onChange={(e) => setLogMinutes(e.target.value)}
+              placeholder="60"
               style={inputStyle}
             />
             {logError && <p style={{ color: '#fb7185', fontSize: '0.8rem', marginTop: '10px' }}>{logError}</p>}
@@ -648,7 +684,14 @@ export function AguCampaignView({
   );
 }
 
-function AguBlockCard({ block, aguPlan, onToggle, onLog, onProduct }) {
+function AguBlockCard({ block, index = 0, aguPlan, onToggle, onLog, onSetDuration, onProduct }) {
+  const [manualMinutes, setManualMinutes] = useState(
+    String(parseDurationMinutes(aguPlan?.blockDurations?.[block.key]) || block.minutes || '')
+  );
+
+  useEffect(() => {
+    setManualMinutes(String(parseDurationMinutes(aguPlan?.blockDurations?.[block.key]) || block.minutes || ''));
+  }, [aguPlan?.blockDurations?.[block.key], block.minutes, block.key]);
   return (
     <div
       className="rpg-card"
@@ -671,6 +714,7 @@ function AguBlockCard({ block, aguPlan, onToggle, onLog, onProduct }) {
             : <Circle size={22} color="#64748b" />}
           <div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b' }}>Bloco {index + 1}</span>
               <strong style={{ color: '#f8fafc' }}>{block.subject?.name}</strong>
               <span style={{
                 fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px',
@@ -683,8 +727,7 @@ function AguBlockCard({ block, aguPlan, onToggle, onLog, onProduct }) {
               )}
               {block.target > 0 && (
                 <span style={{ fontSize: '0.75rem', color: block.metTarget ? '#10b981' : '#fbbf24', fontFamily: 'var(--font-mono)' }}>
-                  {block.todayProgress.solved}/{block.target} q
-                  {block.remaining > 0 ? ` · faltam ${block.remaining}` : ''}
+                  {block.todayProgress.solved}/{block.target} q · {block.minutes || 0}/{block.targetMinutes || 60} min
                 </span>
               )}
             </div>
@@ -713,7 +756,7 @@ function AguBlockCard({ block, aguPlan, onToggle, onLog, onProduct }) {
           </div>
         </button>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {onLog && ['questoes', 'erros', 'simulado', 'revisao', 'lei-seca'].includes(block.kind) && (
+          {onLog && ['questoes', 'estudo', 'erros', 'simulado', 'revisao', 'lei-seca'].includes(block.kind) && (
             <button onClick={onLog} style={ghostBtnStyle}>
               <Target size={14} /> Lançar o que fiz
             </button>
@@ -748,9 +791,135 @@ function AguBlockCard({ block, aguPlan, onToggle, onLog, onProduct }) {
           accent={block.kindMeta?.color || '#fbbf24'}
           compact
         />
+        {onSetDuration && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              onSetDuration(block.key, parseInt(manualMinutes, 10) || 0);
+            }}
+            style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px', flexWrap: 'wrap' }}
+          >
+            <label style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700 }}>Tempo manual (min)</label>
+            <input
+              type="number"
+              min="0"
+              value={manualMinutes}
+              onChange={(e) => setManualMinutes(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              style={{ ...inputStyle, width: '90px', padding: '8px 10px', fontSize: '0.9rem' }}
+            />
+            <button type="submit" style={ghostBtnStyle} onClick={(e) => e.stopPropagation()}>
+              <Clock size={14} /> Salvar tempo
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
+}
+
+function pct(value) {
+  return `${Math.round(Number(value) || 0)}%`;
+}
+
+function EditalTable({ subjects }) {
+  return (
+    <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
+      <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Table2 size={18} /> Edital verticalizado
+      </h3>
+      <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '12px' }}>
+        Matérias e tópicos com conclusão, tempo, blocos, revisões, volume e acerto (geral e do último bloco).
+      </p>
+      <div className="agu-edital-wrap">
+        <table className="agu-edital-table">
+          <thead>
+            <tr>
+              <th>Matéria / tópico</th>
+              <th className="num">Conclusão</th>
+              <th className="num">Tempo</th>
+              <th className="num">Blocos</th>
+              <th className="num">Revisões</th>
+              <th className="num">Questões</th>
+              <th className="num">Acerto</th>
+              <th className="num">Último bloco</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(subjects || []).map((subject) => (
+              <React.Fragment key={subject.id}>
+                <tr className="subject-row">
+                  <td>{subject.name}</td>
+                  <td className="num">{pct(subject.completionPercent)}</td>
+                  <td className="num">{formatStudyDuration(subject.minutes)}</td>
+                  <td className="num">{subject.studyBlocks || 0}</td>
+                  <td className="num">{subject.reviewBlocks || 0}</td>
+                  <td className="num">{subject.solved || 0}</td>
+                  <td className="num">{pct(subject.accuracy)}</td>
+                  <td className="num">{subject.lastBlockAccuracy ? pct(subject.lastBlockAccuracy) : '—'}</td>
+                </tr>
+                {(subject.topics || []).map((topic) => (
+                  <tr key={topic.key || topic.topicId} className="topic-row">
+                    <td>{topic.topicName}</td>
+                    <td className="num">{pct(topic.completionPercent)}</td>
+                    <td className="num">{formatStudyDuration(topic.minutes)}</td>
+                    <td className="num">{topic.studyBlocks || 0}</td>
+                    <td className="num">{topic.reviewBlocks || 0}</td>
+                    <td className="num">{topic.solved || 0}</td>
+                    <td className="num">{pct(topic.accuracy)}</td>
+                    <td className="num">{topic.lastBlockAccuracy ? pct(topic.lastBlockAccuracy) : '—'}</td>
+                  </tr>
+                ))}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function BlockHistoryList({ blocks }) {
+  const list = (blocks || []).filter((block) => (
+    block.done || (block.totalQuestions || 0) > 0 || (block.durationMinutes || 0) > 0
+  ));
+  return (
+    <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
+      <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <History size={18} /> Histórico de blocos
+      </h3>
+      <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '12px' }}>
+        Todos os blocos lançados ou cronometrados, do mais recente ao mais antigo.
+      </p>
+      {list.length === 0 ? (
+        <p style={{ color: '#64748b' }}>Nenhum bloco registrado ainda.</p>
+      ) : (
+        <div className="agu-history-list">
+          {list.map((block) => (
+            <div key={block.key} className="rpg-card" style={{ padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                <strong style={{ color: '#f8fafc' }}>
+                  {block.subject?.name || block.subjectId} · {block.topicName || block.topicId || 'tópico'}
+                </strong>
+                <span style={{ color: '#94a3b8', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>{block.dateStr}</span>
+              </div>
+              <div style={{ marginTop: '6px', fontSize: '0.78rem', color: '#cbd5e1', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <span>{block.kind === 'revisao' ? 'Revisão' : 'Estudo inicial'}</span>
+                <span>{block.totalQuestions || 0} q</span>
+                <span>{pct(block.accuracy)} acerto</span>
+                <span>{formatStudyDuration(block.durationMinutes)}</span>
+                <span style={{ color: block.done ? '#10b981' : '#fbbf24' }}>{block.done ? 'concluído' : 'em aberto'}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function getSubjectName(subjectId) {
+  return AGU_SUBJECTS.find((s) => s.id === subjectId)?.name || subjectId;
 }
 
 function linkBtnStyle(color) {

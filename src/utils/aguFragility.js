@@ -228,6 +228,10 @@ export function getSubjectMastery(stats, topicStats = {}, subject, staleDays = A
 
 export function shouldAdvanceTopic(stats) {
   const solved = stats?.solved || 0;
+  const lastAccuracy = stats?.lastSessionAccuracy;
+  if (lastAccuracy != null && lastAccuracy !== '') {
+    return solved >= AGU_TOPIC_ADVANCE_MIN && Number(lastAccuracy) >= AGU_TOPIC_ADVANCE_ACCURACY;
+  }
   const accSmooth = stats?.accSmooth ?? laplaceAccuracy(stats?.correct || 0, solved);
   return solved >= AGU_TOPIC_ADVANCE_MIN && accSmooth >= AGU_TOPIC_ADVANCE_ACCURACY / 100;
 }

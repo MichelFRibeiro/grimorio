@@ -618,6 +618,67 @@ img, video, canvas {
   padding-bottom: 120px;
 }
 
+.agu-edital-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.agu-edital-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  min-width: 920px;
+}
+
+.agu-edital-table th,
+.agu-edital-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+
+.agu-edital-table th {
+  color: #94a3b8;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  background: rgba(15, 18, 24, 0.85);
+  position: sticky;
+  top: 0;
+}
+
+.agu-edital-table td.num,
+.agu-edital-table th.num {
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.agu-edital-table tr.subject-row {
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.agu-edital-table tr.subject-row td {
+  color: #f8fafc;
+  font-weight: 700;
+}
+
+.agu-edital-table tr.topic-row td {
+  color: #cbd5e1;
+}
+
+.agu-edital-table tr.topic-row td:first-child {
+  padding-left: 28px;
+  color: #e2e8f0;
+}
+
+.agu-history-list {
+  display: grid;
+  gap: 8px;
+}
+
 @media (max-width: 768px) {
   .focus-mini-player {
     left: 12px;

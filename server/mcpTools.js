@@ -1324,7 +1324,12 @@ export const toolsDefinition = [
       if (!db.examQuestions) db.examQuestions = [];
       db.examQuestions.unshift(newEntry);
       if (db.aguPlan) {
-        db.aguPlan = applyExamToPlan(sanitizeAguPlan(db.aguPlan, newEntry.date), newEntry, newEntry.date);
+        db.aguPlan = applyExamToPlan(
+          sanitizeAguPlan(db.aguPlan, newEntry.date),
+          newEntry,
+          newEntry.date,
+          db.examQuestions
+        );
       }
 
       const rewardResult = rewardPlayer({
@@ -1718,6 +1723,10 @@ export const toolsDefinition = [
       return formatSuccess({
         plan,
         today: summary.today,
+        nextBlock: summary.nextBlock,
+        portugueseRequired: summary.portugueseRequired,
+        edital: summary.edital,
+        studyBlocks: (summary.studyBlocks || []).slice(0, 40),
         cycle: {
           number: summary.calendar.cycleNumber,
           start: summary.calendar.cycleStart,

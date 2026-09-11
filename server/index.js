@@ -46,6 +46,7 @@ import {
   summarizePlan,
   toggleCompletedBlock,
   addBlockDuration,
+  setBlockDuration,
   ensureCurrentCycle,
   advanceAguCycle,
   applyExamToPlan,
@@ -1326,7 +1327,12 @@ app.post('/api/questions', (req, res) => {
 
     db.examQuestions.unshift(newQuestionLog);
     if (db.aguPlan) {
-      db.aguPlan = applyExamToPlan(sanitizeAguPlan(db.aguPlan, entryDate), newQuestionLog, entryDate);
+      db.aguPlan = applyExamToPlan(
+        sanitizeAguPlan(db.aguPlan, entryDate),
+        newQuestionLog,
+        entryDate,
+        db.examQuestions
+      );
     }
 
     const rewardResult = rewardPlayer({
@@ -1370,7 +1376,7 @@ app.put('/api/questions/:id', (req, res) => {
     if (index === -1) return res.status(404).json({ error: 'Registro de questões não encontrado' });
 
     const existing = db.examQuestions[index];
-    const { subject, topic, institution, notes, notebookUrl, date, category } = req.body;
+    const { subject, topic, institution, notes, notebookUrl, date, category, durationMinutes } = req.body;
 
     if (category !== undefined && category.trim()) existing.category = category.trim();
     if (subject !== undefined) existing.subject = subject.trim();
@@ -1379,6 +1385,7 @@ app.put('/api/questions/:id', (req, res) => {
     if (notes !== undefined) existing.notes = notes.trim();
     if (notebookUrl !== undefined) existing.notebookUrl = notebookUrl.trim();
     if (date !== undefined) existing.date = date;
+    if (durationMinutes !== undefined) existing.durationMinutes = parseDurationMinutes(durationMinutes);
 
     if (db.actionLogs) {
       const log = db.actionLogs.find(l => l.entityId === existing.id);
@@ -2096,6 +2103,26 @@ app.post('/api/agu-plan/toggle-block', (req, res) => {
     const todayStr = getSaoPauloDateStr();
     db.aguPlan = toggleCompletedBlock(sanitizeAguPlan(db.aguPlan, todayStr), key);
     db.aguPlan = addBlockDuration(db.aguPlan, key, durationMinutes);
+    saveDb(db);
+    res.json({
+      success: true,
+      plan: db.aguPlan,
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/agu-plan/block-duration', (req, res) => {
+  try {
+    const { key, durationMinutes } = req.body || {};
+    if (!key || typeof key !== 'string') {
+      return res.status(400).json({ error: 'Informe a chave do bloco (key).' });
+    }
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.aguPlan = setBlockDuration(sanitizeAguPlan(db.aguPlan, todayStr), key, durationMinutes);
     saveDb(db);
     res.json({
       success: true,

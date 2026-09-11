@@ -718,6 +718,20 @@ export function useGameData() {
     }
   };
 
+  const setAguBlockDuration = async (key, durationMinutes) => {
+    playClick();
+    const res = await fetch('/api/agu-plan/block-duration', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ key, durationMinutes })
+    });
+    if (res.ok) fetchState();
+    else {
+      const errJson = await res.json().catch(() => ({}));
+      showRewardToast(0, 0, errJson.error || 'Erro ao salvar o tempo do bloco.');
+    }
+  };
+
   const realignAguCycle = async () => {
     playClick();
     const res = await fetch('/api/agu-plan/realign', {
@@ -803,6 +817,7 @@ export function useGameData() {
     startAguPlan,
     updateAguPlan,
     toggleAguBlock,
+    setAguBlockDuration,
     realignAguCycle,
     resetAguPlan,
     advanceAguCycle,

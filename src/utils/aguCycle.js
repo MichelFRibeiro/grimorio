@@ -1,6 +1,9 @@
 import {
+  AGU_BLOCK_MINUTES,
+  AGU_BLOCK_QUESTION_TARGET,
   AGU_CYCLE_LENGTH,
   AGU_CYCLE_TEMPLATE,
+  AGU_DAILY_BLOCKS,
   AGU_DEFAULT_CAPACITY_BY_WEEKDAY,
   AGU_DEFAULT_EDITAL_PROFILE_ID,
   AGU_GROUPS,
@@ -33,6 +36,7 @@ import {
   phaseMeta,
   rankSubjects,
   resolveExamSubject,
+  resolveExamTopic,
   topicKey
 } from './aguFragility.js';
 import {
@@ -40,6 +44,17 @@ import {
   fortnightStartFor,
   generateFortnight
 } from './aguCycleGenerator.js';
+import {
+  blockCompletionReason,
+  buildEditalTable,
+  buildTopicProgress,
+  collectStudyBlocks,
+  currentOpenTopic,
+  isBlockComplete,
+  isPortugueseRequired,
+  serializeTopicStatus,
+  suggestNextBlock
+} from './aguStudyEngine.js';
 
 const DAY_LABELS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
@@ -90,17 +105,6 @@ export function isAguExamEntry(entry) {
   return String(entry.notes || '').includes('Campanha AGU');
 }
 
-function examEntryDate(entry) {
-  if (entry?.date) return entry.date;
-  if (entry?.timestamp) return getSaoPauloDateStr(entry.timestamp);
-  return '';
-}
-
-function dateFromBlockKey(key) {
-  const dateStr = String(key || '').split('|')[0];
-  return /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : '';
-}
-
 export function getAguStudyTimeTotals(plan, examQuestions = [], todayStr, calendar) {
   const today = todayStr || getSaoPauloDateStr();
   const weekDays = getCurrentWeekDays(today);
@@ -124,13 +128,8 @@ export function getAguStudyTimeTotals(plan, examQuestions = [], todayStr, calend
     if (dateStr.startsWith(yearPrefix)) totals.year += amount;
   };
 
-  (examQuestions || []).forEach((entry) => {
-    if (!isAguExamEntry(entry)) return;
-    addMinutes(examEntryDate(entry), entry.durationMinutes);
-  });
-
-  Object.entries(plan?.blockDurations || {}).forEach(([key, minutes]) => {
-    addMinutes(dateFromBlockKey(key), minutes);
+  collectStudyBlocks(plan, examQuestions).forEach((block) => {
+    addMinutes(block.dateStr, block.durationMinutes);
   });
 
   return totals;
@@ -152,6 +151,27 @@ export function getSubjectProgressOnDate(examQuestions = [], subject, dateStr) {
   return progress;
 }
 
+function blockProgressOnDate(examQuestions = [], block, dateStr) {
+  const entries = (examQuestions || []).filter((entry) => {
+    if ((entry.date || '') !== dateStr) return false;
+    if (entry.blockKey && block.key && entry.blockKey === block.key) return true;
+    if (entry.subjectId && entry.subjectId === block.subjectId) {
+      if (block.topicId) return (entry.topicId || '') === block.topicId;
+      return true;
+    }
+    if (block.topicId) return false;
+    const subject = getAguSubject(block.subjectId);
+    return matchExamToSubjectDetailed(entry, subject);
+  });
+  return entries.reduce((acc, entry) => {
+    acc.solved += entry.totalQuestions || 0;
+    acc.correct += entry.correctAnswers || 0;
+    acc.sessions += 1;
+    acc.minutes += parseDurationMinutes(entry.durationMinutes);
+    return acc;
+  }, { solved: 0, correct: 0, sessions: 0, minutes: 0, accuracy: 0 });
+}
+
 function hydrateBlock(raw, dateStr, plan, subjectStats, topicStats, examQuestions) {
   const subject = getAguSubject(raw.subjectId);
   const stats = subjectStats[raw.subjectId] || { solved: 0, correct: 0, wrong: 0, accuracy: 0, accSmooth: 0.5, sessions: 0, minutes: 0 };
@@ -159,31 +179,46 @@ function hydrateBlock(raw, dateStr, plan, subjectStats, topicStats, examQuestion
   const platform = recommendPlatform(subject, tStats || stats);
   const key = raw.key || blockKey(dateStr, raw.subjectId, raw.kind, raw.topicId);
   const markedDone = Boolean(plan?.completedBlocks?.[key]) || Boolean(raw.done);
-  const kindMeta = AGU_KIND_META[raw.kind] || AGU_KIND_META.questoes;
+  const kind = raw.kind === 'revisao' ? 'revisao' : (raw.kind === 'estudo' ? 'estudo' : raw.kind);
+  const kindMeta = AGU_KIND_META[kind] || (kind === 'estudo' ? { label: 'Estudo inicial', icon: '🎯', color: '#f59e0b' } : AGU_KIND_META.questoes);
   const group = AGU_GROUPS[subject?.group] || AGU_GROUPS.extra;
-  const todayProgress = getSubjectProgressOnDate(examQuestions, subject, dateStr);
-  const target = raw.target || 0;
+  const todayProgress = blockProgressOnDate(examQuestions, { ...raw, key, subjectId: raw.subjectId, topicId: raw.topicId }, dateStr);
+  todayProgress.accuracy = todayProgress.solved > 0
+    ? Math.round((todayProgress.correct / todayProgress.solved) * 1000) / 10
+    : 0;
+  const target = raw.target != null ? raw.target : AGU_BLOCK_QUESTION_TARGET;
+  const targetMinutes = raw.targetMinutes != null ? raw.targetMinutes : AGU_BLOCK_MINUTES;
+  const storedMinutes = parseDurationMinutes(plan?.blockDurations?.[key]);
+  const minutes = Math.max(storedMinutes, todayProgress.minutes);
   const remaining = Math.max(0, target - todayProgress.solved);
-  const metTarget = target > 0 && todayProgress.solved >= target;
+  const remainingMinutes = Math.max(0, targetMinutes - minutes);
+  const metTarget = isBlockComplete({ questions: todayProgress.solved, minutes, markedDone });
   const productLogged = Boolean(raw.productLogged) || Boolean(plan?.completedBlocks?.[`${key}|product`]);
   const done = raw.kind === 'discursiva'
     ? productLogged
-    : (markedDone || metTarget);
-  const progressPercent = target > 0
-    ? Math.min(100, Math.round((todayProgress.solved / target) * 100))
-    : (done ? 100 : 0);
+    : metTarget;
+  const progressPercent = Math.min(100, Math.max(
+    target > 0 ? Math.round((todayProgress.solved / target) * 100) : 0,
+    targetMinutes > 0 ? Math.round((minutes / targetMinutes) * 100) : 0,
+    done ? 100 : 0
+  ));
   const cursor = subject ? currentTopicForSubject(plan, subject) : null;
 
   return {
     ...raw,
     key,
     dateStr,
+    kind,
     done,
     markedDone,
     metTarget,
     remaining,
+    remainingMinutes,
     progressPercent,
     todayProgress,
+    minutes,
+    target,
+    targetMinutes,
     productLogged,
     subject,
     stats,
@@ -193,7 +228,8 @@ function hydrateBlock(raw, dateStr, plan, subjectStats, topicStats, examQuestion
     productMeta: raw.targetProduct ? AGU_PRODUCT_META[raw.targetProduct] : null,
     mastery: getTopicMastery(tStats || stats, plan?.staleDays || AGU_STALE_DAYS),
     topicName: raw.topicName || cursor?.topicName || null,
-    optional: Boolean(raw.optional)
+    optional: Boolean(raw.optional),
+    completionReason: blockCompletionReason({ questions: todayProgress.solved, minutes, markedDone })
   };
 }
 
@@ -211,9 +247,17 @@ export function getDaySchedule(plan, dateStr, subjectStats = {}, examQuestions =
   const weekday = getSaoPauloDayOfWeek(dateStr);
   const topicStats = buildTopicStats(examQuestions, dateStr);
   const generated = (plan?.currentCycle?.days || []).find((day) => day.dateStr === dateStr);
+  const fallback = generated
+    ? null
+    : generateFortnight(plan, examQuestions, dateStr, { startDate: dateStr, cycleNumber: plan?.cycleNumber || 1 }).days?.[0];
   const source = generated
     ? { label: generated.label, cycleIndex: getCycleDayIndex(plan, dateStr), blocks: generated.blocks || [], optional: generated.optional }
-    : { ...templateBlocksForDate(plan, dateStr), optional: weekday === 0 || weekday === 6 };
+    : {
+      label: fallback?.label || templateBlocksForDate(plan, dateStr).label,
+      cycleIndex: getCycleDayIndex(plan, dateStr),
+      blocks: fallback?.blocks || templateBlocksForDate(plan, dateStr).blocks,
+      optional: false
+    };
 
   const blocks = (source.blocks || []).map((block, index) => ({
     ...hydrateBlock(block, dateStr, plan, subjectStats, topicStats, examQuestions),
@@ -296,17 +340,29 @@ export function summarizePlan(plan, examQuestions = [], todayStr) {
   const calendar = getCycleCalendar(plan, today, byId, examQuestions);
   const todayProgress = getTodayQuestionProgress(examQuestions, today);
   const phase = plan?.phase || calendar.phase || 'fundacao';
+  const edital = buildEditalTable(plan, examQuestions, today);
+  const studyBlocks = collectStudyBlocks(plan, examQuestions);
+  const portugueseRequired = isPortugueseRequired(studyBlocks);
+  const nextSuggested = suggestNextBlock(plan, examQuestions, today, {
+    topicProgress: edital.topicProgress,
+    usedTopicKeys: (schedule.blocks || []).filter((b) => b.done).map((b) => `${b.subjectId}/${b.topicId}`),
+    portugueseRequired,
+    portugueseToday: (schedule.blocks || []).some((b) => b.subjectId === 'portugues' && b.done),
+    blocks: studyBlocks
+  });
 
   const subjects = AGU_SUBJECTS.map((subject) => {
     const stats = byId[subject.id] || { solved: 0, correct: 0, accuracy: 0, accSmooth: 0.5 };
-    const cursor = currentTopicForSubject(plan, subject);
+    const editalSubject = edital.subjects.find((s) => s.id === subject.id);
+    const cursor = currentOpenTopic(plan, subject, edital.topicProgress) || currentTopicForSubject(plan, subject);
     return {
       ...subject,
       groupMeta: AGU_GROUPS[subject.group] || AGU_GROUPS.extra,
       stats,
       cursor,
       mastery: getSubjectMastery(stats, topicStats, subject, plan?.staleDays || AGU_STALE_DAYS),
-      platform: recommendPlatform(subject, stats)
+      platform: recommendPlatform(subject, stats),
+      edital: editalSubject
     };
   });
 
@@ -319,6 +375,7 @@ export function summarizePlan(plan, examQuestions = [], todayStr) {
 
   const cycleDoneBlocks = calendar.days.reduce((sum, day) => sum + day.doneCount, 0);
   const cycleTotalBlocks = calendar.days.reduce((sum, day) => sum + day.totalBlocks, 0);
+  const nextOpen = (schedule.blocks || []).find((b) => !b.done) || nextSuggested;
 
   return {
     started: Boolean(plan?.startedAt),
@@ -326,11 +383,17 @@ export function summarizePlan(plan, examQuestions = [], todayStr) {
     phase,
     phaseMeta: AGU_PHASES[phase] || AGU_PHASES.fundacao,
     editalPublished: Boolean(plan?.editalPublished),
-    keepPortuguese: plan?.keepPortuguese !== false,
+    keepPortuguese: portugueseRequired,
+    portugueseRequired,
+    portugueseWaiver: edital.portugueseWaiver,
     targetAccuracy: plan?.targetAccuracy || AGU_TARGET_ACCURACY,
     subjectStats: byId,
     topicStats,
+    topicProgress: edital.topicProgress,
     subjects,
+    edital,
+    studyBlocks,
+    nextBlock: nextOpen,
     today: schedule,
     calendar,
     todayProgress,
@@ -366,6 +429,19 @@ export function addBlockDuration(plan, key, minutes) {
   if (!plan || !key || amount <= 0) return plan;
   const blockDurations = { ...(plan.blockDurations || {}) };
   blockDurations[key] = parseDurationMinutes(blockDurations[key]) + amount;
+  return {
+    ...plan,
+    blockDurations,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function setBlockDuration(plan, key, minutes) {
+  if (!plan || !key) return plan;
+  const amount = parseDurationMinutes(minutes);
+  const blockDurations = { ...(plan.blockDurations || {}) };
+  if (amount > 0) blockDurations[key] = amount;
+  else delete blockDurations[key];
   return {
     ...plan,
     blockDurations,
@@ -513,31 +589,25 @@ export function ensureCurrentCycle(plan, examQuestions = [], todayStr) {
   return next;
 }
 
-export function applyExamToPlan(plan, entry, todayStr) {
+export function applyExamToPlan(plan, entry, todayStr, examQuestions = null) {
   if (!plan || !entry) return plan;
   const subject = resolveExamSubject(entry);
   if (!subject) return plan;
+  const allExams = Array.isArray(examQuestions) ? examQuestions : [];
+  const hasEntry = allExams.some((item) => item === entry || (entry.id && item.id === entry.id));
+  const exams = hasEntry ? allExams : [entry, ...allExams];
+  const progress = buildTopicProgress(plan, exams, entry.date || todayStr);
   const currentTopic = { ...(plan.currentTopic || {}) };
-  const topicStatus = { ...(plan.topicStatus || {}) };
-  const cursor = currentTopicForSubject(plan, subject);
-  const topicId = entry.topicId || cursor?.topicId;
+  const topic = resolveExamTopic(entry, subject);
+  const topicId = entry.topicId || topic?.id;
   if (topicId) {
-    const key = topicKey(subject.id, topicId);
-    const prev = topicStatus[key] || { status: 'open', solved: 0, correct: 0 };
-    topicStatus[key] = {
-      ...prev,
-      status: 'open',
-      lastTouchedAt: entry.date || todayStr,
-      solved: (prev.solved || 0) + (entry.totalQuestions || 0),
-      correct: (prev.correct || 0) + (entry.correctAnswers || 0)
-    };
+    const row = progress[topicKey(subject.id, topicId)];
     currentTopic[subject.id] = {
-      ...(currentTopic[subject.id] || {}),
       topicId,
-      topicName: cursor?.topicName,
-      status: 'open',
-      questionsOnTopic: (currentTopic[subject.id]?.questionsOnTopic || 0) + (entry.totalQuestions || 0),
-      correctOnTopic: (currentTopic[subject.id]?.correctOnTopic || 0) + (entry.correctAnswers || 0)
+      topicName: topic?.name || row?.topicName,
+      status: row?.status || 'in_progress',
+      questionsOnTopic: row?.initialSolved || 0,
+      correctOnTopic: row?.initialCorrect || 0
     };
   }
   let debt = [...(plan.debt || [])];
@@ -552,7 +622,8 @@ export function applyExamToPlan(plan, entry, todayStr) {
   return {
     ...plan,
     currentTopic,
-    topicStatus,
+    topicStatus: serializeTopicStatus(progress),
+    keepPortuguese: isPortugueseRequired(collectStudyBlocks(plan, exams)),
     debt,
     updatedAt: new Date().toISOString()
   };
@@ -573,6 +644,9 @@ export function sanitizeAguPlan(plan, todayStr) {
     keepPortuguese: plan.keepPortuguese !== false,
     capacityByWeekday: capacity,
     weekdaysMorning: Number(plan.weekdaysMorning) > 0 ? Number(plan.weekdaysMorning) : AGU_WEEKDAY_MORNING_MINUTES,
+    dailyBlocks: AGU_DAILY_BLOCKS,
+    blockMinutes: AGU_BLOCK_MINUTES,
+    blockQuestionTarget: AGU_BLOCK_QUESTION_TARGET,
     cycleLengthDays: AGU_CYCLE_LENGTH,
     targetAccuracy: Number(plan.targetAccuracy) > 0 ? Number(plan.targetAccuracy) : AGU_TARGET_ACCURACY,
     dailyQuestionTarget: Number(plan.dailyQuestionTarget) > 0 ? Number(plan.dailyQuestionTarget) : AGU_WEEKDAY_QUESTION_TARGET,

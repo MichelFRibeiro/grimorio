@@ -8,31 +8,38 @@
 
 export const AGU_TARGET_ACCURACY = 90;
 export const AGU_CYCLE_LENGTH = 14;
-export const AGU_WEEKDAY_QUESTION_TARGET = 25;
-export const AGU_SATURDAY_QUESTION_TARGET = 40;
-export const AGU_SUNDAY_QUESTION_TARGET = 15;
-export const AGU_MASTER_MIN_SOLVED = 40;
+export const AGU_DAILY_BLOCKS = 3;
+export const AGU_BLOCK_MINUTES = 60;
+export const AGU_BLOCK_QUESTION_TARGET = 20;
+export const AGU_WEEKDAY_QUESTION_TARGET = 60;
+export const AGU_SATURDAY_QUESTION_TARGET = 60;
+export const AGU_SUNDAY_QUESTION_TARGET = 60;
+export const AGU_MASTER_MIN_SOLVED = 60;
 export const AGU_STALE_DAYS = 21;
-export const AGU_TOPIC_ADVANCE_MIN = 25;
-export const AGU_TOPIC_ADVANCE_ACCURACY = 85;
+export const AGU_TOPIC_ADVANCE_MIN = 60;
+export const AGU_TOPIC_ADVANCE_ACCURACY = 80;
+export const AGU_TOPIC_REOPEN_ACCURACY = 80;
 export const AGU_SUBJECT_MASTERY_TOPIC_RATIO = 0.7;
-export const AGU_PLAN_VERSION = 2;
+export const AGU_PORTUGUESE_WAIVE_ACCURACY = 95;
+export const AGU_PORTUGUESE_WAIVE_BLOCKS = 10;
+export const AGU_REVIEW_INTERVALS = [1, 7, 21, 30, 90, 120];
+export const AGU_PLAN_VERSION = 3;
 export const AGU_DEFAULT_EDITAL_PROFILE_ID = 'pf-tec-2023';
 
-/** Minutos de TARDE por weekday (0=Dom … 6=Sáb). Noite fechada. */
+/** Minutos por weekday (0=Dom … 6=Sáb). 3 blocos de 60 min todos os dias. */
 export const AGU_DEFAULT_CAPACITY_BY_WEEKDAY = {
-  0: 0,
-  1: 225,
-  2: 110,
-  3: 225,
-  4: 110,
-  5: 225,
-  6: 0
+  0: 180,
+  1: 180,
+  2: 180,
+  3: 180,
+  4: 180,
+  5: 180,
+  6: 180
 };
 
 export const AGU_WEEKDAY_MORNING_MINUTES = 60;
 export const AGU_LONG_AFTERNOON_BLOCKS = 3;
-export const AGU_SHORT_AFTERNOON_BLOCKS = 2;
+export const AGU_SHORT_AFTERNOON_BLOCKS = 3;
 export const AGU_LONG_DAY_MINUTES = 180;
 
 export const AGU_PHASES = {
@@ -692,6 +699,7 @@ export const AGU_CYCLE_TEMPLATE = [
 ];
 
 export const AGU_KIND_META = {
+  estudo: { label: 'Estudo inicial', icon: '🎯', color: '#f59e0b' },
   questoes: { label: 'Questões', icon: '🎯', color: '#f59e0b' },
   erros: { label: 'Caderno de erros', icon: '♻️', color: '#f43f5e' },
   revisao: { label: 'Revisão', icon: '🔁', color: '#38bdf8' },
@@ -774,10 +782,10 @@ export function recommendPlatform(subject, stats) {
   const accuracy = stats?.accuracy || stats?.accSmooth || 0;
   const accuracyPct = accuracy <= 1 ? Math.round(accuracy * 1000) / 10 : accuracy;
   if (solved < AGU_MASTER_MIN_SOLVED) {
-    return { id: 'tec', reason: 'Ainda no Tec. Meta: 40 questões no tópico antes de julgar esgotamento.' };
+    return { id: 'tec', reason: 'Ainda no Tec. Meta: 60 questões no tópico (cerca de 3 blocos) antes de concluir.' };
   }
   if (accuracyPct >= AGU_TARGET_ACCURACY) {
-    return { id: 'tec', reason: 'Meta de 90% atingida. Mantenha no Tec (revisão e caderno de erros).' };
+    return { id: 'tec', reason: 'Meta de 90% atingida. Mantenha no Tec (revisão espaçada).' };
   }
   if (subject?.leiSeca) {
     return {
@@ -800,6 +808,9 @@ export function createDefaultAguPlan(todayStr) {
     keepPortuguese: true,
     capacityByWeekday: { ...AGU_DEFAULT_CAPACITY_BY_WEEKDAY },
     weekdaysMorning: AGU_WEEKDAY_MORNING_MINUTES,
+    dailyBlocks: AGU_DAILY_BLOCKS,
+    blockMinutes: AGU_BLOCK_MINUTES,
+    blockQuestionTarget: AGU_BLOCK_QUESTION_TARGET,
     cycleNumber: 1,
     cycleStartDate: todayStr || null,
     cycleLengthDays: AGU_CYCLE_LENGTH,
