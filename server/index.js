@@ -50,8 +50,12 @@ import {
   ensureCurrentCycle,
   advanceAguCycle,
   applyExamToPlan,
-  logDiscursiveProduct
+  logDiscursiveProduct,
+  deleteStudyBlock,
+  updateStudyBlockMeta,
+  refreshAguProgress
 } from '../src/utils/aguCycle.js';
+import { collectStudyBlocks } from '../src/utils/aguStudyEngine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2103,6 +2107,169 @@ app.post('/api/agu-plan/toggle-block', (req, res) => {
     const todayStr = getSaoPauloDateStr();
     db.aguPlan = toggleCompletedBlock(sanitizeAguPlan(db.aguPlan, todayStr), key);
     db.aguPlan = addBlockDuration(db.aguPlan, key, durationMinutes);
+    saveDb(db);
+    res.json({
+      success: true,
+      plan: db.aguPlan,
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/agu-plan/block', (req, res) => {
+  try {
+    const key = req.body?.key;
+    if (!key || typeof key !== 'string') return res.status(400).json({ error: 'Informe a chave do bloco (key).' });
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    const {
+      dateStr,
+      subjectId,
+      topicId,
+      kind,
+      durationMinutes,
+      totalQuestions,
+      correctAnswers
+    } = req.body || {};
+    const total = totalQuestions === undefined || totalQuestions === ''
+      ? undefined
+      : parseInt(totalQuestions, 10);
+    const correct = correctAnswers === undefined || correctAnswers === ''
+      ? 0
+      : parseInt(correctAnswers, 10);
+    if (total !== undefined && (Number.isNaN(total) || total < 0)) {
+      return res.status(400).json({ error: 'Questões devem ser 0 ou mais.' });
+    }
+    if (total !== undefined && (Number.isNaN(correct) || correct < 0 || correct > total)) {
+      return res.status(400).json({ error: 'Acertos devem ficar entre 0 e o total de questões.' });
+    }
+
+    const { plan: nextPlan, key: nextKey } = updateStudyBlockMeta(
+      sanitizeAguPlan(db.aguPlan, todayStr),
+      key,
+      { dateStr, subjectId, topicId, kind, durationMinutes, totalQuestions: total }
+    );
+    db.aguPlan = nextPlan;
+
+    if (!db.examQuestions) db.examQuestions = [];
+    const examIds = new Set(
+      collectStudyBlocks(db.aguPlan, db.examQuestions)
+        .filter((block) => block.key === key || block.key === nextKey)
+        .flatMap((block) => block.examIds || [])
+    );
+    const linked = db.examQuestions.filter((entry) => examIds.has(entry.id) || entry.blockKey === key || entry.blockKey === nextKey);
+    if (total !== undefined) {
+      linked.forEach((entry) => {
+        revertPlayerReward({
+          xp: entry.xpEarned || 0,
+          coins: entry.coinsEarned || 0,
+          focus: (entry.totalQuestions || 0) * 2,
+          wisdom: (entry.correctAnswers || 0) * 2,
+          consistency: 10,
+          actionType: 'exam_questions',
+          entityId: entry.id
+        });
+      });
+      db.examQuestions = db.examQuestions.filter((entry) => entry.blockKey !== key && entry.blockKey !== nextKey);
+      if (total > 0) {
+        const subject = AGU_SUBJECTS.find((s) => s.id === (subjectId || linked[0]?.subjectId)) || null;
+        const topic = subject?.topics?.find((t) => t.id === (topicId || linked[0]?.topicId));
+        const accuracyRate = Math.round((correct / total) * 1000) / 10;
+        const baseXp = total * 3;
+        const correctXp = correct * 4;
+        const accuracyBonusXp = accuracyRate === 100 ? 50 : accuracyRate >= 90 ? 30 : accuracyRate >= 80 ? 15 : 0;
+        const totalXp = baseXp + correctXp + accuracyBonusXp;
+        const coins = Math.max(2, Math.floor(correct / 2)) + (accuracyRate >= 80 ? 5 : 0) + (accuracyRate === 100 ? 10 : 0);
+        const newQuestionLog = {
+          id: uid('eq'),
+          category: 'Estudos',
+          subject: subject?.name || linked[0]?.subject || 'Geral',
+          topic: topic?.name || linked[0]?.topic || '',
+          subjectId: subject?.id || subjectId,
+          topicId: topic?.id || topicId,
+          kind: kind || 'estudo',
+          blockKey: nextKey,
+          institution: linked[0]?.institution || 'Cebraspe',
+          totalQuestions: total,
+          correctAnswers: correct,
+          wrongAnswers: total - correct,
+          accuracyRate,
+          durationMinutes: parseDurationMinutes(durationMinutes),
+          notes: `Campanha AGU · bloco editado · ${topic?.name || ''}`,
+          notebookUrl: subject?.tecCadernoUrl || linked[0]?.notebookUrl || '',
+          xpEarned: totalXp,
+          coinsEarned: coins,
+          date: dateStr || linked[0]?.date || todayStr,
+          timestamp: new Date().toISOString()
+        };
+        db.examQuestions.unshift(newQuestionLog);
+        rewardPlayer({
+          xp: totalXp,
+          coins,
+          focus: total * 2,
+          wisdom: correct * 2,
+          consistency: 10,
+          actionType: 'exam_questions',
+          entityId: newQuestionLog.id,
+          title: `${newQuestionLog.subject}: ${correct}/${total} acertos (${accuracyRate}%)`,
+          details: {
+            category: 'Estudos',
+            totalQuestions: total,
+            correctAnswers: correct,
+            accuracyRate,
+            subject: newQuestionLog.subject,
+            topic: newQuestionLog.topic
+          }
+        });
+      }
+    } else if (nextKey !== key) {
+      db.examQuestions = db.examQuestions.map((entry) => (
+        entry.blockKey === key ? { ...entry, blockKey: nextKey, date: dateStr || entry.date, subjectId: subjectId || entry.subjectId, topicId: topicId || entry.topicId, kind: kind || entry.kind } : entry
+      ));
+    }
+
+    db.aguPlan = refreshAguProgress(db.aguPlan, db.examQuestions || [], todayStr);
+    saveDb(db);
+    res.json({
+      success: true,
+      key: nextKey,
+      plan: db.aguPlan,
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/agu-plan/block/delete', (req, res) => {
+  try {
+    const key = req.body?.key;
+    if (!key || typeof key !== 'string') return res.status(400).json({ error: 'Informe a chave do bloco (key).' });
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    if (!db.examQuestions) db.examQuestions = [];
+    const examIds = new Set(
+      collectStudyBlocks(sanitizeAguPlan(db.aguPlan, todayStr), db.examQuestions)
+        .filter((block) => block.key === key)
+        .flatMap((block) => block.examIds || [])
+    );
+    const linked = db.examQuestions.filter((entry) => examIds.has(entry.id) || entry.blockKey === key);
+    linked.forEach((entry) => {
+      revertPlayerReward({
+        xp: entry.xpEarned || 0,
+        coins: entry.coinsEarned || 0,
+        focus: (entry.totalQuestions || 0) * 2,
+        wisdom: (entry.correctAnswers || 0) * 2,
+        consistency: 10,
+        actionType: 'exam_questions',
+        entityId: entry.id
+      });
+    });
+    db.examQuestions = db.examQuestions.filter((entry) => entry.blockKey !== key);
+    db.aguPlan = deleteStudyBlock(sanitizeAguPlan(db.aguPlan, todayStr), key);
+    db.aguPlan = refreshAguProgress(db.aguPlan, db.examQuestions || [], todayStr);
     saveDb(db);
     res.json({
       success: true,

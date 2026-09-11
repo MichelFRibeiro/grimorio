@@ -85,6 +85,8 @@ export function App() {
     startAguPlan,
     toggleAguBlock,
     setAguBlockDuration,
+    updateAguBlock,
+    deleteAguBlock,
     realignAguCycle,
     resetAguPlan,
     advanceAguCycle,
@@ -369,6 +371,8 @@ export function App() {
             onStartPlan={startAguPlan}
             onToggleBlock={toggleAguBlock}
             onSetBlockDuration={setAguBlockDuration}
+            onUpdateBlock={updateAguBlock}
+            onDeleteBlock={deleteAguBlock}
             onRealignCycle={realignAguCycle}
             onResetPlan={resetAguPlan}
             onAdvanceCycle={advanceAguCycle}

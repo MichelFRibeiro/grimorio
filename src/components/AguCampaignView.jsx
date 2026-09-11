@@ -19,7 +19,9 @@ import {
   PenLine,
   History,
   Table2,
-  Compass
+  Compass,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityTimerBox } from './ActivityTimerBox';
@@ -135,6 +137,8 @@ export function AguCampaignView({
   onStartPlan,
   onToggleBlock,
   onSetBlockDuration,
+  onUpdateBlock,
+  onDeleteBlock,
   onRealignCycle,
   onResetPlan,
   onAdvanceCycle,
@@ -177,7 +181,7 @@ export function AguCampaignView({
     const live = snap ? Math.floor(elapsedMsFrom(snap.accumulatedMs || 0, snap.runStartedAt || null) / 60000) : 0;
     setLogBlock(block);
     setLogTotal(remaining);
-    setLogCorrect('');
+    setLogCorrect('0');
     setLogMinutes(live > 0 ? String(live) : (block.minutes > 0 ? String(block.minutes) : '60'));
     setLogError('');
   };
@@ -189,11 +193,11 @@ export function AguCampaignView({
 
   const submitLog = (e) => {
     e.preventDefault();
-    if (!logBlock || !onAddQuestions) return;
+    if (!logBlock) return;
     const total = parseInt(logTotal, 10);
-    const correct = parseInt(logCorrect, 10);
-    if (!total || total <= 0) {
-      setLogError('Informe quantas questões você fez agora (pode ser 5 de 30).');
+    const correct = logCorrect === '' ? 0 : parseInt(logCorrect, 10);
+    if (Number.isNaN(total) || total < 0) {
+      setLogError('Informe quantas questões você fez agora (0 se foi só teoria).');
       return;
     }
     if (Number.isNaN(correct) || correct < 0 || correct > total) {
@@ -201,26 +205,32 @@ export function AguCampaignView({
       return;
     }
     const minutes = parseInt(logMinutes, 10);
-    consumeBlockTimer(logBlock.key);
     const durationMinutes = Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
-    onAddQuestions({
-      category: 'Estudos',
-      subject: logBlock.subject?.name || 'Geral',
-      topic: logBlock.topicName || logBlock.kindMeta?.label || '',
-      subjectId: logBlock.subjectId,
-      topicId: logBlock.topicId,
-      kind: logBlock.kind,
-      cycleNumber: summary.calendar.cycleNumber,
-      blockKey: logBlock.key,
-      platform: logBlock.platform?.id,
-      institution: 'Cebraspe',
-      totalQuestions: total,
-      correctAnswers: correct,
-      durationMinutes,
-      notes: `Campanha AGU · ${logBlock.kindMeta?.label || 'bloco'} · ${logBlock.topicName || ''} · ${total}/${logBlock.target || 20} q`,
-      notebookUrl: logBlock.subject?.tecCadernoUrl || '',
-      date: todayStr
-    });
+    if (total === 0 && durationMinutes <= 0) {
+      setLogError('Bloco só de teoria: informe o tempo estudado, ou lance as questões feitas.');
+      return;
+    }
+    consumeBlockTimer(logBlock.key);
+    if (total > 0 && onAddQuestions) {
+      onAddQuestions({
+        category: 'Estudos',
+        subject: logBlock.subject?.name || 'Geral',
+        topic: logBlock.topicName || logBlock.kindMeta?.label || '',
+        subjectId: logBlock.subjectId,
+        topicId: logBlock.topicId,
+        kind: logBlock.kind,
+        cycleNumber: summary.calendar.cycleNumber,
+        blockKey: logBlock.key,
+        platform: logBlock.platform?.id,
+        institution: 'Cebraspe',
+        totalQuestions: total,
+        correctAnswers: correct,
+        durationMinutes,
+        notes: `Campanha AGU · ${logBlock.kindMeta?.label || 'bloco'} · ${logBlock.topicName || ''} · ${total}/${logBlock.target || 20} q`,
+        notebookUrl: logBlock.subject?.tecCadernoUrl || '',
+        date: todayStr
+      });
+    }
     if (onSetBlockDuration && durationMinutes > 0) {
       onSetBlockDuration(logBlock.key, durationMinutes);
     }
@@ -469,7 +479,11 @@ export function AguCampaignView({
       )}
 
       {screen === 'historico' && (
-        <BlockHistoryList blocks={summary.studyBlocks || []} />
+        <BlockHistoryList
+          blocks={summary.studyBlocks || []}
+          onUpdateBlock={onUpdateBlock}
+          onDeleteBlock={onDeleteBlock}
+        />
       )}
 
       {screen === 'hoje' && <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
@@ -627,14 +641,14 @@ export function AguCampaignView({
               <button type="button" onClick={closeLog} style={{ ...ghostBtnStyle, padding: '8px' }}><X size={16} /></button>
             </div>
             <p style={{ color: '#cbd5e1', fontSize: '0.85rem', marginBottom: '14px', lineHeight: 1.5 }}>
-              Informe as questões deste bloco e, se quiser, o tempo estudado (cronômetro ou digitado).
+              Pode ser só teoria: 0 questões e 0 acertos. Nesse caso, o bloco fecha pelo tempo (60 min).
             </p>
             <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, marginBottom: '6px' }}>
               Questões feitas agora
             </label>
             <input
-              type="number" min="1" value={logTotal} onChange={(e) => setLogTotal(e.target.value)}
-              placeholder="5"
+              type="number" min="0" value={logTotal} onChange={(e) => setLogTotal(e.target.value)}
+              placeholder="0"
               style={inputStyle}
             />
             <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, margin: '12px 0 6px' }}>
@@ -661,7 +675,7 @@ export function AguCampaignView({
                 background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 color: '#000', border: 'none'
               }}>
-                Salvar {logTotal || '0'} questões
+                {parseInt(logTotal, 10) > 0 ? `Salvar ${logTotal} questões` : 'Salvar bloco'}
               </button>
             </div>
           </form>
@@ -879,17 +893,77 @@ function EditalTable({ subjects }) {
   );
 }
 
-function BlockHistoryList({ blocks }) {
+function BlockHistoryList({ blocks, onUpdateBlock, onDeleteBlock }) {
   const list = (blocks || []).filter((block) => (
     block.done || (block.totalQuestions || 0) > 0 || (block.durationMinutes || 0) > 0
   ));
+  const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [editDate, setEditDate] = useState('');
+  const [editSubjectId, setEditSubjectId] = useState('');
+  const [editTopicId, setEditTopicId] = useState('');
+  const [editKind, setEditKind] = useState('estudo');
+  const [editTotal, setEditTotal] = useState('0');
+  const [editCorrect, setEditCorrect] = useState('0');
+  const [editMinutes, setEditMinutes] = useState('0');
+  const [editError, setEditError] = useState('');
+
+  const openEdit = (block) => {
+    setEditing(block);
+    setEditDate(block.dateStr || '');
+    setEditSubjectId(block.subjectId || '');
+    setEditTopicId(block.topicId || '');
+    setEditKind(block.kind === 'revisao' ? 'revisao' : 'estudo');
+    setEditTotal(String(block.totalQuestions || 0));
+    setEditCorrect(String(block.correctAnswers || 0));
+    setEditMinutes(String(block.durationMinutes || 0));
+    setEditError('');
+  };
+
+  const topicsForSubject = AGU_SUBJECTS.find((s) => s.id === editSubjectId)?.topics || [];
+
+  const submitEdit = (e) => {
+    e.preventDefault();
+    if (!editing || !onUpdateBlock) return;
+    const total = parseInt(editTotal, 10);
+    const correct = editCorrect === '' ? 0 : parseInt(editCorrect, 10);
+    const minutes = parseInt(editMinutes, 10);
+    if (Number.isNaN(total) || total < 0) {
+      setEditError('Questões devem ser 0 ou mais (0 = só teoria).');
+      return;
+    }
+    if (Number.isNaN(correct) || correct < 0 || correct > total) {
+      setEditError('Acertos devem ficar entre 0 e o total de questões.');
+      return;
+    }
+    if (Number.isNaN(minutes) || minutes < 0) {
+      setEditError('Informe o tempo estudado em minutos.');
+      return;
+    }
+    if (total === 0 && minutes <= 0) {
+      setEditError('Bloco só de teoria precisa de tempo estudado.');
+      return;
+    }
+    onUpdateBlock({
+      key: editing.key,
+      dateStr: editDate,
+      subjectId: editSubjectId,
+      topicId: editTopicId || null,
+      kind: editKind,
+      totalQuestions: total,
+      correctAnswers: correct,
+      durationMinutes: minutes
+    });
+    setEditing(null);
+  };
+
   return (
     <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
       <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
         <History size={18} /> Histórico de blocos
       </h3>
       <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '12px' }}>
-        Todos os blocos lançados ou cronometrados, do mais recente ao mais antigo.
+        Todos os blocos lançados ou cronometrados, do mais recente ao mais antigo. Dá para editar ou excluir.
       </p>
       {list.length === 0 ? (
         <p style={{ color: '#64748b' }}>Nenhum bloco registrado ainda.</p>
@@ -910,10 +984,105 @@ function BlockHistoryList({ blocks }) {
                 <span>{formatStudyDuration(block.durationMinutes)}</span>
                 <span style={{ color: block.done ? '#10b981' : '#fbbf24' }}>{block.done ? 'concluído' : 'em aberto'}</span>
               </div>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                {onUpdateBlock && (
+                  <button type="button" onClick={() => openEdit(block)} style={ghostBtnStyle}>
+                    <Pencil size={14} /> Editar
+                  </button>
+                )}
+                {onDeleteBlock && (
+                  <button type="button" onClick={() => setDeleting(block)} style={{ ...ghostBtnStyle, color: '#fb7185', borderColor: 'rgba(244,63,94,0.35)' }}>
+                    <Trash2 size={14} /> Excluir
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
       )}
+
+      {editing && (
+        <div
+          className="modal-overlay"
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)',
+            backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex',
+            alignItems: 'center', justifyContent: 'center', padding: '16px'
+          }}
+          onClick={() => setEditing(null)}
+        >
+          <form
+            onSubmit={submitEdit}
+            className="glass-panel modal-sheet"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '480px', width: '100%', padding: '24px', border: '1px solid rgba(245,158,11,0.4)', borderRadius: '20px' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
+              <h3 className="font-cinzel" style={{ fontSize: '1.15rem', color: '#f8fafc' }}>Editar bloco</h3>
+              <button type="button" onClick={() => setEditing(null)} style={{ ...ghostBtnStyle, padding: '8px' }}><X size={16} /></button>
+            </div>
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, marginBottom: '6px' }}>Data</label>
+            <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} style={inputStyle} />
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, margin: '12px 0 6px' }}>Matéria</label>
+            <select
+              value={editSubjectId}
+              onChange={(e) => {
+                setEditSubjectId(e.target.value);
+                const first = AGU_SUBJECTS.find((s) => s.id === e.target.value)?.topics?.[0];
+                setEditTopicId(first?.id || '');
+              }}
+              style={inputStyle}
+            >
+              {AGU_SUBJECTS.map((subject) => (
+                <option key={subject.id} value={subject.id}>{subject.name}</option>
+              ))}
+            </select>
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, margin: '12px 0 6px' }}>Tópico</label>
+            <select value={editTopicId} onChange={(e) => setEditTopicId(e.target.value)} style={inputStyle}>
+              {topicsForSubject.map((topic) => (
+                <option key={topic.id} value={topic.id}>{topic.name}</option>
+              ))}
+            </select>
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, margin: '12px 0 6px' }}>Tipo</label>
+            <select value={editKind} onChange={(e) => setEditKind(e.target.value)} style={inputStyle}>
+              <option value="estudo">Estudo inicial</option>
+              <option value="revisao">Revisão</option>
+            </select>
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, margin: '12px 0 6px' }}>Questões feitas</label>
+            <input type="number" min="0" value={editTotal} onChange={(e) => setEditTotal(e.target.value)} style={inputStyle} />
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, margin: '12px 0 6px' }}>Acertos</label>
+            <input type="number" min="0" value={editCorrect} onChange={(e) => setEditCorrect(e.target.value)} style={inputStyle} />
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, margin: '12px 0 6px' }}>Tempo estudado (min)</label>
+            <input type="number" min="0" value={editMinutes} onChange={(e) => setEditMinutes(e.target.value)} style={inputStyle} />
+            {editError && <p style={{ color: '#fb7185', fontSize: '0.8rem', marginTop: '10px' }}>{editError}</p>}
+            <div style={{ display: 'flex', gap: '8px', marginTop: '16px', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setEditing(null)} style={ghostBtnStyle}>Cancelar</button>
+              <button type="submit" style={{
+                ...ghostBtnStyle,
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                color: '#000', border: 'none'
+              }}>
+                Salvar alterações
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <ConfirmModal
+        isOpen={Boolean(deleting)}
+        title="Excluir bloco"
+        message={deleting
+          ? `Excluir o bloco de ${deleting.subject?.name || deleting.subjectId} · ${deleting.topicName || 'tópico'} (${deleting.dateStr})? O tempo, as questões e o progresso desse bloco serão estornados.`
+          : ''}
+        confirmText="Excluir"
+        confirmVariant="danger"
+        onCancel={() => setDeleting(null)}
+        onConfirm={() => {
+          if (deleting && onDeleteBlock) onDeleteBlock(deleting.key);
+          setDeleting(null);
+        }}
+      />
     </section>
   );
 }

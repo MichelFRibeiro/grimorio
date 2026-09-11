@@ -449,6 +449,94 @@ export function setBlockDuration(plan, key, minutes) {
   };
 }
 
+function remapBlockKey(plan, fromKey, toKey) {
+  if (!plan || !fromKey || !toKey || fromKey === toKey) return plan;
+  const completedBlocks = { ...(plan.completedBlocks || {}) };
+  const blockDurations = { ...(plan.blockDurations || {}) };
+  if (completedBlocks[fromKey]) {
+    completedBlocks[toKey] = completedBlocks[fromKey];
+    delete completedBlocks[fromKey];
+  }
+  if (completedBlocks[`${fromKey}|product`]) {
+    completedBlocks[`${toKey}|product`] = completedBlocks[`${fromKey}|product`];
+    delete completedBlocks[`${fromKey}|product`];
+  }
+  if (blockDurations[fromKey] != null) {
+    blockDurations[toKey] = blockDurations[fromKey];
+    delete blockDurations[fromKey];
+  }
+  return {
+    ...plan,
+    completedBlocks,
+    blockDurations,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function deleteStudyBlock(plan, key) {
+  if (!plan || !key) return plan;
+  const completedBlocks = { ...(plan.completedBlocks || {}) };
+  const blockDurations = { ...(plan.blockDurations || {}) };
+  delete completedBlocks[key];
+  delete completedBlocks[`${key}|product`];
+  delete blockDurations[key];
+  return {
+    ...plan,
+    completedBlocks,
+    blockDurations,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function refreshAguProgress(plan, examQuestions = [], todayStr) {
+  const today = todayStr || getSaoPauloDateStr();
+  const progress = buildTopicProgress({ ...plan, topicStatus: {} }, examQuestions, today);
+  return {
+    ...plan,
+    topicStatus: serializeTopicStatus(progress),
+    keepPortuguese: isPortugueseRequired(collectStudyBlocks(plan, examQuestions)),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function updateStudyBlockMeta(plan, key, patch = {}) {
+  if (!plan || !key) return { plan, key };
+  const parsed = parseBlockKey(key);
+  const dateStr = patch.dateStr || parsed.dateStr;
+  const subjectId = patch.subjectId || parsed.subjectId;
+  const rawKind = patch.kind || parsed.kind || 'estudo';
+  const kind = rawKind === 'revisao' ? 'revisao' : 'estudo';
+  const topicId = patch.topicId !== undefined ? patch.topicId : parsed.topicId;
+  const nextKey = blockKey(dateStr, subjectId, kind, topicId);
+  let next = remapBlockKey(plan, key, nextKey);
+  if (patch.durationMinutes !== undefined) {
+    next = setBlockDuration(next, nextKey, patch.durationMinutes);
+  }
+  const questions = Number(patch.totalQuestions);
+  const minutes = patch.durationMinutes !== undefined
+    ? parseDurationMinutes(patch.durationMinutes)
+    : parseDurationMinutes(next.blockDurations?.[nextKey]);
+  const complete = isBlockComplete({
+    questions: Number.isFinite(questions) ? questions : 0,
+    minutes
+  });
+  const completedBlocks = { ...(next.completedBlocks || {}) };
+  if (complete) {
+    completedBlocks[nextKey] = completedBlocks[nextKey] || new Date().toISOString();
+  } else {
+    delete completedBlocks[nextKey];
+    delete completedBlocks[`${nextKey}|product`];
+  }
+  return {
+    plan: {
+      ...next,
+      completedBlocks,
+      updatedAt: new Date().toISOString()
+    },
+    key: nextKey
+  };
+}
+
 export function logDiscursiveProduct(plan, key, payload = {}) {
   const completed = { ...(plan.completedBlocks || {}) };
   completed[key] = new Date().toISOString();

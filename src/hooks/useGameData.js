@@ -732,6 +732,34 @@ export function useGameData() {
     }
   };
 
+  const updateAguBlock = async (payload) => {
+    playClick();
+    const res = await fetch('/api/agu-plan/block', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) fetchState();
+    else {
+      const errJson = await res.json().catch(() => ({}));
+      showRewardToast(0, 0, errJson.error || 'Erro ao editar o bloco.');
+    }
+  };
+
+  const deleteAguBlock = async (key) => {
+    playClick();
+    const res = await fetch('/api/agu-plan/block/delete', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ key })
+    });
+    if (res.ok) fetchState();
+    else {
+      const errJson = await res.json().catch(() => ({}));
+      showRewardToast(0, 0, errJson.error || 'Erro ao excluir o bloco.');
+    }
+  };
+
   const realignAguCycle = async () => {
     playClick();
     const res = await fetch('/api/agu-plan/realign', {
@@ -818,6 +846,8 @@ export function useGameData() {
     updateAguPlan,
     toggleAguBlock,
     setAguBlockDuration,
+    updateAguBlock,
+    deleteAguBlock,
     realignAguCycle,
     resetAguPlan,
     advanceAguCycle,
