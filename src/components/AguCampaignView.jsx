@@ -247,8 +247,15 @@ export function AguCampaignView({
   };
 
   const selected = summary.subjects.find((subject) => subject.id === selectedSubjectId) || summary.subjects[0];
-  const todayTarget = Math.max(summary.today.questionTarget, 1);
-  const todayPercent = Math.round((summary.todayProgress.solved / todayTarget) * 100);
+  const todayBlocks = summary.today?.blocks || [];
+  const todayQuestionTarget = Math.max(summary.today?.questionTarget || (todayBlocks.length * 20), 1);
+  const todayMinuteTarget = Math.max(todayBlocks.reduce((sum, block) => sum + (block.targetMinutes || 60), 0), todayBlocks.length * 60, 1);
+  const todayMinutes = todayBlocks.reduce((sum, block) => sum + (block.minutes || 0), 0);
+  const todayPercent = Math.round(Math.max(
+    (summary.todayProgress.solved || 0) / todayQuestionTarget,
+    todayMinutes / todayMinuteTarget,
+    (summary.today?.doneCount || 0) / Math.max(todayBlocks.length, 1)
+  ) * 100);
 
   return (
     <div>

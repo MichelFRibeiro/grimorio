@@ -671,7 +671,14 @@ export function generateFortnight(plan, examQuestions, todayStr, options = {}) {
       pinExisting: dateStr === todayStr,
       advanceProgress: true
     });
-    const blocks = (built.blocks || []).map((block, index) => ({
+    const unique = [];
+    const usedSubjects = new Set();
+    (built.blocks || []).forEach((block) => {
+      if (block.subjectId && usedSubjects.has(block.subjectId)) return;
+      if (block.subjectId) usedSubjects.add(block.subjectId);
+      unique.push(block);
+    });
+    const blocks = unique.map((block, index) => ({
       ...block,
       window: index === 0 ? 'morning' : 'afternoon',
       optional: false,

@@ -76,7 +76,9 @@ plan.currentCycle.days.forEach((day) => {
   assert((day.blocks || []).length === 3, `${day.dateStr} deve ter 3 blocos, tem ${(day.blocks || []).length}`);
   assert((day.blocks || []).some((b) => b.subjectId === 'portugues'), `${day.dateStr} inclui português`);
   const topics = (day.blocks || []).map((b) => `${b.subjectId}/${b.topicId}`);
+  const subjects = (day.blocks || []).map((b) => b.subjectId);
   assert(new Set(topics).size === topics.length, `${day.dateStr} não repete tópico`);
+  assert(new Set(subjects).size === subjects.length, `${day.dateStr} não repete matéria`);
 });
 
 const zeroSummary = summarizePlan(plan, [], monday);
@@ -180,6 +182,14 @@ const loggedPort = afterRefresh.blocks.find((b) => b.subjectId === 'portugues');
 assert(loggedPort, 'português lançado permanece no dia');
 assert((loggedPort.minutes || 0) >= 60, `bloco de português herda 67 min, veio ${loggedPort.minutes}`);
 assert(loggedPort.done === true, 'bloco de português com 67 min fica concluído após refresh');
+const subjectsToday = afterRefresh.blocks.map((b) => b.subjectId);
+assert(new Set(subjectsToday).size === subjectsToday.length, `hoje não pode repetir matéria, veio ${subjectsToday.join(', ')}`);
+assert(subjectsToday.filter((id) => id === 'portugues').length === 1, 'português entra só uma vez no dia');
+const volume = Math.round(Math.max(
+  afterRefresh.blocks.reduce((sum, b) => sum + (b.minutes || 0), 0) / 180,
+  afterRefresh.doneCount / 3
+) * 100);
+assert(volume >= 30, `volume do dia deve refletir 67/180 min, veio ${volume}%`);
 
 console.log('🎉 Teste do motor adaptativo AGU PASSOU.');
 process.exit(0);

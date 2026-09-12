@@ -548,15 +548,20 @@ export function suggestNextBlock(plan, examQuestions, todayStr, options = {}) {
   const today = todayStr || getSaoPauloDateStr();
   const topicProgress = options.topicProgress || buildTopicProgress(plan, examQuestions, today);
   const usedKeys = new Set(options.usedTopicKeys || []);
+  const usedSubjects = new Set(options.usedSubjectIds || []);
+  usedKeys.forEach((key) => {
+    const subjectId = String(key || '').split('/')[0];
+    if (subjectId) usedSubjects.add(subjectId);
+  });
   const portugueseRequired = options.portugueseRequired != null
     ? options.portugueseRequired
     : isPortugueseRequired(options.blocks || collectStudyBlocks(plan, examQuestions));
-  const portugueseToday = Boolean(options.portugueseToday);
+  const portugueseToday = Boolean(options.portugueseToday) || usedSubjects.has('portugues');
   const allowed = allowedSubjectSet(plan, portugueseRequired);
 
   if (portugueseRequired && !portugueseToday) {
     const row = pickPortugueseTopic(topicProgress);
-    if (row && !usedKeys.has(row.key) && allowed.has(row.subjectId)) {
+    if (row && !usedKeys.has(row.key) && !usedSubjects.has(row.subjectId) && allowed.has(row.subjectId)) {
       const kind = row.reviewDue || row.status === 'completed'
         ? 'revisao'
         : 'estudo';
@@ -566,13 +571,15 @@ export function suggestNextBlock(plan, examQuestions, todayStr, options = {}) {
     }
   }
 
-  const review = dueReviews(topicProgress, today).find((row) => !usedKeys.has(row.key) && allowed.has(row.subjectId));
+  const review = dueReviews(topicProgress, today).find((row) => (
+    !usedKeys.has(row.key) && !usedSubjects.has(row.subjectId) && allowed.has(row.subjectId)
+  ));
   if (review) {
     return makeSuggestedBlock(review, today, 'revisao', `Revisão devida desde ${review.nextReviewAt}`);
   }
 
   const pending = pendingTopics(topicProgress).find((row) => {
-    if (usedKeys.has(row.key)) return false;
+    if (usedKeys.has(row.key) || usedSubjects.has(row.subjectId)) return false;
     if (!allowed.has(row.subjectId)) return false;
     if (portugueseRequired && row.subjectId === 'portugues' && portugueseToday) return false;
     return true;
@@ -584,7 +591,9 @@ export function suggestNextBlock(plan, examQuestions, todayStr, options = {}) {
     return makeSuggestedBlock(pending, today, 'estudo', reason);
   }
 
-  const fallback = Object.values(topicProgress).find((row) => !usedKeys.has(row.key) && allowed.has(row.subjectId));
+  const fallback = Object.values(topicProgress).find((row) => (
+    !usedKeys.has(row.key) && !usedSubjects.has(row.subjectId) && allowed.has(row.subjectId)
+  ));
   if (fallback) {
     return makeSuggestedBlock(fallback, today, fallback.status === 'completed' ? 'revisao' : 'estudo', 'Nenhum tópico pendente — revisão extra');
   }
@@ -593,16 +602,41 @@ export function suggestNextBlock(plan, examQuestions, todayStr, options = {}) {
 
 export function overlayLoggedDayBlocks(sourceBlocks, plan, examQuestions, dateStr) {
   const pinned = pinExistingTodayBlocks(plan, examQuestions, dateStr);
-  if (!pinned.length) return sourceBlocks || [];
-  const used = new Set(pinned.map((block) => topicKey(block.subjectId, block.topicId)));
+  const usedSubjects = new Set(pinned.map((block) => block.subjectId).filter(Boolean));
+  const usedTopics = new Set(pinned.map((block) => topicKey(block.subjectId, block.topicId)));
   const merged = [...pinned];
   (sourceBlocks || []).forEach((block) => {
     if (merged.length >= AGU_DAILY_BLOCKS) return;
+    if (block.subjectId && usedSubjects.has(block.subjectId)) return;
     const stamp = topicKey(block.subjectId, block.topicId);
-    if (used.has(stamp)) return;
-    used.add(stamp);
+    if (usedTopics.has(stamp)) return;
+    if (block.subjectId) usedSubjects.add(block.subjectId);
+    usedTopics.add(stamp);
     merged.push(block);
   });
+  const topicProgress = buildTopicProgress(plan, examQuestions, dateStr);
+  const allBlocks = collectStudyBlocks(plan, examQuestions);
+  const portugueseRequired = isPortugueseRequired(allBlocks);
+  while (merged.length < AGU_DAILY_BLOCKS) {
+    const next = suggestNextBlock(plan, examQuestions, dateStr, {
+      topicProgress,
+      usedTopicKeys: [...usedTopics],
+      usedSubjectIds: [...usedSubjects],
+      portugueseRequired,
+      portugueseToday: usedSubjects.has('portugues'),
+      blocks: allBlocks
+    });
+    if (!next || usedSubjects.has(next.subjectId)) break;
+    merged.push({
+      ...next,
+      window: merged.length === 0 ? 'morning' : 'afternoon',
+      optional: false,
+      target: AGU_BLOCK_QUESTION_TARGET,
+      targetMinutes: AGU_BLOCK_MINUTES
+    });
+    usedSubjects.add(next.subjectId);
+    usedTopics.add(topicKey(next.subjectId, next.topicId));
+  }
   return merged;
 }
 
@@ -615,9 +649,8 @@ function pinExistingTodayBlocks(plan, examQuestions, dateStr) {
       return (a.key || '').localeCompare(b.key || '');
     })
     .filter((block) => {
-      const stamp = `${block.subjectId}|${normalizeKind(block.kind)}|${block.topicId || ''}`;
-      if (seen.has(stamp)) return false;
-      seen.add(stamp);
+      if (!block.subjectId || seen.has(block.subjectId)) return false;
+      seen.add(block.subjectId);
       return true;
     });
   return blocks.slice(0, AGU_DAILY_BLOCKS).map((block, index) => ({
@@ -658,21 +691,24 @@ export function buildDayBlocks(plan, examQuestions, dateStr, options = {}) {
   const pinned = pinExisting ? pinExistingTodayBlocks(plan, examQuestions, dateStr) : [];
   const blocks = [...pinned];
   const usedTopicKeys = new Set(blocks.map((b) => topicKey(b.subjectId, b.topicId)));
+  const usedSubjectIds = new Set(blocks.map((b) => b.subjectId).filter(Boolean));
   let portugueseToday = blocks.some((b) => b.subjectId === 'portugues');
 
   while (blocks.length < AGU_DAILY_BLOCKS) {
     const next = suggestNextBlock(plan, examQuestions, dateStr, {
       topicProgress,
       usedTopicKeys: [...usedTopicKeys],
+      usedSubjectIds: [...usedSubjectIds],
       portugueseRequired,
       portugueseToday,
       blocks: allBlocks
     });
-    if (!next) break;
+    if (!next || usedSubjectIds.has(next.subjectId)) break;
     next.window = blocks.length === 0 ? 'morning' : 'afternoon';
     next.key = `${dateStr}|${next.subjectId}|${next.kind}|${next.topicId}|${blocks.length}`;
     blocks.push(next);
     usedTopicKeys.add(topicKey(next.subjectId, next.topicId));
+    usedSubjectIds.add(next.subjectId);
     if (next.subjectId === 'portugues') portugueseToday = true;
     if (advanceProgress) virtualApply(topicProgress, next, dateStr);
   }

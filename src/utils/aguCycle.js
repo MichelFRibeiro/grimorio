@@ -274,7 +274,14 @@ export function getDaySchedule(plan, dateStr, subjectStats = {}, examQuestions =
     };
 
   const sourceBlocks = overlayLoggedDayBlocks(source.blocks || [], plan, examQuestions, dateStr);
-  const blocks = sourceBlocks.map((block, index) => ({
+  const uniqueBlocks = [];
+  const usedSubjects = new Set();
+  sourceBlocks.forEach((block) => {
+    if (block.subjectId && usedSubjects.has(block.subjectId)) return;
+    if (block.subjectId) usedSubjects.add(block.subjectId);
+    uniqueBlocks.push(block);
+  });
+  const blocks = uniqueBlocks.map((block, index) => ({
     ...hydrateBlock(block, dateStr, plan, subjectStats, topicStats, examQuestions),
     index
   }));
@@ -361,8 +368,9 @@ export function summarizePlan(plan, examQuestions = [], todayStr) {
   const nextSuggested = suggestNextBlock(plan, examQuestions, today, {
     topicProgress: edital.topicProgress,
     usedTopicKeys: (schedule.blocks || []).filter((b) => b.done).map((b) => `${b.subjectId}/${b.topicId}`),
+    usedSubjectIds: (schedule.blocks || []).map((b) => b.subjectId).filter(Boolean),
     portugueseRequired,
-    portugueseToday: (schedule.blocks || []).some((b) => b.subjectId === 'portugues' && b.done),
+    portugueseToday: (schedule.blocks || []).some((b) => b.subjectId === 'portugues'),
     blocks: studyBlocks
   });
 
