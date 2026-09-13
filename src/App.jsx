@@ -14,7 +14,8 @@ import { OracleAnalytics } from './components/OracleAnalytics';
 import { NextActionCard } from './components/NextActionCard';
 import { LevelUpModal } from './components/LevelUpModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale, Headphones } from 'lucide-react';
+import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale, Headphones, Mountain } from 'lucide-react';
+import { NinetyDayGoalsView } from './components/NinetyDayGoalsView';
 import { AguCampaignView } from './components/AguCampaignView';
 import { FocusChamberView, FocusMiniPlayer } from './components/FocusPlayer';
 import { useFocusPlayer } from './hooks/useFocusPlayer';
@@ -91,7 +92,12 @@ export function App() {
     resetAguPlan,
     advanceAguCycle,
     logAguProduct,
-    updateAguPlan
+    updateAguPlan,
+    addNinetyDayGoal,
+    updateNinetyDayGoal,
+    logNinetyDayGoalProgress,
+    deleteNinetyDayGoalLog,
+    deleteNinetyDayGoal
   } = useGameData();
 
   if (loadingAuth || (isAuthenticated && loading)) {
@@ -159,7 +165,8 @@ export function App() {
     actionLogs,
     analytics,
     nextAction,
-    locations
+    locations,
+    ninetyDayGoals
   } = data || {};
 
   const pendingQuestsCount = (quests || []).filter(q => !q.completed).length;
@@ -171,6 +178,7 @@ export function App() {
   const activeProcessesCount = (processes || []).filter(p => p.status === 'in_progress').length;
   const aguToday = summarizePlan(aguPlan, examQuestions || [], getSaoPauloDateStr()).today;
   const aguTodayRemaining = Math.max(0, (aguToday.totalBlocks || 0) - (aguToday.doneCount || 0));
+  const activeNinetyDayGoalsCount = (ninetyDayGoals || []).filter(g => g.status === 'active' || g.status === 'expired').length;
 
   const tabs = [
     { id: 'quests', label: 'Missões', icon: Scroll, badge: pendingQuestsCount },
@@ -178,6 +186,7 @@ export function App() {
     { id: 'books', label: 'Biblioteca', icon: BookOpen, badge: activeBooksCount },
     { id: 'processes', label: 'Processos', icon: Layers, badge: activeProcessesCount },
     { id: 'habits', label: 'Rituais', icon: Flame, badge: habits?.length },
+    { id: 'goals', label: '90 Dias', icon: Mountain, badge: activeNinetyDayGoalsCount },
     { id: 'focus', label: 'Foco', icon: Headphones },
     { id: 'rewards', label: 'Taverna', icon: Gift },
     { id: 'agu', label: 'AGU', icon: Scale, badge: aguTodayRemaining },
@@ -344,6 +353,18 @@ export function App() {
             onUpdateHabit={updateHabit}
             onToggleHabit={toggleHabit}
             onDeleteHabit={deleteHabit}
+          />
+        )}
+
+        {activeTab === 'goals' && (
+          <NinetyDayGoalsView
+            goals={ninetyDayGoals}
+            questCategories={questCategories}
+            onAddGoal={addNinetyDayGoal}
+            onUpdateGoal={updateNinetyDayGoal}
+            onLogProgress={logNinetyDayGoalProgress}
+            onDeleteLog={deleteNinetyDayGoalLog}
+            onDeleteGoal={deleteNinetyDayGoal}
           />
         )}
 

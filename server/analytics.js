@@ -1,4 +1,5 @@
 import { getDb } from './db.js';
+import { enrichNinetyDayGoal, formatGoalAmount } from '../src/utils/ninetyDayGoals.js';
 import { parseDurationMinutes, sumDurationMap } from '../src/utils/activityDuration.js';
 import { computeCategoryRankings } from './rankings.js';
 import {
@@ -24,6 +25,7 @@ export function computeAnalytics() {
 
   const now = new Date();
   const todayStr = getSaoPauloDateStr(now);
+  const ninetyDayGoals = (db.ninetyDayGoals || []).map(g => enrichNinetyDayGoal(g, todayStr));
   const currentMonthStr = getSaoPauloMonthStr(now); // '2026-08'
   const currentYearStr = getSaoPauloYearStr(now); // '2026'
 
@@ -332,6 +334,23 @@ export function computeAnalytics() {
     });
   }
 
+  const activeNinetyDayGoals = ninetyDayGoals.filter(g => g.status === 'active' || g.status === 'expired');
+  if (activeNinetyDayGoals.length > 0) {
+    const behind = activeNinetyDayGoals.filter(g => g.pace === 'behind');
+    const lead = behind[0] || activeNinetyDayGoals[0];
+    insights.push({
+      type: 'ninety_day_goals',
+      icon: 'Mountain',
+      color: behind.length > 0 ? 'rose' : 'emerald',
+      title: behind.length > 0
+        ? `Meta de 90 dias atrasada: ${lead.title}`
+        : `Metas de 90 dias em andamento (${activeNinetyDayGoals.length}/3)`,
+      description: behind.length > 0
+        ? `"${lead.title}" está em ${formatGoalAmount(lead.currentAmount, lead.unit, lead.unitLabel)} de ${formatGoalAmount(lead.targetAmount, lead.unit, lead.unitLabel)} (${lead.percent}%). O ritmo esperado neste ponto seria ${formatGoalAmount(lead.expectedAmount, lead.unit, lead.unitLabel)}. Recupere o ciclo da semana atual.`
+        : activeNinetyDayGoals.map(g => `"${g.title}" ${g.percent}%`).join(' · ')
+    });
+  }
+
   // Insight 5: Urgency & Procrastination Pattern
   const completedQuests = quests.filter(q => q.completed);
   const pendingQuests = quests.filter(q => !q.completed);
@@ -398,7 +417,9 @@ export function computeAnalytics() {
     totalProcessUnitsCompleted,
     totalHabitsActive: habits.length,
     totalActionsLogged: logs.length,
-    overallUserRank: rankings.overall?.rank?.name || 'E'
+    overallUserRank: rankings.overall?.rank?.name || 'E',
+    ninetyDayGoalsActive: activeNinetyDayGoals.length,
+    ninetyDayGoalsCompleted: ninetyDayGoals.filter(g => g.status === 'completed').length
   };
 
   return {
@@ -417,6 +438,17 @@ export function computeAnalytics() {
     questionDailyHistory,
     totalProcessUnitsCompleted,
     habitStats,
+    ninetyDayGoals: ninetyDayGoals.map(g => ({
+      id: g.id,
+      title: g.title,
+      status: g.status,
+      percent: g.percent,
+      pace: g.pace,
+      currentAmount: g.currentAmount,
+      targetAmount: g.targetAmount,
+      unitLabel: g.unitLabel,
+      daysLeft: g.daysLeft
+    })),
     rankings,
     insights,
     summary

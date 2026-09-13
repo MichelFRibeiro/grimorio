@@ -56,6 +56,18 @@ import {
   refreshAguProgress
 } from '../src/utils/aguCycle.js';
 import { collectStudyBlocks } from '../src/utils/aguStudyEngine.js';
+import {
+  MAX_ACTIVE_NINETY_DAY_GOALS,
+  countOccupiedNinetyDayGoalSlots,
+  createNinetyDayGoal,
+  deleteNinetyDayGoalLog,
+  describeCycleBreakdown,
+  enrichNinetyDayGoal,
+  logNinetyDayGoalProgress,
+  previewNinetyDayGoal,
+  sanitizeNinetyDayGoals,
+  updateNinetyDayGoal
+} from '../src/utils/ninetyDayGoals.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -375,6 +387,7 @@ app.get('/api/state', (req, res) => {
   try {
     const db = getDb();
     const todayStr = getSaoPauloDateStr();
+    db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
     db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
     if (db.aguPlan?.startedAt) {
       const next = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);
@@ -2296,6 +2309,208 @@ app.post('/api/agu-plan/block-duration', (req, res) => {
       plan: db.aguPlan,
       summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ninety-day-goals/preview', (req, res) => {
+  try {
+    const todayStr = getSaoPauloDateStr();
+    const preview = previewNinetyDayGoal(req.body || {}, todayStr);
+    if (!preview.valid) {
+      return res.status(400).json({ error: preview.error || 'Não foi possível interpretar a meta.' });
+    }
+    res.json({
+      success: true,
+      preview,
+      breakdown: describeCycleBreakdown({
+        unit: preview.unit,
+        unitLabel: preview.unitLabel,
+        cycles: preview.cycles
+      })
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/ninety-day-goals', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    const goals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr).map(g => enrichNinetyDayGoal(g, todayStr));
+    res.json({
+      success: true,
+      goals,
+      occupiedSlots: countOccupiedNinetyDayGoalSlots(goals),
+      maxActive: MAX_ACTIVE_NINETY_DAY_GOALS
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ninety-day-goals', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
+    const occupied = countOccupiedNinetyDayGoalSlots(db.ninetyDayGoals);
+    if (occupied >= MAX_ACTIVE_NINETY_DAY_GOALS) {
+      return res.status(400).json({
+        error: `Você já tem ${MAX_ACTIVE_NINETY_DAY_GOALS} metas de 90 dias em andamento. Conclua, archive ou exclua uma delas para cadastrar outra.`
+      });
+    }
+
+    const defaultCat = db.questCategories?.[0]?.name || 'Pessoal';
+    const goal = createNinetyDayGoal({
+      title: req.body?.title,
+      description: req.body?.description,
+      category: req.body?.category || defaultCat,
+      icon: req.body?.icon,
+      targetAmount: req.body?.targetAmount,
+      unit: req.body?.unit,
+      unitLabel: req.body?.unitLabel,
+      direction: req.body?.direction,
+      startDate: req.body?.startDate
+    }, { today: todayStr });
+
+    db.ninetyDayGoals.unshift(goal);
+    saveDb(db);
+    res.json({
+      success: true,
+      goal,
+      occupiedSlots: countOccupiedNinetyDayGoalSlots(db.ninetyDayGoals),
+      breakdown: describeCycleBreakdown(goal)
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/ninety-day-goals/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    const goal = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr).find(g => g.id === req.params.id);
+    if (!goal) return res.status(404).json({ error: 'Meta de 90 dias não encontrada.' });
+    res.json({ success: true, goal: enrichNinetyDayGoal(goal, todayStr), breakdown: describeCycleBreakdown(goal) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/ninety-day-goals/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
+    const index = db.ninetyDayGoals.findIndex(g => g.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Meta de 90 dias não encontrada.' });
+    const updated = updateNinetyDayGoal(db.ninetyDayGoals[index], req.body || {}, todayStr);
+    db.ninetyDayGoals[index] = updated;
+    saveDb(db);
+    res.json({ success: true, goal: updated, breakdown: describeCycleBreakdown(updated) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/ninety-day-goals/:id/progress', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
+    const index = db.ninetyDayGoals.findIndex(g => g.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Meta de 90 dias não encontrada.' });
+
+    const result = logNinetyDayGoalProgress(db.ninetyDayGoals[index], {
+      amount: req.body?.amount,
+      date: req.body?.date,
+      note: req.body?.note,
+      timestamp: req.body?.timestamp
+    }, todayStr);
+
+    db.ninetyDayGoals[index] = result.goal;
+
+    const defaultCat = db.questCategories?.[0]?.name || 'Pessoal';
+    const rewardResult = rewardPlayer({
+      xp: result.rewards.xp,
+      coins: result.rewards.coins,
+      willpower: result.rewards.willpower,
+      actionType: 'ninety_day_goal_progress',
+      entityId: result.log.id,
+      title: `${result.goal.title} (+${result.log.amount} ${result.goal.unitLabel || result.goal.unit || ''})`.trim(),
+      details: {
+        category: result.goal.category || defaultCat,
+        goalId: result.goal.id,
+        amount: result.log.amount,
+        justCompleted: result.justCompleted
+      },
+      timestamp: result.log.timestamp
+    });
+
+    saveDb(db);
+    res.json({
+      success: true,
+      goal: result.goal,
+      log: result.log,
+      justCompleted: result.justCompleted,
+      rewards: result.rewards,
+      rewardResult,
+      analytics: computeAnalytics()
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/ninety-day-goals/:id/logs/:logId', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
+    const index = db.ninetyDayGoals.findIndex(g => g.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Meta de 90 dias não encontrada.' });
+
+    const result = deleteNinetyDayGoalLog(db.ninetyDayGoals[index], req.params.logId, todayStr);
+    db.ninetyDayGoals[index] = result.goal;
+
+    revertPlayerReward({
+      xp: result.removed.xpEarned || 0,
+      coins: result.removed.coinsEarned || 0,
+      willpower: result.removed.willpowerEarned || 0,
+      actionType: 'ninety_day_goal_progress',
+      entityId: result.removed.id
+    });
+
+    saveDb(db);
+    res.json({ success: true, goal: result.goal, removed: result.removed });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/ninety-day-goals/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
+    const index = db.ninetyDayGoals.findIndex(g => g.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Meta de 90 dias não encontrada.' });
+    const [removed] = db.ninetyDayGoals.splice(index, 1);
+    (removed.logs || []).forEach((log) => {
+      revertPlayerReward({
+        xp: log.xpEarned || 0,
+        coins: log.coinsEarned || 0,
+        willpower: log.willpowerEarned || 0,
+        actionType: 'ninety_day_goal_progress',
+        entityId: log.id
+      });
+    });
+    saveDb(db);
+    res.json({ success: true, removed });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

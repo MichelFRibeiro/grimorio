@@ -773,6 +773,106 @@ export function useGameData() {
     }
   };
 
+  const addNinetyDayGoal = async (goalData) => {
+    playClick();
+    const res = await fetch('/api/ninety-day-goals', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(goalData)
+    });
+    if (res.ok) {
+      fetchState();
+      return { success: true };
+    }
+    const errJson = await res.json().catch(() => ({}));
+    const error = errJson.error || 'Erro ao criar a meta de 90 dias.';
+    showRewardToast(0, 0, error);
+    throw new Error(error);
+  };
+
+  const updateNinetyDayGoal = async (id, goalData) => {
+    playClick();
+    const res = await fetch(`/api/ninety-day-goals/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(goalData)
+    });
+    if (res.ok) {
+      fetchState();
+      return { success: true };
+    }
+    const errJson = await res.json().catch(() => ({}));
+    const error = errJson.error || 'Erro ao atualizar a meta de 90 dias.';
+    showRewardToast(0, 0, error);
+    throw new Error(error);
+  };
+
+  const logNinetyDayGoalProgress = async (id, progressData) => {
+    playClick();
+    const res = await fetch(`/api/ninety-day-goals/${id}/progress`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(progressData)
+    });
+    if (res.ok) {
+      const result = await res.json();
+      if (result.rewardResult) {
+        const just = result.justCompleted || {};
+        const label = just.goal
+          ? 'Meta de 90 dias conquistada!'
+          : just.month
+            ? 'Mês da meta fechado!'
+            : just.fortnight
+              ? 'Quinzena da meta fechada!'
+              : just.week
+                ? 'Semana da meta fechada!'
+                : 'Avanço na meta de 90 dias!';
+        handleRewardResponse(result.rewardResult, label);
+        if (just.goal) {
+          confetti({ particleCount: 110, spread: 80, origin: { y: 0.6 } });
+        }
+      }
+      fetchState();
+      return { success: true, result };
+    }
+    const errJson = await res.json().catch(() => ({}));
+    const error = errJson.error || 'Erro ao registrar o avanço.';
+    showRewardToast(0, 0, error);
+    throw new Error(error);
+  };
+
+  const deleteNinetyDayGoalLog = async (goalId, logId) => {
+    playClick();
+    const res = await fetch(`/api/ninety-day-goals/${goalId}/logs/${logId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      fetchState();
+      return { success: true };
+    }
+    const errJson = await res.json().catch(() => ({}));
+    const error = errJson.error || 'Erro ao estornar o avanço.';
+    showRewardToast(0, 0, error);
+    throw new Error(error);
+  };
+
+  const deleteNinetyDayGoal = async (id) => {
+    playClick();
+    const res = await fetch(`/api/ninety-day-goals/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      fetchState();
+      return { success: true };
+    }
+    const errJson = await res.json().catch(() => ({}));
+    const error = errJson.error || 'Erro ao excluir a meta de 90 dias.';
+    showRewardToast(0, 0, error);
+    throw new Error(error);
+  };
+
   const resetAguPlan = async () => {
     playClick();
     const res = await fetch('/api/agu-plan/reset', {
@@ -851,6 +951,11 @@ export function useGameData() {
     realignAguCycle,
     resetAguPlan,
     advanceAguCycle,
-    logAguProduct
+    logAguProduct,
+    addNinetyDayGoal,
+    updateNinetyDayGoal,
+    logNinetyDayGoalProgress,
+    deleteNinetyDayGoalLog,
+    deleteNinetyDayGoal
   };
 }
