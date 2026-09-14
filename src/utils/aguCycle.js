@@ -514,8 +514,22 @@ export function deleteStudyBlock(plan, key) {
 export function refreshAguProgress(plan, examQuestions = [], todayStr) {
   const today = todayStr || getSaoPauloDateStr();
   const progress = buildTopicProgress({ ...plan, topicStatus: {} }, examQuestions, today);
+  const currentTopic = { ...(plan.currentTopic || {}) };
+  AGU_SUBJECTS.forEach((subject) => {
+    const open = currentOpenTopic(plan, subject, progress);
+    if (open?.topicId) {
+      currentTopic[subject.id] = {
+        topicId: open.topicId,
+        topicName: open.topicName,
+        status: open.status,
+        questionsOnTopic: open.questionsOnTopic || 0,
+        correctOnTopic: open.correctOnTopic || 0
+      };
+    }
+  });
   return {
     ...plan,
+    currentTopic,
     topicStatus: serializeTopicStatus(progress),
     keepPortuguese: isPortugueseRequired(collectStudyBlocks(plan, examQuestions)),
     updatedAt: new Date().toISOString()

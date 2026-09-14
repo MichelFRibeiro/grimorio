@@ -405,7 +405,7 @@ function applyBlockToTopic(row, block, dateStr) {
     } else {
       completeTopic(row, dateStr);
     }
-  } else if (row.initialSolved > 0) {
+  } else if (row.initialSolved > 0 || (row.studyBlocks || 0) > 0 || parseDurationMinutes(block.durationMinutes) > 0) {
     row.status = 'in_progress';
   }
 }
@@ -468,7 +468,7 @@ export function buildTopicProgress(plan, examQuestions = [], todayStr) {
       row.minutes += parseDurationMinutes(block.durationMinutes);
     }
     if (!block.done && (block.totalQuestions || 0) === 0 && parseDurationMinutes(block.durationMinutes) === 0) return;
-    if (block.done || (block.totalQuestions || 0) > 0) {
+    if (block.done || (block.totalQuestions || 0) > 0 || parseDurationMinutes(block.durationMinutes) > 0) {
       applyBlockToTopic(row, block, block.dateStr || today);
     }
   });
@@ -514,14 +514,51 @@ export function pendingTopics(topicProgress) {
     });
 }
 
+function isOpenTopicRow(row) {
+  if (!row) return false;
+  if (row.status === 'completed' || row.status === 'review') return false;
+  return true;
+}
+
+function isStartedTopicRow(row) {
+  if (!isOpenTopicRow(row)) return false;
+  return (row.initialSolved || 0) > 0
+    || (row.studyBlocks || 0) > 0
+    || (row.minutes || 0) > 0
+    || Boolean(row.lastTouchedAt);
+}
+
 function pickPortugueseTopic(topicProgress) {
-  const ortografia = topicProgress[topicKey('portugues', 'ortografia')];
-  if (ortografia && (ortografia.status === 'pending' || ortografia.status === 'in_progress')) return ortografia;
+  const subject = getAguSubject('portugues');
+  const open = currentOpenTopic(null, subject, topicProgress);
+  if (open?.topicId) {
+    const row = topicProgress[topicKey('portugues', open.topicId)];
+    if (row && isOpenTopicRow(row)) return row;
+  }
   const due = dueReviews(topicProgress).find((row) => row.subjectId === 'portugues');
   if (due) return { ...due, reviewDue: true };
   const pending = pendingTopics(topicProgress).find((row) => row.subjectId === 'portugues');
   if (pending) return pending;
-  return ortografia || Object.values(topicProgress).find((row) => row.subjectId === 'portugues') || null;
+  return topicProgress[topicKey('portugues', 'ortografia')]
+    || Object.values(topicProgress).find((row) => row.subjectId === 'portugues')
+    || null;
+}
+
+function snapBlockToOpenTopic(plan, topicProgress, block) {
+  if (!block?.subjectId) return block;
+  const subject = getAguSubject(block.subjectId);
+  const open = currentOpenTopic(plan, subject, topicProgress);
+  if (!open?.topicId || open.topicId === block.topicId) return block;
+  const openRow = topicProgress?.[topicKey(block.subjectId, open.topicId)];
+  if (!isOpenTopicRow(openRow)) return block;
+  return {
+    ...block,
+    topicId: open.topicId,
+    topicName: open.topicName || block.topicName,
+    key: block.dateStr
+      ? `${block.dateStr}|${block.subjectId}|${normalizeKind(block.kind)}|${open.topicId}`
+      : block.key
+  };
 }
 
 function makeSuggestedBlock(row, dateStr, kind, reason) {
@@ -582,6 +619,11 @@ export function suggestNextBlock(plan, examQuestions, todayStr, options = {}) {
     if (usedKeys.has(row.key) || usedSubjects.has(row.subjectId)) return false;
     if (!allowed.has(row.subjectId)) return false;
     if (portugueseRequired && row.subjectId === 'portugues' && portugueseToday) return false;
+    const subject = getAguSubject(row.subjectId);
+    const open = currentOpenTopic(plan, subject, topicProgress);
+    if (open?.topicId && open.topicId !== row.topicId && isStartedTopicRow(topicProgress[topicKey(row.subjectId, open.topicId)])) {
+      return false;
+    }
     return true;
   });
   if (pending) {
@@ -604,9 +646,11 @@ export function overlayLoggedDayBlocks(sourceBlocks, plan, examQuestions, dateSt
   const pinned = pinExistingTodayBlocks(plan, examQuestions, dateStr);
   const usedSubjects = new Set(pinned.map((block) => block.subjectId).filter(Boolean));
   const usedTopics = new Set(pinned.map((block) => topicKey(block.subjectId, block.topicId)));
+  const topicProgress = buildTopicProgress(plan, examQuestions, dateStr);
   const merged = [...pinned];
-  (sourceBlocks || []).forEach((block) => {
+  (sourceBlocks || []).forEach((raw) => {
     if (merged.length >= AGU_DAILY_BLOCKS) return;
+    const block = snapBlockToOpenTopic(plan, topicProgress, raw);
     if (block.subjectId && usedSubjects.has(block.subjectId)) return;
     const stamp = topicKey(block.subjectId, block.topicId);
     if (usedTopics.has(stamp)) return;
@@ -614,7 +658,6 @@ export function overlayLoggedDayBlocks(sourceBlocks, plan, examQuestions, dateSt
     usedTopics.add(stamp);
     merged.push(block);
   });
-  const topicProgress = buildTopicProgress(plan, examQuestions, dateStr);
   const allBlocks = collectStudyBlocks(plan, examQuestions);
   const portugueseRequired = isPortugueseRequired(allBlocks);
   while (merged.length < AGU_DAILY_BLOCKS) {
@@ -671,13 +714,7 @@ function pinExistingTodayBlocks(plan, examQuestions, dateStr) {
 function virtualApply(topicProgress, block, dateStr) {
   const row = topicProgress[topicKey(block.subjectId, block.topicId)];
   if (!row) return;
-  applyBlockToTopic(row, {
-    kind: block.kind,
-    totalQuestions: AGU_BLOCK_QUESTION_TARGET,
-    correctAnswers: Math.round(AGU_BLOCK_QUESTION_TARGET * 0.85)
-  }, dateStr);
-  row.solved += AGU_BLOCK_QUESTION_TARGET;
-  row.correct += Math.round(AGU_BLOCK_QUESTION_TARGET * 0.85);
+  if (row.status !== 'in_progress') row.status = 'in_progress';
   row.lastTouchedAt = dateStr;
   finalizeTopicRow(row, dateStr);
 }
@@ -836,6 +873,23 @@ export function applyStudySession(plan, entry, todayStr) {
 
 export function currentOpenTopic(plan, subject, topicProgress) {
   const topics = subject?.topics || [];
+  const storedId = plan?.currentTopic?.[subject?.id]?.topicId;
+  const storedRow = storedId ? topicProgress?.[topicKey(subject.id, storedId)] : null;
+  if (storedRow && isOpenTopicRow(storedRow) && isStartedTopicRow(storedRow)) {
+    const found = topics.find((topic) => topic.id === storedId);
+    return {
+      topicId: storedId,
+      topicName: found?.name || storedRow.topicName,
+      status: storedRow.status,
+      questionsOnTopic: storedRow.initialSolved,
+      correctOnTopic: storedRow.initialCorrect
+    };
+  }
+  const started = topics.find((topic) => isStartedTopicRow(topicProgress?.[topicKey(subject.id, topic.id)]));
+  if (started) {
+    const row = topicProgress[topicKey(subject.id, started.id)];
+    return { topicId: started.id, topicName: started.name, status: row.status, questionsOnTopic: row.initialSolved, correctOnTopic: row.initialCorrect };
+  }
   const inProgress = topics.find((topic) => topicProgress?.[topicKey(subject.id, topic.id)]?.status === 'in_progress');
   if (inProgress) {
     const row = topicProgress[topicKey(subject.id, inProgress.id)];

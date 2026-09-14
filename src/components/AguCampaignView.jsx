@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityTimerBox } from './ActivityTimerBox';
-import { consumeActivityTimerMinutes, getActivityTimerSnapshot, startActivityTimer, subscribeActivityTimers } from '../utils/liveActivityTimers';
+import { consumeActivityTimerMinutes, getActivityTimerSnapshot, subscribeActivityTimers } from '../utils/liveActivityTimers';
 import { elapsedMsFrom, formatStudyDuration, parseDurationMinutes } from '../utils/activityDuration';
 import {
   AGU_FOLDER_URL,
@@ -164,16 +164,6 @@ export function AguCampaignView({
   const liveMinutes = useLiveAguMinutes(todayBlockKeys);
 
   const consumeBlockTimer = (blockKey) => consumeActivityTimerMinutes('agu', blockKey);
-
-  useEffect(() => {
-    const firstOpen = (summary.today?.blocks || []).find((b) => !b.done);
-    if (!firstOpen?.key) return undefined;
-    const snap = getActivityTimerSnapshot('agu', firstOpen.key);
-    if (!snap.isRunning && snap.accumulatedMs === 0) {
-      startActivityTimer('agu', firstOpen.key);
-    }
-    return undefined;
-  }, [summary.today?.dateStr]);
 
   const openLog = (block) => {
     const remaining = block.remaining > 0 ? String(block.remaining) : '20';

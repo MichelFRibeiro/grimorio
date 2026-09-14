@@ -191,5 +191,11 @@ const volume = Math.round(Math.max(
 ) * 100);
 assert(volume >= 30, `volume do dia deve refletir 67/180 min, veio ${volume}%`);
 
+const later = addDaysToDateStr(monday, 3);
+const laterDay = getDaySchedule(theoryPlan, later, {}, []);
+const laterPort = laterDay.blocks.find((b) => b.subjectId === 'portugues');
+assert(laterPort?.topicId === 'acentuacao', `português deve continuar em Acentuação até 60 q, veio ${laterPort?.topicId}`);
+assert((laterPort?.todayProgress?.solved || 0) < 60, 'teoria não conclui o tópico');
+
 console.log('🎉 Teste do motor adaptativo AGU PASSOU.');
 process.exit(0);

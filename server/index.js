@@ -2303,6 +2303,7 @@ app.post('/api/agu-plan/block-duration', (req, res) => {
     const db = getDb();
     const todayStr = getSaoPauloDateStr();
     db.aguPlan = setBlockDuration(sanitizeAguPlan(db.aguPlan, todayStr), key, durationMinutes);
+    db.aguPlan = refreshAguProgress(db.aguPlan, db.examQuestions || [], todayStr);
     saveDb(db);
     res.json({
       success: true,
