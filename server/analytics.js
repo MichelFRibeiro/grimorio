@@ -1,5 +1,6 @@
 import { getDb } from './db.js';
 import { enrichNinetyDayGoal, formatGoalAmount } from '../src/utils/ninetyDayGoals.js';
+import { MAX_DAILY_VICTORIES, summarizeDay } from '../src/utils/dailyVictories.js';
 import { parseDurationMinutes, sumDurationMap } from '../src/utils/activityDuration.js';
 import { computeCategoryRankings } from './rankings.js';
 import {
@@ -26,6 +27,7 @@ export function computeAnalytics() {
   const now = new Date();
   const todayStr = getSaoPauloDateStr(now);
   const ninetyDayGoals = (db.ninetyDayGoals || []).map(g => enrichNinetyDayGoal(g, todayStr));
+  const dailyVictorySummary = summarizeDay(db.dailyVictories || [], todayStr, db.dailyVictoryBonuses || {});
   const currentMonthStr = getSaoPauloMonthStr(now); // '2026-08'
   const currentYearStr = getSaoPauloYearStr(now); // '2026'
 
@@ -334,6 +336,34 @@ export function computeAnalytics() {
     });
   }
 
+  if (dailyVictorySummary.plannedCount === 0) {
+    insights.push({
+      type: 'daily_victories',
+      icon: 'Trophy',
+      color: 'amber',
+      title: 'Planeje as 3 vitórias do dia',
+      description: 'Defina até 3 tarefas que, se alcançadas, tornam o dia uma vitória. Dá para cadastrar hoje ou já deixar as de amanhã prontas.'
+    });
+  } else if (!dailyVictorySummary.allComplete) {
+    insights.push({
+      type: 'daily_victories',
+      icon: 'Trophy',
+      color: dailyVictorySummary.completedCount === 0 ? 'rose' : 'amber',
+      title: `Vitórias do dia: ${dailyVictorySummary.completedCount}/${dailyVictorySummary.plannedCount}`,
+      description: dailyVictorySummary.completedCount === 0
+        ? 'Nenhuma vitória do dia foi registrada ainda. Conclua a primeira para ganhar XP, moedas e Vontade.'
+        : `Faltam ${dailyVictorySummary.plannedCount - dailyVictorySummary.completedCount} vitória(s) para fechar o dia${dailyVictorySummary.plannedCount === MAX_DAILY_VICTORIES ? ' e disparar o bônus da tríade' : ''}.`
+    });
+  } else if (dailyVictorySummary.tripleBonusAwarded) {
+    insights.push({
+      type: 'daily_victories',
+      icon: 'Trophy',
+      color: 'emerald',
+      title: 'Tríade de vitórias conquistada!',
+      description: 'As 3 vitórias planejadas para hoje foram realizadas. O bônus extra já entrou no Grimório.'
+    });
+  }
+
   const activeNinetyDayGoals = ninetyDayGoals.filter(g => g.status === 'active' || g.status === 'expired');
   if (activeNinetyDayGoals.length > 0) {
     const behind = activeNinetyDayGoals.filter(g => g.pace === 'behind');
@@ -419,7 +449,10 @@ export function computeAnalytics() {
     totalActionsLogged: logs.length,
     overallUserRank: rankings.overall?.rank?.name || 'E',
     ninetyDayGoalsActive: activeNinetyDayGoals.length,
-    ninetyDayGoalsCompleted: ninetyDayGoals.filter(g => g.status === 'completed').length
+    ninetyDayGoalsCompleted: ninetyDayGoals.filter(g => g.status === 'completed').length,
+    dailyVictoriesPlanned: dailyVictorySummary.plannedCount,
+    dailyVictoriesCompleted: dailyVictorySummary.completedCount,
+    dailyVictoriesTripleBonus: dailyVictorySummary.tripleBonusAwarded
   };
 
   return {
@@ -438,6 +471,7 @@ export function computeAnalytics() {
     questionDailyHistory,
     totalProcessUnitsCompleted,
     habitStats,
+    dailyVictoriesToday: dailyVictorySummary,
     ninetyDayGoals: ninetyDayGoals.map(g => ({
       id: g.id,
       title: g.title,

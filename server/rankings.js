@@ -250,6 +250,9 @@ function resolveLogCategory(log, db, registeredNames) {
   } else if (log.type === 'exam_questions' && log.entityId && db.examQuestions) {
     const eq = db.examQuestions.find(item => item.id === log.entityId);
     if (eq?.category) resolved = eq.category;
+  } else if ((log.type === 'daily_victory_complete' || log.type === 'daily_victory_triple_bonus') && log.entityId && db.dailyVictories) {
+    const victory = db.dailyVictories.find(item => item.id === log.entityId);
+    if (victory?.category) resolved = victory.category;
   }
 
   if (!resolved && log.details?.category) {

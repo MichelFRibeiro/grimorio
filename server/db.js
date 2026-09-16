@@ -14,6 +14,7 @@ import { sanitizeLiveActivityTimers } from '../src/utils/activityDuration.js';
 import { createDefaultAguPlan } from '../src/data/aguCurriculum.js';
 import { sanitizeAguPlan, ensureCurrentCycle } from '../src/utils/aguCycle.js';
 import { sanitizeNinetyDayGoals } from '../src/utils/ninetyDayGoals.js';
+import { sanitizeDailyVictories, sanitizeDailyVictoryBonuses } from '../src/utils/dailyVictories.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -87,6 +88,7 @@ export function applyCategoryRename(db, oldName, newName) {
   (db.books || []).forEach(rename);
   (db.examQuestions || []).forEach(rename);
   (db.ninetyDayGoals || []).forEach(rename);
+  (db.dailyVictories || []).forEach(rename);
 
   (db.actionLogs || []).forEach(log => {
     if (log.details?.category === oldName) {
@@ -272,7 +274,9 @@ export const defaultDatabase = () => {
     actionLogs: [],
     liveActivityTimers: {},
     aguPlan: createDefaultAguPlan(todayStr),
-    ninetyDayGoals: []
+    ninetyDayGoals: [],
+    dailyVictories: [],
+    dailyVictoryBonuses: {}
   };
 };
 
@@ -296,6 +300,8 @@ export function sanitizeDb(db) {
   db.liveActivityTimers = sanitizeLiveActivityTimers(db.liveActivityTimers);
   const todayStr = getSaoPauloDateStr();
   db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
+  db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+  db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
   db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
   if (db.aguPlan?.startedAt) {
     db.aguPlan = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);

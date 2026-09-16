@@ -68,6 +68,20 @@ import {
   sanitizeNinetyDayGoals,
   updateNinetyDayGoal
 } from '../src/utils/ninetyDayGoals.js';
+import {
+  MAX_DAILY_VICTORIES,
+  DAILY_VICTORY_REWARDS,
+  DAILY_VICTORY_TRIPLE_BONUS,
+  bonusEntityId,
+  completeDailyVictory,
+  createDailyVictory,
+  deleteDailyVictory,
+  getPlannableDates,
+  sanitizeDailyVictories,
+  sanitizeDailyVictoryBonuses,
+  summarizeDay,
+  updateDailyVictory
+} from '../src/utils/dailyVictories.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -388,6 +402,8 @@ app.get('/api/state', (req, res) => {
     const db = getDb();
     const todayStr = getSaoPauloDateStr();
     db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
+    db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+    db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
     db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
     if (db.aguPlan?.startedAt) {
       const next = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);
@@ -2514,6 +2530,197 @@ app.delete('/api/ninety-day-goals/:id', (req, res) => {
     res.json({ success: true, removed });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// VITÓRIAS PLANEJADAS PARA O DIA
+// ==========================================
+app.get('/api/daily-victories', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    const dates = getPlannableDates(todayStr);
+    const items = sanitizeDailyVictories(db.dailyVictories);
+    const bonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
+    res.json({
+      success: true,
+      today: todayStr,
+      dates,
+      maxPerDay: MAX_DAILY_VICTORIES,
+      rewards: DAILY_VICTORY_REWARDS,
+      tripleBonus: DAILY_VICTORY_TRIPLE_BONUS,
+      todaySummary: summarizeDay(items, dates.today, bonuses),
+      tomorrowSummary: summarizeDay(items, dates.tomorrow, bonuses),
+      dailyVictories: items,
+      dailyVictoryBonuses: bonuses
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/daily-victories', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+    db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
+    const defaultCat = db.questCategories?.[0]?.name || 'Pessoal';
+    const result = createDailyVictory(db.dailyVictories, {
+      title: req.body?.title,
+      category: req.body?.category,
+      date: req.body?.date
+    }, { today: todayStr, defaultCategory: defaultCat });
+    db.dailyVictories = result.list;
+    saveDb(db);
+    res.json({
+      success: true,
+      victory: result.victory,
+      todaySummary: summarizeDay(result.list, todayStr, db.dailyVictoryBonuses)
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/daily-victories/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+    db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
+    const result = updateDailyVictory(db.dailyVictories, req.params.id, req.body || {}, { today: todayStr });
+    db.dailyVictories = result.list;
+    saveDb(db);
+    res.json({ success: true, victory: result.victory });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/daily-victories/:id/complete', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+    db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
+
+    const result = completeDailyVictory(db.dailyVictories, db.dailyVictoryBonuses, req.params.id, {
+      note: req.body?.note,
+      completed: req.body?.completed,
+      today: todayStr
+    });
+
+    db.dailyVictories = result.list;
+    db.dailyVictoryBonuses = result.bonuses;
+
+    let rewardResult = null;
+    let bonusRewardResult = null;
+
+    if (!result.stateUnchanged) {
+      if (result.willComplete) {
+        rewardResult = rewardPlayer({
+          xp: DAILY_VICTORY_REWARDS.xp,
+          coins: DAILY_VICTORY_REWARDS.coins,
+          willpower: DAILY_VICTORY_REWARDS.willpower,
+          actionType: 'daily_victory_complete',
+          entityId: result.victory.id,
+          title: result.victory.title,
+          details: {
+            category: result.victory.category,
+            date: result.victory.date,
+            note: result.victory.note || ''
+          }
+        });
+        if (result.bonusAwardedNow) {
+          bonusRewardResult = rewardPlayer({
+            xp: DAILY_VICTORY_TRIPLE_BONUS.xp,
+            coins: DAILY_VICTORY_TRIPLE_BONUS.coins,
+            willpower: DAILY_VICTORY_TRIPLE_BONUS.willpower,
+            consistency: DAILY_VICTORY_TRIPLE_BONUS.consistency,
+            actionType: 'daily_victory_triple_bonus',
+            entityId: bonusEntityId(result.victory.date),
+            title: `Tríade de vitórias — ${result.victory.date}`,
+            details: {
+              category: result.victory.category,
+              date: result.victory.date,
+              bonus: true
+            }
+          });
+        }
+      } else {
+        rewardResult = revertPlayerReward({
+          xp: DAILY_VICTORY_REWARDS.xp,
+          coins: DAILY_VICTORY_REWARDS.coins,
+          willpower: DAILY_VICTORY_REWARDS.willpower,
+          actionType: 'daily_victory_complete',
+          entityId: result.victory.id
+        });
+        if (result.bonusRevertedNow) {
+          bonusRewardResult = revertPlayerReward({
+            xp: DAILY_VICTORY_TRIPLE_BONUS.xp,
+            coins: DAILY_VICTORY_TRIPLE_BONUS.coins,
+            willpower: DAILY_VICTORY_TRIPLE_BONUS.willpower,
+            consistency: DAILY_VICTORY_TRIPLE_BONUS.consistency,
+            actionType: 'daily_victory_triple_bonus',
+            entityId: bonusEntityId(result.victory.date)
+          });
+        }
+      }
+    }
+
+    saveDb(db);
+    res.json({
+      success: true,
+      victory: result.victory,
+      willComplete: result.willComplete,
+      stateUnchanged: result.stateUnchanged,
+      bonusAwardedNow: result.bonusAwardedNow,
+      bonusRevertedNow: result.bonusRevertedNow,
+      rewardResult,
+      bonusRewardResult,
+      todaySummary: summarizeDay(result.list, todayStr, result.bonuses),
+      analytics: computeAnalytics()
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/daily-victories/:id', (req, res) => {
+  try {
+    const db = getDb();
+    db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+    db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
+    const result = deleteDailyVictory(db.dailyVictories, db.dailyVictoryBonuses, req.params.id);
+    db.dailyVictories = result.list;
+    db.dailyVictoryBonuses = result.bonuses;
+
+    if (result.shouldRevertReward) {
+      revertPlayerReward({
+        xp: DAILY_VICTORY_REWARDS.xp,
+        coins: DAILY_VICTORY_REWARDS.coins,
+        willpower: DAILY_VICTORY_REWARDS.willpower,
+        actionType: 'daily_victory_complete',
+        entityId: result.removed.id
+      });
+    }
+    if (result.bonusRevertedNow) {
+      revertPlayerReward({
+        xp: DAILY_VICTORY_TRIPLE_BONUS.xp,
+        coins: DAILY_VICTORY_TRIPLE_BONUS.coins,
+        willpower: DAILY_VICTORY_TRIPLE_BONUS.willpower,
+        consistency: DAILY_VICTORY_TRIPLE_BONUS.consistency,
+        actionType: 'daily_victory_triple_bonus',
+        entityId: bonusEntityId(result.removed.date)
+      });
+    }
+
+    saveDb(db);
+    res.json({ success: true, removed: result.removed });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

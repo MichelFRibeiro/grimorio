@@ -857,6 +857,93 @@ export function useGameData() {
     throw new Error(error);
   };
 
+  const addDailyVictory = async (victoryData) => {
+    playClick();
+    const res = await fetch('/api/daily-victories', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(victoryData)
+    });
+    if (res.ok) {
+      fetchState();
+      return { success: true };
+    }
+    const errJson = await res.json().catch(() => ({}));
+    const error = errJson.error || 'Erro ao cadastrar a vitória planejada.';
+    showRewardToast(0, 0, error);
+    throw new Error(error);
+  };
+
+  const updateDailyVictory = async (id, victoryData) => {
+    playClick();
+    const res = await fetch(`/api/daily-victories/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(victoryData)
+    });
+    if (res.ok) {
+      fetchState();
+      return { success: true };
+    }
+    const errJson = await res.json().catch(() => ({}));
+    const error = errJson.error || 'Erro ao atualizar a vitória planejada.';
+    showRewardToast(0, 0, error);
+    throw new Error(error);
+  };
+
+  const completeDailyVictory = async (id, extra = {}) => {
+    playClick();
+    const res = await fetch(`/api/daily-victories/${id}/complete`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(extra || {})
+    });
+    if (res.ok) {
+      const result = await res.json();
+      if (!result.stateUnchanged) {
+        if (result.willComplete) {
+          if (result.rewardResult) {
+            handleRewardResponse(result.rewardResult, `Vitória: ${result.victory.title}`);
+          }
+          if (result.bonusAwardedNow && result.bonusRewardResult) {
+            handleRewardResponse(result.bonusRewardResult, 'Tríade de vitórias conquistada!');
+            confetti({ particleCount: 90, spread: 80, origin: { y: 0.55 } });
+          } else {
+            confetti({ particleCount: 36, spread: 55, origin: { y: 0.7 } });
+          }
+        } else {
+          showRewardToast(
+            -(result.rewardResult?.revertedXp || 40),
+            -(result.rewardResult?.revertedCoins || 12),
+            `Vitória reaberta: ${result.victory.title}`
+          );
+        }
+      }
+      fetchState();
+      return { success: true, result };
+    }
+    const errJson = await res.json().catch(() => ({}));
+    const error = errJson.error || 'Erro ao registrar a vitória.';
+    showRewardToast(0, 0, error);
+    throw new Error(error);
+  };
+
+  const deleteDailyVictory = async (id) => {
+    playClick();
+    const res = await fetch(`/api/daily-victories/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      fetchState();
+      return { success: true };
+    }
+    const errJson = await res.json().catch(() => ({}));
+    const error = errJson.error || 'Erro ao excluir a vitória planejada.';
+    showRewardToast(0, 0, error);
+    throw new Error(error);
+  };
+
   const deleteNinetyDayGoal = async (id) => {
     playClick();
     const res = await fetch(`/api/ninety-day-goals/${id}`, {
@@ -956,6 +1043,10 @@ export function useGameData() {
     updateNinetyDayGoal,
     logNinetyDayGoalProgress,
     deleteNinetyDayGoalLog,
-    deleteNinetyDayGoal
+    deleteNinetyDayGoal,
+    addDailyVictory,
+    updateDailyVictory,
+    completeDailyVictory,
+    deleteDailyVictory
   };
 }

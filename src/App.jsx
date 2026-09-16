@@ -4,6 +4,7 @@ import { useGameData } from './hooks/useGameData';
 import { LoginView } from './components/LoginView';
 import { Header } from './components/Header';
 import { BossRaid } from './components/BossRaid';
+import { DailyVictoriesCard } from './components/DailyVictoriesCard';
 import { QuestsView } from './components/QuestsView';
 import { QuestionsView } from './components/QuestionsView';
 import { BooksView } from './components/BooksView';
@@ -97,7 +98,11 @@ export function App() {
     updateNinetyDayGoal,
     logNinetyDayGoalProgress,
     deleteNinetyDayGoalLog,
-    deleteNinetyDayGoal
+    deleteNinetyDayGoal,
+    addDailyVictory,
+    updateDailyVictory,
+    completeDailyVictory,
+    deleteDailyVictory
   } = useGameData();
 
   if (loadingAuth || (isAuthenticated && loading)) {
@@ -166,7 +171,9 @@ export function App() {
     analytics,
     nextAction,
     locations,
-    ninetyDayGoals
+    ninetyDayGoals,
+    dailyVictories,
+    dailyVictoryBonuses
   } = data || {};
 
   const pendingQuestsCount = (quests || []).filter(q => !q.completed).length;
@@ -208,6 +215,16 @@ export function App() {
         muted={muted}
         onToggleMute={toggleMute}
         onOpenOracle={() => setActiveTab('oracle')}
+      />
+
+      <DailyVictoriesCard
+        dailyVictories={dailyVictories}
+        dailyVictoryBonuses={dailyVictoryBonuses}
+        questCategories={questCategories}
+        onAddVictory={addDailyVictory}
+        onUpdateVictory={updateDailyVictory}
+        onCompleteVictory={completeDailyVictory}
+        onDeleteVictory={deleteDailyVictory}
       />
 
       {/* Boss Raid Banner */}

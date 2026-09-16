@@ -49,6 +49,20 @@ import {
   sanitizeNinetyDayGoals,
   updateNinetyDayGoal
 } from '../src/utils/ninetyDayGoals.js';
+import {
+  MAX_DAILY_VICTORIES,
+  DAILY_VICTORY_REWARDS,
+  DAILY_VICTORY_TRIPLE_BONUS,
+  bonusEntityId,
+  completeDailyVictory,
+  createDailyVictory,
+  deleteDailyVictory,
+  getPlannableDates,
+  sanitizeDailyVictories,
+  sanitizeDailyVictoryBonuses,
+  summarizeDay,
+  updateDailyVictory
+} from '../src/utils/dailyVictories.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, sumDurationMap, clearLiveActivityTimer } from '../src/utils/activityDuration.js';
 
 const locationEnum = z.enum(['anywhere', 'office', 'home', 'gym']);
@@ -1554,7 +1568,12 @@ export const toolsDefinition = [
         activeBooks: (db.books || []).filter(b => b.status === 'reading').length,
         totalProcesses: (db.processes || []).length,
         totalHabits: (db.habits || []).length,
-        totalRewardItems: (db.rewards || []).length
+        totalRewardItems: (db.rewards || []).length,
+        dailyVictoriesToday: summarizeDay(
+          sanitizeDailyVictories(db.dailyVictories),
+          getSaoPauloDateStr(),
+          sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses)
+        )
       };
 
       return formatSuccess({
@@ -2073,6 +2092,221 @@ export const toolsDefinition = [
       saveDb(db);
       return formatSuccess({ removed }, 'Meta de 90 dias excluída e recompensas estornadas.');
     }
+  },
+  // ==========================================
+  // VITÓRIAS PLANEJADAS PARA O DIA
+  // ==========================================
+  {
+    name: 'list_daily_victories',
+    description: 'Listar as Vitórias Planejadas para o Dia (máximo de 3 por dia). Independentes das missões, usam as mesmas categorias. Padrão: hoje e amanhã.',
+    schema: {
+      date: z.string().optional().describe('Filtrar por data YYYY-MM-DD (hoje ou amanhã). Se omitido, retorna hoje e amanhã.')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      const dates = getPlannableDates(todayStr);
+      const items = sanitizeDailyVictories(db.dailyVictories);
+      const bonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
+      if (args.date) {
+        return formatSuccess({
+          date: args.date,
+          summary: summarizeDay(items, args.date, bonuses),
+          maxPerDay: MAX_DAILY_VICTORIES,
+          rewards: DAILY_VICTORY_REWARDS,
+          tripleBonus: DAILY_VICTORY_TRIPLE_BONUS
+        }, `Vitórias de ${args.date}.`);
+      }
+      return formatSuccess({
+        today: todayStr,
+        dates,
+        maxPerDay: MAX_DAILY_VICTORIES,
+        rewards: DAILY_VICTORY_REWARDS,
+        tripleBonus: DAILY_VICTORY_TRIPLE_BONUS,
+        todaySummary: summarizeDay(items, dates.today, bonuses),
+        tomorrowSummary: summarizeDay(items, dates.tomorrow, bonuses)
+      }, 'Vitórias de hoje e amanhã.');
+    }
+  },
+  {
+    name: 'create_daily_victory',
+    description: 'Cadastrar uma Vitória Planejada para hoje ou amanhã (máximo de 3 por dia). Independente das missões; usa as mesmas categorias.',
+    schema: {
+      title: z.string().describe('Título da vitória (ex: Finalizar petição, Treinar 40 min)'),
+      category: z.string().optional().describe('Categoria (ex: Trabalho, Estudos, Pessoal, Saúde)'),
+      date: z.string().optional().describe('Data YYYY-MM-DD (hoje ou amanhã). Padrão: hoje')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+      db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
+      try {
+        const result = createDailyVictory(db.dailyVictories, args, {
+          today: todayStr,
+          defaultCategory: db.questCategories?.[0]?.name || 'Pessoal'
+        });
+        db.dailyVictories = result.list;
+        saveDb(db);
+        return formatSuccess({
+          victory: result.victory,
+          summary: summarizeDay(result.list, result.victory.date, db.dailyVictoryBonuses)
+        }, `Vitória '${result.victory.title}' planejada para ${result.victory.date}.`);
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'update_daily_victory',
+    description: 'Atualizar título, categoria ou data de uma Vitória Planejada (ainda não realizada).',
+    schema: {
+      id: z.string().describe('ID da vitória'),
+      title: z.string().optional().describe('Novo título'),
+      category: z.string().optional().describe('Nova categoria'),
+      date: z.string().optional().describe('Nova data YYYY-MM-DD (hoje ou amanhã)'),
+      note: z.string().optional().describe('Anotação (só se já estiver concluída)')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+      try {
+        const result = updateDailyVictory(db.dailyVictories, args.id, args, { today: todayStr });
+        db.dailyVictories = result.list;
+        saveDb(db);
+        return formatSuccess(result.victory, `Vitória '${result.victory.title}' atualizada.`);
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'complete_daily_victory',
+    description: 'Registrar (ou desmarcar) a realização de uma Vitória Planejada no próprio dia. Concede XP, moedas e Vontade; concluir as 3 do dia dispara um bônus extra. Anotação opcional na conclusão.',
+    schema: {
+      id: z.string().describe('ID da vitória'),
+      completed: z.boolean().optional().describe('true = realizada, false = reabrir. Se omitido, alterna.'),
+      note: z.string().optional().describe('Anotação opcional ao concluir')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+      db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
+      try {
+        const result = completeDailyVictory(db.dailyVictories, db.dailyVictoryBonuses, args.id, {
+          note: args.note,
+          completed: args.completed,
+          today: todayStr
+        });
+        db.dailyVictories = result.list;
+        db.dailyVictoryBonuses = result.bonuses;
+
+        let rewardResult = null;
+        let bonusRewardResult = null;
+        if (!result.stateUnchanged) {
+          if (result.willComplete) {
+            rewardResult = rewardPlayer({
+              xp: DAILY_VICTORY_REWARDS.xp,
+              coins: DAILY_VICTORY_REWARDS.coins,
+              willpower: DAILY_VICTORY_REWARDS.willpower,
+              actionType: 'daily_victory_complete',
+              entityId: result.victory.id,
+              title: result.victory.title,
+              details: {
+                category: result.victory.category,
+                date: result.victory.date,
+                note: result.victory.note || ''
+              }
+            });
+            if (result.bonusAwardedNow) {
+              bonusRewardResult = rewardPlayer({
+                xp: DAILY_VICTORY_TRIPLE_BONUS.xp,
+                coins: DAILY_VICTORY_TRIPLE_BONUS.coins,
+                willpower: DAILY_VICTORY_TRIPLE_BONUS.willpower,
+                consistency: DAILY_VICTORY_TRIPLE_BONUS.consistency,
+                actionType: 'daily_victory_triple_bonus',
+                entityId: bonusEntityId(result.victory.date),
+                title: `Tríade de vitórias — ${result.victory.date}`,
+                details: { category: result.victory.category, date: result.victory.date, bonus: true }
+              });
+            }
+          } else {
+            rewardResult = revertPlayerReward({
+              xp: DAILY_VICTORY_REWARDS.xp,
+              coins: DAILY_VICTORY_REWARDS.coins,
+              willpower: DAILY_VICTORY_REWARDS.willpower,
+              actionType: 'daily_victory_complete',
+              entityId: result.victory.id
+            });
+            if (result.bonusRevertedNow) {
+              bonusRewardResult = revertPlayerReward({
+                xp: DAILY_VICTORY_TRIPLE_BONUS.xp,
+                coins: DAILY_VICTORY_TRIPLE_BONUS.coins,
+                willpower: DAILY_VICTORY_TRIPLE_BONUS.willpower,
+                consistency: DAILY_VICTORY_TRIPLE_BONUS.consistency,
+                actionType: 'daily_victory_triple_bonus',
+                entityId: bonusEntityId(result.victory.date)
+              });
+            }
+          }
+        }
+        saveDb(db);
+        const verb = result.willComplete ? 'conquistada' : 'reaberta';
+        const bonusMsg = result.bonusAwardedNow ? ' Tríade completa — bônus concedido!' : (result.bonusRevertedNow ? ' Bônus da tríade estornado.' : '');
+        return formatSuccess({
+          victory: result.victory,
+          willComplete: result.willComplete,
+          bonusAwardedNow: result.bonusAwardedNow,
+          bonusRevertedNow: result.bonusRevertedNow,
+          rewardResult,
+          bonusRewardResult
+        }, `Vitória '${result.victory.title}' ${verb}.${bonusMsg}`);
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'delete_daily_victory',
+    description: 'Excluir uma Vitória Planejada. Se já estava concluída, estorna as recompensas (e o bônus da tríade, se aplicável).',
+    schema: {
+      id: z.string().describe('ID da vitória a excluir')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+      db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
+      try {
+        const result = deleteDailyVictory(db.dailyVictories, db.dailyVictoryBonuses, args.id);
+        db.dailyVictories = result.list;
+        db.dailyVictoryBonuses = result.bonuses;
+        if (result.shouldRevertReward) {
+          revertPlayerReward({
+            xp: DAILY_VICTORY_REWARDS.xp,
+            coins: DAILY_VICTORY_REWARDS.coins,
+            willpower: DAILY_VICTORY_REWARDS.willpower,
+            actionType: 'daily_victory_complete',
+            entityId: result.removed.id
+          });
+        }
+        if (result.bonusRevertedNow) {
+          revertPlayerReward({
+            xp: DAILY_VICTORY_TRIPLE_BONUS.xp,
+            coins: DAILY_VICTORY_TRIPLE_BONUS.coins,
+            willpower: DAILY_VICTORY_TRIPLE_BONUS.willpower,
+            consistency: DAILY_VICTORY_TRIPLE_BONUS.consistency,
+            actionType: 'daily_victory_triple_bonus',
+            entityId: bonusEntityId(result.removed.date)
+          });
+        }
+        saveDb(db);
+        return formatSuccess({ removed: result.removed }, `Vitória '${result.removed.title}' excluída.`);
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
   }
 ];
 
@@ -2098,7 +2332,8 @@ export const resourcesDefinition = [
             books: (db.books || []).length,
             processes: (db.processes || []).length,
             habits: (db.habits || []).length,
-            ninetyDayGoals: (db.ninetyDayGoals || []).length
+            ninetyDayGoals: (db.ninetyDayGoals || []).length,
+            dailyVictories: (db.dailyVictories || []).length
           }
         }, null, 2)
       };
@@ -2206,6 +2441,30 @@ export const resourcesDefinition = [
         uri: 'grimorio://ninety-day-goals',
         mimeType: 'application/json',
         text: JSON.stringify(goals, null, 2)
+      };
+    }
+  },
+  {
+    uri: 'grimorio://daily-victories',
+    name: 'Vitórias Planejadas para o Dia',
+    description: 'Até 3 vitórias por dia (hoje e amanhã), independentes das missões',
+    mimeType: 'application/json',
+    handler: async () => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      const dates = getPlannableDates(todayStr);
+      const items = sanitizeDailyVictories(db.dailyVictories);
+      const bonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
+      return {
+        uri: 'grimorio://daily-victories',
+        mimeType: 'application/json',
+        text: JSON.stringify({
+          today: todayStr,
+          dates,
+          todaySummary: summarizeDay(items, dates.today, bonuses),
+          tomorrowSummary: summarizeDay(items, dates.tomorrow, bonuses),
+          dailyVictories: items
+        }, null, 2)
       };
     }
   }
