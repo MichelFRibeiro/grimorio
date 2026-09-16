@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Trophy,
   Plus,
@@ -480,15 +481,16 @@ export function DailyVictoriesCard({
         </div>
       )}
 
-      {showForm && (
+      {showForm && typeof document !== 'undefined' && createPortal(
         <div
           className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            backdropFilter: 'blur(6px)',
-            zIndex: 1000,
+            backgroundColor: 'rgba(5, 7, 13, 0.88)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            zIndex: 999999,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -590,18 +592,20 @@ export function DailyVictoriesCard({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {completing && (
+      {completing && typeof document !== 'undefined' && createPortal(
         <div
           className="modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            backdropFilter: 'blur(6px)',
-            zIndex: 1000,
+            backgroundColor: 'rgba(5, 7, 13, 0.88)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            zIndex: 999999,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -679,7 +683,8 @@ export function DailyVictoriesCard({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <ConfirmModal
