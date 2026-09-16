@@ -72,10 +72,60 @@ export function isTripleBonusAwarded(bonuses = {}, dateStr) {
   return !!(bonuses && bonuses[dateStr] && bonuses[dateStr].awarded);
 }
 
+export const DAY_OUTCOME = {
+  victory: 'victory',
+  partial: 'partial',
+  unplanned: 'unplanned',
+  defeat: 'defeat'
+};
+
+export const DAY_OUTCOME_META = {
+  victory: {
+    key: 'victory',
+    label: 'Vitória',
+    description: 'Todas as tarefas planejadas foram feitas',
+    color: '#34d399',
+    bg: 'rgba(16, 185, 129, 0.18)',
+    border: 'rgba(52, 211, 153, 0.45)'
+  },
+  partial: {
+    key: 'partial',
+    label: 'Parcial',
+    description: 'Algumas feitas, outras não',
+    color: '#fbbf24',
+    bg: 'rgba(245, 158, 11, 0.18)',
+    border: 'rgba(251, 191, 36, 0.45)'
+  },
+  unplanned: {
+    key: 'unplanned',
+    label: 'Sem planejamento',
+    description: 'Nenhuma vitória foi cadastrada',
+    color: '#64748b',
+    bg: 'rgba(100, 116, 139, 0.16)',
+    border: 'rgba(148, 163, 184, 0.28)'
+  },
+  defeat: {
+    key: 'defeat',
+    label: 'Derrota',
+    description: 'Nenhuma tarefa planejada foi feita',
+    color: '#f87171',
+    bg: 'rgba(244, 63, 94, 0.18)',
+    border: 'rgba(248, 113, 113, 0.45)'
+  }
+};
+
+export function classifyDayOutcome(plannedCount = 0, completedCount = 0) {
+  if (plannedCount <= 0) return DAY_OUTCOME.unplanned;
+  if (completedCount <= 0) return DAY_OUTCOME.defeat;
+  if (completedCount >= plannedCount) return DAY_OUTCOME.victory;
+  return DAY_OUTCOME.partial;
+}
+
 export function summarizeDay(list = [], dateStr, bonuses = {}) {
   const items = listVictoriesForDate(list, dateStr);
   const completedCount = items.filter(item => item.completed).length;
   const plannedCount = items.length;
+  const outcome = classifyDayOutcome(plannedCount, completedCount);
   return {
     date: dateStr,
     items,
@@ -83,8 +133,87 @@ export function summarizeDay(list = [], dateStr, bonuses = {}) {
     completedCount,
     remainingSlots: Math.max(0, MAX_DAILY_VICTORIES - plannedCount),
     canAdd: plannedCount < MAX_DAILY_VICTORIES,
-    allComplete: plannedCount === MAX_DAILY_VICTORIES && completedCount === MAX_DAILY_VICTORIES,
-    tripleBonusAwarded: isTripleBonusAwarded(bonuses, dateStr)
+    allComplete: plannedCount > 0 && completedCount === plannedCount,
+    tripleComplete: plannedCount === MAX_DAILY_VICTORIES && completedCount === MAX_DAILY_VICTORIES,
+    tripleBonusAwarded: isTripleBonusAwarded(bonuses, dateStr),
+    outcome,
+    outcomeMeta: DAY_OUTCOME_META[outcome]
+  };
+}
+
+export function monthKeyFromDate(dateStr) {
+  if (!isValidDateStr(dateStr)) return '';
+  return dateStr.slice(0, 7);
+}
+
+export function shiftMonthKey(monthKey, offset) {
+  const [year, month] = String(monthKey || '').split('-').map(Number);
+  if (!year || !month) return monthKey;
+  const d = new Date(Date.UTC(year, month - 1 + offset, 1, 12, 0, 0));
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+
+export function formatMonthKey(monthKey) {
+  const [year, month] = String(monthKey || '').split('-').map(Number);
+  if (!year || !month) return monthKey || '';
+  const names = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  return `${names[month - 1]} ${year}`;
+}
+
+export function daysInMonth(year, month) {
+  return new Date(Date.UTC(year, month, 0, 12, 0, 0)).getUTCDate();
+}
+
+/**
+ * Grade de calendário (domingo a sábado) com o resultado de cada dia do mês.
+ */
+export function buildMonthCalendar(list = [], bonuses = {}, monthKey, today = getSaoPauloDateStr()) {
+  const [year, month] = String(monthKey || '').split('-').map(Number);
+  if (!year || !month) return { monthKey, weeks: [], days: [] };
+
+  const totalDays = daysInMonth(year, month);
+  const firstDate = `${year}-${String(month).padStart(2, '0')}-01`;
+  const firstDow = new Date(Date.UTC(year, month - 1, 1, 12, 0, 0)).getUTCDay();
+  const cells = [];
+
+  for (let i = 0; i < firstDow; i += 1) {
+    cells.push({ empty: true, key: `pad-start-${i}` });
+  }
+
+  for (let day = 1; day <= totalDays; day += 1) {
+    const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const summary = summarizeDay(list, date, bonuses);
+    cells.push({
+      empty: false,
+      key: date,
+      date,
+      day,
+      summary,
+      outcome: summary.outcome,
+      isToday: date === today,
+      isFuture: date > today
+    });
+  }
+
+  while (cells.length % 7 !== 0) {
+    cells.push({ empty: true, key: `pad-end-${cells.length}` });
+  }
+
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    weeks.push(cells.slice(i, i + 7));
+  }
+
+  return {
+    monthKey,
+    year,
+    month,
+    label: formatMonthKey(monthKey),
+    firstDate,
+    weeks,
+    days: cells.filter(cell => !cell.empty)
   };
 }
 

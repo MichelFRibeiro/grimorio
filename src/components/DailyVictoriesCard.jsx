@@ -10,7 +10,11 @@ import {
   X,
   Sparkles,
   Calendar,
-  RotateCcw
+  RotateCcw,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
@@ -20,7 +24,11 @@ import {
   DAILY_VICTORY_TRIPLE_BONUS,
   formatDailyVictoryDate,
   getPlannableDates,
-  summarizeDay
+  summarizeDay,
+  DAY_OUTCOME_META,
+  monthKeyFromDate,
+  shiftMonthKey,
+  buildMonthCalendar
 } from '../utils/dailyVictories';
 
 const DEFAULT_CATEGORIES = [
@@ -87,6 +95,20 @@ export function DailyVictoriesCard({
 
   const [completing, setCompleting] = useState(null);
   const [completeNote, setCompleteNote] = useState('');
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => monthKeyFromDate(todayStr));
+
+  useEffect(() => {
+    if (!showCalendar) {
+      setCalendarMonth(monthKeyFromDate(todayStr));
+    }
+  }, [todayStr, showCalendar]);
+
+  const calendar = useMemo(
+    () => buildMonthCalendar(dailyVictories, dailyVictoryBonuses, calendarMonth, todayStr),
+    [dailyVictories, dailyVictoryBonuses, calendarMonth, todayStr]
+  );
+  const weekdayLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
@@ -288,6 +310,28 @@ export function DailyVictoriesCard({
           </div>
           <button
             type="button"
+            onClick={() => setShowCalendar(open => !open)}
+            title={showCalendar ? 'Ocultar calendário' : 'Ver calendário do mês'}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 12px',
+              borderRadius: '10px',
+              border: showCalendar ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(255,255,255,0.1)',
+              cursor: 'pointer',
+              background: showCalendar ? 'rgba(245, 158, 11, 0.16)' : 'rgba(255,255,255,0.05)',
+              color: showCalendar ? '#fbbf24' : '#cbd5e1',
+              fontWeight: 800,
+              fontSize: '0.8rem'
+            }}
+          >
+            <Calendar size={15} />
+            Histórico
+            {showCalendar ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          <button
+            type="button"
             onClick={openCreate}
             disabled={!summary.canAdd}
             title={summary.canAdd ? 'Adicionar vitória' : 'Limite de 3 vitórias neste dia'}
@@ -328,6 +372,142 @@ export function DailyVictoriesCard({
           {formatDailyVictoryDate(selectedDate)}
         </span>
       </div>
+
+      {showCalendar && (
+        <div
+          style={{
+            marginBottom: '14px',
+            padding: '14px',
+            borderRadius: '14px',
+            background: 'rgba(8, 10, 18, 0.55)',
+            border: '1px solid rgba(255,255,255,0.06)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '12px' }}>
+            <button
+              type="button"
+              onClick={() => setCalendarMonth(prev => shiftMonthKey(prev, -1))}
+              title="Mês anterior"
+              style={{
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: '#e2e8f0',
+                borderRadius: '8px',
+                width: '34px',
+                height: '34px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
+              }}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <div style={{ textAlign: 'center' }}>
+              <div className="font-cinzel" style={{ fontSize: '0.95rem', fontWeight: 800, color: '#f8fafc' }}>
+                {calendar.label}
+              </div>
+              {calendarMonth !== monthKeyFromDate(todayStr) && (
+                <button
+                  type="button"
+                  onClick={() => setCalendarMonth(monthKeyFromDate(todayStr))}
+                  style={{
+                    marginTop: '2px',
+                    background: 'none',
+                    border: 'none',
+                    color: '#fbbf24',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Voltar ao mês atual
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setCalendarMonth(prev => shiftMonthKey(prev, 1))}
+              title="Próximo mês"
+              style={{
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: '#e2e8f0',
+                borderRadius: '8px',
+                width: '34px',
+                height: '34px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
+              }}
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '6px', marginBottom: '6px' }}>
+            {weekdayLabels.map(label => (
+              <div key={label} style={{ textAlign: 'center', fontSize: '0.68rem', fontWeight: 800, color: '#64748b', letterSpacing: '0.04em' }}>
+                {label}
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '6px' }}>
+            {calendar.weeks.flat().map(cell => {
+              if (cell.empty) {
+                return <div key={cell.key} />;
+              }
+              const meta = DAY_OUTCOME_META[cell.outcome] || DAY_OUTCOME_META.unplanned;
+              const muted = cell.isFuture && cell.outcome === 'unplanned';
+              return (
+                <div
+                  key={cell.date}
+                  title={`${formatDailyVictoryDate(cell.date)} — ${meta.label}${cell.summary.plannedCount ? ` (${cell.summary.completedCount}/${cell.summary.plannedCount})` : ''}`}
+                  style={{
+                    minHeight: '42px',
+                    borderRadius: '10px',
+                    padding: '6px 4px 5px',
+                    background: muted ? 'rgba(255,255,255,0.03)' : meta.bg,
+                    border: cell.isToday ? '1px solid #fbbf24' : `1px solid ${muted ? 'rgba(255,255,255,0.05)' : meta.border}`,
+                    color: muted ? '#475569' : meta.color,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '2px',
+                    boxShadow: cell.isToday ? '0 0 0 1px rgba(251, 191, 36, 0.35)' : 'none'
+                  }}
+                >
+                  <span style={{ fontSize: '0.78rem', fontWeight: 800, lineHeight: 1 }}>{cell.day}</span>
+                  {!muted && (
+                    <span style={{ fontSize: '0.58rem', fontWeight: 800, letterSpacing: '0.01em', lineHeight: 1, textAlign: 'center' }}>
+                      {cell.summary.plannedCount > 0 ? `${cell.summary.completedCount}/${cell.summary.plannedCount}` : '—'}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 14px', marginTop: '12px' }}>
+            {Object.values(DAY_OUTCOME_META).map(meta => (
+              <div key={meta.key} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#cbd5e1' }}>
+                <span style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '999px',
+                  background: meta.color,
+                  boxShadow: `0 0 8px ${meta.color}88`,
+                  flexShrink: 0
+                }} />
+                <span style={{ fontWeight: 700, color: meta.color }}>{meta.label}</span>
+                <span style={{ color: '#64748b' }}>{meta.description}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {summary.items.length === 0 ? (
         <div style={{

@@ -10,7 +10,12 @@ import {
   deleteDailyVictory,
   summarizeDay,
   sanitizeDailyVictories,
-  bonusEntityId
+  bonusEntityId,
+  classifyDayOutcome,
+  DAY_OUTCOME,
+  buildMonthCalendar,
+  shiftMonthKey,
+  monthKeyFromDate
 } from '../src/utils/dailyVictories.js';
 
 function assert(condition, message) {
@@ -133,6 +138,24 @@ function runTests() {
   ]);
   assert(sanitized.length === 1 && sanitized[0].category === 'Estudos', 'Sanitize descarta registros inválidos');
   assert(bonusEntityId(today) === 'dv-bonus-2026-03-20', 'ID estável do bônus da tríade');
+
+  assert(classifyDayOutcome(0, 0) === DAY_OUTCOME.unplanned, 'Sem planejamento quando não há tarefas');
+  assert(classifyDayOutcome(3, 0) === DAY_OUTCOME.defeat, 'Derrota quando nenhuma planejada foi feita');
+  assert(classifyDayOutcome(3, 2) === DAY_OUTCOME.partial, 'Parcial quando só algumas foram feitas');
+  assert(classifyDayOutcome(2, 2) === DAY_OUTCOME.victory, 'Vitória quando todas as planejadas foram feitas');
+  assert(monthKeyFromDate(today) === '2026-03', 'Extrai YYYY-MM da data');
+  assert(shiftMonthKey('2026-03', -1) === '2026-02' && shiftMonthKey('2026-12', 1) === '2027-01', 'Navega entre meses');
+
+  const cal = buildMonthCalendar(list, bonuses, '2026-03', today);
+  assert(cal.days.length === 31, 'Março tem 31 dias na grade');
+  const day20 = cal.days.find(d => d.date === today);
+  assert(day20.outcome === DAY_OUTCOME.victory, '20/03 é vitória com as 2 restantes feitas');
+  const day19 = cal.days.find(d => d.date === yesterday);
+  assert(day19.outcome === DAY_OUTCOME.unplanned, 'Dia sem cadastro fica sem planejamento');
+
+  const mixed = list.map((item, idx) => (idx === 0 ? { ...item, completed: false } : item));
+  const mixedCal = buildMonthCalendar(mixed, {}, '2026-03', today);
+  assert(mixedCal.days.find(d => d.date === today).outcome === DAY_OUTCOME.partial, 'Parcial quando 1 de 2 está feita');
 
   console.log('\n🎉 Todos os testes de Vitórias Planejadas passaram!');
 }
