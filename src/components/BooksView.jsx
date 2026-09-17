@@ -34,6 +34,8 @@ import {
   writeLiveReadingSession,
   clearLiveReadingSession
 } from '../utils/liveReadingSession';
+import { getSaoPauloDateStr } from '../utils/timeUtils';
+import { ReadingLoadChart } from './ReadingLoadChart';
 
 export function BooksView({
   books,
@@ -814,6 +816,14 @@ export function BooksView({
           <Quote size={16} /> Grimório de Citações ({allLibraryQuotes.length})
         </button>
       </div>
+
+      {(subTab === 'books' || subTab === 'book-detail') && (
+        <ReadingLoadChart
+          readingSessions={readingSessions}
+          todayStr={getSaoPauloDateStr()}
+          liveMinutes={activeSessionBook ? Math.floor((timerSeconds || 0) / 60) : 0}
+        />
+      )}
 
       {/* VIEW 1: BOOKS GRID */}
       {subTab === 'books' && (

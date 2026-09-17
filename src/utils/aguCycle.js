@@ -26,6 +26,13 @@ import {
 import { parseDurationMinutes } from './activityDuration.js';
 import { addDaysToDateStr, getCurrentWeekDays, getSaoPauloDateStr, getSaoPauloDayOfWeek } from './timeUtils.js';
 import {
+  HOMEOSTASIS_BAND_RATIO,
+  HOMEOSTASIS_WINDOW_DAYS,
+  buildDailyLoadSeries,
+  buildHomeostasisBand,
+  classifyLoadMinutes
+} from './homeostasis.js';
+import {
   buildSubjectStats as buildSubjectStatsDetailed,
   buildTopicStats,
   currentTopicForSubject,
@@ -62,34 +69,10 @@ import {
 
 const DAY_LABELS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
-/** Janela da faixa de homeostase: média real dos últimos N dias. */
-export const AGU_STUDY_LOAD_WINDOW_DAYS = 14;
-/** Amplitude da faixa em torno da média (±20%). */
-export const AGU_HOMEOSTASIS_BAND_RATIO = 0.2;
+export const AGU_STUDY_LOAD_WINDOW_DAYS = HOMEOSTASIS_WINDOW_DAYS;
+export const AGU_HOMEOSTASIS_BAND_RATIO = HOMEOSTASIS_BAND_RATIO;
 
-function roundStudyHours(value) {
-  return Math.round((Number(value) || 0) * 100) / 100;
-}
-
-export function buildHomeostasisBand(avgHours) {
-  const center = Math.max(0, roundStudyHours(avgHours));
-  return {
-    avgHours: center,
-    homeostasisMinHours: roundStudyHours(center * (1 - AGU_HOMEOSTASIS_BAND_RATIO)),
-    homeostasisMaxHours: roundStudyHours(center * (1 + AGU_HOMEOSTASIS_BAND_RATIO))
-  };
-}
-
-export function classifyStudyLoadHours(hours, band = {}) {
-  const value = Number(hours) || 0;
-  const min = Number(band.homeostasisMinHours);
-  const max = Number(band.homeostasisMaxHours);
-  const floor = Number.isFinite(min) ? min : 0;
-  const ceiling = Number.isFinite(max) ? max : 0;
-  if (value < floor) return 'allostasis-under';
-  if (value > ceiling) return 'allostasis-over';
-  return 'homeostasis';
-}
+export { buildHomeostasisBand, classifyLoadMinutes as classifyStudyLoadHours };
 
 export { matchExamToSubjectDetailed as matchExamToSubject };
 export { detectPhase, phaseMeta, rankSubjects, collectDebtFromCycle, generateFortnight };
@@ -169,62 +152,22 @@ export function getAguStudyTimeTotals(plan, examQuestions = [], todayStr, calend
 }
 
 /**
- * Série diária de horas estudadas na Campanha AGU.
+ * Série diária de minutos estudados na Campanha AGU.
  * A faixa de homeostase é a média real da janela (padrão: 14 dias), ±20%.
  * Recalcula a cada dia — não usa meta prescrita de 3H.
  */
 export function getAguStudyLoadSeries(plan, examQuestions = [], todayStr, options = {}) {
-  const today = todayStr || getSaoPauloDateStr();
-  const days = Math.max(1, Number(options.days) || AGU_STUDY_LOAD_WINDOW_DAYS);
-  const extraMinutesByDate = options.extraMinutesByDate || {};
-  const start = addDaysToDateStr(today, -(days - 1));
   const byDate = {};
-
   collectStudyBlocks(plan, examQuestions).forEach((block) => {
     if (!block.dateStr) return;
     byDate[block.dateStr] = (byDate[block.dateStr] || 0) + parseDurationMinutes(block.durationMinutes);
   });
-
-  const rawPoints = [];
-  let totalMinutes = 0;
-
-  for (let i = 0; i < days; i += 1) {
-    const dateStr = addDaysToDateStr(start, i);
-    const minutes = (byDate[dateStr] || 0) + parseDurationMinutes(extraMinutesByDate[dateStr]);
-    totalMinutes += minutes;
-    rawPoints.push({
-      dateStr,
-      minutes,
-      hours: roundStudyHours(minutes / 60),
-      isToday: dateStr === today
-    });
-  }
-
-  const avgHours = days > 0 ? roundStudyHours(totalMinutes / days / 60) : 0;
-  const band = buildHomeostasisBand(avgHours);
-
-  let homeostasisDays = 0;
-  let allostasisUnderDays = 0;
-  let allostasisOverDays = 0;
-  const points = rawPoints.map((point) => {
-    const zone = classifyStudyLoadHours(point.hours, band);
-    if (zone === 'homeostasis') homeostasisDays += 1;
-    else if (zone === 'allostasis-under') allostasisUnderDays += 1;
-    else allostasisOverDays += 1;
-    return { ...point, zone };
+  return buildDailyLoadSeries({
+    minutesByDate: byDate,
+    todayStr,
+    days: options.days || AGU_STUDY_LOAD_WINDOW_DAYS,
+    extraMinutesByDate: options.extraMinutesByDate
   });
-
-  return {
-    avgHours: band.avgHours,
-    homeostasisMinHours: band.homeostasisMinHours,
-    homeostasisMaxHours: band.homeostasisMaxHours,
-    points,
-    homeostasisDays,
-    allostasisUnderDays,
-    allostasisOverDays,
-    allostasisDays: allostasisUnderDays + allostasisOverDays,
-    today: points.find((point) => point.isToday) || null
-  };
 }
 
 export function getSubjectProgressOnDate(examQuestions = [], subject, dateStr) {
