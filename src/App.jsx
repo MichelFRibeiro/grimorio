@@ -21,11 +21,10 @@ import { AguCampaignView } from './components/AguCampaignView';
 import { FocusChamberView, FocusMiniPlayer } from './components/FocusPlayer';
 import { useFocusPlayer } from './hooks/useFocusPlayer';
 import { getSaoPauloDateStr } from './utils/timeUtils';
-import { hasLiveReadingSession } from './utils/liveReadingSession';
 import { summarizePlan } from './utils/aguCycle';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState(() => (hasLiveReadingSession() ? 'books' : 'quests'));
+  const [activeTab, setActiveTab] = useState(null);
   const focusPlayer = useFocusPlayer();
 
   const {
@@ -256,8 +255,10 @@ export function App() {
               key={tab.id}
               onClick={() => {
                 playClick();
-                setActiveTab(tab.id);
+                setActiveTab(prev => (prev === tab.id ? null : tab.id));
               }}
+              aria-pressed={isActive}
+              title={isActive ? `Recolher ${tab.label}` : `Abrir ${tab.label}`}
               className="app-nav-tab"
               style={{
                 display: 'flex',

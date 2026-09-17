@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Compass, CheckCircle2, Clock, MapPin, Sparkles, Flame, Scroll, RefreshCw } from 'lucide-react';
+import { Compass, CheckCircle2, Clock, MapPin, Sparkles, Flame, Scroll, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { LOCATIONS, getLocationMeta } from '../utils/locations';
 import { PriorityBadge } from './ActivityScaleFields';
 import { ActivityTimerBox } from './ActivityTimerBox';
@@ -21,6 +21,7 @@ export function NextActionCard({
 }) {
   const [snoozedIds, setSnoozedIds] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const catalog = (locations && locations.length) ? locations : LOCATIONS;
   const context = nextAction?.context || {};
   const activeLocation = currentLocation || context.location || 'anywhere';
@@ -92,19 +93,43 @@ export function NextActionCard({
   };
 
   const locMeta = getLocationMeta(activeLocation, catalog);
+  const collapsedHint = primary
+    ? `${primary.kind === 'habit' ? '🔥' : '📜'} ${primary.title}`
+    : (nextAction?.emptyReason || 'Nada pendente neste lugar e neste horário.');
 
   return (
     <div
       className="glass-panel"
       style={{
-        padding: '16px 20px',
+        padding: collapsed ? '12px 16px' : '16px 20px',
         marginBottom: '24px',
         border: '1px solid rgba(168, 85, 247, 0.28)',
         background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(19, 23, 34, 0.92) 100%)'
       }}
     >
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: collapsed ? 0 : '14px' }}>
+        <button
+          type="button"
+          onClick={() => {
+            if (playClick) playClick();
+            setCollapsed(prev => !prev);
+          }}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Expandir O Oráculo indica' : 'Recolher O Oráculo indica'}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            background: 'transparent',
+            border: 'none',
+            color: 'inherit',
+            cursor: 'pointer',
+            textAlign: 'left',
+            padding: 0,
+            minWidth: 0,
+            flex: '1 1 240px'
+          }}
+        >
           <div
             style={{
               width: '38px',
@@ -115,19 +140,26 @@ export function NextActionCard({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#c084fc'
+              color: '#c084fc',
+              flexShrink: 0
             }}
           >
             <Compass size={18} />
           </div>
-          <div>
-            <h3 className="font-cinzel" style={{ fontSize: '1.02rem', fontWeight: 800, color: '#e9d5ff', margin: 0 }}>
+          <div style={{ minWidth: 0 }}>
+            <h3 className="font-cinzel" style={{ fontSize: '1.02rem', fontWeight: 800, color: '#e9d5ff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
               O Oráculo indica
+              {collapsed ? <ChevronDown size={16} color="#c4b5fd" /> : <ChevronUp size={16} color="#c4b5fd" />}
             </h3>
-            <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>
-              Próxima atividade para agora · {locMeta.emoji} {locMeta.label}
+            <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {collapsed
+                ? collapsedHint
+                : `Próxima atividade para agora · ${locMeta.emoji} ${locMeta.label}`}
             </p>
           </div>
+        </button>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
           {onRefresh && (
             <button
               type="button"
@@ -135,7 +167,6 @@ export function NextActionCard({
               disabled={refreshing}
               title="Reprocessar a indicação do Oráculo"
               style={{
-                marginLeft: '4px',
                 padding: '6px 10px',
                 borderRadius: '999px',
                 border: '1px solid rgba(168, 85, 247, 0.45)',
@@ -154,10 +185,7 @@ export function NextActionCard({
               {refreshing ? 'Consultando...' : 'Reprocessar'}
             </button>
           )}
-        </div>
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
-          {catalog.map(loc => {
+          {!collapsed && catalog.map(loc => {
             const active = loc.id === activeLocation;
             return (
               <button
@@ -182,6 +210,9 @@ export function NextActionCard({
           })}
         </div>
       </div>
+
+      {collapsed ? null : (
+        <>
 
       {primary ? (
         <PrimaryRow
@@ -277,6 +308,8 @@ export function NextActionCard({
             return windowLabel ? `${d.title} (${windowLabel})` : d.title;
           }).join(' · ')}
         </p>
+      )}
+        </>
       )}
     </div>
   );
