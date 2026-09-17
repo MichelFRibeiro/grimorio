@@ -421,6 +421,7 @@ export function App() {
             onUpdatePlan={updateAguPlan}
             onOpenQuestions={() => setActiveTab('questions')}
             onAddQuestions={addExamQuestions}
+            onAddDailyVictory={addDailyVictory}
           />
         )}
 

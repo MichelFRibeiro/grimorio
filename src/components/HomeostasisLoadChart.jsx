@@ -63,7 +63,8 @@ export function HomeostasisLoadChart({
   description,
   seriesLabel = 'Tempo',
   accentColor = '#fbbf24',
-  zoneCopy = DEFAULT_ZONE_META
+  zoneCopy = DEFAULT_ZONE_META,
+  actions = null
 }) {
   const todayPoint = series?.today;
   const todayZone = zoneCopy[todayPoint?.zone] || zoneCopy['allostasis-under'] || DEFAULT_ZONE_META['allostasis-under'];
@@ -219,6 +220,7 @@ export function HomeostasisLoadChart({
           <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '6px', maxWidth: '640px' }}>
             {description || `A faixa verde acompanha o tempo real dos últimos ${days} dias, com teto +20% e piso −20%. Atualiza todo dia. Fora dela o ritmo vira alostase — subcarga ou sobrecarga.`}
           </p>
+          {actions}
         </div>
         <div
           className="rpg-card"

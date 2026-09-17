@@ -29,7 +29,8 @@ export function AguStudyLoadChart({
   examQuestions,
   todayStr,
   liveMinutes = 0,
-  days = HOMEOSTASIS_WINDOW_DAYS
+  days = HOMEOSTASIS_WINDOW_DAYS,
+  actions = null
 }) {
   const series = useMemo(() => {
     const extra = liveMinutes > 0 && todayStr ? { [todayStr]: liveMinutes } : {};
@@ -48,6 +49,7 @@ export function AguStudyLoadChart({
       seriesLabel="Estudo AGU"
       accentColor="#fbbf24"
       zoneCopy={AGU_ZONE_COPY}
+      actions={actions}
     />
   );
 }

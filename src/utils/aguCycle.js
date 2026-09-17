@@ -30,7 +30,8 @@ import {
   HOMEOSTASIS_WINDOW_DAYS,
   buildDailyLoadSeries,
   buildHomeostasisBand,
-  classifyLoadMinutes
+  classifyLoadMinutes,
+  roundLoadMinutes
 } from './homeostasis.js';
 import {
   buildSubjectStats as buildSubjectStatsDetailed,
@@ -168,6 +169,22 @@ export function getAguStudyLoadSeries(plan, examQuestions = [], todayStr, option
     days: options.days || AGU_STUDY_LOAD_WINDOW_DAYS,
     extraMinutesByDate: options.extraMinutesByDate
   });
+}
+
+export const AGU_HOMEOSTASIS_VICTORY_CATEGORY = 'Estudos';
+
+export function formatAguHomeostasisStudyVictoryTitle(minutes) {
+  return `Estudar no mínimo ${roundLoadMinutes(minutes)} minutos.`;
+}
+
+/** Vitória do dia no centro da faixa de homeostase de estudo AGU. */
+export function buildAguHomeostasisStudyVictory(plan, examQuestions = [], todayStr, options = {}) {
+  const series = getAguStudyLoadSeries(plan, examQuestions, todayStr, options);
+  return {
+    title: formatAguHomeostasisStudyVictoryTitle(series.avgMinutes),
+    category: AGU_HOMEOSTASIS_VICTORY_CATEGORY,
+    date: todayStr || getSaoPauloDateStr()
+  };
 }
 
 export function getSubjectProgressOnDate(examQuestions = [], subject, dateStr) {

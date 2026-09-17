@@ -19,8 +19,11 @@ import {
   getAguStudyLoadSeries,
   classifyStudyLoadHours,
   buildHomeostasisBand,
+  buildAguHomeostasisStudyVictory,
+  formatAguHomeostasisStudyVictoryTitle,
   AGU_STUDY_LOAD_WINDOW_DAYS,
-  AGU_HOMEOSTASIS_BAND_RATIO
+  AGU_HOMEOSTASIS_BAND_RATIO,
+  AGU_HOMEOSTASIS_VICTORY_CATEGORY
 } from '../src/utils/aguCycle.js';
 
 function assert(condition, message) {
@@ -107,6 +110,11 @@ assert(loadSeries.homeostasisMaxMinutes === 12, `Teto deveria ser 12 min, veio $
 assert(mondayPoint.zone === 'allostasis-over', '140 min supera a média recente e entra em sobrecarga');
 assert(loadSeries.points.length === 14, 'Série padrão cobre 14 dias');
 assert(loadSeries.today.dateStr === monday, 'today aponta para a data de referência');
+assert(formatAguHomeostasisStudyVictoryTitle(10) === 'Estudar no mínimo 10 minutos.', 'Título usa o centro em minutos');
+const homeostasisVictory = buildAguHomeostasisStudyVictory(plan, [...exams, laterExam], monday, { days: 14 });
+assert(homeostasisVictory.title === 'Estudar no mínimo 10 minutos.', `Vitória usa o centro da faixa, veio ${homeostasisVictory.title}`);
+assert(homeostasisVictory.category === AGU_HOMEOSTASIS_VICTORY_CATEGORY, 'Vitória entra em Estudos');
+assert(homeostasisVictory.date === monday, 'Vitória é planejada para o dia de referência');
 
 assert(sanitizeAguPlan(null, monday).completedBlocks, 'sanitize cria plano vazio');
 assert(sanitizeAguPlan(plan, monday).blockDurations[`${monday}|administrativo|estudo|atos`] === 45, 'sanitize preserva durações');
