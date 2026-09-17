@@ -62,6 +62,19 @@ import {
 
 const DAY_LABELS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
+/** Meta diária da campanha: 3 blocos × 60 min = 3H. */
+export const AGU_STUDY_TARGET_HOURS = (AGU_DAILY_BLOCKS * AGU_BLOCK_MINUTES) / 60;
+/** Faixa sustentável em torno da meta 3H (±1h). Fora dela o dia entra em alostase. */
+export const AGU_HOMEOSTASIS_MIN_HOURS = Math.max(1, AGU_STUDY_TARGET_HOURS - 1);
+export const AGU_HOMEOSTASIS_MAX_HOURS = AGU_STUDY_TARGET_HOURS + 1;
+
+export function classifyStudyLoadHours(hours) {
+  const value = Number(hours) || 0;
+  if (value < AGU_HOMEOSTASIS_MIN_HOURS) return 'allostasis-under';
+  if (value > AGU_HOMEOSTASIS_MAX_HOURS) return 'allostasis-over';
+  return 'homeostasis';
+}
+
 export { matchExamToSubjectDetailed as matchExamToSubject };
 export { detectPhase, phaseMeta, rankSubjects, collectDebtFromCycle, generateFortnight };
 
@@ -137,6 +150,60 @@ export function getAguStudyTimeTotals(plan, examQuestions = [], todayStr, calend
   });
 
   return totals;
+}
+
+/**
+ * Série diária de horas estudadas na Campanha AGU, com zona 3H
+ * (homeostase 2–4h vs alostase por subcarga ou sobrecarga).
+ */
+export function getAguStudyLoadSeries(plan, examQuestions = [], todayStr, options = {}) {
+  const today = todayStr || getSaoPauloDateStr();
+  const days = Math.max(1, Number(options.days) || 14);
+  const extraMinutesByDate = options.extraMinutesByDate || {};
+  const start = addDaysToDateStr(today, -(days - 1));
+  const byDate = {};
+
+  collectStudyBlocks(plan, examQuestions).forEach((block) => {
+    if (!block.dateStr) return;
+    byDate[block.dateStr] = (byDate[block.dateStr] || 0) + parseDurationMinutes(block.durationMinutes);
+  });
+
+  const points = [];
+  let homeostasisDays = 0;
+  let allostasisUnderDays = 0;
+  let allostasisOverDays = 0;
+  let totalMinutes = 0;
+
+  for (let i = 0; i < days; i += 1) {
+    const dateStr = addDaysToDateStr(start, i);
+    const minutes = (byDate[dateStr] || 0) + parseDurationMinutes(extraMinutesByDate[dateStr]);
+    const hours = Math.round((minutes / 60) * 100) / 100;
+    const zone = classifyStudyLoadHours(hours);
+    if (zone === 'homeostasis') homeostasisDays += 1;
+    else if (zone === 'allostasis-under') allostasisUnderDays += 1;
+    else allostasisOverDays += 1;
+    totalMinutes += minutes;
+    points.push({
+      dateStr,
+      minutes,
+      hours,
+      zone,
+      isToday: dateStr === today
+    });
+  }
+
+  return {
+    targetHours: AGU_STUDY_TARGET_HOURS,
+    homeostasisMinHours: AGU_HOMEOSTASIS_MIN_HOURS,
+    homeostasisMaxHours: AGU_HOMEOSTASIS_MAX_HOURS,
+    points,
+    avgHours: days > 0 ? Math.round((totalMinutes / days / 60) * 100) / 100 : 0,
+    homeostasisDays,
+    allostasisUnderDays,
+    allostasisOverDays,
+    allostasisDays: allostasisUnderDays + allostasisOverDays,
+    today: points.find((point) => point.isToday) || null
+  };
 }
 
 export function getSubjectProgressOnDate(examQuestions = [], subject, dateStr) {

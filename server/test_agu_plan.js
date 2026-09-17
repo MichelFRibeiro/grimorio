@@ -15,7 +15,12 @@ import {
   sanitizeAguPlan,
   addBlockDuration,
   setBlockDuration,
-  getAguStudyTimeTotals
+  getAguStudyTimeTotals,
+  getAguStudyLoadSeries,
+  classifyStudyLoadHours,
+  AGU_STUDY_TARGET_HOURS,
+  AGU_HOMEOSTASIS_MIN_HOURS,
+  AGU_HOMEOSTASIS_MAX_HOURS
 } from '../src/utils/aguCycle.js';
 
 function assert(condition, message) {
@@ -82,6 +87,20 @@ assert(summary.portugueseRequired === true, 'Português permanece obrigatório')
 assert(summary.edital?.subjects?.length === 21, 'Edital verticalizado lista as matérias');
 assert(Array.isArray(summary.studyBlocks), 'Histórico de blocos presente');
 assert(summary.nextBlock, 'Próximo bloco sugerido');
+assert(AGU_STUDY_TARGET_HOURS === 3, 'Meta 3H da campanha');
+assert(AGU_HOMEOSTASIS_MIN_HOURS === 2 && AGU_HOMEOSTASIS_MAX_HOURS === 4, 'Faixa sustentável 2–4h');
+assert(classifyStudyLoadHours(3) === 'homeostasis', '3h está em homeostase');
+assert(classifyStudyLoadHours(1.5) === 'allostasis-under', '1.5h é subcarga');
+assert(classifyStudyLoadHours(5) === 'allostasis-over', '5h é sobrecarga');
+
+const loadSeries = getAguStudyLoadSeries(plan, [...exams, laterExam], monday, { days: 14 });
+const mondayPoint = loadSeries.points.find((p) => p.dateStr === monday);
+assert(mondayPoint.minutes === 140, `Segunda deve ter 140 min, veio ${mondayPoint.minutes}`);
+assert(mondayPoint.hours === 2.33, `140 min = 2.33h, veio ${mondayPoint.hours}`);
+assert(mondayPoint.zone === 'homeostasis', '2.33h permanece na faixa 3H');
+assert(loadSeries.points.length === 14, 'Série padrão cobre 14 dias');
+assert(loadSeries.today.dateStr === monday, 'today aponta para a data de referência');
+
 assert(sanitizeAguPlan(null, monday).completedBlocks, 'sanitize cria plano vazio');
 assert(sanitizeAguPlan(plan, monday).blockDurations[`${monday}|administrativo|estudo|atos`] === 45, 'sanitize preserva durações');
 

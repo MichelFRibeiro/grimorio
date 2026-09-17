@@ -295,6 +295,61 @@ img, video, canvas {
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 15px rgba(245, 158, 11, 0.08);
 }
 
+.agu-load-chart-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agu-load-chart-side {
+  font-family: var(--font-heading);
+  letter-spacing: 0.28em;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: center;
+  color: #f43f5e;
+  text-shadow: 0 0 12px rgba(244, 63, 94, 0.35);
+}
+
+.agu-load-chart-canvas {
+  position: relative;
+  height: 280px;
+  border-top: 1px solid rgba(244, 63, 94, 0.45);
+  border-bottom: 1px solid rgba(244, 63, 94, 0.45);
+  background:
+    linear-gradient(180deg, rgba(244, 63, 94, 0.08) 0%, transparent 18%),
+    linear-gradient(0deg, rgba(244, 63, 94, 0.08) 0%, transparent 18%);
+}
+
+.agu-load-chart-band-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: none;
+  font-family: var(--font-heading);
+  letter-spacing: 0.22em;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.agu-load-chart-band-label--home {
+  top: 46%;
+  color: #34d399;
+  text-shadow: 0 0 14px rgba(16, 185, 129, 0.45);
+}
+
+@media (max-width: 768px) {
+  .agu-load-chart-canvas {
+    height: 220px;
+  }
+
+  .agu-load-chart-side {
+    letter-spacing: 0.18em;
+  }
+}
+
 /* Gradients for Book Covers */
 .gradient-amber {
   background: linear-gradient(135deg, #b45309 0%, #78350f 100%);

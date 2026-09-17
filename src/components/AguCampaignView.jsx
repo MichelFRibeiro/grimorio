@@ -37,6 +37,7 @@ import {
 } from '../data/aguCurriculum.js';
 import { summarizePlan } from '../utils/aguCycle.js';
 import { getSaoPauloDateStr } from '../utils/timeUtils.js';
+import { AguStudyLoadChart } from './AguStudyLoadChart';
 
 const PROTOCOL = [
   'Três blocos por dia, 60 min cada. Um tópico de uma matéria por bloco.',
@@ -366,6 +367,13 @@ export function AguCampaignView({
       </div>
 
       <StudyTimeCard studyTime={summary.studyTime} liveMinutes={liveMinutes} />
+
+      <AguStudyLoadChart
+        aguPlan={aguPlan}
+        examQuestions={examQuestions}
+        todayStr={todayStr}
+        liveMinutes={liveMinutes}
+      />
 
       {summary.nextBlock && (
         <section className="glass-panel-gold" style={{ padding: '16px 18px', marginBottom: '18px' }}>
