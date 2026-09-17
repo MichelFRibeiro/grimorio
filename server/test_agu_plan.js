@@ -18,9 +18,9 @@ import {
   getAguStudyTimeTotals,
   getAguStudyLoadSeries,
   classifyStudyLoadHours,
-  AGU_STUDY_TARGET_HOURS,
-  AGU_HOMEOSTASIS_MIN_HOURS,
-  AGU_HOMEOSTASIS_MAX_HOURS
+  buildHomeostasisBand,
+  AGU_STUDY_LOAD_WINDOW_DAYS,
+  AGU_HOMEOSTASIS_BAND_RATIO
 } from '../src/utils/aguCycle.js';
 
 function assert(condition, message) {
@@ -87,17 +87,25 @@ assert(summary.portugueseRequired === true, 'Português permanece obrigatório')
 assert(summary.edital?.subjects?.length === 21, 'Edital verticalizado lista as matérias');
 assert(Array.isArray(summary.studyBlocks), 'Histórico de blocos presente');
 assert(summary.nextBlock, 'Próximo bloco sugerido');
-assert(AGU_STUDY_TARGET_HOURS === 3, 'Meta 3H da campanha');
-assert(AGU_HOMEOSTASIS_MIN_HOURS === 2 && AGU_HOMEOSTASIS_MAX_HOURS === 4, 'Faixa sustentável 2–4h');
-assert(classifyStudyLoadHours(3) === 'homeostasis', '3h está em homeostase');
-assert(classifyStudyLoadHours(1.5) === 'allostasis-under', '1.5h é subcarga');
-assert(classifyStudyLoadHours(5) === 'allostasis-over', '5h é sobrecarga');
+assert(AGU_STUDY_LOAD_WINDOW_DAYS === 14, 'Janela da faixa usa 14 dias');
+assert(AGU_HOMEOSTASIS_BAND_RATIO === 0.2, 'Faixa é ±20% da média real');
+const band = buildHomeostasisBand(0.56);
+assert(band.avgHours === 0.56, `Centro da faixa é a média, veio ${band.avgHours}`);
+assert(band.homeostasisMinHours === 0.45, `Piso −20% deveria ser 0.45, veio ${band.homeostasisMinHours}`);
+assert(band.homeostasisMaxHours === 0.67, `Teto +20% deveria ser 0.67, veio ${band.homeostasisMaxHours}`);
+assert(classifyStudyLoadHours(0.56, band) === 'homeostasis', 'Média está em homeostase');
+assert(classifyStudyLoadHours(0.3, band) === 'allostasis-under', 'Abaixo da média recente é subcarga');
+assert(classifyStudyLoadHours(0.9, band) === 'allostasis-over', 'Acima da média recente é sobrecarga');
+assert(classifyStudyLoadHours(0, buildHomeostasisBand(0)) === 'homeostasis', 'Média zero: 0h permanece na faixa');
 
 const loadSeries = getAguStudyLoadSeries(plan, [...exams, laterExam], monday, { days: 14 });
 const mondayPoint = loadSeries.points.find((p) => p.dateStr === monday);
 assert(mondayPoint.minutes === 140, `Segunda deve ter 140 min, veio ${mondayPoint.minutes}`);
 assert(mondayPoint.hours === 2.33, `140 min = 2.33h, veio ${mondayPoint.hours}`);
-assert(mondayPoint.zone === 'homeostasis', '2.33h permanece na faixa 3H');
+assert(loadSeries.avgHours === 0.17, `Média 14d de 140 min é 0.17h, veio ${loadSeries.avgHours}`);
+assert(loadSeries.homeostasisMinHours === 0.14, `Piso deveria ser 0.14h, veio ${loadSeries.homeostasisMinHours}`);
+assert(loadSeries.homeostasisMaxHours === 0.2, `Teto deveria ser 0.20h, veio ${loadSeries.homeostasisMaxHours}`);
+assert(mondayPoint.zone === 'allostasis-over', '2.33h supera a média recente e entra em sobrecarga');
 assert(loadSeries.points.length === 14, 'Série padrão cobre 14 dias');
 assert(loadSeries.today.dateStr === monday, 'today aponta para a data de referência');
 

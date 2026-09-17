@@ -21,21 +21,28 @@ const ZONE_META = {
     label: 'Homeostase',
     color: '#10b981',
     glow: 'rgba(16, 185, 129, 0.35)',
-    copy: 'Carga sustentável em torno das 3H. O organismo absorve o treino e devolve consistência.'
+    copy: 'Dentro da faixa real dos últimos 14 dias (±20% da média). O ritmo atual está sendo absorvido.'
   },
   'allostasis-under': {
     label: 'Alostase · subcarga',
     color: '#f43f5e',
     glow: 'rgba(244, 63, 94, 0.35)',
-    copy: 'Abaixo da faixa 3H. O sistema ainda não encontrou o ritmo — dívida de treino, não descanso estratégico.'
+    copy: 'Abaixo da média recente. Queda em relação ao que o organismo já vinha sustentando.'
   },
   'allostasis-over': {
     label: 'Alostase · sobrecarga',
     color: '#f43f5e',
     glow: 'rgba(244, 63, 94, 0.35)',
-    copy: 'Acima da faixa 3H. Adaptação vira desgaste: o treino deixa de ser estímulo e vira carga alostática.'
+    copy: 'Acima da média recente. O treino passou do ritmo que vinha sendo sustentado.'
   }
 };
+
+function formatHoursLabel(hours) {
+  const value = Number(hours) || 0;
+  const whole = Math.round(value * 100) / 100;
+  if (Number.isInteger(whole)) return `${whole}h`;
+  return `${String(whole).replace('.', ',')}h`;
+}
 
 function shortDate(dateStr) {
   if (!dateStr) return '';
@@ -66,18 +73,18 @@ export function AguStudyLoadChart({
   const todayPoint = series.today;
   const todayZone = ZONE_META[todayPoint?.zone] || ZONE_META['allostasis-under'];
   const peakHours = Math.max(
-    series.homeostasisMaxHours + 2,
+    series.homeostasisMaxHours * 1.35,
     ...series.points.map((point) => point.hours),
-    6
+    1
   );
-  const yMax = Math.ceil(peakHours);
+  const yMax = Math.max(1, Math.ceil(peakHours * 2) / 2);
 
   const chartData = useMemo(() => {
     const labels = series.points.map((point) => shortDate(point.dateStr));
     const hours = series.points.map((point) => point.hours);
     const floor = series.points.map(() => series.homeostasisMinHours);
     const ceiling = series.points.map(() => series.homeostasisMaxHours);
-    const target = series.points.map(() => series.targetHours);
+    const center = series.points.map(() => series.avgHours);
     const roof = series.points.map(() => yMax);
 
     return {
@@ -118,8 +125,8 @@ export function AguStudyLoadChart({
           order: 3
         },
         {
-          label: 'Meta 3H',
-          data: target,
+          label: 'Média 14d',
+          data: center,
           borderColor: 'rgba(251, 191, 36, 0.55)',
           backgroundColor: 'transparent',
           borderWidth: 1,
@@ -207,29 +214,33 @@ export function AguStudyLoadChart({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Activity size={18} color="#fbbf24" />
             <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24' }}>
-              Carga 3H — Homeostase & Alostase
+              Carga real — Homeostase & Alostase
             </h3>
           </div>
           <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '6px', maxWidth: '640px' }}>
-            A faixa verde é o equilíbrio do protocolo AGU: 3 blocos de 60 min, com folga de 2h a 4h.
-            Fora dela o treino vira alostase — subcarga (dívida) ou sobrecarga (desgaste).
+            A faixa verde acompanha o que você realmente estudou: média dos últimos {days} dias,
+            com teto +20% e piso −20%. Atualiza todo dia. Fora dela o treino vira alostase —
+            subcarga ou sobrecarga em relação ao ritmo recente.
           </p>
         </div>
         <div
           className="rpg-card"
           style={{
             padding: '10px 14px',
-            minWidth: '132px',
+            minWidth: '148px',
             textAlign: 'center',
             borderColor: `${todayZone.color}55`,
             boxShadow: `0 0 18px ${todayZone.glow}`
           }}
         >
           <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            Hoje
+            Faixa de hoje
           </div>
-          <div style={{ fontFamily: 'var(--font-heading)', fontSize: '1.55rem', color: '#fbbf24', lineHeight: 1.1, margin: '4px 0' }}>
-            3H
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: '1.2rem', color: '#fbbf24', lineHeight: 1.15, margin: '4px 0' }}>
+            {formatHoursLabel(series.homeostasisMinHours)}–{formatHoursLabel(series.homeostasisMaxHours)}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '4px' }}>
+            centro {formatHoursLabel(series.avgHours)}
           </div>
           <div style={{ fontSize: '0.78rem', color: todayZone.color, fontWeight: 800 }}>
             {todayZone.label}
@@ -248,7 +259,7 @@ export function AguStudyLoadChart({
 
       <p style={{ color: '#cbd5e1', fontSize: '0.82rem', marginTop: '12px', lineHeight: 1.45 }}>
         {todayPoint
-          ? `Hoje: ${formatStudyDuration(todayPoint.minutes)} (${todayPoint.hours}h). ${todayZone.copy}`
+          ? `Hoje: ${formatStudyDuration(todayPoint.minutes)} (${formatHoursLabel(todayPoint.hours)}). ${todayZone.copy}`
           : todayZone.copy}
       </p>
 
@@ -256,7 +267,7 @@ export function AguStudyLoadChart({
         <div className="rpg-card" style={{ padding: '12px 14px' }}>
           <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Média {days}d</div>
           <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fbbf24', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
-            {series.avgHours}h
+            {formatHoursLabel(series.avgHours)}
           </div>
         </div>
         <div className="rpg-card" style={{ padding: '12px 14px' }}>
