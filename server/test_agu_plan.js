@@ -60,6 +60,9 @@ assert(!plan.completedBlocks[key], 'Bloco deve ser desmarcado');
 plan = addBlockDuration(plan, `${monday}|administrativo|estudo|atos`, 12);
 plan = addBlockDuration(plan, `${monday}|administrativo|estudo|atos`, 8);
 assert(plan.blockDurations[`${monday}|administrativo|estudo|atos`] === 20, 'Duração do bloco deve somar');
+plan = addBlockDuration(plan, `${monday}|administrativo|estudo|atos`, 30);
+plan = addBlockDuration(plan, `${monday}|administrativo|estudo|atos`, 33);
+assert(plan.blockDurations[`${monday}|administrativo|estudo|atos`] === 83, 'Sessões lançadas devem somar (20 + 30 + 33)');
 plan = setBlockDuration(plan, `${monday}|administrativo|estudo|atos`, 45);
 assert(plan.blockDurations[`${monday}|administrativo|estudo|atos`] === 45, 'Duração manual substitui o valor');
 

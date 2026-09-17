@@ -137,6 +137,7 @@ export function AguCampaignView({
   onStartPlan,
   onToggleBlock,
   onSetBlockDuration,
+  onAddBlockDuration,
   onUpdateBlock,
   onDeleteBlock,
   onRealignCycle,
@@ -172,7 +173,7 @@ export function AguCampaignView({
     setLogBlock(block);
     setLogTotal(remaining);
     setLogCorrect('0');
-    setLogMinutes(live > 0 ? String(live) : (block.minutes > 0 ? String(block.minutes) : '60'));
+    setLogMinutes(live > 0 ? String(live) : '');
     setLogError('');
   };
 
@@ -221,8 +222,9 @@ export function AguCampaignView({
         date: todayStr
       });
     }
-    if (onSetBlockDuration && durationMinutes > 0) {
-      onSetBlockDuration(logBlock.key, durationMinutes);
+    const addDuration = onAddBlockDuration || onSetBlockDuration;
+    if (addDuration && durationMinutes > 0) {
+      addDuration(logBlock.key, durationMinutes, { mode: 'add' });
     }
     closeLog();
   };
@@ -638,7 +640,8 @@ export function AguCampaignView({
               <button type="button" onClick={closeLog} style={{ ...ghostBtnStyle, padding: '8px' }}><X size={16} /></button>
             </div>
             <p style={{ color: '#cbd5e1', fontSize: '0.85rem', marginBottom: '14px', lineHeight: 1.5 }}>
-              Pode ser só teoria: 0 questões e 0 acertos. Nesse caso, o bloco fecha pelo tempo (60 min).
+              Pode ser só teoria: 0 questões e 0 acertos. Informe só o tempo desta sessão — ele será somado ao já lançado neste bloco.
+              {(logBlock.minutes || 0) > 0 ? ` Já registrado: ${formatStudyDuration(logBlock.minutes)}.` : ''}
             </p>
             <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, marginBottom: '6px' }}>
               Questões feitas agora
@@ -657,11 +660,11 @@ export function AguCampaignView({
               style={inputStyle}
             />
             <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, margin: '12px 0 6px' }}>
-              Tempo estudado (minutos)
+              Tempo desta sessão (minutos)
             </label>
             <input
               type="number" min="0" value={logMinutes} onChange={(e) => setLogMinutes(e.target.value)}
-              placeholder="60"
+              placeholder="ex: 33"
               style={inputStyle}
             />
             {logError && <p style={{ color: '#fb7185', fontSize: '0.8rem', marginTop: '10px' }}>{logError}</p>}

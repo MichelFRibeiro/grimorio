@@ -2312,13 +2312,17 @@ app.post('/api/agu-plan/block/delete', (req, res) => {
 
 app.post('/api/agu-plan/block-duration', (req, res) => {
   try {
-    const { key, durationMinutes } = req.body || {};
+    const { key, durationMinutes, mode } = req.body || {};
     if (!key || typeof key !== 'string') {
       return res.status(400).json({ error: 'Informe a chave do bloco (key).' });
     }
     const db = getDb();
     const todayStr = getSaoPauloDateStr();
-    db.aguPlan = setBlockDuration(sanitizeAguPlan(db.aguPlan, todayStr), key, durationMinutes);
+    const plan = sanitizeAguPlan(db.aguPlan, todayStr);
+    // mode=add soma uma nova sessão ao bloco; o padrão continua substituindo (edição manual do total).
+    db.aguPlan = String(mode || '').toLowerCase() === 'add'
+      ? addBlockDuration(plan, key, durationMinutes)
+      : setBlockDuration(plan, key, durationMinutes);
     db.aguPlan = refreshAguProgress(db.aguPlan, db.examQuestions || [], todayStr);
     saveDb(db);
     res.json({
