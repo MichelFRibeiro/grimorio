@@ -98,10 +98,12 @@ export function DailyVictoriesCard({
   const [completeNote, setCompleteNote] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => monthKeyFromDate(todayStr));
+  const [historyDate, setHistoryDate] = useState(todayStr);
 
   useEffect(() => {
     if (!showCalendar) {
       setCalendarMonth(monthKeyFromDate(todayStr));
+      setHistoryDate(todayStr);
     }
   }, [todayStr, showCalendar]);
 
@@ -109,7 +111,18 @@ export function DailyVictoriesCard({
     () => buildMonthCalendar(dailyVictories, dailyVictoryBonuses, calendarMonth, todayStr),
     [dailyVictories, dailyVictoryBonuses, calendarMonth, todayStr]
   );
+  const historySummary = useMemo(
+    () => summarizeDay(dailyVictories, historyDate, dailyVictoryBonuses),
+    [dailyVictories, historyDate, dailyVictoryBonuses]
+  );
   const weekdayLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+  const selectHistoryDate = (date) => {
+    setHistoryDate(date);
+    if (date === dates.today || date === dates.tomorrow) {
+      setSelectedDate(date);
+    }
+  };
 
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
@@ -292,7 +305,10 @@ export function DailyVictoriesCard({
                 <button
                   key={tab.key}
                   type="button"
-                  onClick={() => setSelectedDate(tab.key)}
+                  onClick={() => {
+                    setSelectedDate(tab.key);
+                    setHistoryDate(tab.key);
+                  }}
                   style={{
                     padding: '6px 12px',
                     borderRadius: '8px',
@@ -461,23 +477,34 @@ export function DailyVictoriesCard({
               }
               const meta = DAY_OUTCOME_META[cell.outcome] || DAY_OUTCOME_META.unplanned;
               const muted = cell.isFuture && cell.outcome === 'unplanned';
+              const selected = historyDate === cell.date;
               return (
-                <div
+                <button
                   key={cell.date}
+                  type="button"
+                  onClick={() => selectHistoryDate(cell.date)}
                   title={`${formatDailyVictoryDate(cell.date)} — ${meta.label}${cell.summary.plannedCount ? ` (${cell.summary.completedCount}/${cell.summary.plannedCount})` : ''}`}
                   style={{
                     minHeight: '42px',
                     borderRadius: '10px',
                     padding: '6px 4px 5px',
                     background: muted ? 'rgba(255,255,255,0.03)' : meta.bg,
-                    border: cell.isToday ? '1px solid #fbbf24' : `1px solid ${muted ? 'rgba(255,255,255,0.05)' : meta.border}`,
+                    border: selected
+                      ? '1px solid #fbbf24'
+                      : cell.isToday
+                        ? '1px solid rgba(251, 191, 36, 0.55)'
+                        : `1px solid ${muted ? 'rgba(255,255,255,0.05)' : meta.border}`,
                     color: muted ? '#475569' : meta.color,
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '2px',
-                    boxShadow: cell.isToday ? '0 0 0 1px rgba(251, 191, 36, 0.35)' : 'none'
+                    boxShadow: selected ? '0 0 0 1px rgba(251, 191, 36, 0.55)' : 'none',
+                    cursor: 'pointer',
+                    width: '100%',
+                    font: 'inherit',
+                    appearance: 'none'
                   }}
                 >
                   <span style={{ fontSize: '0.78rem', fontWeight: 800, lineHeight: 1 }}>{cell.day}</span>
@@ -486,7 +513,7 @@ export function DailyVictoriesCard({
                       {cell.summary.plannedCount > 0 ? `${cell.summary.completedCount}/${cell.summary.plannedCount}` : '—'}
                     </span>
                   )}
-                </div>
+                </button>
               );
             })}
           </div>
@@ -506,6 +533,119 @@ export function DailyVictoriesCard({
                 <span style={{ color: '#64748b' }}>{meta.description}</span>
               </div>
             ))}
+          </div>
+
+          <div style={{
+            marginTop: '14px',
+            padding: '12px',
+            borderRadius: '12px',
+            background: 'rgba(255,255,255,0.03)',
+            border: `1px solid ${(historySummary.outcomeMeta || DAY_OUTCOME_META.unplanned).border}`
+          }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: historySummary.items.length ? '10px' : 0 }}>
+              <div>
+                <div className="font-cinzel" style={{ fontSize: '0.88rem', fontWeight: 800, color: '#f8fafc' }}>
+                  {formatDailyVictoryDate(historyDate)}
+                  {historyDate === dates.today ? ' · Hoje' : historyDate === dates.tomorrow ? ' · Amanhã' : ''}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
+                  {historySummary.plannedCount > 0
+                    ? `${historySummary.completedCount} feitas · ${historySummary.plannedCount - historySummary.completedCount} não feitas`
+                    : 'Nenhuma vitória cadastrada neste dia'}
+                </div>
+              </div>
+              <span style={{
+                fontSize: '0.7rem',
+                padding: '3px 8px',
+                borderRadius: '999px',
+                fontWeight: 800,
+                background: (historySummary.outcomeMeta || DAY_OUTCOME_META.unplanned).bg,
+                color: (historySummary.outcomeMeta || DAY_OUTCOME_META.unplanned).color,
+                border: `1px solid ${(historySummary.outcomeMeta || DAY_OUTCOME_META.unplanned).border}`
+              }}>
+                {(historySummary.outcomeMeta || DAY_OUTCOME_META.unplanned).label}
+                {historySummary.plannedCount > 0 ? ` · ${historySummary.completedCount}/${historySummary.plannedCount}` : ''}
+              </span>
+            </div>
+
+            {historySummary.items.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {[
+                  { key: 'done', label: 'Feitas', items: historySummary.items.filter(item => item.completed) },
+                  { key: 'pending', label: 'Não feitas', items: historySummary.items.filter(item => !item.completed) }
+                ].map(group => (
+                  <div key={group.key}>
+                    <div style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 800,
+                      letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      color: group.key === 'done' ? '#34d399' : '#f87171',
+                      marginBottom: '6px'
+                    }}>
+                      {group.label} ({group.items.length})
+                    </div>
+                    {group.items.length === 0 ? (
+                      <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b' }}>
+                        {group.key === 'done' ? 'Nenhuma vitória foi concluída neste dia.' : 'Todas as vitórias planejadas foram feitas.'}
+                      </p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {group.items.map(victory => {
+                          const color = categoryColor(victory.category, activeCategories);
+                          return (
+                            <div
+                              key={victory.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: '8px',
+                                padding: '8px 10px',
+                                borderRadius: '10px',
+                                background: victory.completed ? 'rgba(16, 185, 129, 0.08)' : 'rgba(248, 113, 113, 0.08)',
+                                border: `1px solid ${victory.completed ? 'rgba(16, 185, 129, 0.22)' : 'rgba(248, 113, 113, 0.22)'}`
+                              }}
+                            >
+                              <span style={{ color: victory.completed ? '#34d399' : '#f87171', flexShrink: 0, marginTop: 1 }}>
+                                {victory.completed ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+                              </span>
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{
+                                    fontSize: '0.84rem',
+                                    fontWeight: 700,
+                                    color: victory.completed ? '#94a3b8' : '#f8fafc',
+                                    textDecoration: victory.completed ? 'line-through' : 'none'
+                                  }}>
+                                    {victory.title}
+                                  </span>
+                                  <span style={{
+                                    fontSize: '0.65rem',
+                                    padding: '1px 6px',
+                                    borderRadius: '999px',
+                                    background: `${color}18`,
+                                    color,
+                                    border: `1px solid ${color}40`,
+                                    fontWeight: 700
+                                  }}>
+                                    {victory.category}
+                                  </span>
+                                </div>
+                                {victory.completed && victory.note && (
+                                  <p style={{ margin: '4px 0 0', fontSize: '0.74rem', color: '#94a3b8', whiteSpace: 'pre-wrap' }}>
+                                    {victory.note}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
