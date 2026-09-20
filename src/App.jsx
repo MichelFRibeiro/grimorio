@@ -348,6 +348,7 @@ export function App() {
             onAddBookQuote={addBookQuote}
             onUpdateBookQuote={updateBookQuote}
             onDeleteBookQuote={deleteBookQuote}
+            onAddDailyVictory={addDailyVictory}
           />
         )}
 

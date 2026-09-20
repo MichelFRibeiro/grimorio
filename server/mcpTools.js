@@ -51,6 +51,7 @@ import {
 } from '../src/utils/ninetyDayGoals.js';
 import {
   MAX_DAILY_VICTORIES,
+  EXTENDED_MAX_DAILY_VICTORIES,
   DAILY_VICTORY_REWARDS,
   DAILY_VICTORY_TRIPLE_BONUS,
   bonusEntityId,
@@ -2098,7 +2099,7 @@ export const toolsDefinition = [
   // ==========================================
   {
     name: 'list_daily_victories',
-    description: 'Listar as Vitórias Planejadas para o Dia (máximo de 3 por dia). Independentes das missões, usam as mesmas categorias. Padrão: hoje e amanhã.',
+    description: 'Listar as Vitórias Planejadas para o Dia (máximo de 3 manuais por dia; estudo/leitura pela homeostase podem ir a 5). Independentes das missões, usam as mesmas categorias. Padrão: hoje e amanhã.',
     schema: {
       date: z.string().optional().describe('Filtrar por data YYYY-MM-DD (hoje ou amanhã). Se omitido, retorna hoje e amanhã.')
     },
@@ -2113,6 +2114,7 @@ export const toolsDefinition = [
           date: args.date,
           summary: summarizeDay(items, args.date, bonuses),
           maxPerDay: MAX_DAILY_VICTORIES,
+          overflowMaxPerDay: EXTENDED_MAX_DAILY_VICTORIES,
           rewards: DAILY_VICTORY_REWARDS,
           tripleBonus: DAILY_VICTORY_TRIPLE_BONUS
         }, `Vitórias de ${args.date}.`);
@@ -2121,6 +2123,7 @@ export const toolsDefinition = [
         today: todayStr,
         dates,
         maxPerDay: MAX_DAILY_VICTORIES,
+        overflowMaxPerDay: EXTENDED_MAX_DAILY_VICTORIES,
         rewards: DAILY_VICTORY_REWARDS,
         tripleBonus: DAILY_VICTORY_TRIPLE_BONUS,
         todaySummary: summarizeDay(items, dates.today, bonuses),
@@ -2130,11 +2133,12 @@ export const toolsDefinition = [
   },
   {
     name: 'create_daily_victory',
-    description: 'Cadastrar uma Vitória Planejada para hoje ou amanhã (máximo de 3 por dia). Independente das missões; usa as mesmas categorias.',
+    description: 'Cadastrar uma Vitória Planejada para hoje ou amanhã (máximo de 3 manuais por dia). Use source homeostasis-study ou homeostasis-reading para ir até 5.',
     schema: {
       title: z.string().describe('Título da vitória (ex: Finalizar petição, Treinar 40 min)'),
       category: z.string().optional().describe('Categoria (ex: Trabalho, Estudos, Pessoal, Saúde)'),
-      date: z.string().optional().describe('Data YYYY-MM-DD (hoje ou amanhã). Padrão: hoje')
+      date: z.string().optional().describe('Data YYYY-MM-DD (hoje ou amanhã). Padrão: hoje'),
+      source: z.enum(['homeostasis-study', 'homeostasis-reading']).optional().describe('Origem especial que permite ir além de 3 (estudo AGU ou leitura)')
     },
     handler: async (args) => {
       const db = getDb();
@@ -2447,7 +2451,7 @@ export const resourcesDefinition = [
   {
     uri: 'grimorio://daily-victories',
     name: 'Vitórias Planejadas para o Dia',
-    description: 'Até 3 vitórias por dia (hoje e amanhã), independentes das missões',
+    description: 'Até 3 vitórias manuais por dia (hoje e amanhã); estudo/leitura pela homeostase podem ir a 5',
     mimeType: 'application/json',
     handler: async () => {
       const db = getDb();

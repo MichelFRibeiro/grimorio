@@ -24,6 +24,7 @@ import {
   recommendPlatform
 } from '../data/aguCurriculum.js';
 import { parseDurationMinutes } from './activityDuration.js';
+import { DAILY_VICTORY_OVERFLOW_SOURCES } from './dailyVictories.js';
 import { addDaysToDateStr, getCurrentWeekDays, getSaoPauloDateStr, getSaoPauloDayOfWeek } from './timeUtils.js';
 import {
   HOMEOSTASIS_BAND_RATIO,
@@ -183,7 +184,8 @@ export function buildAguHomeostasisStudyVictory(plan, examQuestions = [], todayS
   return {
     title: formatAguHomeostasisStudyVictoryTitle(series.avgMinutes),
     category: AGU_HOMEOSTASIS_VICTORY_CATEGORY,
-    date: todayStr || getSaoPauloDateStr()
+    date: todayStr || getSaoPauloDateStr(),
+    source: DAILY_VICTORY_OVERFLOW_SOURCES.study
   };
 }
 

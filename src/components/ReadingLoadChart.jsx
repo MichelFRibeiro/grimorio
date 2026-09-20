@@ -27,7 +27,8 @@ export function ReadingLoadChart({
   readingSessions,
   todayStr,
   liveMinutes = 0,
-  days = HOMEOSTASIS_WINDOW_DAYS
+  days = HOMEOSTASIS_WINDOW_DAYS,
+  actions = null
 }) {
   const series = useMemo(() => {
     const extra = liveMinutes > 0 && todayStr ? { [todayStr]: liveMinutes } : {};
@@ -46,6 +47,7 @@ export function ReadingLoadChart({
       seriesLabel="Leitura"
       accentColor="#34d399"
       zoneCopy={READING_ZONE_COPY}
+      actions={actions}
     />
   );
 }

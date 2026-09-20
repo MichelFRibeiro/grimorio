@@ -70,6 +70,7 @@ import {
 } from '../src/utils/ninetyDayGoals.js';
 import {
   MAX_DAILY_VICTORIES,
+  EXTENDED_MAX_DAILY_VICTORIES,
   DAILY_VICTORY_REWARDS,
   DAILY_VICTORY_TRIPLE_BONUS,
   bonusEntityId,
@@ -2552,6 +2553,7 @@ app.get('/api/daily-victories', (req, res) => {
       today: todayStr,
       dates,
       maxPerDay: MAX_DAILY_VICTORIES,
+      overflowMaxPerDay: EXTENDED_MAX_DAILY_VICTORIES,
       rewards: DAILY_VICTORY_REWARDS,
       tripleBonus: DAILY_VICTORY_TRIPLE_BONUS,
       todaySummary: summarizeDay(items, dates.today, bonuses),
@@ -2574,7 +2576,8 @@ app.post('/api/daily-victories', (req, res) => {
     const result = createDailyVictory(db.dailyVictories, {
       title: req.body?.title,
       category: req.body?.category,
-      date: req.body?.date
+      date: req.body?.date,
+      source: req.body?.source
     }, { today: todayStr, defaultCategory: defaultCat });
     db.dailyVictories = result.list;
     saveDb(db);

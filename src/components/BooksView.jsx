@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Plus,
   BookOpen,
@@ -36,6 +36,8 @@ import {
 } from '../utils/liveReadingSession';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import { ReadingLoadChart } from './ReadingLoadChart';
+import { PlanHomeostasisVictoryButton } from './PlanHomeostasisVictoryButton';
+import { buildReadingHomeostasisVictory } from '../utils/homeostasis';
 
 export function BooksView({
   books,
@@ -49,7 +51,8 @@ export function BooksView({
   onDeleteBook,
   onAddBookQuote,
   onUpdateBookQuote,
-  onDeleteBookQuote
+  onDeleteBookQuote,
+  onAddDailyVictory
 }) {
   const defaultCategoryList = [
     { id: 'cat-1', name: 'Trabalho', color: '#38bdf8' },
@@ -208,6 +211,11 @@ export function BooksView({
     initialAccumulatedMs: restoredLiveSession?.timer?.accumulatedMs || 0,
     initialRunStartedAt: restoredLiveSession?.timer?.runStartedAt || null
   });
+  const readingTodayStr = getSaoPauloDateStr();
+  const readingHomeostasisVictory = useMemo(
+    () => buildReadingHomeostasisVictory(readingSessions || [], readingTodayStr),
+    [readingSessions, readingTodayStr]
+  );
   const [sessionStartPage, setSessionStartPage] = useState(() => restoredLiveSession?.sessionStartPage ?? 0);
   const [sessionEndPage, setSessionEndPage] = useState(() => restoredLiveSession?.sessionEndPage ?? 0);
   const [sessionNotes, setSessionNotes] = useState(() => restoredLiveSession?.sessionNotes || '');
@@ -822,6 +830,13 @@ export function BooksView({
           readingSessions={readingSessions}
           todayStr={getSaoPauloDateStr()}
           liveMinutes={activeSessionBook ? Math.floor((timerSeconds || 0) / 60) : 0}
+          actions={(
+            <PlanHomeostasisVictoryButton
+              victory={readingHomeostasisVictory}
+              onAddDailyVictory={onAddDailyVictory}
+              accentColor="#34d399"
+            />
+          )}
         />
       )}
 

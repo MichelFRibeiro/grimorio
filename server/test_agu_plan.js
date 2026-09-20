@@ -25,6 +25,7 @@ import {
   AGU_HOMEOSTASIS_BAND_RATIO,
   AGU_HOMEOSTASIS_VICTORY_CATEGORY
 } from '../src/utils/aguCycle.js';
+import { DAILY_VICTORY_OVERFLOW_SOURCES } from '../src/utils/dailyVictories.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -115,6 +116,7 @@ const homeostasisVictory = buildAguHomeostasisStudyVictory(plan, [...exams, late
 assert(homeostasisVictory.title === 'Estudar no mínimo 10 minutos.', `Vitória usa o centro da faixa, veio ${homeostasisVictory.title}`);
 assert(homeostasisVictory.category === AGU_HOMEOSTASIS_VICTORY_CATEGORY, 'Vitória entra em Estudos');
 assert(homeostasisVictory.date === monday, 'Vitória é planejada para o dia de referência');
+assert(homeostasisVictory.source === DAILY_VICTORY_OVERFLOW_SOURCES.study, 'Vitória de estudo usa origem de overflow');
 
 assert(sanitizeAguPlan(null, monday).completedBlocks, 'sanitize cria plano vazio');
 assert(sanitizeAguPlan(plan, monday).blockDurations[`${monday}|administrativo|estudo|atos`] === 45, 'sanitize preserva durações');

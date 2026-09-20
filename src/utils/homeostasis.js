@@ -1,4 +1,5 @@
 import { parseDurationMinutes } from './activityDuration.js';
+import { DAILY_VICTORY_OVERFLOW_SOURCES } from './dailyVictories.js';
 import { addDaysToDateStr, getSaoPauloDateStr } from './timeUtils.js';
 
 /** Janela da faixa de homeostase: média real dos últimos N dias. */
@@ -110,4 +111,21 @@ export function getReadingLoadSeries(readingSessions = [], todayStr, options = {
     days: options.days,
     extraMinutesByDate: options.extraMinutesByDate
   });
+}
+
+export const READING_HOMEOSTASIS_VICTORY_CATEGORY = 'Estudos';
+
+export function formatReadingHomeostasisVictoryTitle(minutes) {
+  return `Ler no mínimo ${roundLoadMinutes(minutes)} minutos.`;
+}
+
+/** Vitória do dia no centro da faixa de homeostase de leitura. */
+export function buildReadingHomeostasisVictory(readingSessions = [], todayStr, options = {}) {
+  const series = getReadingLoadSeries(readingSessions, todayStr, options);
+  return {
+    title: formatReadingHomeostasisVictoryTitle(series.avgMinutes),
+    category: READING_HOMEOSTASIS_VICTORY_CATEGORY,
+    date: todayStr || getSaoPauloDateStr(),
+    source: DAILY_VICTORY_OVERFLOW_SOURCES.reading
+  };
 }

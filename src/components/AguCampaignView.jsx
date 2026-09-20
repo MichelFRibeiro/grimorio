@@ -21,8 +21,7 @@ import {
   Table2,
   Compass,
   Pencil,
-  Trash2,
-  Trophy
+  Trash2
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityTimerBox } from './ActivityTimerBox';
@@ -39,6 +38,7 @@ import {
 import { buildAguHomeostasisStudyVictory, summarizePlan } from '../utils/aguCycle.js';
 import { getSaoPauloDateStr } from '../utils/timeUtils.js';
 import { AguStudyLoadChart } from './AguStudyLoadChart';
+import { PlanHomeostasisVictoryButton } from './PlanHomeostasisVictoryButton';
 
 const PROTOCOL = [
   'Três blocos por dia, 60 min cada. Um tópico de uma matéria por bloco.',
@@ -164,28 +164,12 @@ export function AguCampaignView({
   const [logMinutes, setLogMinutes] = useState('');
   const [logError, setLogError] = useState('');
   const [screen, setScreen] = useState('hoje');
-  const [victoryBusy, setVictoryBusy] = useState(false);
-  const [victoryFeedback, setVictoryFeedback] = useState(null);
   const todayBlockKeys = (summary.today?.blocks || []).map((block) => block.key);
   const liveMinutes = useLiveAguMinutes(todayBlockKeys);
   const homeostasisVictory = useMemo(
     () => buildAguHomeostasisStudyVictory(aguPlan, examQuestions || [], todayStr),
     [aguPlan, examQuestions, todayStr]
   );
-
-  const handlePlanHomeostasisVictory = async () => {
-    if (!onAddDailyVictory || victoryBusy) return;
-    setVictoryBusy(true);
-    setVictoryFeedback(null);
-    try {
-      await onAddDailyVictory(homeostasisVictory);
-      setVictoryFeedback({ ok: true, message: `Vitória planejada: ${homeostasisVictory.title}` });
-    } catch (err) {
-      setVictoryFeedback({ ok: false, message: err.message || 'Não foi possível cadastrar a vitória.' });
-    } finally {
-      setVictoryBusy(false);
-    }
-  };
 
   const consumeBlockTimer = (blockKey) => consumeActivityTimerMinutes('agu', blockKey);
 
@@ -395,45 +379,13 @@ export function AguCampaignView({
         examQuestions={examQuestions}
         todayStr={todayStr}
         liveMinutes={liveMinutes}
-        actions={onAddDailyVictory ? (
-          <div style={{ marginTop: '12px' }}>
-            <button
-              type="button"
-              onClick={handlePlanHomeostasisVictory}
-              disabled={victoryBusy}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '9px 14px',
-                borderRadius: '10px',
-                background: victoryBusy
-                  ? 'rgba(251, 191, 36, 0.18)'
-                  : 'linear-gradient(135deg, rgba(251, 191, 36, 0.22) 0%, rgba(16, 185, 129, 0.18) 100%)',
-                color: '#fbbf24',
-                border: '1px solid rgba(251, 191, 36, 0.45)',
-                fontWeight: 800,
-                fontSize: '0.8rem',
-                cursor: victoryBusy ? 'wait' : 'pointer'
-              }}
-            >
-              <Trophy size={14} />
-              {victoryBusy
-                ? 'Planejando…'
-                : `Planejar vitória: ${homeostasisVictory.title}`}
-            </button>
-            {victoryFeedback && (
-              <p style={{
-                marginTop: '8px',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                color: victoryFeedback.ok ? '#34d399' : '#fb7185'
-              }}>
-                {victoryFeedback.message}
-              </p>
-            )}
-          </div>
-        ) : null}
+        actions={(
+          <PlanHomeostasisVictoryButton
+            victory={homeostasisVictory}
+            onAddDailyVictory={onAddDailyVictory}
+            accentColor="#fbbf24"
+          />
+        )}
       />
 
       {summary.nextBlock && (

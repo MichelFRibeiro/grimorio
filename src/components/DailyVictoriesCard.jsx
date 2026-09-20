@@ -20,6 +20,7 @@ import { ConfirmModal } from './ConfirmModal';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import {
   MAX_DAILY_VICTORIES,
+  EXTENDED_MAX_DAILY_VICTORIES,
   DAILY_VICTORY_REWARDS,
   DAILY_VICTORY_TRIPLE_BONUS,
   formatDailyVictoryDate,
@@ -84,7 +85,7 @@ export function DailyVictoriesCard({
   const isToday = selectedDate === dates.today;
   const canComplete = isToday;
   const progressPct = summary.plannedCount > 0
-    ? Math.round((summary.completedCount / MAX_DAILY_VICTORIES) * 100)
+    ? Math.round((summary.completedCount / Math.max(summary.displayCap || MAX_DAILY_VICTORIES, 1)) * 100)
     : 0;
 
   const [showForm, setShowForm] = useState(false);
@@ -251,7 +252,7 @@ export function DailyVictoriesCard({
                 color: summary.allComplete ? '#34d399' : '#fbbf24',
                 fontWeight: 800
               }}>
-                {summary.completedCount}/{MAX_DAILY_VICTORIES}
+                {summary.completedCount}/{summary.displayCap || MAX_DAILY_VICTORIES}
               </span>
               {summary.tripleBonusAwarded && (
                 <span style={{
@@ -270,8 +271,8 @@ export function DailyVictoriesCard({
               )}
             </div>
             <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
-              Até 3 tarefas que, se alcançadas, tornam o dia uma vitória. +{DAILY_VICTORY_REWARDS.xp} XP e +{DAILY_VICTORY_REWARDS.coins} 🪙 cada
-              {summary.plannedCount === MAX_DAILY_VICTORIES ? ` · tríade +${DAILY_VICTORY_TRIPLE_BONUS.xp} XP` : ''}.
+              Até 3 tarefas manuais; estudo e leitura pela homeostase podem ir a {EXTENDED_MAX_DAILY_VICTORIES}. +{DAILY_VICTORY_REWARDS.xp} XP e +{DAILY_VICTORY_REWARDS.coins} 🪙 cada
+              {summary.plannedCount >= MAX_DAILY_VICTORIES ? ` · tríade +${DAILY_VICTORY_TRIPLE_BONUS.xp} XP` : ''}.
             </p>
           </div>
         </div>
@@ -334,7 +335,7 @@ export function DailyVictoriesCard({
             type="button"
             onClick={openCreate}
             disabled={!summary.canAdd}
-            title={summary.canAdd ? 'Adicionar vitória' : 'Limite de 3 vitórias neste dia'}
+            title={summary.canAdd ? 'Adicionar vitória' : 'Limite de 3 vitórias manuais neste dia. Estudo e leitura ainda podem ser adicionados pela homeostase.'}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -523,7 +524,7 @@ export function DailyVictoriesCard({
             Nenhuma vitória planejada para {isToday ? 'hoje' : 'amanhã'}.
           </p>
           <p style={{ margin: '4px 0 0', fontSize: '0.78rem' }}>
-            Cadastre até 3 tarefas independentes das missões. Concluir as três dispara um bônus.
+            Cadastre até 3 tarefas independentes das missões. Concluir as três dispara um bônus. Estudo e leitura pela homeostase podem ir além.
           </p>
         </div>
       ) : (
@@ -573,7 +574,7 @@ export function DailyVictoriesCard({
                       color: '#64748b',
                       fontFamily: 'var(--font-mono)'
                     }}>
-                      {idx + 1}/{MAX_DAILY_VICTORIES}
+                      {idx + 1}/{summary.displayCap || MAX_DAILY_VICTORIES}
                     </span>
                     <span style={{
                       fontSize: '0.92rem',

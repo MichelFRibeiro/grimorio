@@ -5,8 +5,12 @@ import {
   buildHomeostasisBand,
   classifyLoadMinutes,
   buildDailyLoadSeries,
-  getReadingLoadSeries
+  getReadingLoadSeries,
+  formatReadingHomeostasisVictoryTitle,
+  buildReadingHomeostasisVictory,
+  READING_HOMEOSTASIS_VICTORY_CATEGORY
 } from '../src/utils/homeostasis.js';
+import { DAILY_VICTORY_OVERFLOW_SOURCES } from '../src/utils/dailyVictories.js';
 
 function run() {
   console.log('🧪 Testando faixa de homeostase em minutos...\n');
@@ -48,6 +52,18 @@ function run() {
   assert.strictEqual(reading.homeostasisMinMinutes, 4);
   assert.strictEqual(reading.homeostasisMaxMinutes, 6);
   console.log('✅ Tempo de leitura soma sessões do dia e monta a faixa em minutos.');
+
+  assert.strictEqual(formatReadingHomeostasisVictoryTitle(5), 'Ler no mínimo 5 minutos.');
+  const readingVictory = buildReadingHomeostasisVictory([
+    { date: '2026-09-07', durationMinutes: 20 },
+    { timestamp: '2026-09-07T22:10:00.000Z', durationMinutes: 15 },
+    { date: '2026-09-01', durationMinutes: 40 }
+  ], '2026-09-07', { days: 14 });
+  assert.strictEqual(readingVictory.title, 'Ler no mínimo 5 minutos.');
+  assert.strictEqual(readingVictory.category, READING_HOMEOSTASIS_VICTORY_CATEGORY);
+  assert.strictEqual(readingVictory.date, '2026-09-07');
+  assert.strictEqual(readingVictory.source, DAILY_VICTORY_OVERFLOW_SOURCES.reading);
+  console.log('✅ Vitória de leitura usa o centro da faixa de homeostase.');
 
   console.log('\n🎉 Teste de homeostase PASSOU COM SUCESSO!');
 }

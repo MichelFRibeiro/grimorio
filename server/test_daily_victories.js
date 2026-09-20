@@ -1,5 +1,7 @@
 import {
   MAX_DAILY_VICTORIES,
+  EXTENDED_MAX_DAILY_VICTORIES,
+  DAILY_VICTORY_OVERFLOW_SOURCES,
   DAILY_VICTORY_REWARDS,
   DAILY_VICTORY_TRIPLE_BONUS,
   canPlanForDate,
@@ -33,7 +35,8 @@ function runTests() {
   const tomorrow = '2026-03-21';
   const yesterday = '2026-03-19';
 
-  assert(MAX_DAILY_VICTORIES === 3, 'Máximo de 3 vitórias por dia');
+  assert(MAX_DAILY_VICTORIES === 3, 'Máximo de 3 vitórias manuais por dia');
+  assert(EXTENDED_MAX_DAILY_VICTORIES === 5, 'Estudo e leitura podem ir a 5');
   assert(DAILY_VICTORY_REWARDS.xp === 40 && DAILY_VICTORY_REWARDS.coins === 12, 'Recompensa individual definida');
   assert(DAILY_VICTORY_TRIPLE_BONUS.xp === 60 && DAILY_VICTORY_TRIPLE_BONUS.coins === 20, 'Bônus da tríade definido');
   assert(canPlanForDate(today, today) && canPlanForDate(tomorrow, today), 'Permite cadastrar hoje e amanhã');
@@ -156,6 +159,73 @@ function runTests() {
   const mixed = list.map((item, idx) => (idx === 0 ? { ...item, completed: false } : item));
   const mixedCal = buildMonthCalendar(mixed, {}, '2026-03', today);
   assert(mixedCal.days.find(d => d.date === today).outcome === DAY_OUTCOME.partial, 'Parcial quando 1 de 2 está feita');
+
+  let overflowList = [];
+  overflowList = createDailyVictory(overflowList, { title: 'Finalizar petição', category: 'Trabalho', date: today }, { today }).list;
+  overflowList = createDailyVictory(overflowList, { title: 'Treinar 40 min', category: 'Saúde', date: today }, { today }).list;
+  overflowList = createDailyVictory(overflowList, { title: 'Ler 20 páginas', category: 'Estudos', date: today }, { today }).list;
+
+  const studyOverflow = createDailyVictory(overflowList, {
+    title: 'Estudar no mínimo 10 minutos.',
+    category: 'Estudos',
+    date: today,
+    source: DAILY_VICTORY_OVERFLOW_SOURCES.study
+  }, { today });
+  overflowList = studyOverflow.list;
+  assert(overflowList.filter(v => v.date === today).length === 4, 'Estudo pela homeostase passa de 3');
+  assert(studyOverflow.victory.source === DAILY_VICTORY_OVERFLOW_SOURCES.study, 'Marca origem de estudo');
+
+  const readingOverflow = createDailyVictory(overflowList, {
+    title: 'Ler no mínimo 5 minutos.',
+    category: 'Estudos',
+    date: today,
+    source: DAILY_VICTORY_OVERFLOW_SOURCES.reading
+  }, { today });
+  overflowList = readingOverflow.list;
+  assert(overflowList.filter(v => v.date === today).length === 5, 'Leitura pela homeostase completa o teto de 5');
+
+  let overflowBlocked = false;
+  try {
+    createDailyVictory(overflowList, {
+      title: 'Estudar no mínimo 12 minutos.',
+      date: today,
+      source: DAILY_VICTORY_OVERFLOW_SOURCES.study
+    }, { today });
+  } catch (err) {
+    overflowBlocked = /5 vitórias/.test(err.message);
+  }
+  assert(overflowBlocked, 'Bloqueia a 6ª vitória mesmo via homeostase');
+
+  let manualStillBlocked = false;
+  try {
+    createDailyVictory(overflowList, { title: 'Quinta vitória manual', date: today }, { today });
+  } catch {
+    manualStillBlocked = true;
+  }
+  assert(manualStillBlocked, 'Cadastro manual continua bloqueado além de 3');
+
+  const overflowSummary = summarizeDay(overflowList, today);
+  assert(overflowSummary.plannedCount === 5 && overflowSummary.displayCap === 5, 'Resumo mostra o teto estendido');
+  assert(overflowSummary.canAdd === false && overflowSummary.canAddOverflow === false, 'Sem vagas manuais nem de overflow');
+  assert(overflowSummary.tripleComplete === false, 'Tríade ainda exige 3 concluídas');
+
+  let overflowBonuses = {};
+  const o1 = completeDailyVictory(overflowList, overflowBonuses, overflowList[0].id, { today });
+  overflowList = o1.list;
+  overflowBonuses = o1.bonuses;
+  const o2 = completeDailyVictory(overflowList, overflowBonuses, overflowList[1].id, { today });
+  overflowList = o2.list;
+  overflowBonuses = o2.bonuses;
+  const o3 = completeDailyVictory(overflowList, overflowBonuses, overflowList[2].id, { today });
+  overflowList = o3.list;
+  overflowBonuses = o3.bonuses;
+  assert(o3.bonusAwardedNow === true, 'Tríade dispara ao concluir 3 mesmo com 5 planejadas');
+  assert(summarizeDay(overflowList, today, overflowBonuses).allComplete === false, 'Dia com overflow só fecha com as 5');
+
+  const moved = updateDailyVictory(overflowList, studyOverflow.victory.id, { date: tomorrow }, { today });
+  overflowList = moved.list;
+  assert(overflowList.filter(v => v.date === today).length === 4, 'Mover overflow para amanhã libera uma vaga hoje');
+  assert(overflowList.filter(v => v.date === tomorrow).length === 1, 'Overflow de estudo pode ir para amanhã');
 
   console.log('\n🎉 Todos os testes de Vitórias Planejadas passaram!');
 }

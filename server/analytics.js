@@ -352,7 +352,7 @@ export function computeAnalytics() {
       title: `Vitórias do dia: ${dailyVictorySummary.completedCount}/${dailyVictorySummary.plannedCount}`,
       description: dailyVictorySummary.completedCount === 0
         ? 'Nenhuma vitória do dia foi registrada ainda. Conclua a primeira para ganhar XP, moedas e Vontade.'
-        : `Faltam ${dailyVictorySummary.plannedCount - dailyVictorySummary.completedCount} vitória(s) para fechar o dia${dailyVictorySummary.plannedCount === MAX_DAILY_VICTORIES ? ' e disparar o bônus da tríade' : ''}.`
+        : `Faltam ${dailyVictorySummary.plannedCount - dailyVictorySummary.completedCount} vitória(s) para fechar o dia${dailyVictorySummary.plannedCount >= MAX_DAILY_VICTORIES && !dailyVictorySummary.tripleBonusAwarded ? ' e disparar o bônus da tríade' : ''}.`
     });
   } else if (dailyVictorySummary.tripleBonusAwarded) {
     insights.push({

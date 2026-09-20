@@ -2,11 +2,28 @@
  * Vitórias Planejadas para o Dia
  * Até 3 tarefas independentes das missões; categorias iguais às das missões.
  * Cadastro: no próprio dia ou no dia anterior (amanhã).
+ * Botões de homeostase (estudo AGU / leitura) podem ir até 5.
  */
 
 import { addDaysToDateStr, getSaoPauloDateStr } from './timeUtils.js';
 
 export const MAX_DAILY_VICTORIES = 3;
+export const EXTENDED_MAX_DAILY_VICTORIES = 5;
+
+export const DAILY_VICTORY_OVERFLOW_SOURCES = {
+  study: 'homeostasis-study',
+  reading: 'homeostasis-reading'
+};
+
+export function isOverflowDailyVictorySource(source) {
+  return Object.values(DAILY_VICTORY_OVERFLOW_SOURCES).includes(source);
+}
+
+export function maxDailyVictoriesForSource(source) {
+  return isOverflowDailyVictorySource(source)
+    ? EXTENDED_MAX_DAILY_VICTORIES
+    : MAX_DAILY_VICTORIES;
+}
 
 export const DAILY_VICTORY_REWARDS = {
   xp: 40,
@@ -126,15 +143,19 @@ export function summarizeDay(list = [], dateStr, bonuses = {}) {
   const completedCount = items.filter(item => item.completed).length;
   const plannedCount = items.length;
   const outcome = classifyDayOutcome(plannedCount, completedCount);
+  const displayCap = Math.max(plannedCount, MAX_DAILY_VICTORIES);
   return {
     date: dateStr,
     items,
     plannedCount,
     completedCount,
+    displayCap,
     remainingSlots: Math.max(0, MAX_DAILY_VICTORIES - plannedCount),
+    remainingOverflowSlots: Math.max(0, EXTENDED_MAX_DAILY_VICTORIES - plannedCount),
     canAdd: plannedCount < MAX_DAILY_VICTORIES,
+    canAddOverflow: plannedCount < EXTENDED_MAX_DAILY_VICTORIES,
     allComplete: plannedCount > 0 && completedCount === plannedCount,
-    tripleComplete: plannedCount === MAX_DAILY_VICTORIES && completedCount === MAX_DAILY_VICTORIES,
+    tripleComplete: plannedCount >= MAX_DAILY_VICTORIES && completedCount >= MAX_DAILY_VICTORIES,
     tripleBonusAwarded: isTripleBonusAwarded(bonuses, dateStr),
     outcome,
     outcomeMeta: DAY_OUTCOME_META[outcome]
@@ -224,7 +245,7 @@ export function sanitizeDailyVictory(raw) {
   const date = isValidDateStr(raw.date) ? raw.date : null;
   if (!date) return null;
 
-  return {
+  const victory = {
     id: raw.id || uidDaily('dv'),
     date,
     title,
@@ -238,6 +259,10 @@ export function sanitizeDailyVictory(raw) {
     coinReward: DAILY_VICTORY_REWARDS.coins,
     willpowerReward: DAILY_VICTORY_REWARDS.willpower
   };
+  if (isOverflowDailyVictorySource(raw.source)) {
+    victory.source = raw.source;
+  }
+  return victory;
 }
 
 export function sanitizeDailyVictories(list = []) {
@@ -270,8 +295,11 @@ export function createDailyVictory(list = [], input = {}, { today = getSaoPauloD
   }
 
   const current = sanitizeDailyVictories(list);
-  if (countVictoriesForDate(current, date) >= MAX_DAILY_VICTORIES) {
-    throw new Error(`Já existem ${MAX_DAILY_VICTORIES} vitórias planejadas para ${formatDailyVictoryDate(date)}.`);
+  const source = isOverflowDailyVictorySource(input.source) ? input.source : undefined;
+  const cap = maxDailyVictoriesForSource(source);
+  const count = countVictoriesForDate(current, date);
+  if (count >= cap) {
+    throw new Error(`Já existem ${count} vitórias planejadas para ${formatDailyVictoryDate(date)}.`);
   }
 
   const nowIso = new Date().toISOString();
@@ -280,6 +308,7 @@ export function createDailyVictory(list = [], input = {}, { today = getSaoPauloD
     date,
     title,
     category: input.category || defaultCategory,
+    source,
     completed: false,
     completedAt: null,
     note: '',
@@ -319,8 +348,10 @@ export function updateDailyVictory(list = [], id, patch = {}, { today = getSaoPa
     if (!canPlanForDate(nextDate, today)) {
       throw new Error('Só é possível mover vitórias para hoje ou para amanhã.');
     }
-    if (countVictoriesForDate(current.filter(item => item.id !== id), nextDate) >= MAX_DAILY_VICTORIES) {
-      throw new Error(`Já existem ${MAX_DAILY_VICTORIES} vitórias planejadas para ${formatDailyVictoryDate(nextDate)}.`);
+    const moveCap = maxDailyVictoriesForSource(existing.source);
+    const nextCount = countVictoriesForDate(current.filter(item => item.id !== id), nextDate);
+    if (nextCount >= moveCap) {
+      throw new Error(`Já existem ${nextCount} vitórias planejadas para ${formatDailyVictoryDate(nextDate)}.`);
     }
     existing.date = nextDate;
   }
@@ -385,7 +416,7 @@ export function completeDailyVictory(list = [], bonuses = {}, id, { note, comple
   const completedCount = countCompletedForDate(next, existing.date);
   const plannedCount = countVictoriesForDate(next, existing.date);
 
-  if (willComplete && plannedCount === MAX_DAILY_VICTORIES && completedCount === MAX_DAILY_VICTORIES && !isTripleBonusAwarded(nextBonuses, existing.date)) {
+  if (willComplete && plannedCount >= MAX_DAILY_VICTORIES && completedCount >= MAX_DAILY_VICTORIES && !isTripleBonusAwarded(nextBonuses, existing.date)) {
     nextBonuses[existing.date] = {
       awarded: true,
       awardedAt: nowIso,
