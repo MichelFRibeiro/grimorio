@@ -64,6 +64,7 @@ import {
   summarizeDay,
   updateDailyVictory
 } from '../src/utils/dailyVictories.js';
+import { syncDailyVictoriesFromActivity } from './dailyVictorySync.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, sumDurationMap, clearLiveActivityTimer } from '../src/utils/activityDuration.js';
 
 const locationEnum = z.enum(['anywhere', 'office', 'home', 'gym']);
@@ -331,11 +332,17 @@ export const toolsDefinition = [
         });
       }
 
+      const linkedVictories = syncDailyVictoriesFromActivity(db, {
+        questId: quest.id,
+        questCompleted: willComplete
+      });
+
       saveDb(db);
       return formatSuccess({
         quest,
         completed: willComplete,
-        rewardResult
+        rewardResult,
+        linkedVictories
       }, willComplete ? `🎉 Missão '${quest.title}' concluída! Recompensas concedidas.` : `Missão '${quest.title}' desmarcada e recompensas estornadas.`);
     }
   },
@@ -763,12 +770,15 @@ export const toolsDefinition = [
         details: { category: 'Estudos', pagesRead, durationMinutes: duration, finishedBook, quotesCount: parsedQuotes.length }
       });
 
+      const linkedVictories = syncDailyVictoriesFromActivity(db, { syncReading: true });
+
       saveDb(db);
       return formatSuccess({
         session,
         book,
         finishedBook,
-        rewardResult
+        rewardResult,
+        linkedVictories
       }, `📖 Sessão de leitura registrada! +${pagesRead} páginas lidas (+${totalXp} XP, +${wisdom} Sabedoria, +${coins} Moedas).`);
     }
   },
@@ -800,8 +810,10 @@ export const toolsDefinition = [
         entityId: removed.bookId
       });
 
+      const linkedVictories = syncDailyVictoriesFromActivity(db, { syncReading: true });
+
       saveDb(db);
-      return formatSuccess({ removed, book }, 'Sessão de leitura excluída e progresso estornado com sucesso.');
+      return formatSuccess({ removed, book, linkedVictories }, 'Sessão de leitura excluída e progresso estornado com sucesso.');
     }
   },
 
@@ -1369,10 +1381,13 @@ export const toolsDefinition = [
         details: { subject: newEntry.subject, correct, total, accuracy }
       });
 
+      const linkedVictories = syncDailyVictoriesFromActivity(db, { syncStudy: true });
+
       saveDb(db);
       return formatSuccess({
         entry: newEntry,
-        rewardResult
+        rewardResult,
+        linkedVictories
       }, `🎯 ${total} questões registradas em '${newEntry.subject}' com ${accuracy}% de acerto! (+${xp} XP, +${wisdom} Sabedoria).`);
     }
   },
@@ -1396,8 +1411,10 @@ export const toolsDefinition = [
         entityId: args.id
       });
 
+      const linkedVictories = syncDailyVictoriesFromActivity(db, { syncStudy: true });
+
       saveDb(db);
-      return formatSuccess(removed, 'Registro de questões excluído e pontuação estornada.');
+      return formatSuccess({ removed, linkedVictories }, 'Registro de questões excluído e pontuação estornada.');
     }
   },
 
@@ -1848,9 +1865,10 @@ export const toolsDefinition = [
       const key = args.key || match?.key || `${dateStr}|${args.subjectId}|${kind}`;
       db.aguPlan = toggleCompletedBlock(plan, key);
       db.aguPlan = addBlockDuration(db.aguPlan, key, args.durationMinutes);
+      const linkedVictories = syncDailyVictoriesFromActivity(db, { today: todayStr, syncStudy: true });
       saveDb(db);
       const next = summarizePlan(db.aguPlan, db.examQuestions || [], todayStr);
-      return formatSuccess({ key, plan: db.aguPlan, today: next.today }, `Bloco ${key} alternado.`);
+      return formatSuccess({ key, plan: db.aguPlan, today: next.today, linkedVictories }, `Bloco ${key} alternado.`);
     }
   },
   // ==========================================

@@ -19,7 +19,10 @@ import {
   shiftMonthKey,
   monthKeyFromDate,
   canPlanQuestAsDailyVictory,
-  isQuestPlannedForDate
+  isQuestPlannedForDate,
+  parseHomeostasisVictoryTargetMinutes,
+  isHomeostasisVictoryFulfilled,
+  planLinkedDailyVictoryUpdates
 } from '../src/utils/dailyVictories.js';
 
 function assert(condition, message) {
@@ -231,6 +234,52 @@ function runTests() {
   questList = createDailyVictory(questList, { title: 'Vitória 3', date: today }, { today }).list;
   const atCap = canPlanQuestAsDailyVictory(questList, 'q-nova', today);
   assert(atCap.atLimit && !atCap.canPlan, 'Com 3 vitórias, o botão da missão deve ficar desabilitado');
+
+  const questSync = planLinkedDailyVictoryUpdates(fromQuest.list, {
+    today,
+    questId: 'q-parecer-1',
+    questCompleted: true
+  });
+  assert(questSync.length === 1 && questSync[0].completed === true, 'Concluir a missão gera update da vitória vinculada');
+  const questReopen = planLinkedDailyVictoryUpdates(
+    [{ ...fromQuest.victory, completed: true }],
+    { today, questId: 'q-parecer-1', questCompleted: false }
+  );
+  assert(questReopen.length === 1 && questReopen[0].completed === false, 'Reabrir a missão reabre a vitória vinculada');
+  assert(
+    planLinkedDailyVictoryUpdates(fromQuest.list, { today, questId: 'q-outra', questCompleted: true }).length === 0,
+    'Missão sem vínculo não altera vitórias'
+  );
+
+  assert(parseHomeostasisVictoryTargetMinutes('Ler no mínimo 12 minutos.') === 12, 'Extrai meta de minutos da vitória de leitura');
+  assert(isHomeostasisVictoryFulfilled({ title: 'Estudar no mínimo 10 minutos.' }, 10) === true, 'Homeostase cumprida no mínimo');
+  assert(isHomeostasisVictoryFulfilled({ title: 'Estudar no mínimo 10 minutos.' }, 9) === false, 'Homeostase pendente abaixo da meta');
+
+  const readingVictory = {
+    id: 'dv-read',
+    date: today,
+    title: 'Ler no mínimo 5 minutos.',
+    category: 'Estudos',
+    source: DAILY_VICTORY_OVERFLOW_SOURCES.reading,
+    completed: false
+  };
+  const studyVictory = {
+    id: 'dv-study',
+    date: today,
+    title: 'Estudar no mínimo 10 minutos.',
+    category: 'Estudos',
+    source: DAILY_VICTORY_OVERFLOW_SOURCES.study,
+    completed: false
+  };
+  const readingDone = planLinkedDailyVictoryUpdates([readingVictory, studyVictory], { today, readingMinutes: 6 });
+  assert(readingDone.length === 1 && readingDone[0].id === 'dv-read' && readingDone[0].completed, 'Leitura cumprida conclui só a vitória de leitura');
+  const studyDone = planLinkedDailyVictoryUpdates([readingVictory, studyVictory], { today, studyMinutes: 10 });
+  assert(studyDone.length === 1 && studyDone[0].id === 'dv-study' && studyDone[0].completed, 'Estudo cumprido conclui só a vitória de estudo');
+  const readingShort = planLinkedDailyVictoryUpdates(
+    [{ ...readingVictory, completed: true }],
+    { today, readingMinutes: 2 }
+  );
+  assert(readingShort.length === 0, 'Leitura abaixo da meta não reabre vitória já concluída');
 
   const overflowSummary = summarizeDay(overflowList, today);
   assert(overflowSummary.plannedCount === 5 && overflowSummary.displayCap === 5, 'Resumo mostra o teto estendido');

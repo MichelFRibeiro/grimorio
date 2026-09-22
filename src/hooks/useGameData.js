@@ -155,6 +155,22 @@ export function useGameData() {
     }
   }, [playLevelUp, playSuccess, showRewardToast]);
 
+  const handleLinkedVictories = useCallback((linkedVictories = []) => {
+    (linkedVictories || []).forEach((item) => {
+      if (!item || item.stateUnchanged) return;
+      if (item.willComplete) {
+        if (item.rewardResult) {
+          handleRewardResponse(item.rewardResult, `Vitória: ${item.victory?.title || 'Planejada'}`);
+        }
+        if (item.bonusAwardedNow && item.bonusRewardResult) {
+          handleRewardResponse(item.bonusRewardResult, 'Tríade de vitórias conquistada!');
+        }
+      } else if (item.victory) {
+        showRewardToast(0, 0, `Vitória reaberta: ${item.victory.title}`);
+      }
+    });
+  }, [handleRewardResponse, showRewardToast]);
+
   // 1. Quests Actions
   const addQuest = async (questData) => {
     playClick();
@@ -202,6 +218,7 @@ export function useGameData() {
           `Missão reaberta: ${result.quest.title} (estorno aplicado)`
         );
       }
+      handleLinkedVictories(result.linkedVictories);
       fetchState();
     }
   };
@@ -291,6 +308,7 @@ export function useGameData() {
     if (res.ok) {
       const result = await res.json();
       handleRewardResponse(result.rewardResult, `Leitura: +${result.session.pagesRead} páginas!`);
+      handleLinkedVictories(result.linkedVictories);
       confetti({
         particleCount: 50,
         spread: 60,
@@ -308,6 +326,8 @@ export function useGameData() {
       body: JSON.stringify(sessionData)
     });
     if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      handleLinkedVictories(result.linkedVictories);
       fetchState();
     } else {
       const errJson = await res.json().catch(() => ({}));
@@ -322,6 +342,8 @@ export function useGameData() {
       headers: getAuthHeaders()
     });
     if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      handleLinkedVictories(result.linkedVictories);
       fetchState();
     } else {
       const errJson = await res.json().catch(() => ({}));
@@ -391,6 +413,7 @@ export function useGameData() {
           origin: { y: 0.65 }
         });
       }
+      handleLinkedVictories(result.linkedVictories);
       fetchState();
     } else {
       const errJson = await res.json().catch(() => ({}));
@@ -405,7 +428,11 @@ export function useGameData() {
       headers: getAuthHeaders(),
       body: JSON.stringify(questionData)
     });
-    if (res.ok) fetchState();
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      handleLinkedVictories(result.linkedVictories);
+      fetchState();
+    }
   };
 
   const deleteExamQuestions = async (id) => {
@@ -414,7 +441,11 @@ export function useGameData() {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
-    if (res.ok) fetchState();
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      handleLinkedVictories(result.linkedVictories);
+      fetchState();
+    }
   };
 
   // 3. Process Actions
@@ -711,8 +742,11 @@ export function useGameData() {
       headers: getAuthHeaders(),
       body: JSON.stringify({ key, ...extra })
     });
-    if (res.ok) fetchState();
-    else {
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      handleLinkedVictories(result.linkedVictories);
+      fetchState();
+    } else {
       const errJson = await res.json().catch(() => ({}));
       showRewardToast(0, 0, errJson.error || 'Erro ao marcar o bloco do ciclo.');
     }
@@ -726,8 +760,11 @@ export function useGameData() {
       headers: getAuthHeaders(),
       body: JSON.stringify({ key, durationMinutes, mode })
     });
-    if (res.ok) fetchState();
-    else {
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      handleLinkedVictories(result.linkedVictories);
+      fetchState();
+    } else {
       const errJson = await res.json().catch(() => ({}));
       showRewardToast(0, 0, errJson.error || 'Erro ao salvar o tempo do bloco.');
     }
@@ -744,8 +781,11 @@ export function useGameData() {
       headers: getAuthHeaders(),
       body: JSON.stringify(payload)
     });
-    if (res.ok) fetchState();
-    else {
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      handleLinkedVictories(result.linkedVictories);
+      fetchState();
+    } else {
       const errJson = await res.json().catch(() => ({}));
       showRewardToast(0, 0, errJson.error || 'Erro ao editar o bloco.');
     }
@@ -758,8 +798,11 @@ export function useGameData() {
       headers: getAuthHeaders(),
       body: JSON.stringify({ key })
     });
-    if (res.ok) fetchState();
-    else {
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      handleLinkedVictories(result.linkedVictories);
+      fetchState();
+    } else {
       const errJson = await res.json().catch(() => ({}));
       showRewardToast(0, 0, errJson.error || 'Erro ao excluir o bloco.');
     }

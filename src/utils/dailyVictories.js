@@ -289,6 +289,70 @@ export function canPlanQuestAsDailyVictory(list = [], questId, dateStr) {
   };
 }
 
+export function listOverflowVictoriesForDate(list = [], dateStr, source) {
+  return listVictoriesForDate(list, dateStr).filter(item => item.source === source);
+}
+
+export function parseHomeostasisVictoryTargetMinutes(title) {
+  const match = String(title || '').match(/no m[ií]nimo\s+(\d+)\s+minutos?/i);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * true/false quando o título tem meta em minutos; null se não for possível avaliar.
+ */
+export function isHomeostasisVictoryFulfilled(victory, minutesDone) {
+  const target = parseHomeostasisVictoryTargetMinutes(victory?.title);
+  if (target == null) return null;
+  return (Number(minutesDone) || 0) >= target;
+}
+
+function pushCompletionUpdate(updates, victory, completed, note) {
+  if (!victory || !!victory.completed === !!completed) return;
+  updates.push({
+    id: victory.id,
+    completed: !!completed,
+    note: completed ? note : undefined
+  });
+}
+
+/**
+ * Decide quais vitórias do dia devem ser concluídas/reabertas
+ * a partir de uma missão, leitura ou estudo AGU.
+ */
+export function planLinkedDailyVictoryUpdates(list = [], {
+  today,
+  questId,
+  questCompleted,
+  questNote,
+  readingMinutes,
+  studyMinutes
+} = {}) {
+  const updates = [];
+  if (questId && questCompleted !== undefined) {
+    const note = questNote || 'Concluída junto com a missão.';
+    listVictoriesForDate(list, today)
+      .filter(item => item.questId === questId)
+      .forEach(victory => pushCompletionUpdate(updates, victory, !!questCompleted, note));
+  }
+
+  if (readingMinutes !== undefined) {
+    listOverflowVictoriesForDate(list, today, DAILY_VICTORY_OVERFLOW_SOURCES.reading).forEach((victory) => {
+      if (!isHomeostasisVictoryFulfilled(victory, readingMinutes)) return;
+      pushCompletionUpdate(updates, victory, true, `Leitura do dia: ${Number(readingMinutes) || 0} min.`);
+    });
+  }
+
+  if (studyMinutes !== undefined) {
+    listOverflowVictoriesForDate(list, today, DAILY_VICTORY_OVERFLOW_SOURCES.study).forEach((victory) => {
+      if (!isHomeostasisVictoryFulfilled(victory, studyMinutes)) return;
+      pushCompletionUpdate(updates, victory, true, `Estudo AGU do dia: ${Number(studyMinutes) || 0} min.`);
+    });
+  }
+
+  return updates;
+}
+
 export function sanitizeDailyVictories(list = []) {
   if (!Array.isArray(list)) return [];
   return list.map(sanitizeDailyVictory).filter(Boolean);

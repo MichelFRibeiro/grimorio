@@ -83,6 +83,7 @@ import {
   summarizeDay,
   updateDailyVictory
 } from '../src/utils/dailyVictories.js';
+import { syncDailyVictoriesFromActivity } from './dailyVictorySync.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -777,12 +778,18 @@ app.post('/api/quests/:id/complete', (req, res) => {
       });
     }
 
+    const linkedVictories = syncDailyVictoriesFromActivity(db, {
+      questId: quest.id,
+      questCompleted: willComplete
+    });
+
     saveDb(db);
     res.json({
       success: true,
       quest,
       willComplete,
       rewardResult,
+      linkedVictories,
       analytics: computeAnalytics()
     });
   } catch (err) {
@@ -943,12 +950,15 @@ app.post('/api/books/:id/reading-session', (req, res) => {
       details: { category: 'Estudos', pagesRead, durationMinutes: duration, finishedBook, quotesCount: parsedQuotes.length }
     });
 
+    const linkedVictories = syncDailyVictoriesFromActivity(db, { syncReading: true });
+
     saveDb(db);
     res.json({
       success: true,
       book,
       session,
       rewardResult,
+      linkedVictories,
       analytics: computeAnalytics()
     });
   } catch (err) {
@@ -1091,12 +1101,15 @@ app.put('/api/reading-sessions/:id', (req, res) => {
       db.actionLogs[logIndex].details = { pagesRead: newPagesRead, durationMinutes: duration, finishedBook: isFinishedNow, quotesCount: parsedQuotes.length };
     }
 
+    const linkedVictories = syncDailyVictoriesFromActivity(db, { syncReading: true });
+
     saveDb(db);
     res.json({
       success: true,
       book,
       session,
       userProfile: profile,
+      linkedVictories,
       analytics: computeAnalytics()
     });
   } catch (err) {
@@ -1170,12 +1183,15 @@ app.delete('/api/reading-sessions/:id', (req, res) => {
       }
     }
 
+    const linkedVictories = syncDailyVictoriesFromActivity(db, { syncReading: true });
+
     saveDb(db);
     res.json({
       success: true,
       book,
       deletedSessionId: session.id,
       userProfile: profile,
+      linkedVictories,
       analytics: computeAnalytics()
     });
   } catch (err) {
@@ -1389,11 +1405,14 @@ app.post('/api/questions', (req, res) => {
       }
     });
 
+    const linkedVictories = syncDailyVictoriesFromActivity(db, { syncStudy: true });
+
     saveDb(db);
     res.json({
       success: true,
       examQuestion: newQuestionLog,
       rewardResult,
+      linkedVictories,
       analytics: computeAnalytics()
     });
   } catch (err) {
@@ -1429,8 +1448,10 @@ app.put('/api/questions/:id', (req, res) => {
       }
     }
 
+    const linkedVictories = syncDailyVictoriesFromActivity(db, { syncStudy: true });
+
     saveDb(db);
-    res.json({ success: true, examQuestion: existing, analytics: computeAnalytics() });
+    res.json({ success: true, examQuestion: existing, linkedVictories, analytics: computeAnalytics() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1456,8 +1477,10 @@ app.delete('/api/questions/:id', (req, res) => {
       entityId: questionLog.id
     });
 
+    const linkedVictories = syncDailyVictoriesFromActivity(db, { syncStudy: true });
+
     saveDb(db);
-    res.json({ success: true, rewardResult, analytics: computeAnalytics() });
+    res.json({ success: true, rewardResult, linkedVictories, analytics: computeAnalytics() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2137,11 +2160,13 @@ app.post('/api/agu-plan/toggle-block', (req, res) => {
     const todayStr = getSaoPauloDateStr();
     db.aguPlan = toggleCompletedBlock(sanitizeAguPlan(db.aguPlan, todayStr), key);
     db.aguPlan = addBlockDuration(db.aguPlan, key, durationMinutes);
+    const linkedVictories = syncDailyVictoriesFromActivity(db, { today: todayStr, syncStudy: true });
     saveDb(db);
     res.json({
       success: true,
       plan: db.aguPlan,
-      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr),
+      linkedVictories
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2261,12 +2286,14 @@ app.put('/api/agu-plan/block', (req, res) => {
     }
 
     db.aguPlan = refreshAguProgress(db.aguPlan, db.examQuestions || [], todayStr);
+    const linkedVictories = syncDailyVictoriesFromActivity(db, { today: todayStr, syncStudy: true });
     saveDb(db);
     res.json({
       success: true,
       key: nextKey,
       plan: db.aguPlan,
-      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr),
+      linkedVictories
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2300,11 +2327,13 @@ app.post('/api/agu-plan/block/delete', (req, res) => {
     db.examQuestions = db.examQuestions.filter((entry) => entry.blockKey !== key);
     db.aguPlan = deleteStudyBlock(sanitizeAguPlan(db.aguPlan, todayStr), key);
     db.aguPlan = refreshAguProgress(db.aguPlan, db.examQuestions || [], todayStr);
+    const linkedVictories = syncDailyVictoriesFromActivity(db, { today: todayStr, syncStudy: true });
     saveDb(db);
     res.json({
       success: true,
       plan: db.aguPlan,
-      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr),
+      linkedVictories
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2325,11 +2354,13 @@ app.post('/api/agu-plan/block-duration', (req, res) => {
       ? addBlockDuration(plan, key, durationMinutes)
       : setBlockDuration(plan, key, durationMinutes);
     db.aguPlan = refreshAguProgress(db.aguPlan, db.examQuestions || [], todayStr);
+    const linkedVictories = syncDailyVictoriesFromActivity(db, { today: todayStr, syncStudy: true });
     saveDb(db);
     res.json({
       success: true,
       plan: db.aguPlan,
-      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr)
+      summary: summarizePlan(db.aguPlan, db.examQuestions || [], todayStr),
+      linkedVictories
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
