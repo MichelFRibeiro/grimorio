@@ -55,6 +55,13 @@ O script irá:
   - Cálculo instantâneo de páginas lidas, velocidade (páginas/hora) e Sabedoria.
   - Previsão de dias e horas para conclusão do livro.
 
+### 🧠 Cartografia do Conhecimento (Mapas Mentais)
+- Crie mapas com um **núcleo** e ramos ilimitados, anotações e cores.
+- Editor visual: arrastar ramos, recolher/expandir, organizar layout automático.
+- **Modo estudo**: recobrir ramos do pai ou cartões pai → filho, com cronômetro.
+- Revisão espaçada (Esqueci / Difícil / Bom / Fácil) concede XP, Sabedoria e Moedas.
+- Ramos vencidos voltam para a fila de estudo até consolidar a matéria.
+
 ### ⚡ Linha de Operações (Processos em Lote)
 - Para metas como *"Analisar 10 processos judiciais"*, *"Revisar 15 relatórios"*, *"Estudar 8 aulas"*.
 - Botões de avanço rápido: `+1`, `+2`, `+5` ou quantidade personalizada.
@@ -142,28 +149,34 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 - `toggle_habit`: Marca/desmarca execução diária com cálculo de chamas/streaks.
 - `update_habit`, `delete_habit`.
 
-#### 7. 📝 Banco de Questões / Simulados (`examQuestions`)
+#### 7. 🧠 Mapas Mentais (`mindMaps`)
+- `list_mind_maps`, `get_mind_map`, `create_mind_map`, `update_mind_map`.
+- `add_mind_map_node`, `update_mind_map_node`, `delete_mind_map_node`.
+- `study_mind_map`: registra revisão espaçada (qualidade 0–3) e concede XP/Sabedoria.
+- `delete_mind_map`: exclui o mapa e estorna as sessões de estudo.
+
+#### 8. 📝 Banco de Questões / Simulados (`examQuestions`)
 - `list_exam_questions`, `log_exam_questions`, `update_exam_questions`, `delete_exam_questions`.
 
-#### 8. 🪙 Taverna & Recompensas (`rewards`)
+#### 9. 🪙 Taverna & Recompensas (`rewards`)
 - `list_rewards`, `create_reward`, `redeem_reward`, `list_reward_redemptions`, `cancel_reward_redemption`, `delete_reward`.
 
-#### 9. 🧙‍♂️ Herói & Boss Raid
+#### 10. 🧙‍♂️ Herói & Boss Raid
 - `get_player_state`, `reset_boss_raid`.
 
-#### 10. 🔮 Oráculo de Análises & Padrões (Somente Leitura)
+#### 11. 🔮 Oráculo de Análises & Padrões (Somente Leitura)
 - `get_oracle_analytics`: Relatório completo (janela de pico produtivo, mapa de calor, ritmo semanal, simulados, hábitos e previsões).
 - `get_oracle_insights`: Revelações e conselhos contra procrastinação.
 - `get_productivity_patterns`: Distribuição de esforço horário e por dia da semana.
 - `get_study_analytics`: Métricas consolidadas de leitura e questões.
 - `get_category_rankings`: Rankings e tiers de maestria por categoria.
 
-#### 11. 🏔️ Metas de 90 Dias (`ninetyDayGoals`)
+#### 12. 🏔️ Metas de 90 Dias (`ninetyDayGoals`)
 - `list_ninety_day_goals`, `get_ninety_day_goal`, `preview_ninety_day_goal`.
 - `create_ninety_day_goal`: interpreta o enunciado e gera submetas de 30/15/7 dias (máx. 3 ativas).
 - `update_ninety_day_goal`, `log_ninety_day_goal_progress` (compila nos ciclos maiores), `delete_ninety_day_goal_log`, `delete_ninety_day_goal`.
 
-#### 12. 🧭 Próxima Atividade (contexto de lugar e horário)
+#### 13. 🧭 Próxima Atividade (contexto de lugar e horário)
 - `get_next_action`: Indica a próxima missão ou ritual considerando lugar (`anywhere`, `office`, `home`, `gym`), janela de horário, prazos, prioridade e histórico.
 - `set_current_location`: Define o lugar atual do herói usado pelo Oráculo.
 

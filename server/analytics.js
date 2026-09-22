@@ -1,5 +1,6 @@
 import { getDb } from './db.js';
 import { enrichNinetyDayGoal, formatGoalAmount } from '../src/utils/ninetyDayGoals.js';
+import { computeMapStats, getStudyQueue } from '../src/utils/mindMaps.js';
 import { MAX_DAILY_VICTORIES, summarizeDay } from '../src/utils/dailyVictories.js';
 import { parseDurationMinutes, sumDurationMap } from '../src/utils/activityDuration.js';
 import { computeCategoryRankings } from './rankings.js';
@@ -23,6 +24,8 @@ export function computeAnalytics() {
   const processes = db.processes || [];
   const processSteps = db.processSteps || [];
   const habits = db.habits || [];
+  const mindMaps = db.mindMaps || [];
+  const mindMapSessions = db.mindMapSessions || [];
 
   const now = new Date();
   const todayStr = getSaoPauloDateStr(now);
@@ -365,6 +368,26 @@ export function computeAnalytics() {
   }
 
   const activeNinetyDayGoals = ninetyDayGoals.filter(g => g.status === 'active' || g.status === 'expired');
+  const dueMindMaps = mindMaps.filter(m => getStudyQueue(m, { today: todayStr, mode: 'branches' }).length > 0);
+  if (mindMaps.length === 0) {
+    insights.push({
+      type: 'mind_maps',
+      icon: 'Network',
+      color: 'purple',
+      title: 'Cartografia do Conhecimento em branco',
+      description: 'Crie um mapa mental na seção Mapas para transformar uma matéria em ramos visuais e depois estudá-los com revisão espaçada.'
+    });
+  } else if (dueMindMaps.length > 0) {
+    const lead = dueMindMaps[0];
+    insights.push({
+      type: 'mind_maps',
+      icon: 'Network',
+      color: 'amber',
+      title: `Mapas mentais prontos para revisão (${dueMindMaps.length})`,
+      description: `"${lead.title}" tem ramos vencidos hoje. Estude o mapa para consolidar a matéria e ganhar Sabedoria.`
+    });
+  }
+
   if (activeNinetyDayGoals.length > 0) {
     const behind = activeNinetyDayGoals.filter(g => g.pace === 'behind');
     const lead = behind[0] || activeNinetyDayGoals[0];
@@ -452,7 +475,10 @@ export function computeAnalytics() {
     ninetyDayGoalsCompleted: ninetyDayGoals.filter(g => g.status === 'completed').length,
     dailyVictoriesPlanned: dailyVictorySummary.plannedCount,
     dailyVictoriesCompleted: dailyVictorySummary.completedCount,
-    dailyVictoriesTripleBonus: dailyVictorySummary.tripleBonusAwarded
+    dailyVictoriesTripleBonus: dailyVictorySummary.tripleBonusAwarded,
+    totalMindMaps: mindMaps.length,
+    totalMindMapSessions: mindMapSessions.length,
+    mindMapBranchesDue: dueMindMaps.reduce((acc, m) => acc + getStudyQueue(m, { today: todayStr, mode: 'branches' }).length, 0)
   };
 
   return {
@@ -472,6 +498,18 @@ export function computeAnalytics() {
     totalProcessUnitsCompleted,
     habitStats,
     dailyVictoriesToday: dailyVictorySummary,
+    mindMaps: mindMaps.map(m => {
+      const stats = computeMapStats(m, { today: todayStr });
+      return {
+        id: m.id,
+        title: m.title,
+        category: m.category,
+        branches: stats.branches,
+        due: stats.due,
+        mastery: stats.mastery,
+        lastStudiedAt: stats.lastStudiedAt
+      };
+    }),
     ninetyDayGoals: ninetyDayGoals.map(g => ({
       id: g.id,
       title: g.title,

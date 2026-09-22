@@ -448,6 +448,158 @@ export function useGameData() {
     }
   };
 
+  const addMindMap = async (mapData) => {
+    playClick();
+    const res = await fetch('/api/mind-maps', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(mapData)
+    });
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      fetchState();
+      return result.mindMap || null;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao criar o mapa mental.');
+    throw new Error(errJson.error || 'Erro ao criar o mapa mental.');
+  };
+
+  const updateMindMap = async (id, mapData) => {
+    playClick();
+    const res = await fetch(`/api/mind-maps/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(mapData)
+    });
+    if (res.ok) {
+      fetchState();
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao atualizar o mapa mental.');
+    return false;
+  };
+
+  const addMindMapNode = async (mapId, nodeData) => {
+    playClick();
+    const res = await fetch(`/api/mind-maps/${mapId}/nodes`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(nodeData)
+    });
+    if (res.ok) {
+      fetchState();
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao adicionar ramo.');
+    return false;
+  };
+
+  const updateMindMapNode = async (mapId, nodeId, nodeData) => {
+    const res = await fetch(`/api/mind-maps/${mapId}/nodes/${nodeId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(nodeData)
+    });
+    if (res.ok) {
+      fetchState();
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao atualizar o ramo.');
+    return false;
+  };
+
+  const deleteMindMapNode = async (mapId, nodeId) => {
+    playClick();
+    const res = await fetch(`/api/mind-maps/${mapId}/nodes/${nodeId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      fetchState();
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao excluir o ramo.');
+    return false;
+  };
+
+  const layoutMindMap = async (mapId) => {
+    playClick();
+    const res = await fetch(`/api/mind-maps/${mapId}/layout`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      fetchState();
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao organizar o mapa.');
+    return false;
+  };
+
+  const studyMindMap = async (mapId, sessionData) => {
+    playClick();
+    const res = await fetch(`/api/mind-maps/${mapId}/study`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(sessionData)
+    });
+    if (res.ok) {
+      const result = await res.json();
+      if (result.rewardResult) {
+        handleRewardResponse(
+          result.rewardResult,
+          `Mapa: ${result.session.recalled}/${result.session.reviewed} ramos (${result.session.accuracy}%)`
+        );
+        confetti({
+          particleCount: result.session.accuracy >= 80 ? 70 : 40,
+          spread: 70,
+          origin: { y: 0.65 }
+        });
+      }
+      fetchState();
+      return result;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao registrar o estudo do mapa.');
+    throw new Error(errJson.error || 'Erro ao registrar o estudo do mapa.');
+  };
+
+  const deleteMindMap = async (id) => {
+    playClick();
+    const res = await fetch(`/api/mind-maps/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      fetchState();
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao excluir o mapa mental.');
+    return false;
+  };
+
+  const deleteMindMapSession = async (id) => {
+    playClick();
+    const res = await fetch(`/api/mind-map-sessions/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      fetchState();
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao excluir a sessão de estudo.');
+    return false;
+  };
+
   // 3. Process Actions
   const addProcess = async (processData) => {
     playClick();
@@ -1096,6 +1248,15 @@ export function useGameData() {
     addDailyVictory,
     updateDailyVictory,
     completeDailyVictory,
-    deleteDailyVictory
+    deleteDailyVictory,
+    addMindMap,
+    updateMindMap,
+    addMindMapNode,
+    updateMindMapNode,
+    deleteMindMapNode,
+    layoutMindMap,
+    studyMindMap,
+    deleteMindMap,
+    deleteMindMapSession
   };
 }

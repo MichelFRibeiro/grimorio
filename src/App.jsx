@@ -15,8 +15,9 @@ import { OracleAnalytics } from './components/OracleAnalytics';
 import { NextActionCard } from './components/NextActionCard';
 import { LevelUpModal } from './components/LevelUpModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale, Headphones, Mountain } from 'lucide-react';
+import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale, Headphones, Mountain, Network } from 'lucide-react';
 import { NinetyDayGoalsView } from './components/NinetyDayGoalsView';
+import { MindMapsView } from './components/MindMapsView';
 import { AguCampaignView } from './components/AguCampaignView';
 import { FocusChamberView, FocusMiniPlayer } from './components/FocusPlayer';
 import { useFocusPlayer } from './hooks/useFocusPlayer';
@@ -102,7 +103,15 @@ export function App() {
     addDailyVictory,
     updateDailyVictory,
     completeDailyVictory,
-    deleteDailyVictory
+    deleteDailyVictory,
+    addMindMap,
+    updateMindMap,
+    addMindMapNode,
+    updateMindMapNode,
+    deleteMindMapNode,
+    layoutMindMap,
+    studyMindMap,
+    deleteMindMap
   } = useGameData();
 
   if (loadingAuth || (isAuthenticated && loading)) {
@@ -173,7 +182,9 @@ export function App() {
     locations,
     ninetyDayGoals,
     dailyVictories,
-    dailyVictoryBonuses
+    dailyVictoryBonuses,
+    mindMaps,
+    mindMapSessions
   } = data || {};
 
   const pendingQuestsCount = (quests || []).filter(q => !q.completed).length;
@@ -186,11 +197,14 @@ export function App() {
   const aguToday = summarizePlan(aguPlan, examQuestions || [], getSaoPauloDateStr()).today;
   const aguTodayRemaining = Math.max(0, (aguToday.totalBlocks || 0) - (aguToday.doneCount || 0));
   const activeNinetyDayGoalsCount = (ninetyDayGoals || []).filter(g => g.status === 'active' || g.status === 'expired').length;
+  const dueMindMapsCount = analytics?.summary?.mindMapBranchesDue
+    ?? (mindMaps || []).reduce((acc, m) => acc + (m.stats?.dueBranches || 0), 0);
 
   const tabs = [
     { id: 'quests', label: 'Missões', icon: Scroll, badge: pendingQuestsCount },
     { id: 'questions', label: 'Questões', icon: Target, badge: todayQuestionsCount },
     { id: 'books', label: 'Biblioteca', icon: BookOpen, badge: activeBooksCount },
+    { id: 'maps', label: 'Mapas', icon: Network, badge: dueMindMapsCount },
     { id: 'processes', label: 'Processos', icon: Layers, badge: activeProcessesCount },
     { id: 'habits', label: 'Rituais', icon: Flame, badge: habits?.length },
     { id: 'goals', label: '90 Dias', icon: Mountain, badge: activeNinetyDayGoalsCount },
@@ -333,6 +347,22 @@ export function App() {
             onAddQuestions={addExamQuestions}
             onUpdateQuestions={updateExamQuestions}
             onDeleteQuestions={deleteExamQuestions}
+          />
+        )}
+
+        {activeTab === 'maps' && (
+          <MindMapsView
+            mindMaps={mindMaps}
+            mindMapSessions={mindMapSessions}
+            questCategories={questCategories}
+            onAddMap={addMindMap}
+            onUpdateMap={updateMindMap}
+            onAddNode={addMindMapNode}
+            onUpdateNode={updateMindMapNode}
+            onDeleteNode={deleteMindMapNode}
+            onLayoutMap={layoutMindMap}
+            onStudyMap={studyMindMap}
+            onDeleteMap={deleteMindMap}
           />
         )}
 

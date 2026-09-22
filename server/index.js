@@ -84,6 +84,18 @@ import {
   updateDailyVictory
 } from '../src/utils/dailyVictories.js';
 import { syncDailyVictoriesFromActivity } from './dailyVictorySync.js';
+import {
+  createMindMap,
+  addMindMapNode,
+  updateMindMapNode,
+  deleteMindMapNode,
+  updateMindMapMeta,
+  layoutMindMap,
+  applyStudySession,
+  sanitizeMindMaps,
+  sanitizeMindMapSessions,
+  computeMapStats
+} from '../src/utils/mindMaps.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -406,6 +418,8 @@ app.get('/api/state', (req, res) => {
     db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
     db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
     db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
     db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
     if (db.aguPlan?.startedAt) {
       const next = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);
@@ -2760,6 +2774,271 @@ app.delete('/api/daily-victories/:id', (req, res) => {
     res.json({ success: true, removed: result.removed });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// MAPAS MENTAIS
+// ==========================================
+app.get('/api/mind-maps', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    const mindMaps = sanitizeMindMaps(db.mindMaps).map(m => ({
+      ...m,
+      stats: computeMapStats(m, { today: todayStr })
+    }));
+    res.json({
+      success: true,
+      mindMaps,
+      sessions: sanitizeMindMapSessions(db.mindMapSessions)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/mind-maps', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const { title, description, category, color, rootLabel } = req.body || {};
+    const map = createMindMap({ title, description, category, color, rootLabel });
+    db.mindMaps.unshift(map);
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...map, stats: computeMapStats(map) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/mind-maps/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const map = sanitizeMindMaps(db.mindMaps).find(m => m.id === req.params.id);
+    if (!map) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    res.json({
+      success: true,
+      mindMap: { ...map, stats: computeMapStats(map) }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/mind-maps/:id', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+
+    const { title, description, category, color, rootLabel, nodes, layout } = req.body || {};
+    let next = db.mindMaps[index];
+
+    if (Array.isArray(nodes)) {
+      next = {
+        ...next,
+        nodes,
+        updatedAt: new Date().toISOString()
+      };
+      next = sanitizeMindMaps([next])[0];
+      if (!next) return res.status(400).json({ error: 'Mapa mental inválido.' });
+    }
+
+    if (title !== undefined || description !== undefined || category !== undefined || color !== undefined || rootLabel !== undefined) {
+      next = updateMindMapMeta(next, { title, description, category, color, rootLabel });
+    }
+
+    if (layout) {
+      next = layoutMindMap(next);
+    }
+
+    db.mindMaps[index] = next;
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...next, stats: computeMapStats(next) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/mind-maps/:id/nodes', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    const { parentId, label, notes, color, x, y } = req.body || {};
+    const next = addMindMapNode(db.mindMaps[index], { parentId, label, notes, color, x, y });
+    db.mindMaps[index] = next;
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...next, stats: computeMapStats(next) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/mind-maps/:id/nodes/:nodeId', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    const next = updateMindMapNode(db.mindMaps[index], req.params.nodeId, req.body || {});
+    db.mindMaps[index] = next;
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...next, stats: computeMapStats(next) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/mind-maps/:id/nodes/:nodeId', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    const next = deleteMindMapNode(db.mindMaps[index], req.params.nodeId);
+    db.mindMaps[index] = next;
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...next, stats: computeMapStats(next) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/mind-maps/:id/layout', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    const next = layoutMindMap(db.mindMaps[index]);
+    db.mindMaps[index] = next;
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...next, stats: computeMapStats(next) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/mind-maps/:id/study', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+
+    const { reviews, durationMinutes, mode, date } = req.body || {};
+    const todayStr = date || getSaoPauloDateStr();
+    const result = applyStudySession(db.mindMaps[index], reviews, {
+      today: todayStr,
+      durationMinutes,
+      mode
+    });
+
+    db.mindMaps[index] = result.map;
+    db.mindMapSessions.unshift(result.session);
+
+    const rewardResult = rewardPlayer({
+      xp: result.rewards.xp,
+      coins: result.rewards.coins,
+      wisdom: result.rewards.wisdom,
+      focus: result.rewards.focus,
+      actionType: 'mind_map_study',
+      entityId: result.session.id,
+      title: `${result.map.title}: ${result.session.recalled}/${result.session.reviewed} ramos (${result.session.accuracy}%)`,
+      details: {
+        category: result.map.category || 'Estudos',
+        mapId: result.map.id,
+        sessionId: result.session.id,
+        reviewed: result.session.reviewed,
+        recalled: result.session.recalled,
+        accuracy: result.session.accuracy,
+        durationMinutes: result.session.durationMinutes,
+        mode: result.session.mode
+      }
+    });
+
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...result.map, stats: computeMapStats(result.map, { today: todayStr }) },
+      session: result.session,
+      rewardResult,
+      analytics: computeAnalytics()
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/mind-maps/:id', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    const [removed] = db.mindMaps.splice(index, 1);
+    const relatedSessions = db.mindMapSessions.filter(s => s.mapId === removed.id);
+    relatedSessions.forEach((session) => {
+      revertPlayerReward({
+        xp: session.xpEarned || 0,
+        coins: session.coinsEarned || 0,
+        wisdom: (session.recalled || 0) * 2 + Math.min(session.reviewed || 0, 8),
+        focus: (session.reviewed || 0) + Math.floor((session.durationMinutes || 0) / 5),
+        actionType: 'mind_map_study',
+        entityId: session.id
+      });
+    });
+    db.mindMapSessions = db.mindMapSessions.filter(s => s.mapId !== removed.id);
+    saveDb(db);
+    res.json({ success: true, removed });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/mind-map-sessions/:id', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
+    const index = db.mindMapSessions.findIndex(s => s.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Sessão de estudo não encontrada.' });
+    const [removed] = db.mindMapSessions.splice(index, 1);
+    revertPlayerReward({
+      xp: removed.xpEarned || 0,
+      coins: removed.coinsEarned || 0,
+      wisdom: (removed.recalled || 0) * 2 + Math.min(removed.reviewed || 0, 8),
+      focus: (removed.reviewed || 0) + Math.floor((removed.durationMinutes || 0) / 5),
+      actionType: 'mind_map_study',
+      entityId: removed.id
+    });
+    saveDb(db);
+    res.json({ success: true, removed });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

@@ -734,7 +734,102 @@ img, video, canvas {
   gap: 8px;
 }
 
+.mindmap-canvas {
+  position: relative;
+  min-height: 520px;
+  height: min(68vh, 720px);
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(168, 85, 247, 0.28);
+  background:
+    radial-gradient(at 20% 0%, rgba(168, 85, 247, 0.12) 0px, transparent 45%),
+    radial-gradient(at 90% 100%, rgba(56, 189, 248, 0.08) 0px, transparent 40%),
+    #0b0e16;
+  touch-action: none;
+}
+
+.mindmap-zoom {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(12, 14, 20, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.mindmap-zoom button {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.mindmap-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 14px;
+}
+
+.mindmap-side {
+  padding: 16px;
+}
+
+.mindmap-ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.mindmap-ghost-btn.is-danger {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+.mindmap-study-card {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 28px 24px;
+}
+
+.mindmap-answer {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  color: #d1fae5;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .mindmap-editor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 768px) {
+  .mindmap-canvas {
+    min-height: 420px;
+    height: 58vh;
+  }
+
   .focus-mini-player {
     left: 12px;
     right: 12px;

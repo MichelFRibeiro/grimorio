@@ -250,6 +250,10 @@ function resolveLogCategory(log, db, registeredNames) {
   } else if (log.type === 'exam_questions' && log.entityId && db.examQuestions) {
     const eq = db.examQuestions.find(item => item.id === log.entityId);
     if (eq?.category) resolved = eq.category;
+  } else if (log.type === 'mind_map_study' && db.mindMaps) {
+    const mapId = log.details?.mapId || log.entityId;
+    const mm = db.mindMaps.find(item => item.id === mapId);
+    if (mm?.category) resolved = mm.category;
   } else if ((log.type === 'daily_victory_complete' || log.type === 'daily_victory_triple_bonus') && log.entityId && db.dailyVictories) {
     const victory = db.dailyVictories.find(item => item.id === log.entityId);
     if (victory?.category) resolved = victory.category;
@@ -263,7 +267,7 @@ function resolveLogCategory(log, db, registeredNames) {
     return resolved;
   }
 
-  if (log.type === 'reading_session' || log.type === 'book_quote' || log.type === 'exam_questions') {
+  if (log.type === 'reading_session' || log.type === 'book_quote' || log.type === 'exam_questions' || log.type === 'mind_map_study') {
     return findRegisteredFallback(registeredNames, ['Estudos']);
   }
 

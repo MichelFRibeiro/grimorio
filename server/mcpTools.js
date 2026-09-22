@@ -65,6 +65,19 @@ import {
   updateDailyVictory
 } from '../src/utils/dailyVictories.js';
 import { syncDailyVictoriesFromActivity } from './dailyVictorySync.js';
+import {
+  createMindMap,
+  addMindMapNode,
+  updateMindMapNode,
+  deleteMindMapNode,
+  updateMindMapMeta,
+  layoutMindMap,
+  applyStudySession,
+  sanitizeMindMaps,
+  sanitizeMindMapSessions,
+  computeMapStats,
+  getStudyQueue
+} from '../src/utils/mindMaps.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, sumDurationMap, clearLiveActivityTimer } from '../src/utils/activityDuration.js';
 
 const locationEnum = z.enum(['anywhere', 'office', 'home', 'gym']);
@@ -1290,6 +1303,260 @@ export const toolsDefinition = [
   },
 
   // ==========================================
+  // 6.5. MAPAS MENTAIS
+  // ==========================================
+  {
+    name: 'list_mind_maps',
+    description: 'Listar mapas mentais da Cartografia do Conhecimento, com contagem de ramos e revisões vencidas.',
+    schema: {
+      search: z.string().optional().describe('Buscar no título, descrição ou ramos')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      let maps = sanitizeMindMaps(db.mindMaps).map(m => ({
+        ...m,
+        stats: computeMapStats(m, { today: todayStr })
+      }));
+      if (args.search) {
+        const q = args.search.toLowerCase();
+        maps = maps.filter(m =>
+          m.title.toLowerCase().includes(q)
+          || (m.description || '').toLowerCase().includes(q)
+          || (m.nodes || []).some(n => (n.label || '').toLowerCase().includes(q))
+        );
+      }
+      return formatSuccess({ total: maps.length, mindMaps: maps }, `${maps.length} mapas mentais encontrados.`);
+    }
+  },
+  {
+    name: 'get_mind_map',
+    description: 'Obter um mapa mental completo, incluindo ramos, anotações e fila de estudo.',
+    schema: {
+      id: z.string().describe('ID do mapa mental')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      const map = sanitizeMindMaps(db.mindMaps).find(m => m.id === args.id);
+      if (!map) return formatError(`Mapa mental '${args.id}' não encontrado.`);
+      return formatSuccess({
+        mindMap: { ...map, stats: computeMapStats(map, { today: todayStr }) },
+        studyQueue: getStudyQueue(map, { today: todayStr, mode: 'branches' })
+      }, 'Mapa mental carregado.');
+    }
+  },
+  {
+    name: 'create_mind_map',
+    description: 'Criar um novo mapa mental com um núcleo (ideia central) para ramificar depois.',
+    schema: {
+      title: z.string().describe('Título / núcleo do mapa'),
+      description: z.string().optional().describe('Descrição ou contexto'),
+      category: z.string().optional().describe('Categoria (ex: Estudos)'),
+      color: z.string().optional().describe('Cor hex do núcleo'),
+      rootLabel: z.string().optional().describe('Rótulo do núcleo, se diferente do título')
+    },
+    handler: async (args) => {
+      try {
+        const db = getDb();
+        db.mindMaps = sanitizeMindMaps(db.mindMaps);
+        const map = createMindMap(args);
+        db.mindMaps.unshift(map);
+        saveDb(db);
+        return formatSuccess(map, `Mapa mental '${map.title}' criado.`);
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'update_mind_map',
+    description: 'Atualizar título, descrição, categoria ou reorganizar o layout de um mapa mental.',
+    schema: {
+      id: z.string().describe('ID do mapa'),
+      title: z.string().optional(),
+      description: z.string().optional(),
+      category: z.string().optional(),
+      color: z.string().optional(),
+      rootLabel: z.string().optional(),
+      layout: z.boolean().optional().describe('Se true, reorganiza automaticamente os ramos')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      const index = db.mindMaps.findIndex(m => m.id === args.id);
+      if (index === -1) return formatError(`Mapa mental '${args.id}' não encontrado.`);
+      try {
+        let next = updateMindMapMeta(db.mindMaps[index], args);
+        if (args.layout) next = layoutMindMap(next);
+        db.mindMaps[index] = next;
+        saveDb(db);
+        return formatSuccess(next, `Mapa '${next.title}' atualizado.`);
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'add_mind_map_node',
+    description: 'Adicionar um ramo (ideia filha) a um mapa mental existente.',
+    schema: {
+      mapId: z.string().describe('ID do mapa'),
+      parentId: z.string().optional().describe('ID do ramo pai (omitido = núcleo)'),
+      label: z.string().describe('Texto do ramo'),
+      notes: z.string().optional().describe('Anotação de estudo'),
+      color: z.string().optional()
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      const index = db.mindMaps.findIndex(m => m.id === args.mapId);
+      if (index === -1) return formatError(`Mapa mental '${args.mapId}' não encontrado.`);
+      try {
+        const next = addMindMapNode(db.mindMaps[index], args);
+        db.mindMaps[index] = next;
+        saveDb(db);
+        return formatSuccess(next, `Ramo '${args.label}' adicionado.`);
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'update_mind_map_node',
+    description: 'Atualizar o texto, anotação, cor ou posição de um ramo.',
+    schema: {
+      mapId: z.string().describe('ID do mapa'),
+      nodeId: z.string().describe('ID do ramo'),
+      label: z.string().optional(),
+      notes: z.string().optional(),
+      color: z.string().optional(),
+      collapsed: z.boolean().optional()
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      const index = db.mindMaps.findIndex(m => m.id === args.mapId);
+      if (index === -1) return formatError(`Mapa mental '${args.mapId}' não encontrado.`);
+      try {
+        const next = updateMindMapNode(db.mindMaps[index], args.nodeId, args);
+        db.mindMaps[index] = next;
+        saveDb(db);
+        return formatSuccess(next, 'Ramo atualizado.');
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'delete_mind_map_node',
+    description: 'Excluir um ramo e todos os descendentes. O núcleo não pode ser excluído.',
+    schema: {
+      mapId: z.string().describe('ID do mapa'),
+      nodeId: z.string().describe('ID do ramo')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      const index = db.mindMaps.findIndex(m => m.id === args.mapId);
+      if (index === -1) return formatError(`Mapa mental '${args.mapId}' não encontrado.`);
+      try {
+        const next = deleteMindMapNode(db.mindMaps[index], args.nodeId);
+        db.mindMaps[index] = next;
+        saveDb(db);
+        return formatSuccess(next, 'Ramo excluído.');
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'study_mind_map',
+    description: 'Registrar uma sessão de estudo de um mapa mental (revisão espaçada). Concede XP, Sabedoria e Moedas.',
+    schema: {
+      id: z.string().describe('ID do mapa'),
+      reviews: z.array(z.object({
+        nodeId: z.string().describe('ID do ramo revisado'),
+        quality: z.number().describe('0 esqueci, 1 difícil, 2 bom, 3 fácil')
+      })).describe('Avaliações dos ramos'),
+      durationMinutes: z.number().optional().describe('Duração da sessão em minutos'),
+      mode: z.enum(['branches', 'cards']).optional().describe('Modo de estudo')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
+      const index = db.mindMaps.findIndex(m => m.id === args.id);
+      if (index === -1) return formatError(`Mapa mental '${args.id}' não encontrado.`);
+      try {
+        const todayStr = getSaoPauloDateStr();
+        const result = applyStudySession(db.mindMaps[index], args.reviews, {
+          today: todayStr,
+          durationMinutes: args.durationMinutes,
+          mode: args.mode
+        });
+        db.mindMaps[index] = result.map;
+        db.mindMapSessions.unshift(result.session);
+        const rewardResult = rewardPlayer({
+          xp: result.rewards.xp,
+          coins: result.rewards.coins,
+          wisdom: result.rewards.wisdom,
+          focus: result.rewards.focus,
+          actionType: 'mind_map_study',
+          entityId: result.session.id,
+          title: `${result.map.title}: ${result.session.recalled}/${result.session.reviewed} ramos (${result.session.accuracy}%)`,
+          details: {
+            category: result.map.category || 'Estudos',
+            mapId: result.map.id,
+            sessionId: result.session.id,
+            reviewed: result.session.reviewed,
+            recalled: result.session.recalled,
+            accuracy: result.session.accuracy,
+            durationMinutes: result.session.durationMinutes,
+            mode: result.session.mode
+          }
+        });
+        saveDb(db);
+        return formatSuccess({
+          mindMap: result.map,
+          session: result.session,
+          rewardResult
+        }, `Sessão registrada: ${result.session.recalled}/${result.session.reviewed} ramos lembrados.`);
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'delete_mind_map',
+    description: 'Excluir um mapa mental e estornar as recompensas das sessões de estudo.',
+    schema: {
+      id: z.string().describe('ID do mapa')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
+      const index = db.mindMaps.findIndex(m => m.id === args.id);
+      if (index === -1) return formatError(`Mapa mental '${args.id}' não encontrado.`);
+      const [removed] = db.mindMaps.splice(index, 1);
+      db.mindMapSessions.filter(s => s.mapId === removed.id).forEach((session) => {
+        revertPlayerReward({
+          xp: session.xpEarned || 0,
+          coins: session.coinsEarned || 0,
+          wisdom: (session.recalled || 0) * 2 + Math.min(session.reviewed || 0, 8),
+          focus: (session.reviewed || 0) + Math.floor((session.durationMinutes || 0) / 5),
+          actionType: 'mind_map_study',
+          entityId: session.id
+        });
+      });
+      db.mindMapSessions = db.mindMapSessions.filter(s => s.mapId !== removed.id);
+      saveDb(db);
+      return formatSuccess(removed, `Mapa '${removed.title}' excluído.`);
+    }
+  },
+
+  // ==========================================
   // 7. BANCO DE QUESTÕES / SIMULADOS - CRUD
   // ==========================================
   {
@@ -1586,6 +1853,7 @@ export const toolsDefinition = [
         activeBooks: (db.books || []).filter(b => b.status === 'reading').length,
         totalProcesses: (db.processes || []).length,
         totalHabits: (db.habits || []).length,
+        totalMindMaps: (db.mindMaps || []).length,
         totalRewardItems: (db.rewards || []).length,
         dailyVictoriesToday: summarizeDay(
           sanitizeDailyVictories(db.dailyVictories),
@@ -1694,7 +1962,8 @@ export const toolsDefinition = [
           questionHorizons: analytics.questionHorizons,
           subjectStats: analytics.subjectStats,
           questionDailyHistory: analytics.questionDailyHistory
-        }
+        },
+        mindMaps: analytics.mindMaps || []
       }, 'Métricas de leitura e simulados obtidas.');
     }
   },
@@ -2356,7 +2625,8 @@ export const resourcesDefinition = [
             processes: (db.processes || []).length,
             habits: (db.habits || []).length,
             ninetyDayGoals: (db.ninetyDayGoals || []).length,
-            dailyVictories: (db.dailyVictories || []).length
+            dailyVictories: (db.dailyVictories || []).length,
+            mindMaps: (db.mindMaps || []).length
           }
         }, null, 2)
       };
@@ -2464,6 +2734,28 @@ export const resourcesDefinition = [
         uri: 'grimorio://ninety-day-goals',
         mimeType: 'application/json',
         text: JSON.stringify(goals, null, 2)
+      };
+    }
+  },
+  {
+    uri: 'grimorio://mind-maps',
+    name: 'Cartografia do Conhecimento',
+    description: 'Mapas mentais, ramos e sessões de estudo com revisão espaçada',
+    mimeType: 'application/json',
+    handler: async () => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      const maps = sanitizeMindMaps(db.mindMaps).map(m => ({
+        ...m,
+        stats: computeMapStats(m, { today: todayStr })
+      }));
+      return {
+        uri: 'grimorio://mind-maps',
+        mimeType: 'application/json',
+        text: JSON.stringify({
+          mindMaps: maps,
+          sessions: sanitizeMindMapSessions(db.mindMapSessions)
+        }, null, 2)
       };
     }
   },
