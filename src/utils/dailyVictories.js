@@ -262,7 +262,31 @@ export function sanitizeDailyVictory(raw) {
   if (isOverflowDailyVictorySource(raw.source)) {
     victory.source = raw.source;
   }
+  const questId = String(raw.questId || '').trim();
+  if (questId) {
+    victory.questId = questId;
+  }
   return victory;
+}
+
+export function findVictoryForQuest(list = [], questId, dateStr) {
+  const id = String(questId || '').trim();
+  if (!id) return null;
+  return listVictoriesForDate(list, dateStr).find(item => item.questId === id) || null;
+}
+
+export function isQuestPlannedForDate(list = [], questId, dateStr) {
+  return !!findVictoryForQuest(list, questId, dateStr);
+}
+
+export function canPlanQuestAsDailyVictory(list = [], questId, dateStr) {
+  const alreadyPlanned = isQuestPlannedForDate(list, questId, dateStr);
+  const summary = summarizeDay(list, dateStr);
+  return {
+    alreadyPlanned,
+    atLimit: !summary.canAdd,
+    canPlan: !alreadyPlanned && summary.canAdd
+  };
 }
 
 export function sanitizeDailyVictories(list = []) {
@@ -296,6 +320,10 @@ export function createDailyVictory(list = [], input = {}, { today = getSaoPauloD
 
   const current = sanitizeDailyVictories(list);
   const source = isOverflowDailyVictorySource(input.source) ? input.source : undefined;
+  const questId = String(input.questId || '').trim() || undefined;
+  if (questId && isQuestPlannedForDate(current, questId, date)) {
+    throw new Error('Esta missão já está nas vitórias planejadas deste dia.');
+  }
   const cap = maxDailyVictoriesForSource(source);
   const count = countVictoriesForDate(current, date);
   if (count >= cap) {
@@ -309,6 +337,7 @@ export function createDailyVictory(list = [], input = {}, { today = getSaoPauloD
     title,
     category: input.category || defaultCategory,
     source,
+    questId,
     completed: false,
     completedAt: null,
     note: '',

@@ -2138,7 +2138,8 @@ export const toolsDefinition = [
       title: z.string().describe('Título da vitória (ex: Finalizar petição, Treinar 40 min)'),
       category: z.string().optional().describe('Categoria (ex: Trabalho, Estudos, Pessoal, Saúde)'),
       date: z.string().optional().describe('Data YYYY-MM-DD (hoje ou amanhã). Padrão: hoje'),
-      source: z.enum(['homeostasis-study', 'homeostasis-reading']).optional().describe('Origem especial que permite ir além de 3 (estudo AGU ou leitura)')
+      source: z.enum(['homeostasis-study', 'homeostasis-reading']).optional().describe('Origem especial que permite ir além de 3 (estudo AGU ou leitura)'),
+      questId: z.string().optional().describe('ID da missão de origem, se a vitória foi planejada a partir de uma missão')
     },
     handler: async (args) => {
       const db = getDb();

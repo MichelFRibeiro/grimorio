@@ -17,7 +17,8 @@ import {
   RotateCcw,
   Settings,
   X,
-  PlusCircle
+  PlusCircle,
+  Trophy
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityContextFields } from './ActivityContextFields';
@@ -28,24 +29,29 @@ import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, window
 import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, getPriorityMeta, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
 import { formatDurationLabel } from '../utils/activityDuration';
 import { consumeActivityTimerMinutes } from '../utils/liveActivityTimers';
+import { canPlanQuestAsDailyVictory, MAX_DAILY_VICTORIES } from '../utils/dailyVictories';
 
 export function QuestsView({
   quests,
   questCategories = [],
   rankings,
+  dailyVictories = [],
   onAddQuest,
   onCompleteQuest,
   onDeleteQuest,
   onUpdateQuest,
   onAddCategory,
   onUpdateCategory,
-  onDeleteCategory
+  onDeleteCategory,
+  onAddDailyVictory
 }) {
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [statusFilter, setStatusFilter] = useState('pending'); // 'pending' | 'completed' | 'all'
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [expandedSubtasks, setExpandedSubtasks] = useState({});
+  const [planningQuestId, setPlanningQuestId] = useState(null);
+  const todayStr = getSaoPauloDateStr();
 
   // Generic Confirm Modal State
   const [confirmModal, setConfirmModal] = useState({
@@ -245,6 +251,25 @@ export function QuestsView({
     });
 
     handleCloseEditModal();
+  };
+
+  const handlePlanAsDailyVictory = async (quest) => {
+    if (!onAddDailyVictory || !quest) return;
+    const planState = canPlanQuestAsDailyVictory(dailyVictories, quest.id, todayStr);
+    if (!planState.canPlan) return;
+    setPlanningQuestId(quest.id);
+    try {
+      await onAddDailyVictory({
+        title: quest.title,
+        category: quest.category,
+        date: todayStr,
+        questId: quest.id
+      });
+    } catch {
+      // O toast de erro já é exibido pelo hook de dados.
+    } finally {
+      setPlanningQuestId(null);
+    }
   };
 
   // Trigger modal when user uncompletes a quest (reopening and reverting rewards)
@@ -541,6 +566,14 @@ export function QuestsView({
             const completedSubtasks = (quest.subtasks || []).filter(s => s.completed).length;
             const totalSubtasks = (quest.subtasks || []).length;
             const priorityMeta = getPriorityMeta(quest.priority);
+            const planState = canPlanQuestAsDailyVictory(dailyVictories, quest.id, todayStr);
+            const planningBusy = planningQuestId === quest.id;
+            const planDisabled = planningBusy || !planState.canPlan;
+            const planTitle = planState.alreadyPlanned
+              ? 'Esta missão já está nas Vitórias Planejadas de hoje'
+              : planState.atLimit
+                ? `Limite de ${MAX_DAILY_VICTORIES} vitórias manuais atingido para hoje`
+                : 'Adicionar às Vitórias Planejadas para o Dia';
 
             return (
               <div
@@ -687,6 +720,34 @@ export function QuestsView({
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {onAddDailyVictory && (
+                          <button
+                            type="button"
+                            onClick={() => handlePlanAsDailyVictory(quest)}
+                            disabled={planDisabled}
+                            title={planTitle}
+                            aria-label={planTitle}
+                            style={{
+                              background: planState.alreadyPlanned
+                                ? 'rgba(245, 158, 11, 0.18)'
+                                : 'rgba(245, 158, 11, 0.1)',
+                              border: planState.alreadyPlanned
+                                ? '1px solid rgba(245, 158, 11, 0.45)'
+                                : '1px solid rgba(245, 158, 11, 0.25)',
+                              color: planState.alreadyPlanned ? '#fbbf24' : (planDisabled ? '#64748b' : '#fbbf24'),
+                              cursor: planDisabled ? 'not-allowed' : 'pointer',
+                              padding: '6px',
+                              borderRadius: '8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              opacity: planDisabled && !planState.alreadyPlanned ? 0.45 : 1
+                            }}
+                          >
+                            <Trophy size={14} />
+                          </button>
+                      )}
+
                       {/* Reopen Button (if completed) */}
                       {quest.completed && (
                         <button

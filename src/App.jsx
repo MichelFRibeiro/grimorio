@@ -312,6 +312,7 @@ export function App() {
             quests={quests}
             questCategories={questCategories}
             rankings={analytics?.rankings}
+            dailyVictories={dailyVictories}
             onAddQuest={addQuest}
             onCompleteQuest={completeQuest}
             onDeleteQuest={deleteQuest}
@@ -319,6 +320,7 @@ export function App() {
             onAddCategory={addQuestCategory}
             onUpdateCategory={updateQuestCategory}
             onDeleteCategory={deleteQuestCategory}
+            onAddDailyVictory={addDailyVictory}
           />
         )}
 

@@ -17,7 +17,9 @@ import {
   DAY_OUTCOME,
   buildMonthCalendar,
   shiftMonthKey,
-  monthKeyFromDate
+  monthKeyFromDate,
+  canPlanQuestAsDailyVictory,
+  isQuestPlannedForDate
 } from '../src/utils/dailyVictories.js';
 
 function assert(condition, message) {
@@ -203,6 +205,32 @@ function runTests() {
     manualStillBlocked = true;
   }
   assert(manualStillBlocked, 'Cadastro manual continua bloqueado além de 3');
+
+  let questList = [];
+  const fromQuest = createDailyVictory(questList, {
+    title: 'Redigir parecer',
+    category: 'Trabalho',
+    date: today,
+    questId: 'q-parecer-1'
+  }, { today });
+  questList = fromQuest.list;
+  assert(fromQuest.victory.questId === 'q-parecer-1', 'Persiste o vínculo com a missão');
+  assert(isQuestPlannedForDate(questList, 'q-parecer-1', today), 'Detecta missão já planejada para o dia');
+  assert(canPlanQuestAsDailyVictory(questList, 'q-parecer-1', today).alreadyPlanned, 'Bloqueia duplicar a mesma missão');
+  assert(canPlanQuestAsDailyVictory(questList, 'q-outra', today).canPlan, 'Outra missão ainda pode ser planejada');
+
+  let duplicateQuestBlocked = false;
+  try {
+    createDailyVictory(questList, { title: 'Redigir parecer de novo', date: today, questId: 'q-parecer-1' }, { today });
+  } catch (err) {
+    duplicateQuestBlocked = /já está nas vitórias/.test(err.message);
+  }
+  assert(duplicateQuestBlocked, 'Recusa a mesma missão duas vezes no mesmo dia');
+
+  questList = createDailyVictory(questList, { title: 'Vitória 2', date: today }, { today }).list;
+  questList = createDailyVictory(questList, { title: 'Vitória 3', date: today }, { today }).list;
+  const atCap = canPlanQuestAsDailyVictory(questList, 'q-nova', today);
+  assert(atCap.atLimit && !atCap.canPlan, 'Com 3 vitórias, o botão da missão deve ficar desabilitado');
 
   const overflowSummary = summarizeDay(overflowList, today);
   assert(overflowSummary.plannedCount === 5 && overflowSummary.displayCap === 5, 'Resumo mostra o teto estendido');

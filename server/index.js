@@ -2577,7 +2577,8 @@ app.post('/api/daily-victories', (req, res) => {
       title: req.body?.title,
       category: req.body?.category,
       date: req.body?.date,
-      source: req.body?.source
+      source: req.body?.source,
+      questId: req.body?.questId
     }, { today: todayStr, defaultCategory: defaultCat });
     db.dailyVictories = result.list;
     saveDb(db);
