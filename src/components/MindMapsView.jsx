@@ -61,11 +61,18 @@ function nodeSize(node = {}, fontSize = 13) {
   const scale = fs / 13;
   const hasMedia = !!(node.imageUrl || node.icon);
   const extra = node.imageUrl ? 36 * scale : (node.icon ? 28 * scale : 0);
-  const w = Math.max(
-    (hasMedia ? 148 : 120) * Math.max(1, scale * 0.9),
-    Math.min(340, 28 + String(node.label || '').length * (fs * 0.62) + extra)
-  );
-  const h = (node.imageUrl ? 72 : 44) * Math.max(1, scale * 0.92);
+  const label = String(node.label || '');
+  const charW = fs * 0.62;
+  const padding = 28;
+  const minW = (hasMedia ? 148 : 120) * Math.max(1, scale * 0.9);
+  const maxW = 460;
+  const singleLineW = padding + label.length * charW + extra;
+  const w = Math.max(minW, Math.min(maxW, singleLineW));
+  const innerW = Math.max(48, w - padding - extra);
+  const charsPerLine = Math.max(8, Math.floor(innerW / Math.max(charW, 1)));
+  const lines = Math.max(1, Math.ceil(label.length / charsPerLine));
+  const minH = (node.imageUrl ? 72 : 44) * Math.max(1, scale * 0.92);
+  const h = Math.max(minH, 18 + lines * fs * 1.28);
   return { w, h };
 }
 
@@ -382,7 +389,6 @@ function MindMapCanvas({
           const selected = selectedId === node.id;
           const linkingFrom = linkingFromId === node.id;
           const kids = childrenOf(map, node.id).length;
-          const label = node.label.length > 28 ? `${node.label.slice(0, 26)}…` : node.label;
           return (
             <div
               key={node.id}
@@ -407,7 +413,7 @@ function MindMapCanvas({
                   <MindMapIcon name={node.icon} size={Math.max(14, Math.round(fontSize + 3))} color={node.color || '#c084fc'} />
                 </span>
               ) : null}
-              <span className="mindmap-node-label">{label}</span>
+              <span className="mindmap-node-label">{node.label}</span>
               {kids > 0 && (
                 <span className="mindmap-node-badge" style={{ background: node.color || '#64748b' }}>
                   {node.collapsed ? '+' : kids}
