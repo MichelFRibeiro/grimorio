@@ -624,6 +624,55 @@ export function useGameData() {
     return false;
   };
 
+  const addMindMapCrossLink = async (mapId, linkData) => {
+    playClick();
+    const res = await fetch(`/api/mind-maps/${mapId}/links`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(linkData)
+    });
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      applyMindMapPayload(result);
+      return result.mindMap || null;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao criar a ligação.');
+    throw new Error(errJson.error || 'Erro ao criar a ligação.');
+  };
+
+  const updateMindMapCrossLink = async (mapId, linkId, linkData) => {
+    const res = await fetch(`/api/mind-maps/${mapId}/links/${linkId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(linkData)
+    });
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      applyMindMapPayload(result);
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao atualizar a ligação.');
+    return false;
+  };
+
+  const deleteMindMapCrossLink = async (mapId, linkId) => {
+    playClick();
+    const res = await fetch(`/api/mind-maps/${mapId}/links/${linkId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      applyMindMapPayload(result);
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao excluir a ligação.');
+    return false;
+  };
+
   const layoutMindMap = async (mapId) => {
     playClick();
     const res = await fetch(`/api/mind-maps/${mapId}/layout`, {
@@ -1433,6 +1482,9 @@ export function useGameData() {
     addMindMapNode,
     updateMindMapNode,
     deleteMindMapNode,
+    addMindMapCrossLink,
+    updateMindMapCrossLink,
+    deleteMindMapCrossLink,
     layoutMindMap,
     studyMindMap,
     deleteMindMap,

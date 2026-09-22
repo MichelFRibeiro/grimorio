@@ -24,6 +24,22 @@ export function sanitizeMindMapLineStyle(value) {
   return value === 'curve' ? 'curve' : 'taper';
 }
 
+export const MIND_MAP_BASE_FONT_SIZE = 13;
+export const MIND_MAP_DEPTH_FONT_SIZES = [19, 15.5, 13, 11.5, 10.5, 10];
+
+export function mindMapNodeFontSize(depth = 0, enabled = false) {
+  if (!enabled) return MIND_MAP_BASE_FONT_SIZE;
+  const n = Number(depth);
+  const i = Math.max(0, Math.round(Number.isFinite(n) ? n : 0));
+  return MIND_MAP_DEPTH_FONT_SIZES[Math.min(i, MIND_MAP_DEPTH_FONT_SIZES.length - 1)];
+}
+
+function undirectedLinkKey(a, b) {
+  const left = String(a || '');
+  const right = String(b || '');
+  return left < right ? `${left}|${right}` : `${right}|${left}`;
+}
+
 export const STUDY_QUALITY = {
   forgot: 0,
   hard: 1,
@@ -245,11 +261,13 @@ export function createMindMap({
     categoryId: categoryId || null,
     color: color || root.color,
     lineStyle: 'taper',
+    scaleFontByDepth: false,
     createdAt: now,
     updatedAt: now,
     lastStudiedAt: null,
     nodes: [root],
-    rootId: root.id
+    rootId: root.id,
+    crossLinks: []
   };
 }
 
@@ -385,7 +403,11 @@ export function deleteMindMapNode(map, nodeId) {
   return {
     ...map,
     updatedAt: new Date().toISOString(),
-    nodes: map.nodes.filter(n => !remove.has(n.id))
+    nodes: map.nodes.filter(n => !remove.has(n.id)),
+    crossLinks: sanitizeMindMapCrossLinks(
+      (map.crossLinks || []).filter(l => !remove.has(l.fromId) && !remove.has(l.toId)),
+      map.nodes.filter(n => !remove.has(n.id))
+    )
   };
 }
 
@@ -402,6 +424,7 @@ export function updateMindMapMeta(map, patch = {}) {
   if (patch.categoryId !== undefined) next.categoryId = patch.categoryId || null;
   if (patch.color !== undefined && patch.color) next.color = patch.color;
   if (patch.lineStyle !== undefined) next.lineStyle = sanitizeMindMapLineStyle(patch.lineStyle);
+  if (patch.scaleFontByDepth !== undefined) next.scaleFontByDepth = !!patch.scaleFontByDepth;
   if (patch.rootLabel !== undefined) {
     const root = getRootNode(next);
     if (root) {
@@ -413,6 +436,117 @@ export function updateMindMapMeta(map, patch = {}) {
     }
   }
   return next;
+}
+
+export function createMindMapCrossLink({
+  id,
+  fromId,
+  toId,
+  label = '',
+  icon = '',
+  color
+} = {}, nodes = []) {
+  const from = String(fromId || '').trim();
+  const to = String(toId || '').trim();
+  if (!from || !to) throw new Error('Escolha os dois ramos da ligação.');
+  if (from === to) throw new Error('A ligação precisa de dois ramos diferentes.');
+  const ids = new Set((nodes || []).map(n => n.id));
+  if (ids.size && (!ids.has(from) || !ids.has(to))) {
+    throw new Error('Um dos ramos da ligação não existe neste mapa.');
+  }
+  const treeLinked = (nodes || []).some(n => (
+    (n.id === to && n.parentId === from) || (n.id === from && n.parentId === to)
+  ));
+  if (treeLinked) {
+    throw new Error('Esses ramos já estão ligados pela árvore do mapa. Use uma ligação extra só para relacionar ideias de ramos diferentes.');
+  }
+  return {
+    id: id || uidMind('ml'),
+    fromId: from,
+    toId: to,
+    label: String(label || '').trim().slice(0, 80),
+    icon: sanitizeMindMapIcon(icon),
+    color: color || colorForIndex(hashStr(from + to) + 3)
+  };
+}
+
+function hashStr(value) {
+  const s = String(value || '');
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+export function sanitizeMindMapCrossLink(raw, nodes = []) {
+  if (!raw || typeof raw !== 'object') return null;
+  try {
+    return createMindMapCrossLink(raw, nodes);
+  } catch {
+    return null;
+  }
+}
+
+export function sanitizeMindMapCrossLinks(list = [], nodes = []) {
+  const seen = new Set();
+  const out = [];
+  (Array.isArray(list) ? list : []).forEach((raw) => {
+    const link = sanitizeMindMapCrossLink(raw, nodes);
+    if (!link) return;
+    const key = undirectedLinkKey(link.fromId, link.toId);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(link);
+  });
+  return out;
+}
+
+export function addMindMapCrossLink(map, payload = {}) {
+  if (!map) throw new Error('Mapa mental não encontrado.');
+  const link = createMindMapCrossLink(payload, map.nodes);
+  const key = undirectedLinkKey(link.fromId, link.toId);
+  const existing = (map.crossLinks || []).some(l => undirectedLinkKey(l.fromId, l.toId) === key);
+  if (existing) throw new Error('Já existe uma ligação entre esses ramos.');
+  return {
+    ...map,
+    updatedAt: new Date().toISOString(),
+    crossLinks: [...(map.crossLinks || []), link]
+  };
+}
+
+export function updateMindMapCrossLink(map, linkId, patch = {}) {
+  if (!map) throw new Error('Mapa mental não encontrado.');
+  const links = map.crossLinks || [];
+  const index = links.findIndex(l => l.id === linkId);
+  if (index === -1) throw new Error('Ligação não encontrada.');
+  const current = links[index];
+  const nextLink = createMindMapCrossLink({
+    ...current,
+    ...patch,
+    id: current.id,
+    fromId: patch.fromId !== undefined ? patch.fromId : current.fromId,
+    toId: patch.toId !== undefined ? patch.toId : current.toId
+  }, map.nodes);
+  const key = undirectedLinkKey(nextLink.fromId, nextLink.toId);
+  const clash = links.some((l, i) => i !== index && undirectedLinkKey(l.fromId, l.toId) === key);
+  if (clash) throw new Error('Já existe uma ligação entre esses ramos.');
+  const nextLinks = links.slice();
+  nextLinks[index] = nextLink;
+  return {
+    ...map,
+    updatedAt: new Date().toISOString(),
+    crossLinks: nextLinks
+  };
+}
+
+export function deleteMindMapCrossLink(map, linkId) {
+  if (!map) throw new Error('Mapa mental não encontrado.');
+  const links = map.crossLinks || [];
+  if (!links.some(l => l.id === linkId)) throw new Error('Ligação não encontrada.');
+  return {
+    ...map,
+    updatedAt: new Date().toISOString(),
+    crossLinks: links.filter(l => l.id !== linkId)
+  };
 }
 
 export function layoutMindMap(map, { radius = 200 } = {}) {
@@ -668,11 +802,13 @@ export function sanitizeMindMap(raw) {
     categoryId: raw.categoryId || null,
     color: raw.color || root.color,
     lineStyle: sanitizeMindMapLineStyle(raw.lineStyle),
+    scaleFontByDepth: !!raw.scaleFontByDepth,
     createdAt: raw.createdAt || new Date().toISOString(),
     updatedAt: raw.updatedAt || raw.createdAt || new Date().toISOString(),
     lastStudiedAt: sanitizeDate(raw.lastStudiedAt, null),
     rootId: root.id,
-    nodes
+    nodes,
+    crossLinks: sanitizeMindMapCrossLinks(raw.crossLinks, nodes)
   };
 }
 

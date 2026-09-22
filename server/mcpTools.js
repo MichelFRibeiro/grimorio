@@ -70,6 +70,9 @@ import {
   addMindMapNode,
   updateMindMapNode,
   deleteMindMapNode,
+  addMindMapCrossLink,
+  updateMindMapCrossLink,
+  deleteMindMapCrossLink,
   updateMindMapMeta,
   layoutMindMap,
   applyStudySession,
@@ -1392,7 +1395,7 @@ export const toolsDefinition = [
   },
   {
     name: 'update_mind_map',
-    description: 'Atualizar título, descrição, categoria, estilo das linhas ou reorganizar o layout de um mapa mental.',
+    description: 'Atualizar título, descrição, categoria, estilo das linhas, escala de fonte pelo núcleo ou reorganizar o layout de um mapa mental.',
     schema: {
       id: z.string().describe('ID do mapa'),
       title: z.string().optional(),
@@ -1402,6 +1405,7 @@ export const toolsDefinition = [
       color: z.string().optional(),
       rootLabel: z.string().optional(),
       lineStyle: z.enum(['curve', 'taper']).optional().describe('curve = linhas, taper = galhos que afinam'),
+      scaleFontByDepth: z.boolean().optional().describe('Se true, a fonte fica maior perto do núcleo e menor nas pontas'),
       layout: z.boolean().optional().describe('Se true, reorganiza automaticamente os ramos')
     },
     handler: async (args) => {
@@ -1470,6 +1474,79 @@ export const toolsDefinition = [
         db.mindMaps[index] = next;
         saveDb(db);
         return formatSuccess(next, 'Ramo atualizado.');
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'add_mind_map_link',
+    description: 'Criar uma ligação extra entre dois ramos escolhidos (não substitui o galho pai-filho). Pode ter rótulo e ícone.',
+    schema: {
+      mapId: z.string().describe('ID do mapa'),
+      fromId: z.string().describe('ID do primeiro ramo'),
+      toId: z.string().describe('ID do segundo ramo'),
+      label: z.string().optional().describe('Rótulo da ligação (ex: causa, vs., exceção)'),
+      icon: z.string().optional().describe('Nome do ícone Lucide no rótulo'),
+      color: z.string().optional().describe('Cor hex da linha')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      const index = db.mindMaps.findIndex(m => m.id === args.mapId);
+      if (index === -1) return formatError(`Mapa mental '${args.mapId}' não encontrado.`);
+      try {
+        const next = addMindMapCrossLink(db.mindMaps[index], args);
+        db.mindMaps[index] = next;
+        saveDb(db);
+        return formatSuccess(next, 'Ligação criada entre os ramos.');
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'update_mind_map_link',
+    description: 'Atualizar rótulo, ícone ou cor de uma ligação extra entre ramos.',
+    schema: {
+      mapId: z.string().describe('ID do mapa'),
+      linkId: z.string().describe('ID da ligação'),
+      label: z.string().optional(),
+      icon: z.string().optional(),
+      color: z.string().optional()
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      const index = db.mindMaps.findIndex(m => m.id === args.mapId);
+      if (index === -1) return formatError(`Mapa mental '${args.mapId}' não encontrado.`);
+      try {
+        const next = updateMindMapCrossLink(db.mindMaps[index], args.linkId, args);
+        db.mindMaps[index] = next;
+        saveDb(db);
+        return formatSuccess(next, 'Ligação atualizada.');
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'delete_mind_map_link',
+    description: 'Remover uma ligação extra entre ramos.',
+    schema: {
+      mapId: z.string().describe('ID do mapa'),
+      linkId: z.string().describe('ID da ligação')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      const index = db.mindMaps.findIndex(m => m.id === args.mapId);
+      if (index === -1) return formatError(`Mapa mental '${args.mapId}' não encontrado.`);
+      try {
+        const next = deleteMindMapCrossLink(db.mindMaps[index], args.linkId);
+        db.mindMaps[index] = next;
+        saveDb(db);
+        return formatSuccess(next, 'Ligação removida.');
       } catch (err) {
         return formatError(err.message);
       }

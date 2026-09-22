@@ -4,7 +4,11 @@ import {
   updateMindMapNode,
   updateMindMapMeta,
   deleteMindMapNode,
+  addMindMapCrossLink,
+  updateMindMapCrossLink,
+  deleteMindMapCrossLink,
   layoutMindMap,
+  mindMapNodeFontSize,
   getStudyQueue,
   applyStudySession,
   computeStudyRewards,
@@ -38,6 +42,8 @@ function runTests() {
   });
   assert(map.title === 'Direito Constitucional', 'Cria mapa com título');
   assert(map.lineStyle === 'taper', 'Mapa novo usa galhos que afinam');
+  assert(map.scaleFontByDepth === false, 'Mapa novo começa com fonte uniforme');
+  assert(Array.isArray(map.crossLinks) && map.crossLinks.length === 0, 'Mapa novo começa sem ligações extras');
   assert(!!getRootNode(map), 'Cria o núcleo do mapa');
   assert(countBranches(map) === 0, 'Mapa novo começa só com o núcleo');
 
@@ -158,7 +164,55 @@ function runTests() {
   assert(moved[0].categoryId === constitucional.id, 'Reatribui mapas ao excluir subassunto');
   const lined = updateMindMapMeta(map, { lineStyle: 'curve' });
   assert(lined.lineStyle === 'curve', 'Alterna para linhas clássicas');
+  const scaled = updateMindMapMeta(map, { scaleFontByDepth: true });
+  assert(scaled.scaleFontByDepth === true, 'Ativa fonte maior perto do núcleo');
+  assert(mindMapNodeFontSize(0, true) > mindMapNodeFontSize(2, true), 'Núcleo fica com fonte maior que ramos distantes');
+  assert(mindMapNodeFontSize(0, false) === mindMapNodeFontSize(4, false), 'Fonte uniforme quando desligado');
   assert(sanitizeMindMap({ title: 'X', lineStyle: 'taper', nodes: [{ label: 'X' }] }).lineStyle === 'taper', 'Sanitize preserva galhos');
+  assert(sanitizeMindMap({ title: 'X', scaleFontByDepth: true, nodes: [{ label: 'X' }] }).scaleFontByDepth === true, 'Sanitize preserva escala de fonte');
+
+  const left = childrenOf(withOrg, withOrg.rootId).find(n => n.label === 'Organização do Estado');
+  const rights = childrenOf(withOrg, withOrg.rootId).find(n => n.label === 'Direitos Fundamentais');
+  const linked = addMindMapCrossLink(withOrg, {
+    fromId: left.id,
+    toId: rights.id,
+    label: 'tensão',
+    icon: 'Scale'
+  });
+  assert(linked.crossLinks.length === 1, 'Cria ligação extra entre ramos');
+  assert(linked.crossLinks[0].label === 'tensão', 'Persiste rótulo da ligação');
+  assert(linked.crossLinks[0].icon === 'Scale', 'Persiste ícone da ligação');
+  const relabeled = updateMindMapCrossLink(linked, linked.crossLinks[0].id, { label: 'vs.' });
+  assert(relabeled.crossLinks[0].label === 'vs.', 'Atualiza rótulo da ligação');
+  let treeLinkBlocked = false;
+  try {
+    addMindMapCrossLink(withOrg, { fromId: withOrg.rootId, toId: left.id });
+  } catch {
+    treeLinkBlocked = true;
+  }
+  assert(treeLinkBlocked, 'Recusa ligação extra no galho pai-filho');
+  const unlinked = deleteMindMapCrossLink(relabeled, relabeled.crossLinks[0].id);
+  assert(unlinked.crossLinks.length === 0, 'Remove ligação extra');
+  const prunedLinks = deleteMindMapNode(
+    addMindMapCrossLink(withOrg, { fromId: left.id, toId: rights.id, label: 'x' }),
+    rights.id
+  );
+  assert(prunedLinks.crossLinks.length === 0, 'Excluir ramo remove ligações incidentes');
+  const sanitizedLinks = sanitizeMindMap({
+    title: 'Com ligações',
+    nodes: [
+      { id: 'a', label: 'Núcleo', x: 0, y: 0 },
+      { id: 'b', parentId: 'a', label: 'Filho 1' },
+      { id: 'c', parentId: 'a', label: 'Filho 2' }
+    ],
+    crossLinks: [
+      { fromId: 'b', toId: 'c', label: 'relação', icon: 'Link' },
+      { fromId: 'missing', toId: 'c', label: 'órfã' },
+      { fromId: 'a', toId: 'b', label: 'árvore' }
+    ]
+  });
+  assert(sanitizedLinks.crossLinks.length === 1, 'Sanitize mantém só ligações válidas');
+  assert(sanitizedLinks.crossLinks[0].label === 'relação', 'Sanitize preserva rótulo válido');
   assert(sanitizeMindMapCategories().length > 0, 'Categorias padrão preenchem lista ausente');
   assert(sanitizeMindMapCategories([]).length === 0, 'Lista vazia permanece vazia');
 

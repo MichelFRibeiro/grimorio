@@ -65,7 +65,9 @@ export function MindMapMediaPicker({
   icon = '',
   imageUrl = '',
   color = '#c084fc',
-  onChange
+  onChange,
+  allowImage = true,
+  title = 'Ícone ou imagem'
 }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('Destaques');
@@ -122,7 +124,7 @@ export function MindMapMediaPicker({
   return (
     <div className="mindmap-media-picker">
       <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', margin: '14px 0 8px' }}>
-        Ícone ou imagem
+        {title}
       </div>
       {(icon || imageUrl) && (
         <div className="mindmap-media-preview">
@@ -173,29 +175,33 @@ export function MindMapMediaPicker({
       <p style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 6 }}>
         {query ? `${icons.length} resultados` : `${MIND_MAP_ALL_ICONS.length} ícones Lucide disponíveis.`}
       </p>
-      <label className="mindmap-ghost-btn" style={{ marginTop: 10, justifyContent: 'center', cursor: 'pointer' }}>
-        Enviar imagem
-        <input type="file" accept="image/*" onChange={onPickFile} style={{ display: 'none' }} />
-      </label>
-      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-        <input
-          value={urlDraft}
-          onChange={(e) => setUrlDraft(e.target.value)}
-          placeholder="https://… imagem"
-          style={{ ...pickerInputStyle, margin: 0 }}
-        />
-        <button
-          type="button"
-          className="mindmap-ghost-btn"
-          onClick={() => {
-            if (!urlDraft.trim()) return;
-            applyImage(urlDraft.trim());
-            setUrlDraft('');
-          }}
-        >
-          Usar
-        </button>
-      </div>
+      {allowImage && (
+        <>
+          <label className="mindmap-ghost-btn" style={{ marginTop: 10, justifyContent: 'center', cursor: 'pointer' }}>
+            Enviar imagem
+            <input type="file" accept="image/*" onChange={onPickFile} style={{ display: 'none' }} />
+          </label>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <input
+              value={urlDraft}
+              onChange={(e) => setUrlDraft(e.target.value)}
+              placeholder="https://… imagem"
+              style={{ ...pickerInputStyle, margin: 0 }}
+            />
+            <button
+              type="button"
+              className="mindmap-ghost-btn"
+              onClick={() => {
+                if (!urlDraft.trim()) return;
+                applyImage(urlDraft.trim());
+                setUrlDraft('');
+              }}
+            >
+              Usar
+            </button>
+          </div>
+        </>
+      )}
       {error && <p style={{ color: '#f87171', fontSize: '0.75rem', marginTop: 8 }}>{error}</p>}
     </div>
   );

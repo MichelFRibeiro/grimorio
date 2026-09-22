@@ -156,6 +156,7 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 #### 7. 🧠 Mapas Mentais (`mindMaps`)
 - `list_mind_maps`, `get_mind_map`, `create_mind_map`, `update_mind_map`.
 - `add_mind_map_node`, `update_mind_map_node`, `delete_mind_map_node`.
+- `add_mind_map_link`, `update_mind_map_link`, `delete_mind_map_link` (ligações extras entre ramos, com rótulo/ícone).
 - `study_mind_map`: registra revisão espaçada (qualidade 0–3) e concede XP/Sabedoria.
 - `delete_mind_map`: exclui o mapa e estorna as sessões de estudo.
 - `list_mind_map_categories`, `create_mind_map_category`, `update_mind_map_category`, `delete_mind_map_category` (assunto + subassunto via `parentId`).

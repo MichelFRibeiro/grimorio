@@ -25,7 +25,9 @@ import {
   Maximize2,
   Minimize2,
   Tag,
-  FolderTree
+  FolderTree,
+  Link2,
+  Unlink
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { MindMapIcon, MindMapMediaPicker, MindMapThumb } from './MindMapMedia';
@@ -39,6 +41,7 @@ import {
   getStudyQueue,
   groupMapsByCategory,
   mindMapCategoryLabel,
+  mindMapNodeFontSize,
   nodeDepth,
   nodePath,
   sanitizeMindMapCategories,
@@ -53,16 +56,21 @@ const QUALITY_OPTIONS = [
   { value: 3, label: 'Fácil', hint: 'Mais intervalo', color: '#10b981' }
 ];
 
-function nodeSize(node = {}) {
+function nodeSize(node = {}, fontSize = 13) {
+  const fs = Number(fontSize) || 13;
+  const scale = fs / 13;
   const hasMedia = !!(node.imageUrl || node.icon);
-  const extra = node.imageUrl ? 36 : (node.icon ? 28 : 0);
-  const w = Math.max(hasMedia ? 148 : 120, Math.min(280, 28 + String(node.label || '').length * 8 + extra));
-  const h = node.imageUrl ? 72 : 44;
+  const extra = node.imageUrl ? 36 * scale : (node.icon ? 28 * scale : 0);
+  const w = Math.max(
+    (hasMedia ? 148 : 120) * Math.max(1, scale * 0.9),
+    Math.min(340, 28 + String(node.label || '').length * (fs * 0.62) + extra)
+  );
+  const h = (node.imageUrl ? 72 : 44) * Math.max(1, scale * 0.92);
   return { w, h };
 }
 
-function nodeAnchor(node, toward) {
-  const { w, h } = nodeSize(node);
+function nodeAnchor(node, toward, fontSize) {
+  const { w, h } = nodeSize(node, fontSize);
   const dx = (toward?.x || 0) - (node?.x || 0);
   const dy = (toward?.y || 0) - (node?.y || 0);
   if (!dx && !dy) return { x: node.x, y: node.y };
@@ -80,9 +88,9 @@ function hashStr(value) {
   return h;
 }
 
-function taperBranchPath(fromNode, toNode, depth, linkId) {
-  const start = nodeAnchor(fromNode, toNode);
-  const end = nodeAnchor(toNode, fromNode);
+function taperBranchPath(fromNode, toNode, depth, linkId, fromFont, toFont) {
+  const start = nodeAnchor(fromNode, toNode, fromFont);
+  const end = nodeAnchor(toNode, fromNode, toFont);
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -114,12 +122,41 @@ function taperBranchPath(fromNode, toNode, depth, linkId) {
   return `M ${left.join(' L ')} L ${right.reverse().join(' L ')} Z`;
 }
 
+function quadraticPoint(start, control, end, t = 0.5) {
+  const u = 1 - t;
+  return {
+    x: u * u * start.x + 2 * u * t * control.x + t * t * end.x,
+    y: u * u * start.y + 2 * u * t * control.y + t * t * end.y
+  };
+}
+
+function crossLinkCurve(fromNode, toNode, fromFont, toFont) {
+  const start = nodeAnchor(fromNode, toNode, fromFont);
+  const end = nodeAnchor(toNode, fromNode, toFont);
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const bulge = Math.min(48, Math.max(18, len * 0.16));
+  const control = {
+    x: (start.x + end.x) / 2 - (dy / len) * bulge,
+    y: (start.y + end.y) / 2 + (dx / len) * bulge
+  };
+  return {
+    d: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`,
+    mid: quadraticPoint(start, control, end, 0.5)
+  };
+}
+
 function MindMapCanvas({
   map,
   selectedId,
+  selectedLinkId,
   onSelect,
+  onSelectLink,
   onMoveNode,
   onAddChild,
+  linkingFromId = null,
+  onLinkTarget,
   readOnly = false,
   fullscreen = false,
   onToggleFullscreen
@@ -130,6 +167,8 @@ function MindMapCanvas({
   const dragRef = useRef(null);
 
   const lineStyle = sanitizeMindMapLineStyle(map?.lineStyle);
+  const scaleFont = !!map?.scaleFontByDepth;
+  const fontFor = (node) => mindMapNodeFontSize(nodeDepth(map, node?.id), scaleFont);
   const visible = useMemo(() => visibleNodeIds(map), [map]);
   const visibleIds = useMemo(() => new Set(visible.map(n => n.id)), [visible]);
   const links = useMemo(() => (
@@ -143,6 +182,15 @@ function MindMapCanvas({
       }))
       .filter(l => l.from && l.to)
   ), [visible, visibleIds, map]);
+  const crossLinks = useMemo(() => (
+    (map?.crossLinks || [])
+      .map((link) => ({
+        ...link,
+        from: visible.find(n => n.id === link.fromId),
+        to: visible.find(n => n.id === link.toId)
+      }))
+      .filter(l => l.from && l.to)
+  ), [map?.crossLinks, visible]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -174,11 +222,17 @@ function MindMapCanvas({
       panY: pan.y
     };
     onSelect(null);
+    if (onSelectLink) onSelectLink(null);
   };
 
   const onPointerDownNode = (e, node) => {
     e.stopPropagation();
-    onSelect(node.id);
+    if (linkingFromId && onLinkTarget) {
+      onLinkTarget(node.id);
+      return;
+    }
+    if (onSelect) onSelect(node.id);
+    if (onSelectLink) onSelectLink(null);
     if (readOnly) return;
     dragRef.current = {
       kind: 'node',
@@ -245,7 +299,7 @@ function MindMapCanvas({
             lineStyle === 'taper' ? (
               <path
                 key={link.id}
-                d={taperBranchPath(link.from, link.to, link.depth, link.id)}
+                d={taperBranchPath(link.from, link.to, link.depth, link.id, fontFor(link.from), fontFor(link.to))}
                 fill={link.to.color || '#64748b'}
                 opacity="0.82"
                 stroke={link.to.color || '#64748b'}
@@ -263,25 +317,86 @@ function MindMapCanvas({
               />
             )
           ))}
+          {crossLinks.map((link) => {
+            const curve = crossLinkCurve(link.from, link.to, fontFor(link.from), fontFor(link.to));
+            const selected = selectedLinkId === link.id;
+            const color = link.color || '#38bdf8';
+            return (
+              <g key={link.id}>
+                <path
+                  d={curve.d}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={selected ? 3.4 : 2.2}
+                  strokeDasharray="7 6"
+                  opacity={selected ? 0.95 : 0.78}
+                  strokeLinecap="round"
+                />
+                <path
+                  d={curve.d}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth="14"
+                  style={{ cursor: readOnly ? 'default' : 'pointer' }}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    if (onSelectLink) onSelectLink(link.id);
+                    if (onSelect) onSelect(null);
+                  }}
+                />
+              </g>
+            );
+          })}
         </g>
       </svg>
       <div className="mindmap-world" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
+        {crossLinks.map((link) => {
+          if (!link.label && !link.icon) return null;
+          const curve = crossLinkCurve(link.from, link.to, fontFor(link.from), fontFor(link.to));
+          const selected = selectedLinkId === link.id;
+          return (
+            <button
+              key={`${link.id}-label`}
+              type="button"
+              className={`mindmap-cross-label ${selected ? 'is-selected' : ''}`}
+              style={{
+                left: curve.mid.x,
+                top: curve.mid.y,
+                borderColor: selected ? '#fbbf24' : (link.color || '#38bdf8'),
+                color: link.color || '#7dd3fc'
+              }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                if (onSelectLink) onSelectLink(link.id);
+                if (onSelect) onSelect(null);
+              }}
+            >
+              {link.icon ? <MindMapIcon name={link.icon} size={12} color={link.color || '#7dd3fc'} /> : null}
+              {link.label ? <span>{link.label}</span> : null}
+            </button>
+          );
+        })}
         {visible.map((node) => {
-          const { w, h } = nodeSize(node);
+          const fontSize = fontFor(node);
+          const { w, h } = nodeSize(node, fontSize);
           const selected = selectedId === node.id;
+          const linkingFrom = linkingFromId === node.id;
           const kids = childrenOf(map, node.id).length;
           const label = node.label.length > 28 ? `${node.label.slice(0, 26)}…` : node.label;
           return (
             <div
               key={node.id}
-              className={`mindmap-node ${selected ? 'is-selected' : ''}`}
+              className={`mindmap-node ${selected ? 'is-selected' : ''} ${linkingFrom ? 'is-linking' : ''}`}
               style={{
                 width: w,
                 minHeight: h,
                 left: node.x - w / 2,
                 top: node.y - h / 2,
-                borderColor: selected ? '#fbbf24' : (node.color || '#64748b'),
-                boxShadow: selected ? '0 0 12px rgba(251,191,36,0.35)' : 'none'
+                fontSize,
+                borderColor: linkingFrom ? '#38bdf8' : (selected ? '#fbbf24' : (node.color || '#64748b')),
+                boxShadow: linkingFrom
+                  ? '0 0 14px rgba(56,189,248,0.45)'
+                  : (selected ? '0 0 12px rgba(251,191,36,0.35)' : 'none')
               }}
               onPointerDown={(e) => onPointerDownNode(e, node)}
             >
@@ -289,7 +404,7 @@ function MindMapCanvas({
                 <img src={node.imageUrl} alt="" className="mindmap-node-photo" draggable={false} />
               ) : node.icon ? (
                 <span className="mindmap-node-icon" style={{ color: node.color || '#c084fc' }}>
-                  <MindMapIcon name={node.icon} size={16} color={node.color || '#c084fc'} />
+                  <MindMapIcon name={node.icon} size={Math.max(14, Math.round(fontSize + 3))} color={node.color || '#c084fc'} />
                 </span>
               ) : null}
               <span className="mindmap-node-label">{label}</span>
@@ -314,6 +429,11 @@ function MindMapCanvas({
           );
         })}
       </div>
+      {linkingFromId && (
+        <div className="mindmap-link-hint">
+          Clique no outro ramo para ligar · Esc cancela
+        </div>
+      )}
       <div className="mindmap-zoom">
         {onToggleFullscreen && (
           <button type="button" onClick={onToggleFullscreen} title={fullscreen ? 'Sair da tela cheia' : 'Tela cheia'}>
@@ -337,6 +457,9 @@ export function MindMapsView({
   onAddNode,
   onUpdateNode,
   onDeleteNode,
+  onAddCrossLink,
+  onUpdateCrossLink,
+  onDeleteCrossLink,
   onLayoutMap,
   onStudyMap,
   onDeleteMap,
@@ -369,8 +492,12 @@ export function MindMapsView({
   const [activeMapId, setActiveMapId] = useState(null);
   const [pendingMap, setPendingMap] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedLinkId, setSelectedLinkId] = useState(null);
+  const [linkingFromId, setLinkingFromId] = useState(null);
   const [draftLabel, setDraftLabel] = useState('');
   const [draftNotes, setDraftNotes] = useState('');
+  const [draftLinkLabel, setDraftLinkLabel] = useState('');
+  const [linkError, setLinkError] = useState('');
   const [localNodes, setLocalNodes] = useState(null);
 
   const [studyMode, setStudyMode] = useState('branches');
@@ -408,10 +535,13 @@ export function MindMapsView({
   const selectedNode = editorMap && selectedId
     ? (editorMap.nodes || []).find(n => n.id === selectedId)
     : null;
+  const selectedLink = editorMap && selectedLinkId
+    ? (editorMap.crossLinks || []).find(l => l.id === selectedLinkId)
+    : null;
 
   useEffect(() => {
     setLocalNodes(null);
-  }, [liveMap?.updatedAt, liveMap?.nodes?.length]);
+  }, [liveMap?.updatedAt, liveMap?.nodes?.length, liveMap?.crossLinks?.length]);
 
   useEffect(() => {
     if (selectedNode) {
@@ -419,6 +549,11 @@ export function MindMapsView({
       setDraftNotes(selectedNode.notes || '');
     }
   }, [selectedNode?.id]);
+
+  useEffect(() => {
+    setDraftLinkLabel(selectedLink?.label || '');
+    setLinkError('');
+  }, [selectedLink?.id]);
 
   const matchingCategoryIds = useMemo(() => {
     if (filterCategoryId === 'all') return null;
@@ -441,18 +576,24 @@ export function MindMapsView({
   const groupedMaps = groupMapsByCategory(filteredMaps, categories);
 
   useEffect(() => {
-    if (!fullscreen) return undefined;
+    if (!fullscreen && !linkingFromId) return undefined;
     const onKey = (e) => {
-      if (e.key === 'Escape') setFullscreen(false);
+      if (e.key !== 'Escape') return;
+      if (linkingFromId) {
+        e.preventDefault();
+        cancelLinking();
+        return;
+      }
+      if (fullscreen) setFullscreen(false);
     };
     window.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    if (fullscreen) document.body.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [fullscreen]);
+  }, [fullscreen, linkingFromId]);
 
   const dueCount = maps.reduce((acc, m) => acc + (computeMapStats(m, { today: todayStr }).dueBranches || 0), 0);
   const sessions = mindMapSessions || [];
@@ -460,6 +601,8 @@ export function MindMapsView({
   const openEditor = (map) => {
     setActiveMapId(map.id);
     setSelectedId(map.rootId);
+    setSelectedLinkId(null);
+    setLinkingFromId(null);
     setLocalNodes(null);
     setView('editor');
   };
@@ -527,6 +670,56 @@ export function MindMapsView({
   const handleAddChild = (parentId) => {
     if (!editorMap) return;
     onAddNode(editorMap.id, { parentId, label: 'Novo ramo' });
+  };
+
+  const handleSelectNode = (nodeId) => {
+    setSelectedId(nodeId);
+    if (nodeId) setSelectedLinkId(null);
+  };
+
+  const handleSelectLink = (linkId) => {
+    setSelectedLinkId(linkId);
+    if (linkId) setSelectedId(null);
+    setLinkingFromId(null);
+  };
+
+  const startLinkFromSelected = () => {
+    if (!selectedNode) return;
+    setLinkError('');
+    setLinkingFromId(selectedNode.id);
+  };
+
+  const cancelLinking = () => {
+    setLinkingFromId(null);
+    setLinkError('');
+  };
+
+  const handleLinkTarget = async (toId) => {
+    if (!editorMap || !linkingFromId) return;
+    if (toId === linkingFromId) {
+      setLinkError('Escolha um ramo diferente para ligar.');
+      return;
+    }
+    try {
+      const before = new Set((editorMap.crossLinks || []).map(l => l.id));
+      const created = await onAddCrossLink?.(editorMap.id, { fromId: linkingFromId, toId });
+      setLinkingFromId(null);
+      setLinkError('');
+      const newId = (created?.crossLinks || []).find(l => !before.has(l.id))?.id
+        || created?.crossLinks?.slice(-1)[0]?.id
+        || null;
+      if (newId) {
+        setSelectedLinkId(newId);
+        setSelectedId(null);
+      }
+    } catch (err) {
+      setLinkError(err.message || 'Não foi possível criar a ligação.');
+    }
+  };
+
+  const handleSaveLink = () => {
+    if (!editorMap || !selectedLink || !onUpdateCrossLink) return;
+    onUpdateCrossLink(editorMap.id, selectedLink.id, { label: draftLinkLabel });
   };
 
   const studyQueue = useMemo(() => {
@@ -676,14 +869,70 @@ export function MindMapsView({
           <MindMapCanvas
             map={editorMap}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            selectedLinkId={selectedLinkId}
+            onSelect={handleSelectNode}
+            onSelectLink={handleSelectLink}
             onMoveNode={handleMoveNode}
             onAddChild={handleAddChild}
+            linkingFromId={linkingFromId}
+            onLinkTarget={handleLinkTarget}
             fullscreen={fullscreen}
             onToggleFullscreen={() => setFullscreen(v => !v)}
           />
           <aside className="glass-panel mindmap-side">
-            {selectedNode ? (
+            {selectedLink ? (
+              <>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
+                  Ligação entre ramos
+                </div>
+                <p style={{ color: '#cbd5e1', fontSize: '0.85rem', marginBottom: 10, lineHeight: 1.45 }}>
+                  {(editorMap.nodes || []).find(n => n.id === selectedLink.fromId)?.label || 'Ramo'}
+                  {' ↔ '}
+                  {(editorMap.nodes || []).find(n => n.id === selectedLink.toId)?.label || 'Ramo'}
+                </p>
+                <label style={labelStyle}>Rótulo (opcional)</label>
+                <input
+                  value={draftLinkLabel}
+                  onChange={(e) => setDraftLinkLabel(e.target.value)}
+                  onBlur={handleSaveLink}
+                  placeholder="ex: causa, exceção, vs."
+                  style={inputStyle}
+                />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
+                  {MIND_MAP_NODE_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => onUpdateCrossLink?.(editorMap.id, selectedLink.id, { color })}
+                      style={{
+                        width: 22, height: 22, borderRadius: '50%', background: color, cursor: 'pointer',
+                        border: selectedLink.color === color ? '2px solid #fff' : '2px solid transparent'
+                      }}
+                    />
+                  ))}
+                </div>
+                <MindMapMediaPicker
+                  icon={selectedLink.icon || ''}
+                  imageUrl=""
+                  color={selectedLink.color}
+                  allowImage={false}
+                  title="Ícone da ligação"
+                  onChange={(patch) => onUpdateCrossLink?.(editorMap.id, selectedLink.id, { icon: patch.icon || '' })}
+                />
+                <div style={{ display: 'grid', gap: '8px', marginTop: '16px' }}>
+                  <button
+                    type="button"
+                    className="mindmap-ghost-btn is-danger"
+                    onClick={() => {
+                      onDeleteCrossLink?.(editorMap.id, selectedLink.id);
+                      setSelectedLinkId(null);
+                    }}
+                  >
+                    <Unlink size={14} /> Remover ligação
+                  </button>
+                </div>
+              </>
+            ) : selectedNode ? (
               <>
                 <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
                   Ramo selecionado
@@ -725,6 +974,16 @@ export function MindMapsView({
                   <button type="button" className="mindmap-ghost-btn" onClick={() => handleAddChild(selectedNode.id)}>
                     <Plus size={14} /> Novo ramo filho
                   </button>
+                  {linkingFromId === selectedNode.id ? (
+                    <button type="button" className="mindmap-ghost-btn" style={{ borderColor: 'rgba(56,189,248,0.5)', color: '#38bdf8' }} onClick={cancelLinking}>
+                      <X size={14} /> Cancelar ligação
+                    </button>
+                  ) : (
+                    <button type="button" className="mindmap-ghost-btn" onClick={startLinkFromSelected}>
+                      <Link2 size={14} /> Ligar a outro ramo
+                    </button>
+                  )}
+                  {linkError && <p style={{ color: '#f87171', fontSize: '0.78rem', margin: 0 }}>{linkError}</p>}
                   <button
                     type="button"
                     className="mindmap-ghost-btn"
@@ -758,6 +1017,18 @@ export function MindMapsView({
                     Linhas
                   </button>
                 </div>
+                <label style={{ ...labelStyle, marginTop: 14 }}>Tamanho da fonte</label>
+                <button
+                  type="button"
+                  className="mindmap-ghost-btn"
+                  style={editorMap.scaleFontByDepth ? { borderColor: 'rgba(251,191,36,0.5)', color: '#fbbf24' } : undefined}
+                  onClick={() => onUpdateMap?.(editorMap.id, { scaleFontByDepth: !editorMap.scaleFontByDepth })}
+                >
+                  {editorMap.scaleFontByDepth ? 'Núcleo maior · ligado' : 'Núcleo maior · desligado'}
+                </button>
+                <p style={{ fontSize: '0.72rem', color: '#64748b', margin: '6px 0 0', lineHeight: 1.45 }}>
+                  Quando ligado, o texto fica maior perto do núcleo e menor nas pontas.
+                </p>
                 <label style={{ ...labelStyle, marginTop: 14 }}>Assunto</label>
                 <select
                   value={editorMap.categoryId || ''}
@@ -774,7 +1045,9 @@ export function MindMapsView({
                 </div>
               </>
             ) : (
-              <p style={{ color: '#94a3b8', fontSize: '0.88rem' }}>Clique em um ramo para editar, anotar ou ramificar.</p>
+              <p style={{ color: '#94a3b8', fontSize: '0.88rem' }}>
+                Clique em um ramo para editar, anotar ou ramificar. Para ligar ideias de ramos diferentes, selecione um e use “Ligar a outro ramo”.
+              </p>
             )}
           </aside>
         </div>
@@ -797,6 +1070,15 @@ export function MindMapsView({
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               <button type="button" className="mindmap-ghost-btn" onClick={() => setFullscreen(true)}>
                 <Maximize2 size={15} /> Tela cheia
+              </button>
+              <button
+                type="button"
+                className="mindmap-ghost-btn"
+                onClick={() => onUpdateMap?.(editorMap.id, { scaleFontByDepth: !editorMap.scaleFontByDepth })}
+                title="Quanto mais perto do núcleo, maior a fonte"
+                style={editorMap.scaleFontByDepth ? { borderColor: 'rgba(251,191,36,0.45)', color: '#fbbf24' } : undefined}
+              >
+                Aa {editorMap.scaleFontByDepth ? 'Núcleo maior' : 'Fonte igual'}
               </button>
               <button
                 type="button"
@@ -826,6 +1108,14 @@ export function MindMapsView({
           <div className="mindmap-fullscreen-bar">
             <span className="font-cinzel">{editorMap.title}</span>
             <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                className="mindmap-ghost-btn"
+                onClick={() => onUpdateMap?.(editorMap.id, { scaleFontByDepth: !editorMap.scaleFontByDepth })}
+                style={editorMap.scaleFontByDepth ? { borderColor: 'rgba(251,191,36,0.45)', color: '#fbbf24' } : undefined}
+              >
+                Aa {editorMap.scaleFontByDepth ? 'Núcleo maior' : 'Fonte igual'}
+              </button>
               <button
                 type="button"
                 className="mindmap-ghost-btn"

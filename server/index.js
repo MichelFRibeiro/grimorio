@@ -89,6 +89,9 @@ import {
   addMindMapNode,
   updateMindMapNode,
   deleteMindMapNode,
+  addMindMapCrossLink,
+  updateMindMapCrossLink,
+  deleteMindMapCrossLink,
   updateMindMapMeta,
   layoutMindMap,
   applyStudySession,
@@ -2942,7 +2945,7 @@ app.put('/api/mind-maps/:id', (req, res) => {
     const index = db.mindMaps.findIndex(m => m.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
 
-    const { title, description, category, categoryId, color, rootLabel, lineStyle, nodes, layout } = req.body || {};
+    const { title, description, category, categoryId, color, rootLabel, lineStyle, scaleFontByDepth, nodes, layout } = req.body || {};
     let next = db.mindMaps[index];
 
     if (Array.isArray(nodes)) {
@@ -2955,7 +2958,7 @@ app.put('/api/mind-maps/:id', (req, res) => {
       if (!next) return res.status(400).json({ error: 'Mapa mental inválido.' });
     }
 
-    if (title !== undefined || description !== undefined || category !== undefined || categoryId !== undefined || color !== undefined || rootLabel !== undefined || lineStyle !== undefined) {
+    if (title !== undefined || description !== undefined || category !== undefined || categoryId !== undefined || color !== undefined || rootLabel !== undefined || lineStyle !== undefined || scaleFontByDepth !== undefined) {
       db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
       const cat = categoryId
         ? db.mindMapCategories.find(c => c.id === categoryId)
@@ -2969,7 +2972,8 @@ app.put('/api/mind-maps/:id', (req, res) => {
         categoryId: categoryId !== undefined ? (cat?.id || categoryId || null) : undefined,
         color,
         rootLabel,
-        lineStyle
+        lineStyle,
+        scaleFontByDepth
       });
     }
 
@@ -3032,6 +3036,61 @@ app.delete('/api/mind-maps/:id/nodes/:nodeId', (req, res) => {
     const index = db.mindMaps.findIndex(m => m.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
     const next = deleteMindMapNode(db.mindMaps[index], req.params.nodeId);
+    db.mindMaps[index] = next;
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...next, stats: computeMapStats(next) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/mind-maps/:id/links', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    const { fromId, toId, label, icon, color } = req.body || {};
+    const next = addMindMapCrossLink(db.mindMaps[index], { fromId, toId, label, icon, color });
+    db.mindMaps[index] = next;
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...next, stats: computeMapStats(next) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/mind-maps/:id/links/:linkId', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    const next = updateMindMapCrossLink(db.mindMaps[index], req.params.linkId, req.body || {});
+    db.mindMaps[index] = next;
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...next, stats: computeMapStats(next) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/mind-maps/:id/links/:linkId', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    const next = deleteMindMapCrossLink(db.mindMaps[index], req.params.linkId);
     db.mindMaps[index] = next;
     saveDb(db);
     res.json({
