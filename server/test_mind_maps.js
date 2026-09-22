@@ -2,6 +2,7 @@ import {
   createMindMap,
   addMindMapNode,
   updateMindMapNode,
+  updateMindMapMeta,
   deleteMindMapNode,
   layoutMindMap,
   getStudyQueue,
@@ -36,6 +37,7 @@ function runTests() {
     category: 'Estudos'
   });
   assert(map.title === 'Direito Constitucional', 'Cria mapa com título');
+  assert(map.lineStyle === 'taper', 'Mapa novo usa galhos que afinam');
   assert(!!getRootNode(map), 'Cria o núcleo do mapa');
   assert(countBranches(map) === 0, 'Mapa novo começa só com o núcleo');
 
@@ -116,6 +118,22 @@ function runTests() {
   }
   assert(untitled, 'Rejeita mapa sem título');
 
+  const withIcon = addMindMapNode(map, { parentId: map.rootId, label: 'Balança', icon: 'Scale' });
+  const scaleNode = withIcon.nodes.find(n => n.label === 'Balança');
+  assert(scaleNode.icon === 'Scale', 'Persiste ícone Lucide no ramo');
+  const withImage = updateMindMapNode(withIcon, scaleNode.id, { imageUrl: 'https://exemplo.test/balanca.png', icon: '' });
+  const imaged = withImage.nodes.find(n => n.id === scaleNode.id);
+  assert(imaged.imageUrl.includes('exemplo.test'), 'Persiste imagem no ramo');
+  assert(imaged.icon === '', 'Imagem substitui o ícone');
+  const cleaned = updateMindMapNode(withImage, scaleNode.id, { imageUrl: 'javascript:alert(1)' });
+  assert(!cleaned.nodes.find(n => n.id === scaleNode.id).imageUrl, 'Rejeita URL de imagem inválida');
+  const sanitized = sanitizeMindMap({
+    title: 'Com mídia',
+    nodes: [{ id: 'n1', label: 'Núcleo', icon: 'BookOpen', imageUrl: 'https://cdn.test/a.png', x: 0, y: 0 }]
+  });
+  assert(sanitized.nodes[0].icon === 'BookOpen', 'Sanitize mantém ícone');
+  assert(sanitized.nodes[0].imageUrl.startsWith('https://'), 'Sanitize mantém imagem http');
+
   const cats = [];
   const constitucional = createMindMapCategory({ name: 'Direito Constitucional', color: '#a855f7' }, cats);
   cats.push(constitucional);
@@ -138,6 +156,9 @@ function runTests() {
 
   const moved = reassignMindMapCategory([mapped], cf88.id, constitucional);
   assert(moved[0].categoryId === constitucional.id, 'Reatribui mapas ao excluir subassunto');
+  const lined = updateMindMapMeta(map, { lineStyle: 'curve' });
+  assert(lined.lineStyle === 'curve', 'Alterna para linhas clássicas');
+  assert(sanitizeMindMap({ title: 'X', lineStyle: 'taper', nodes: [{ label: 'X' }] }).lineStyle === 'taper', 'Sanitize preserva galhos');
   assert(sanitizeMindMapCategories().length > 0, 'Categorias padrão preenchem lista ausente');
   assert(sanitizeMindMapCategories([]).length === 0, 'Lista vazia permanece vazia');
 

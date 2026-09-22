@@ -63,6 +63,8 @@ O script irá:
 - Ramos vencidos voltam para a fila de estudo até consolidar a matéria.
 - **Assuntos e subassuntos** próprios da Cartografia (ex: Direito Constitucional → CF/88), com filtro e agrupamento na lista.
 - **Tela cheia** no editor e no modo estudo (Esc para sair).
+- **Ícones e imagens** em cada ramo: mais de 1.700 ícones Lucide (busca e categorias) ou foto por upload/URL.
+- **Galhos que afinam** nos subníveis (ou linhas clássicas, no seletor do editor).
 
 ### ⚡ Linha de Operações (Processos em Lote)
 - Para metas como *"Analisar 10 processos judiciais"*, *"Revisar 15 relatórios"*, *"Estudar 8 aulas"*.

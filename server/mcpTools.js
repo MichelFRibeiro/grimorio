@@ -1392,7 +1392,7 @@ export const toolsDefinition = [
   },
   {
     name: 'update_mind_map',
-    description: 'Atualizar título, descrição, categoria ou reorganizar o layout de um mapa mental.',
+    description: 'Atualizar título, descrição, categoria, estilo das linhas ou reorganizar o layout de um mapa mental.',
     schema: {
       id: z.string().describe('ID do mapa'),
       title: z.string().optional(),
@@ -1401,6 +1401,7 @@ export const toolsDefinition = [
       categoryId: z.string().optional().describe('ID do assunto ou subassunto'),
       color: z.string().optional(),
       rootLabel: z.string().optional(),
+      lineStyle: z.enum(['curve', 'taper']).optional().describe('curve = linhas, taper = galhos que afinam'),
       layout: z.boolean().optional().describe('Se true, reorganiza automaticamente os ramos')
     },
     handler: async (args) => {
@@ -1427,7 +1428,9 @@ export const toolsDefinition = [
       parentId: z.string().optional().describe('ID do ramo pai (omitido = núcleo)'),
       label: z.string().describe('Texto do ramo'),
       notes: z.string().optional().describe('Anotação de estudo'),
-      color: z.string().optional()
+      color: z.string().optional(),
+      icon: z.string().optional().describe('Nome do ícone Lucide (ex: Scale, BookOpen, Heart)'),
+      imageUrl: z.string().optional().describe('URL ou data URI de uma imagem no ramo')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1446,13 +1449,15 @@ export const toolsDefinition = [
   },
   {
     name: 'update_mind_map_node',
-    description: 'Atualizar o texto, anotação, cor ou posição de um ramo.',
+    description: 'Atualizar o texto, anotação, cor, ícone, imagem ou posição de um ramo.',
     schema: {
       mapId: z.string().describe('ID do mapa'),
       nodeId: z.string().describe('ID do ramo'),
       label: z.string().optional(),
       notes: z.string().optional(),
       color: z.string().optional(),
+      icon: z.string().optional().describe('Nome do ícone Lucide (vazio para remover)'),
+      imageUrl: z.string().optional().describe('URL ou data URI da imagem (vazio para remover)'),
       collapsed: z.boolean().optional()
     },
     handler: async (args) => {

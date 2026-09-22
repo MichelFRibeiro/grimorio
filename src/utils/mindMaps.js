@@ -3,6 +3,7 @@
  */
 
 import { addDaysToDateStr, getSaoPauloDateStr } from './timeUtils.js';
+import { sanitizeMindMapIcon, sanitizeMindMapImageUrl } from './mindMapIcons.js';
 
 export const MIND_MAP_NODE_COLORS = [
   '#f59e0b',
@@ -16,6 +17,12 @@ export const MIND_MAP_NODE_COLORS = [
   '#fb7185',
   '#34d399'
 ];
+
+export const MIND_MAP_LINE_STYLES = ['curve', 'taper'];
+
+export function sanitizeMindMapLineStyle(value) {
+  return value === 'curve' ? 'curve' : 'taper';
+}
 
 export const STUDY_QUALITY = {
   forgot: 0,
@@ -59,6 +66,8 @@ export function createMindMapNode({
   label = 'Novo ramo',
   notes = '',
   color,
+  icon = '',
+  imageUrl = '',
   x = 0,
   y = 0,
   collapsed = false,
@@ -76,6 +85,8 @@ export function createMindMapNode({
     label: trimmed,
     notes: String(notes || '').trim(),
     color: color || colorForIndex(parentId ? siblingIndex + 1 : 0),
+    icon: sanitizeMindMapIcon(icon),
+    imageUrl: sanitizeMindMapImageUrl(imageUrl),
     x: clampNumber(x, 0),
     y: clampNumber(y, 0),
     collapsed: !!collapsed,
@@ -233,6 +244,7 @@ export function createMindMap({
     category: String(category || 'Geral').trim() || 'Geral',
     categoryId: categoryId || null,
     color: color || root.color,
+    lineStyle: 'taper',
     createdAt: now,
     updatedAt: now,
     lastStudiedAt: null,
@@ -309,7 +321,7 @@ function defaultChildPosition(parent, siblingIndex, depth) {
   };
 }
 
-export function addMindMapNode(map, { parentId, label, notes, color, x, y } = {}) {
+export function addMindMapNode(map, { parentId, label, notes, color, icon, imageUrl, x, y } = {}) {
   if (!map) throw new Error('Mapa mental não encontrado.');
   const parent = findNode(map, parentId || map.rootId);
   if (!parent) throw new Error('Ramo pai não encontrado.');
@@ -322,6 +334,8 @@ export function addMindMapNode(map, { parentId, label, notes, color, x, y } = {}
     label,
     notes,
     color: color || colorForIndex(siblings.length + 1),
+    icon,
+    imageUrl,
     x: pos.x,
     y: pos.y
   }, siblings.length);
@@ -345,6 +359,8 @@ export function updateMindMapNode(map, nodeId, patch = {}) {
   }
   if (patch.notes !== undefined) next.notes = String(patch.notes || '').trim();
   if (patch.color !== undefined && patch.color) next.color = patch.color;
+  if (patch.icon !== undefined) next.icon = sanitizeMindMapIcon(patch.icon);
+  if (patch.imageUrl !== undefined) next.imageUrl = sanitizeMindMapImageUrl(patch.imageUrl);
   if (patch.x !== undefined) next.x = clampNumber(patch.x, current.x);
   if (patch.y !== undefined) next.y = clampNumber(patch.y, current.y);
   if (patch.collapsed !== undefined) next.collapsed = !!patch.collapsed;
@@ -385,6 +401,7 @@ export function updateMindMapMeta(map, patch = {}) {
   if (patch.category !== undefined) next.category = String(patch.category || 'Geral').trim() || 'Geral';
   if (patch.categoryId !== undefined) next.categoryId = patch.categoryId || null;
   if (patch.color !== undefined && patch.color) next.color = patch.color;
+  if (patch.lineStyle !== undefined) next.lineStyle = sanitizeMindMapLineStyle(patch.lineStyle);
   if (patch.rootLabel !== undefined) {
     const root = getRootNode(next);
     if (root) {
@@ -460,7 +477,11 @@ export function getStudyQueue(map, { today = getSaoPauloDateStr(), mode = 'branc
           mode: 'cards',
           promptId: parent?.id || root.id,
           prompt: parent?.label || root.label,
+          promptIcon: parent?.icon || '',
+          promptImageUrl: parent?.imageUrl || '',
           answer: node.label,
+          answerIcon: node.icon || '',
+          answerImageUrl: node.imageUrl || '',
           notes: node.notes || '',
           path: nodePath(map, node.id).map(n => n.label),
           due: isNodeDue(node, today)
@@ -478,7 +499,10 @@ export function getStudyQueue(map, { today = getSaoPauloDateStr(), mode = 'branc
         mode: 'branches',
         promptId: node.id,
         prompt: node.label,
+        promptIcon: node.icon || '',
+        promptImageUrl: node.imageUrl || '',
         answers: kids.map(k => k.label),
+        answerNodes: kids.map(k => ({ label: k.label, icon: k.icon || '', imageUrl: k.imageUrl || '' })),
         notes: node.notes || '',
         path: nodePath(map, node.id).map(n => n.label),
         due: isNodeDue(node, today)
@@ -643,6 +667,7 @@ export function sanitizeMindMap(raw) {
     category: String(raw.category || 'Geral').trim() || 'Geral',
     categoryId: raw.categoryId || null,
     color: raw.color || root.color,
+    lineStyle: sanitizeMindMapLineStyle(raw.lineStyle),
     createdAt: raw.createdAt || new Date().toISOString(),
     updatedAt: raw.updatedAt || raw.createdAt || new Date().toISOString(),
     lastStudiedAt: sanitizeDate(raw.lastStudiedAt, null),

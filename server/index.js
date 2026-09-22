@@ -2942,7 +2942,7 @@ app.put('/api/mind-maps/:id', (req, res) => {
     const index = db.mindMaps.findIndex(m => m.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
 
-    const { title, description, category, categoryId, color, rootLabel, nodes, layout } = req.body || {};
+    const { title, description, category, categoryId, color, rootLabel, lineStyle, nodes, layout } = req.body || {};
     let next = db.mindMaps[index];
 
     if (Array.isArray(nodes)) {
@@ -2955,7 +2955,7 @@ app.put('/api/mind-maps/:id', (req, res) => {
       if (!next) return res.status(400).json({ error: 'Mapa mental inválido.' });
     }
 
-    if (title !== undefined || description !== undefined || category !== undefined || categoryId !== undefined || color !== undefined || rootLabel !== undefined) {
+    if (title !== undefined || description !== undefined || category !== undefined || categoryId !== undefined || color !== undefined || rootLabel !== undefined || lineStyle !== undefined) {
       db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
       const cat = categoryId
         ? db.mindMapCategories.find(c => c.id === categoryId)
@@ -2968,7 +2968,8 @@ app.put('/api/mind-maps/:id', (req, res) => {
         category: cat?.name ?? category,
         categoryId: categoryId !== undefined ? (cat?.id || categoryId || null) : undefined,
         color,
-        rootLabel
+        rootLabel,
+        lineStyle
       });
     }
 
@@ -2993,8 +2994,8 @@ app.post('/api/mind-maps/:id/nodes', (req, res) => {
     db.mindMaps = sanitizeMindMaps(db.mindMaps);
     const index = db.mindMaps.findIndex(m => m.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
-    const { parentId, label, notes, color, x, y } = req.body || {};
-    const next = addMindMapNode(db.mindMaps[index], { parentId, label, notes, color, x, y });
+    const { parentId, label, notes, color, icon, imageUrl, x, y } = req.body || {};
+    const next = addMindMapNode(db.mindMaps[index], { parentId, label, notes, color, icon, imageUrl, x, y });
     db.mindMaps[index] = next;
     saveDb(db);
     res.json({

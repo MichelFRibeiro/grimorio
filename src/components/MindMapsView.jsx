@@ -28,6 +28,7 @@ import {
   FolderTree
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { MindMapIcon, MindMapMediaPicker, MindMapThumb } from './MindMapMedia';
 import { useStopwatch, formatTimer } from '../hooks/useStopwatch';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import {
@@ -38,8 +39,10 @@ import {
   getStudyQueue,
   groupMapsByCategory,
   mindMapCategoryLabel,
+  nodeDepth,
   nodePath,
   sanitizeMindMapCategories,
+  sanitizeMindMapLineStyle,
   visibleNodeIds
 } from '../utils/mindMaps';
 
@@ -50,8 +53,65 @@ const QUALITY_OPTIONS = [
   { value: 3, label: 'Fácil', hint: 'Mais intervalo', color: '#10b981' }
 ];
 
-function nodeWidth(label = '') {
-  return Math.max(120, Math.min(260, 28 + String(label).length * 8));
+function nodeSize(node = {}) {
+  const hasMedia = !!(node.imageUrl || node.icon);
+  const extra = node.imageUrl ? 36 : (node.icon ? 28 : 0);
+  const w = Math.max(hasMedia ? 148 : 120, Math.min(280, 28 + String(node.label || '').length * 8 + extra));
+  const h = node.imageUrl ? 72 : 44;
+  return { w, h };
+}
+
+function nodeAnchor(node, toward) {
+  const { w, h } = nodeSize(node);
+  const dx = (toward?.x || 0) - (node?.x || 0);
+  const dy = (toward?.y || 0) - (node?.y || 0);
+  if (!dx && !dy) return { x: node.x, y: node.y };
+  const t = Math.min(
+    (w / 2) / Math.max(Math.abs(dx), 0.0001),
+    (h / 2) / Math.max(Math.abs(dy), 0.0001)
+  );
+  return { x: node.x + dx * t, y: node.y + dy * t };
+}
+
+function hashStr(value) {
+  const s = String(value || '');
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return h;
+}
+
+function taperBranchPath(fromNode, toNode, depth, linkId) {
+  const start = nodeAnchor(fromNode, toNode);
+  const end = nodeAnchor(toNode, fromNode);
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
+  const startW = Math.max(3.2, 16.5 - Math.max(0, depth - 1) * 3.15);
+  const endW = Math.max(1.2, startW * 0.28);
+  const sign = hashStr(linkId) % 2 === 0 ? 1 : -1;
+  const bulge = Math.min(56, Math.max(16, len * 0.2)) * sign;
+  const cx = (start.x + end.x) / 2 + nx * bulge;
+  const cy = (start.y + end.y) / 2 + ny * bulge;
+  const steps = 10;
+  const left = [];
+  const right = [];
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps;
+    const u = 1 - t;
+    const px = u * u * start.x + 2 * u * t * cx + t * t * end.x;
+    const py = u * u * start.y + 2 * u * t * cy + t * t * end.y;
+    const tx = 2 * u * (cx - start.x) + 2 * t * (end.x - cx);
+    const ty = 2 * u * (cy - start.y) + 2 * t * (end.y - cy);
+    const tl = Math.hypot(tx, ty) || 1;
+    const ox = -ty / tl;
+    const oy = tx / tl;
+    const w = startW * (1 - t) + endW * t;
+    left.push(`${px + ox * (w / 2)} ${py + oy * (w / 2)}`);
+    right.push(`${px - ox * (w / 2)} ${py - oy * (w / 2)}`);
+  }
+  return `M ${left.join(' L ')} L ${right.reverse().join(' L ')} Z`;
 }
 
 function MindMapCanvas({
@@ -69,6 +129,7 @@ function MindMapCanvas({
   const [pan, setPan] = useState({ x: 420, y: 280 });
   const dragRef = useRef(null);
 
+  const lineStyle = sanitizeMindMapLineStyle(map?.lineStyle);
   const visible = useMemo(() => visibleNodeIds(map), [map]);
   const visibleIds = useMemo(() => new Set(visible.map(n => n.id)), [visible]);
   const links = useMemo(() => (
@@ -77,10 +138,11 @@ function MindMapCanvas({
       .map(n => ({
         id: `${n.parentId}-${n.id}`,
         from: visible.find(p => p.id === n.parentId),
-        to: n
+        to: n,
+        depth: nodeDepth(map, n.id)
       }))
       .filter(l => l.from && l.to)
-  ), [visible, visibleIds]);
+  ), [visible, visibleIds, map]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -180,80 +242,78 @@ function MindMapCanvas({
         <rect width="100%" height="100%" fill="url(#mm-grid)" data-role="canvas" />
         <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
           {links.map((link) => (
-            <path
-              key={link.id}
-              d={`M ${link.from.x} ${link.from.y} Q ${(link.from.x + link.to.x) / 2} ${(link.from.y + link.to.y) / 2 - 24} ${link.to.x} ${link.to.y}`}
-              fill="none"
-              stroke={link.to.color || '#64748b'}
-              strokeWidth="2.4"
-              opacity="0.7"
-            />
+            lineStyle === 'taper' ? (
+              <path
+                key={link.id}
+                d={taperBranchPath(link.from, link.to, link.depth, link.id)}
+                fill={link.to.color || '#64748b'}
+                opacity="0.82"
+                stroke={link.to.color || '#64748b'}
+                strokeWidth="0.4"
+                strokeLinejoin="round"
+              />
+            ) : (
+              <path
+                key={link.id}
+                d={`M ${link.from.x} ${link.from.y} Q ${(link.from.x + link.to.x) / 2} ${(link.from.y + link.to.y) / 2 - 24} ${link.to.x} ${link.to.y}`}
+                fill="none"
+                stroke={link.to.color || '#64748b'}
+                strokeWidth={Math.max(1.4, 4.2 - (link.depth - 1) * 0.7)}
+                opacity="0.7"
+              />
+            )
           ))}
-          {visible.map((node) => {
-            const w = nodeWidth(node.label);
-            const h = 44;
-            const selected = selectedId === node.id;
-            const kids = childrenOf(map, node.id).length;
-            return (
-              <g
-                key={node.id}
-                transform={`translate(${node.x - w / 2} ${node.y - h / 2})`}
-                onPointerDown={(e) => onPointerDownNode(e, node)}
-                style={{ cursor: readOnly ? 'pointer' : 'grab' }}
-              >
-                <rect
-                  width={w}
-                  height={h}
-                  rx="14"
-                  fill={selected ? 'rgba(19, 23, 34, 0.98)' : 'rgba(19, 23, 34, 0.92)'}
-                  stroke={selected ? '#fbbf24' : (node.color || '#64748b')}
-                  strokeWidth={selected ? 2.4 : 1.6}
-                  filter={selected ? 'drop-shadow(0 0 10px rgba(251,191,36,0.35))' : undefined}
-                />
-                <text
-                  x={w / 2}
-                  y={h / 2 + 1}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fill="#f8fafc"
-                  fontSize="13"
-                  fontWeight="700"
-                  style={{ pointerEvents: 'none', fontFamily: 'var(--font-body)' }}
-                >
-                  {node.label.length > 28 ? `${node.label.slice(0, 26)}…` : node.label}
-                </text>
-                {kids > 0 && (
-                  <g transform={`translate(${w - 10} -6)`}>
-                    <circle r="9" fill={node.color || '#64748b'} />
-                    <text
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fill="#041018"
-                      fontSize="9"
-                      fontWeight="800"
-                    >
-                      {node.collapsed ? '+' : kids}
-                    </text>
-                  </g>
-                )}
-                {!readOnly && selected && (
-                  <g
-                    transform={`translate(${w - 8} ${h - 8})`}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      if (onAddChild) onAddChild(node.id);
-                    }}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <circle r="11" fill="#f59e0b" />
-                    <text textAnchor="middle" dominantBaseline="middle" fill="#041018" fontSize="14" fontWeight="800">+</text>
-                  </g>
-                )}
-              </g>
-            );
-          })}
         </g>
       </svg>
+      <div className="mindmap-world" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
+        {visible.map((node) => {
+          const { w, h } = nodeSize(node);
+          const selected = selectedId === node.id;
+          const kids = childrenOf(map, node.id).length;
+          const label = node.label.length > 28 ? `${node.label.slice(0, 26)}…` : node.label;
+          return (
+            <div
+              key={node.id}
+              className={`mindmap-node ${selected ? 'is-selected' : ''}`}
+              style={{
+                width: w,
+                minHeight: h,
+                left: node.x - w / 2,
+                top: node.y - h / 2,
+                borderColor: selected ? '#fbbf24' : (node.color || '#64748b'),
+                boxShadow: selected ? '0 0 12px rgba(251,191,36,0.35)' : 'none'
+              }}
+              onPointerDown={(e) => onPointerDownNode(e, node)}
+            >
+              {node.imageUrl ? (
+                <img src={node.imageUrl} alt="" className="mindmap-node-photo" draggable={false} />
+              ) : node.icon ? (
+                <span className="mindmap-node-icon" style={{ color: node.color || '#c084fc' }}>
+                  <MindMapIcon name={node.icon} size={16} color={node.color || '#c084fc'} />
+                </span>
+              ) : null}
+              <span className="mindmap-node-label">{label}</span>
+              {kids > 0 && (
+                <span className="mindmap-node-badge" style={{ background: node.color || '#64748b' }}>
+                  {node.collapsed ? '+' : kids}
+                </span>
+              )}
+              {!readOnly && selected && (
+                <button
+                  type="button"
+                  className="mindmap-node-add"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    if (onAddChild) onAddChild(node.id);
+                  }}
+                >
+                  +
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
       <div className="mindmap-zoom">
         {onToggleFullscreen && (
           <button type="button" onClick={onToggleFullscreen} title={fullscreen ? 'Sair da tela cheia' : 'Tela cheia'}>
@@ -655,6 +715,12 @@ export function MindMapsView({
                     />
                   ))}
                 </div>
+                <MindMapMediaPicker
+                  icon={selectedNode.icon || ''}
+                  imageUrl={selectedNode.imageUrl || ''}
+                  color={selectedNode.color}
+                  onChange={(patch) => onUpdateNode(editorMap.id, selectedNode.id, patch)}
+                />
                 <div style={{ display: 'grid', gap: '8px', marginTop: '16px' }}>
                   <button type="button" className="mindmap-ghost-btn" onClick={() => handleAddChild(selectedNode.id)}>
                     <Plus size={14} /> Novo ramo filho
@@ -672,6 +738,25 @@ export function MindMapsView({
                       <Trash2 size={14} /> Excluir ramo
                     </button>
                   )}
+                </div>
+                <label style={{ ...labelStyle, marginTop: 14 }}>Linhas do mapa</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
+                  <button
+                    type="button"
+                    className="mindmap-ghost-btn"
+                    style={editorMap.lineStyle === 'taper' ? { borderColor: 'rgba(168,85,247,0.5)', color: '#c084fc' } : undefined}
+                    onClick={() => onUpdateMap?.(editorMap.id, { lineStyle: 'taper' })}
+                  >
+                    Galhos
+                  </button>
+                  <button
+                    type="button"
+                    className="mindmap-ghost-btn"
+                    style={editorMap.lineStyle !== 'taper' ? { borderColor: 'rgba(56,189,248,0.5)', color: '#38bdf8' } : undefined}
+                    onClick={() => onUpdateMap?.(editorMap.id, { lineStyle: 'curve' })}
+                  >
+                    Linhas
+                  </button>
                 </div>
                 <label style={{ ...labelStyle, marginTop: 14 }}>Assunto</label>
                 <select
@@ -713,6 +798,14 @@ export function MindMapsView({
               <button type="button" className="mindmap-ghost-btn" onClick={() => setFullscreen(true)}>
                 <Maximize2 size={15} /> Tela cheia
               </button>
+              <button
+                type="button"
+                className="mindmap-ghost-btn"
+                onClick={() => onUpdateMap?.(editorMap.id, { lineStyle: editorMap.lineStyle === 'taper' ? 'curve' : 'taper' })}
+                title={editorMap.lineStyle === 'taper' ? 'Usar linhas finas' : 'Usar galhos que afinam'}
+              >
+                <GitBranch size={15} /> {editorMap.lineStyle === 'taper' ? 'Galhos' : 'Linhas'}
+              </button>
               <button type="button" className="mindmap-ghost-btn" onClick={() => onLayoutMap(editorMap.id)}>
                 <Layout size={15} /> Organizar
               </button>
@@ -733,6 +826,13 @@ export function MindMapsView({
           <div className="mindmap-fullscreen-bar">
             <span className="font-cinzel">{editorMap.title}</span>
             <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                className="mindmap-ghost-btn"
+                onClick={() => onUpdateMap?.(editorMap.id, { lineStyle: editorMap.lineStyle === 'taper' ? 'curve' : 'taper' })}
+              >
+                <GitBranch size={14} /> {editorMap.lineStyle === 'taper' ? 'Galhos' : 'Linhas'}
+              </button>
               <button type="button" className="mindmap-ghost-btn" onClick={() => onLayoutMap(editorMap.id)}><Layout size={14} /> Organizar</button>
               <button type="button" className="mindmap-ghost-btn" onClick={() => setFullscreen(false)}><Minimize2 size={14} /> Sair</button>
             </div>
@@ -813,7 +913,13 @@ export function MindMapsView({
               <span>{currentCard.path?.join(' → ')}</span>
               <span>{studyIndex + 1} / {dueQueue.length}</span>
             </div>
-            <h3 className="font-cinzel" style={{ fontSize: '1.45rem', marginBottom: '14px' }}>{currentCard.prompt}</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <MindMapThumb
+                node={{ icon: currentCard.promptIcon, imageUrl: currentCard.promptImageUrl }}
+                size={44}
+              />
+              <h3 className="font-cinzel" style={{ fontSize: '1.45rem', margin: 0 }}>{currentCard.prompt}</h3>
+            </div>
             {!revealed ? (
               <button
                 type="button"
@@ -828,8 +934,11 @@ export function MindMapsView({
             ) : (
               <>
                 <div style={{ display: 'grid', gap: '8px', marginBottom: '18px' }}>
-                  {(currentCard.answers || [currentCard.answer]).filter(Boolean).map((ans) => (
-                    <div key={ans} className="mindmap-answer">{ans}</div>
+                  {(currentCard.answerNodes || (currentCard.answer ? [{ label: currentCard.answer, icon: currentCard.answerIcon, imageUrl: currentCard.answerImageUrl }] : [])).filter(a => a.label).map((ans) => (
+                    <div key={`${ans.label}-${ans.icon || ''}`} className="mindmap-answer" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <MindMapThumb node={ans} size={28} />
+                      <span>{ans.label}</span>
+                    </div>
                   ))}
                   {currentCard.notes && (
                     <p style={{ color: '#cbd5e1', fontSize: '0.88rem', fontStyle: 'italic' }}>{currentCard.notes}</p>
