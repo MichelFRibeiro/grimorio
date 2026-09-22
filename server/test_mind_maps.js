@@ -9,6 +9,11 @@ import {
   deleteMindMapCrossLink,
   layoutMindMap,
   mindMapNodeFontSize,
+  sanitizeMindMapNodeFontSize,
+  stepMindMapNodeFontSize,
+  MIND_MAP_BASE_FONT_SIZE,
+  MIND_MAP_MAX_FONT_SIZE,
+  MIND_MAP_MIN_FONT_SIZE,
   getStudyQueue,
   applyStudySession,
   computeStudyRewards,
@@ -168,6 +173,13 @@ function runTests() {
   assert(scaled.scaleFontByDepth === true, 'Ativa fonte maior perto do núcleo');
   assert(mindMapNodeFontSize(0, true) > mindMapNodeFontSize(2, true), 'Núcleo fica com fonte maior que ramos distantes');
   assert(mindMapNodeFontSize(0, false) === mindMapNodeFontSize(4, false), 'Fonte uniforme quando desligado');
+  assert(mindMapNodeFontSize(0, false, 18) === 18, 'Override de fonte do ramo prevalece sobre a escala');
+  assert(sanitizeMindMapNodeFontSize(99) === MIND_MAP_MAX_FONT_SIZE, 'Fonte do ramo é limitada no máximo');
+  assert(sanitizeMindMapNodeFontSize(4) === MIND_MAP_MIN_FONT_SIZE, 'Fonte do ramo é limitada no mínimo');
+  assert(stepMindMapNodeFontSize(MIND_MAP_BASE_FONT_SIZE, 1) === MIND_MAP_BASE_FONT_SIZE + 1, 'Aumenta a fonte do ramo em 1px');
+  const sized = updateMindMapNode(map, map.rootId, { fontSize: 20 });
+  assert(getRootNode(sized).fontSize === 20, 'Persiste tamanho de fonte no ramo');
+  assert(sanitizeMindMap({ title: 'X', nodes: [{ label: 'X', fontSize: 22 }] }).nodes[0].fontSize === 22, 'Sanitize preserva fonte do ramo');
   assert(sanitizeMindMap({ title: 'X', lineStyle: 'taper', nodes: [{ label: 'X' }] }).lineStyle === 'taper', 'Sanitize preserva galhos');
   assert(sanitizeMindMap({ title: 'X', scaleFontByDepth: true, nodes: [{ label: 'X' }] }).scaleFontByDepth === true, 'Sanitize preserva escala de fonte');
 

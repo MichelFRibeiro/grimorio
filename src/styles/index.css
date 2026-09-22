@@ -2,6 +2,7 @@
   --font-heading: 'Cinzel', serif, system-ui;
   --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+  --font-mindmap: 'Source Sans 3', 'Segoe UI', Roboto, sans-serif;
 
   /* Theme: Dark Fantasy / Obsidian Gold */
   --bg-main: #0c0e14;
@@ -759,14 +760,18 @@ img, video, canvas {
   position: absolute;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 8px 14px;
   border-radius: 14px;
   background: rgba(19, 23, 34, 0.94);
   border: 1.6px solid #64748b;
   color: #f8fafc;
-  font-size: 13px;
-  font-weight: 700;
+  font-family: var(--font-mindmap);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-align: center;
   cursor: grab;
   pointer-events: auto;
   user-select: none;
@@ -828,10 +833,43 @@ img, video, canvas {
 .mindmap-node-label {
   min-width: 0;
   flex: 1;
-  line-height: 1.28;
+  line-height: 1.35;
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
+  text-align: center;
+  font-family: var(--font-mindmap);
+  font-weight: 600;
+}
+
+.mindmap-font-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.mindmap-font-step {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  justify-content: center;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.mindmap-font-step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mindmap-font-value {
+  min-width: 52px;
+  text-align: center;
+  color: #e2e8f0;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
 }
 
 .mindmap-node-icon {

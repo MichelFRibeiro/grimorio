@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus,
+  Minus,
   Network,
   Search,
   Trash2,
@@ -42,7 +43,10 @@ import {
   groupMapsByCategory,
   mindMapCategoryLabel,
   mindMapNodeFontSize,
+  MIND_MAP_MAX_FONT_SIZE,
+  MIND_MAP_MIN_FONT_SIZE,
   nodeDepth,
+  stepMindMapNodeFontSize,
   nodePath,
   sanitizeMindMapCategories,
   sanitizeMindMapLineStyle,
@@ -56,9 +60,9 @@ const QUALITY_OPTIONS = [
   { value: 3, label: 'Fácil', hint: 'Mais intervalo', color: '#10b981' }
 ];
 
-function nodeSize(node = {}, fontSize = 13) {
-  const fs = Number(fontSize) || 13;
-  const scale = fs / 13;
+function nodeSize(node = {}, fontSize = 14) {
+  const fs = Number(fontSize) || 14;
+  const scale = fs / 14;
   const hasMedia = !!(node.imageUrl || node.icon);
   const extra = node.imageUrl ? 36 * scale : (node.icon ? 28 * scale : 0);
   const label = String(node.label || '');
@@ -72,7 +76,7 @@ function nodeSize(node = {}, fontSize = 13) {
   const charsPerLine = Math.max(8, Math.floor(innerW / Math.max(charW, 1)));
   const lines = Math.max(1, Math.ceil(label.length / charsPerLine));
   const minH = (node.imageUrl ? 72 : 44) * Math.max(1, scale * 0.92);
-  const h = Math.max(minH, 18 + lines * fs * 1.28);
+  const h = Math.max(minH, 18 + lines * fs * 1.35);
   return { w, h };
 }
 
@@ -175,7 +179,7 @@ function MindMapCanvas({
 
   const lineStyle = sanitizeMindMapLineStyle(map?.lineStyle);
   const scaleFont = !!map?.scaleFontByDepth;
-  const fontFor = (node) => mindMapNodeFontSize(nodeDepth(map, node?.id), scaleFont);
+  const fontFor = (node) => mindMapNodeFontSize(nodeDepth(map, node?.id), scaleFont, node?.fontSize);
   const visible = useMemo(() => visibleNodeIds(map), [map]);
   const visibleIds = useMemo(() => new Set(visible.map(n => n.id)), [visible]);
   const links = useMemo(() => (
@@ -544,6 +548,9 @@ export function MindMapsView({
   const selectedLink = editorMap && selectedLinkId
     ? (editorMap.crossLinks || []).find(l => l.id === selectedLinkId)
     : null;
+  const selectedNodeFont = selectedNode
+    ? mindMapNodeFontSize(nodeDepth(editorMap, selectedNode.id), !!editorMap.scaleFontByDepth, selectedNode.fontSize)
+    : 14;
 
   useEffect(() => {
     setLocalNodes(null);
@@ -949,6 +956,32 @@ export function MindMapsView({
                   onBlur={handleSaveNode}
                   style={inputStyle}
                 />
+                <label style={{ ...labelStyle, marginTop: 12 }}>Tamanho do texto</label>
+                <div className="mindmap-font-stepper">
+                  <button
+                    type="button"
+                    className="mindmap-ghost-btn mindmap-font-step"
+                    title="Diminuir fonte"
+                    disabled={selectedNodeFont <= MIND_MAP_MIN_FONT_SIZE}
+                    onClick={() => onUpdateNode(editorMap.id, selectedNode.id, {
+                      fontSize: stepMindMapNodeFontSize(selectedNodeFont, -1)
+                    })}
+                  >
+                    <Minus size={16} />
+                  </button>
+                  <span className="mindmap-font-value">{selectedNodeFont}px</span>
+                  <button
+                    type="button"
+                    className="mindmap-ghost-btn mindmap-font-step"
+                    title="Aumentar fonte"
+                    disabled={selectedNodeFont >= MIND_MAP_MAX_FONT_SIZE}
+                    onClick={() => onUpdateNode(editorMap.id, selectedNode.id, {
+                      fontSize: stepMindMapNodeFontSize(selectedNodeFont, 1)
+                    })}
+                  >
+                    <Plus size={16} />
+                  </button>
+                </div>
                 <textarea
                   value={draftNotes}
                   onChange={(e) => setDraftNotes(e.target.value)}

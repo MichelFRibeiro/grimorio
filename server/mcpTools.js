@@ -1453,7 +1453,7 @@ export const toolsDefinition = [
   },
   {
     name: 'update_mind_map_node',
-    description: 'Atualizar o texto, anotação, cor, ícone, imagem ou posição de um ramo.',
+    description: 'Atualizar o texto, anotação, cor, ícone, imagem, tamanho da fonte ou posição de um ramo.',
     schema: {
       mapId: z.string().describe('ID do mapa'),
       nodeId: z.string().describe('ID do ramo'),
@@ -1462,7 +1462,8 @@ export const toolsDefinition = [
       color: z.string().optional(),
       icon: z.string().optional().describe('Nome do ícone Lucide (vazio para remover)'),
       imageUrl: z.string().optional().describe('URL ou data URI da imagem (vazio para remover)'),
-      collapsed: z.boolean().optional()
+      collapsed: z.boolean().optional(),
+      fontSize: z.number().optional().describe('Tamanho da fonte do ramo em pixels (10 a 32)')
     },
     handler: async (args) => {
       const db = getDb();

@@ -24,14 +24,32 @@ export function sanitizeMindMapLineStyle(value) {
   return value === 'curve' ? 'curve' : 'taper';
 }
 
-export const MIND_MAP_BASE_FONT_SIZE = 13;
-export const MIND_MAP_DEPTH_FONT_SIZES = [19, 15.5, 13, 11.5, 10.5, 10];
+export const MIND_MAP_BASE_FONT_SIZE = 14;
+export const MIND_MAP_MIN_FONT_SIZE = 10;
+export const MIND_MAP_MAX_FONT_SIZE = 32;
+export const MIND_MAP_FONT_STEP = 1;
+export const MIND_MAP_DEPTH_FONT_SIZES = [20, 16.5, 14, 12.5, 11.5, 10.5];
 
-export function mindMapNodeFontSize(depth = 0, enabled = false) {
+export function sanitizeMindMapNodeFontSize(value, fallback = null) {
+  if (value == null || value === '') return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const rounded = Math.round(n);
+  return Math.min(MIND_MAP_MAX_FONT_SIZE, Math.max(MIND_MAP_MIN_FONT_SIZE, rounded));
+}
+
+export function mindMapNodeFontSize(depth = 0, enabled = false, override = null) {
+  const custom = sanitizeMindMapNodeFontSize(override, null);
+  if (custom != null) return custom;
   if (!enabled) return MIND_MAP_BASE_FONT_SIZE;
   const n = Number(depth);
   const i = Math.max(0, Math.round(Number.isFinite(n) ? n : 0));
   return MIND_MAP_DEPTH_FONT_SIZES[Math.min(i, MIND_MAP_DEPTH_FONT_SIZES.length - 1)];
+}
+
+export function stepMindMapNodeFontSize(current, delta = 1) {
+  const base = sanitizeMindMapNodeFontSize(current, MIND_MAP_BASE_FONT_SIZE);
+  return sanitizeMindMapNodeFontSize(base + delta, base);
 }
 
 function undirectedLinkKey(a, b) {
@@ -87,6 +105,7 @@ export function createMindMapNode({
   x = 0,
   y = 0,
   collapsed = false,
+  fontSize = null,
   ease = 2.5,
   interval = 0,
   dueDate = null,
@@ -106,6 +125,7 @@ export function createMindMapNode({
     x: clampNumber(x, 0),
     y: clampNumber(y, 0),
     collapsed: !!collapsed,
+    fontSize: sanitizeMindMapNodeFontSize(fontSize, null),
     ease: Math.max(1.3, clampNumber(ease, 2.5)),
     interval: Math.max(0, Math.round(clampNumber(interval, 0))),
     dueDate: sanitizeDate(dueDate, null),
@@ -382,6 +402,7 @@ export function updateMindMapNode(map, nodeId, patch = {}) {
   if (patch.x !== undefined) next.x = clampNumber(patch.x, current.x);
   if (patch.y !== undefined) next.y = clampNumber(patch.y, current.y);
   if (patch.collapsed !== undefined) next.collapsed = !!patch.collapsed;
+  if (patch.fontSize !== undefined) next.fontSize = sanitizeMindMapNodeFontSize(patch.fontSize, null);
   const nodes = map.nodes.slice();
   nodes[index] = next;
   return {
