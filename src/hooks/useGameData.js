@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { useSoundEffects } from './useSoundEffects';
 import { formatBrl } from '../utils/coinExchange.js';
-import { hydrateLiveActivityTimers, setLiveActivityTimerSync, flushLiveActivityTimers } from '../utils/liveActivityTimers.js';
+import { hydrateLiveActivityTimers, setLiveActivityTimerSync, flushLiveActivityTimers, getLiveActivityTimers } from '../utils/liveActivityTimers.js';
+import { fetchWithRetry, connectionErrorMessage, isTransientHttpStatus, retryDelayMs } from '../utils/httpClient.js';
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('grimorio_auth_token');
@@ -19,6 +20,10 @@ export function useGameData() {
   const [error, setError] = useState(null);
   const [rewardPopups, setRewardPopups] = useState([]);
   const [levelUpData, setLevelUpData] = useState(null);
+  const dataRef = useRef(null);
+  const fetchGenRef = useRef(0);
+  const failCountRef = useRef(0);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   const {
     muted,
@@ -30,38 +35,63 @@ export function useGameData() {
     playClick
   } = useSoundEffects();
 
-  const fetchState = useCallback(async () => {
+  const fetchState = useCallback(async (signal) => {
+    const abortSignal = signal instanceof AbortSignal ? signal : undefined;
+    const gen = ++fetchGenRef.current;
     try {
-      const res = await fetch('/api/state', {
-        headers: getAuthHeaders()
-      });
-      if (!res.ok) throw new Error('Falha ao comunicar com o servidor.');
+      const res = await fetchWithRetry('/api/state', {
+        headers: getAuthHeaders(),
+        signal: abortSignal
+      }, { retries: 5, signal: abortSignal });
+      if (gen !== fetchGenRef.current) return;
+      if (!res.ok) {
+        throw Object.assign(
+          new Error(connectionErrorMessage(null, res.status) || 'Falha ao comunicar com o servidor.'),
+          { status: res.status }
+        );
+      }
       const json = await res.json();
+      if (gen !== fetchGenRef.current) return;
       setData(json);
+      dataRef.current = json;
       setError(null);
+      failCountRef.current = 0;
       hydrateLiveActivityTimers(json.liveActivityTimers || {}, { sync: true });
     } catch (err) {
+      if (err?.name === 'AbortError') return;
+      if (gen !== fetchGenRef.current) return;
       console.error(err);
-      setError(err.message);
+      failCountRef.current += 1;
+      const message = connectionErrorMessage(err, err.status) || err.message;
+      if (!dataRef.current) {
+        setError(message);
+        setRetryNonce((n) => n + 1);
+      }
     } finally {
-      setLoading(false);
+      if (gen === fetchGenRef.current) setLoading(false);
     }
   }, []);
 
+  const refresh = useCallback(() => {
+    if (!dataRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+    return fetchState();
+  }, [fetchState]);
+
   const syncLiveTimers = useCallback(async (items) => {
-    try {
-      const res = await fetch('/api/live-timers', {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ items })
-      });
-      if (!res.ok) return;
-      const json = await res.json();
-      if (json?.liveActivityTimers) {
-        hydrateLiveActivityTimers(json.liveActivityTimers);
-      }
-    } catch {
-      // Offline: o cronômetro local continua válido até a próxima sincronização.
+    const res = await fetchWithRetry('/api/live-timers', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ items })
+    }, { retries: 1 });
+    if (!res.ok) {
+      throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+    }
+    const json = await res.json();
+    if (json?.liveActivityTimers) {
+      hydrateLiveActivityTimers(json.liveActivityTimers);
     }
   }, []);
 
@@ -71,46 +101,81 @@ export function useGameData() {
   }, [syncLiveTimers]);
 
   useEffect(() => {
-    fetchState();
+    const controller = new AbortController();
+    fetchState(controller.signal);
 
-    // Frontend Keep-Alive Heartbeat (every 7 minutes to keep Render alive while tab is open)
+    // Keep-alive leve: 1 ping a cada 10 min, só com a aba visível.
     const heartbeat = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
       fetch('/api/health').catch(() => {});
-    }, 7 * 60 * 1000);
+    }, 10 * 60 * 1000);
 
-    const pollTimers = setInterval(() => {
-      fetch('/api/live-timers', { headers: getAuthHeaders() })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((json) => {
-          if (json?.liveActivityTimers) hydrateLiveActivityTimers(json.liveActivityTimers);
-        })
-        .catch(() => {});
-    }, 8000);
+    const LIVE_TIMER_POLL_MS = 45_000;
+    let pollTimer = null;
+    let pollDelay = LIVE_TIMER_POLL_MS;
+    let pollInFlight = false;
+
+    const hasRunningTimer = () => (
+      Object.values(getLiveActivityTimers()).some((t) => t && !t.cleared && t.runStartedAt != null)
+    );
+
+    const pollOnce = async ({ force = false } = {}) => {
+      if (pollInFlight) return;
+      if (document.visibilityState !== 'visible') return;
+      if (!force && !hasRunningTimer()) return;
+      pollInFlight = true;
+      try {
+        const res = await fetch('/api/live-timers', { headers: getAuthHeaders() });
+        if (isTransientHttpStatus(res.status)) {
+          pollDelay = Math.min(5 * 60 * 1000, Math.max(pollDelay * 2, 20_000));
+          return;
+        }
+        pollDelay = LIVE_TIMER_POLL_MS;
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json?.liveActivityTimers) hydrateLiveActivityTimers(json.liveActivityTimers);
+      } catch {
+        pollDelay = Math.min(5 * 60 * 1000, Math.max(pollDelay * 2, 20_000));
+      } finally {
+        pollInFlight = false;
+      }
+    };
+
+    const schedulePoll = () => {
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = setTimeout(async () => {
+        await pollOnce();
+        schedulePoll();
+      }, pollDelay);
+    };
+    schedulePoll();
 
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
-        fetch('/api/live-timers', { headers: getAuthHeaders() })
-          .then((res) => (res.ok ? res.json() : null))
-          .then((json) => {
-            if (json?.liveActivityTimers) hydrateLiveActivityTimers(json.liveActivityTimers);
-          })
-          .catch(() => {});
+        pollDelay = LIVE_TIMER_POLL_MS;
+        pollOnce({ force: true });
       } else {
         flushLiveActivityTimers();
       }
     };
 
     document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', onVisible);
 
     return () => {
+      controller.abort();
       clearInterval(heartbeat);
-      clearInterval(pollTimers);
+      if (pollTimer) clearTimeout(pollTimer);
       document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', onVisible);
       flushLiveActivityTimers();
     };
   }, [fetchState]);
+
+  useEffect(() => {
+    if (!error || dataRef.current) return undefined;
+    const delay = retryDelayMs(Math.max(0, failCountRef.current - 1));
+    const timer = setTimeout(() => fetchState(), delay);
+    return () => clearTimeout(timer);
+  }, [error, retryNonce, fetchState]);
 
   // Trigger floating reward popup
   const showRewardToast = useCallback((xp, coins, text) => {
@@ -1234,7 +1299,7 @@ export function useGameData() {
     data,
     loading,
     error,
-    refresh: fetchState,
+    refresh,
     rewardPopups,
     levelUpData,
     closeLevelUpModal: () => setLevelUpData(null),

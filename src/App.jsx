@@ -140,12 +140,15 @@ export function App() {
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0c0e14', color: '#f87171' }}>
         <div style={{ textAlign: 'center', padding: '24px', maxWidth: '400px' }}>
           <h2 className="font-cinzel" style={{ fontSize: '1.4rem', marginBottom: '12px' }}>Erro de Conexão</h2>
           <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '20px' }}>{error}</p>
+          <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '20px' }}>
+            Nova tentativa automática em alguns segundos…
+          </p>
           <button
             onClick={refresh}
             style={{

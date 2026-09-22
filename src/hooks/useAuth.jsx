@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { fetchWithRetry, isTransientHttpStatus } from '../utils/httpClient.js';
 
 const AuthContext = createContext(null);
 
@@ -32,11 +33,23 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const res = await fetch('/api/auth/me', {
+      const res = await fetchWithRetry('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${storedToken}`
         }
-      });
+      }, { retries: 5 });
+      if (!res.ok) {
+        if (isTransientHttpStatus(res.status)) {
+          throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!data.authenticated) {
+          localStorage.removeItem(TOKEN_STORAGE_KEY);
+          setToken(null);
+          setUser(null);
+        }
+        return;
+      }
       const data = await res.json();
       if (data.authenticated && data.user) {
         setToken(storedToken);
@@ -49,6 +62,13 @@ export function AuthProvider({ children }) {
       }
     } catch (err) {
       console.error('Error validating auth session:', err);
+      // Cold start / 502: não desloga. Mantém a sessão local até o servidor responder.
+      setToken(storedToken);
+      setUser((prev) => prev || {
+        id: 'pending-session',
+        name: 'Aventureiro',
+        email: ''
+      });
     } finally {
       setLoadingAuth(false);
     }

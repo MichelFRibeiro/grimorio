@@ -104,6 +104,22 @@ export function sanitizeLiveActivityTimers(items, now = Date.now()) {
   return next;
 }
 
+export function liveTimersEqual(a, b, now = Date.now()) {
+  const left = sanitizeLiveActivityTimers(a, now);
+  const right = sanitizeLiveActivityTimers(b, now);
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  for (const key of keys) {
+    const x = left[key];
+    const y = right[key];
+    if (!x || !y) return false;
+    if (x.accumulatedMs !== y.accumulatedMs) return false;
+    if (x.runStartedAt !== y.runStartedAt) return false;
+    if (!!x.cleared !== !!y.cleared) return false;
+    if ((x.updatedAt || 0) !== (y.updatedAt || 0)) return false;
+  }
+  return true;
+}
+
 export function mergeLiveActivityTimers(localItems, remoteItems, now = Date.now()) {
   const local = sanitizeLiveActivityTimers(localItems, now);
   const remote = sanitizeLiveActivityTimers(remoteItems, now);

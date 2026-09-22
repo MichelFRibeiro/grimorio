@@ -37,7 +37,7 @@ import {
 } from '../src/utils/activityScale.js';
 import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
-import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, mergeLiveActivityTimers, sanitizeLiveActivityTimers, clearLiveActivityTimer } from '../src/utils/activityDuration.js';
+import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, mergeLiveActivityTimers, sanitizeLiveActivityTimers, clearLiveActivityTimer, liveTimersEqual } from '../src/utils/activityDuration.js';
 import { AGU_SUBJECTS, createDefaultAguPlan } from '../src/data/aguCurriculum.js';
 import {
   sanitizeAguPlan,
@@ -495,8 +495,8 @@ app.post('/api/profile', (req, res) => {
 app.get('/api/live-timers', (req, res) => {
   try {
     const db = getDb();
-    db.liveActivityTimers = sanitizeLiveActivityTimers(db.liveActivityTimers);
-    res.json({ success: true, liveActivityTimers: db.liveActivityTimers });
+    const liveActivityTimers = sanitizeLiveActivityTimers(db.liveActivityTimers);
+    res.json({ success: true, liveActivityTimers });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -506,7 +506,11 @@ app.put('/api/live-timers', (req, res) => {
   try {
     const db = getDb();
     const incoming = req.body?.items || req.body?.liveActivityTimers || req.body;
-    db.liveActivityTimers = mergeLiveActivityTimers(incoming, db.liveActivityTimers);
+    const merged = mergeLiveActivityTimers(incoming, db.liveActivityTimers);
+    if (liveTimersEqual(merged, db.liveActivityTimers)) {
+      return res.json({ success: true, liveActivityTimers: db.liveActivityTimers, unchanged: true });
+    }
+    db.liveActivityTimers = merged;
     saveDb(db);
     res.json({ success: true, liveActivityTimers: db.liveActivityTimers });
   } catch (err) {

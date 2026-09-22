@@ -1,6 +1,7 @@
 import {
   elapsedMsFrom,
   liveTimerKey,
+  liveTimersEqual,
   mergeLiveActivityTimers,
   sanitizeLiveActivityTimers,
   secondsToDurationMinutes,
@@ -8,7 +9,7 @@ import {
 } from './activityDuration.js';
 
 export const LIVE_ACTIVITY_TIMERS_KEY = 'grimorio_live_activity_timers';
-const SYNC_DEBOUNCE_MS = 400;
+const SYNC_DEBOUNCE_MS = 1500;
 
 function canUseStorage() {
   try {
@@ -54,6 +55,9 @@ const keyedListeners = new Map();
 let tickInterval = null;
 let remoteSyncFn = null;
 let syncTimer = null;
+let lastSyncedSnapshot = null;
+let syncInFlight = false;
+let syncQueued = false;
 
 function notify(key) {
   listeners.forEach((fn) => {
@@ -99,13 +103,40 @@ function ensureTick() {
   }
 }
 
+function snapshotForSync() {
+  return sanitizeLiveActivityTimers(timers);
+}
+
+async function runRemoteSync() {
+  if (!remoteSyncFn) return;
+  if (syncInFlight) {
+    syncQueued = true;
+    return;
+  }
+  const payload = snapshotForSync();
+  if (lastSyncedSnapshot && liveTimersEqual(payload, lastSyncedSnapshot)) return;
+
+  syncInFlight = true;
+  try {
+    await Promise.resolve(remoteSyncFn(payload));
+    lastSyncedSnapshot = payload;
+  } catch {
+    // Offline: o cronômetro local continua válido até a próxima sincronização.
+  } finally {
+    syncInFlight = false;
+    if (syncQueued) {
+      syncQueued = false;
+      scheduleRemoteSync();
+    }
+  }
+}
+
 function scheduleRemoteSync() {
   if (!remoteSyncFn) return;
   if (syncTimer) clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
     syncTimer = null;
-    const payload = { ...timers };
-    Promise.resolve(remoteSyncFn(payload)).catch(() => {});
+    runRemoteSync();
   }, SYNC_DEBOUNCE_MS);
 }
 
@@ -234,23 +265,17 @@ export function resetAllActivityTimers() {
 
 export function hydrateLiveActivityTimers(remoteItems, { sync = false, persistLocal = true } = {}) {
   const merged = mergeLiveActivityTimers(timers, remoteItems);
-  const prevKeys = new Set(Object.keys(timers));
-  const nextKeys = new Set(Object.keys(merged));
-  const changed = [...prevKeys, ...nextKeys].some((key) => {
-    const a = timers[key];
-    const b = merged[key];
-    if (!a && !b) return false;
-    if (!a || !b) return true;
-    return a.accumulatedMs !== b.accumulatedMs
-      || a.runStartedAt !== b.runStartedAt
-      || !!a.cleared !== !!b.cleared
-      || a.updatedAt !== b.updatedAt;
-  });
+  const changed = !liveTimersEqual(timers, merged);
   timers = merged;
   if (persistLocal && changed) persist(timers);
   ensureTick();
   if (changed) notify();
-  if (sync) scheduleRemoteSync();
+  if (liveTimersEqual(merged, remoteItems)) {
+    lastSyncedSnapshot = sanitizeLiveActivityTimers(merged);
+  }
+  if (sync && !(lastSyncedSnapshot && liveTimersEqual(merged, lastSyncedSnapshot))) {
+    scheduleRemoteSync();
+  }
   return timers;
 }
 
@@ -264,9 +289,12 @@ export function flushLiveActivityTimers() {
     syncTimer = null;
   }
   persist(timers);
-  if (remoteSyncFn) {
-    Promise.resolve(remoteSyncFn({ ...timers })).catch(() => {});
-  }
+  if (!remoteSyncFn) return;
+  const payload = snapshotForSync();
+  if (lastSyncedSnapshot && liveTimersEqual(payload, lastSyncedSnapshot)) return;
+  Promise.resolve(remoteSyncFn(payload))
+    .then(() => { lastSyncedSnapshot = payload; })
+    .catch(() => {});
 }
 
 if (typeof window !== 'undefined') {

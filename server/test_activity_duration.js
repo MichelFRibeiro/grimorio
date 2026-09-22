@@ -10,6 +10,7 @@ import {
   clearHabitDurationForDate,
   mergeLiveActivityTimers,
   clearLiveActivityTimer,
+  liveTimersEqual,
   LIVE_TIMER_MAX_AGE_MS
 } from '../src/utils/activityDuration.js';
 
@@ -88,6 +89,12 @@ function run() {
   assert.ok(twoRunning['quest:q1'].runStartedAt != null, 'o cronômetro mais recente continua rodando');
   assert.strictEqual(twoRunning['habit:h1'].runStartedAt, null);
   console.log('✅ Apenas um cronômetro permanece em execução após o merge entre dispositivos.');
+
+  const sameA = { 'quest:q1': { accumulatedMs: 1000, runStartedAt: null, updatedAt: now } };
+  const sameB = { 'quest:q1': { accumulatedMs: 1000, runStartedAt: null, updatedAt: now } };
+  assert.strictEqual(liveTimersEqual(sameA, sameB, now), true);
+  assert.strictEqual(liveTimersEqual(sameA, { ...sameB, 'habit:h1': { accumulatedMs: 1, runStartedAt: null, updatedAt: now } }, now), false);
+  console.log('✅ liveTimersEqual detecta snapshots idênticos e evita PUT sem mudança.');
 
   console.log('\n🎉 TODOS OS TESTES DE DURAÇÃO PASSARAM!');
 }
