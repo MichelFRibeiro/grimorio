@@ -75,6 +75,10 @@ import {
   applyStudySession,
   sanitizeMindMaps,
   sanitizeMindMapSessions,
+  sanitizeMindMapCategories,
+  createMindMapCategory,
+  applyMindMapCategoryRename,
+  reassignMindMapCategory,
   computeMapStats,
   getStudyQueue
 } from '../src/utils/mindMaps.js';
@@ -1309,7 +1313,8 @@ export const toolsDefinition = [
     name: 'list_mind_maps',
     description: 'Listar mapas mentais da Cartografia do Conhecimento, com contagem de ramos e revisões vencidas.',
     schema: {
-      search: z.string().optional().describe('Buscar no título, descrição ou ramos')
+      search: z.string().optional().describe('Buscar no título, descrição ou ramos'),
+      categoryId: z.string().optional().describe('Filtrar por assunto ou subassunto')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1318,6 +1323,12 @@ export const toolsDefinition = [
         ...m,
         stats: computeMapStats(m, { today: todayStr })
       }));
+      if (args.categoryId) {
+        const cats = sanitizeMindMapCategories(db.mindMapCategories);
+        const childIds = cats.filter(c => c.parentId === args.categoryId).map(c => c.id);
+        const allowed = new Set([args.categoryId, ...childIds]);
+        maps = maps.filter(m => allowed.has(m.categoryId));
+      }
       if (args.search) {
         const q = args.search.toLowerCase();
         maps = maps.filter(m =>
@@ -1352,7 +1363,8 @@ export const toolsDefinition = [
     schema: {
       title: z.string().describe('Título / núcleo do mapa'),
       description: z.string().optional().describe('Descrição ou contexto'),
-      category: z.string().optional().describe('Categoria (ex: Estudos)'),
+      category: z.string().optional().describe('Nome do assunto (legado)'),
+      categoryId: z.string().optional().describe('ID do assunto ou subassunto'),
       color: z.string().optional().describe('Cor hex do núcleo'),
       rootLabel: z.string().optional().describe('Rótulo do núcleo, se diferente do título')
     },
@@ -1360,7 +1372,16 @@ export const toolsDefinition = [
       try {
         const db = getDb();
         db.mindMaps = sanitizeMindMaps(db.mindMaps);
-        const map = createMindMap(args);
+        db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+        const cat = args.categoryId
+          ? db.mindMapCategories.find(c => c.id === args.categoryId)
+          : db.mindMapCategories.find(c => c.name.toLowerCase() === String(args.category || '').toLowerCase());
+        const map = createMindMap({
+          ...args,
+          category: cat?.name || args.category,
+          categoryId: cat?.id || args.categoryId || null,
+          color: args.color || cat?.color
+        });
         db.mindMaps.unshift(map);
         saveDb(db);
         return formatSuccess(map, `Mapa mental '${map.title}' criado.`);
@@ -1377,6 +1398,7 @@ export const toolsDefinition = [
       title: z.string().optional(),
       description: z.string().optional(),
       category: z.string().optional(),
+      categoryId: z.string().optional().describe('ID do assunto ou subassunto'),
       color: z.string().optional(),
       rootLabel: z.string().optional(),
       layout: z.boolean().optional().describe('Se true, reorganiza automaticamente os ramos')
@@ -1553,6 +1575,101 @@ export const toolsDefinition = [
       db.mindMapSessions = db.mindMapSessions.filter(s => s.mapId !== removed.id);
       saveDb(db);
       return formatSuccess(removed, `Mapa '${removed.title}' excluído.`);
+    }
+  },
+  {
+    name: 'list_mind_map_categories',
+    description: 'Listar assuntos e subassuntos usados para organizar os mapas mentais.',
+    schema: {},
+    handler: async () => {
+      const db = getDb();
+      const categories = sanitizeMindMapCategories(db.mindMapCategories);
+      return formatSuccess({ total: categories.length, categories }, `${categories.length} assuntos encontrados.`);
+    }
+  },
+  {
+    name: 'create_mind_map_category',
+    description: 'Criar um assunto (matéria) ou subassunto de mapas mentais. Subassuntos usam parentId do assunto pai.',
+    schema: {
+      name: z.string().describe('Nome do assunto ou subassunto'),
+      color: z.string().optional().describe('Cor hex'),
+      parentId: z.string().optional().describe('ID do assunto pai (omitido = assunto raiz)')
+    },
+    handler: async (args) => {
+      try {
+        const db = getDb();
+        db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+        const category = createMindMapCategory(args, db.mindMapCategories);
+        db.mindMapCategories.push(category);
+        saveDb(db);
+        return formatSuccess(category, `Assunto '${category.name}' criado.`);
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'update_mind_map_category',
+    description: 'Renomear, recolocar ou recolorir um assunto/subassunto de mapas mentais.',
+    schema: {
+      id: z.string().describe('ID do assunto'),
+      name: z.string().optional(),
+      color: z.string().optional(),
+      parentId: z.string().nullable().optional().describe('Novo pai (null = promover a assunto)')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+      const cat = db.mindMapCategories.find(c => c.id === args.id);
+      if (!cat) return formatError(`Assunto '${args.id}' não encontrado.`);
+      try {
+        if (args.name !== undefined) {
+          const trimmed = String(args.name || '').trim();
+          if (!trimmed) return formatError('Informe o nome do assunto.');
+          cat.name = trimmed;
+          db.mindMaps = applyMindMapCategoryRename(sanitizeMindMaps(db.mindMaps), cat.id, cat);
+        }
+        if (args.color) cat.color = args.color;
+        if (args.parentId !== undefined) {
+          if (args.parentId) {
+            const parent = db.mindMapCategories.find(c => c.id === args.parentId);
+            if (!parent) return formatError('Assunto pai não encontrado.');
+            if (parent.parentId) return formatError('Subassuntos não podem ter outros subassuntos.');
+            cat.parentId = parent.id;
+          } else {
+            cat.parentId = null;
+          }
+        }
+        saveDb(db);
+        return formatSuccess(cat, `Assunto '${cat.name}' atualizado.`);
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'delete_mind_map_category',
+    description: 'Excluir um assunto (e seus subassuntos). Mapas são movidos para outro assunto raiz.',
+    schema: {
+      id: z.string().describe('ID do assunto')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+      const cat = db.mindMapCategories.find(c => c.id === args.id);
+      if (!cat) return formatError(`Assunto '${args.id}' não encontrado.`);
+      const childIds = db.mindMapCategories.filter(c => c.parentId === cat.id).map(c => c.id);
+      const removeIds = new Set([cat.id, ...childIds]);
+      const fallback = db.mindMapCategories.find(c => !removeIds.has(c.id) && !c.parentId)
+        || db.mindMapCategories.find(c => !removeIds.has(c.id))
+        || null;
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      removeIds.forEach((id) => {
+        db.mindMaps = reassignMindMapCategory(db.mindMaps, id, fallback);
+      });
+      db.mindMapCategories = db.mindMapCategories.filter(c => !removeIds.has(c.id));
+      saveDb(db);
+      return formatSuccess({ removed: cat, fallback }, `Assunto '${cat.name}' excluído.`);
     }
   },
 
@@ -2754,7 +2871,8 @@ export const resourcesDefinition = [
         mimeType: 'application/json',
         text: JSON.stringify({
           mindMaps: maps,
-          sessions: sanitizeMindMapSessions(db.mindMapSessions)
+          sessions: sanitizeMindMapSessions(db.mindMapSessions),
+          categories: sanitizeMindMapCategories(db.mindMapCategories)
         }, null, 2)
       };
     }

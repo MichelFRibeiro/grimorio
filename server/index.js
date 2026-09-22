@@ -94,6 +94,10 @@ import {
   applyStudySession,
   sanitizeMindMaps,
   sanitizeMindMapSessions,
+  sanitizeMindMapCategories,
+  createMindMapCategory,
+  applyMindMapCategoryRename,
+  reassignMindMapCategory,
   computeMapStats
 } from '../src/utils/mindMaps.js';
 
@@ -420,6 +424,7 @@ app.get('/api/state', (req, res) => {
     db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
     db.mindMaps = sanitizeMindMaps(db.mindMaps);
     db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
+    db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
     db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
     if (db.aguPlan?.startedAt) {
       const next = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);
@@ -2780,6 +2785,91 @@ app.delete('/api/daily-victories/:id', (req, res) => {
 // ==========================================
 // MAPAS MENTAIS
 // ==========================================
+app.get('/api/mind-map-categories', (req, res) => {
+  try {
+    const db = getDb();
+    res.json({ success: true, categories: sanitizeMindMapCategories(db.mindMapCategories) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/mind-map-categories', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+    const { name, color, parentId } = req.body || {};
+    const category = createMindMapCategory({ name, color, parentId }, db.mindMapCategories);
+    db.mindMapCategories.push(category);
+    saveDb(db);
+    res.json({ success: true, category, categories: db.mindMapCategories });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/mind-map-categories/:id', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+    const cat = db.mindMapCategories.find(c => c.id === req.params.id);
+    if (!cat) return res.status(404).json({ error: 'Assunto não encontrado.' });
+    const { name, color, parentId } = req.body || {};
+    if (name !== undefined) {
+      const trimmed = String(name || '').trim();
+      if (!trimmed) return res.status(400).json({ error: 'Informe o nome do assunto.' });
+      const siblings = db.mindMapCategories.filter(c => c.id !== cat.id && (c.parentId || null) === (cat.parentId || null));
+      if (siblings.some(c => c.name.toLowerCase() === trimmed.toLowerCase())) {
+        return res.status(400).json({ error: 'Já existe um assunto com este nome neste nível.' });
+      }
+      cat.name = trimmed;
+      db.mindMaps = applyMindMapCategoryRename(sanitizeMindMaps(db.mindMaps), cat.id, cat);
+    }
+    if (color !== undefined && color) cat.color = color;
+    if (parentId !== undefined) {
+      if (parentId) {
+        const parent = db.mindMapCategories.find(c => c.id === parentId);
+        if (!parent) return res.status(400).json({ error: 'Assunto pai não encontrado.' });
+        if (parent.parentId) return res.status(400).json({ error: 'Subassuntos não podem ter outros subassuntos.' });
+        if (parent.id === cat.id) return res.status(400).json({ error: 'Um assunto não pode ser pai de si mesmo.' });
+        if (db.mindMapCategories.some(c => c.parentId === cat.id)) {
+          return res.status(400).json({ error: 'Mova os subassuntos antes de transformar este assunto em subassunto.' });
+        }
+        cat.parentId = parent.id;
+      } else {
+        cat.parentId = null;
+      }
+    }
+    saveDb(db);
+    res.json({ success: true, category: cat, categories: db.mindMapCategories });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/mind-map-categories/:id', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+    const cat = db.mindMapCategories.find(c => c.id === req.params.id);
+    if (!cat) return res.status(404).json({ error: 'Assunto não encontrado.' });
+    const childIds = db.mindMapCategories.filter(c => c.parentId === cat.id).map(c => c.id);
+    const removeIds = new Set([cat.id, ...childIds]);
+    const fallback = db.mindMapCategories.find(c => !removeIds.has(c.id) && !c.parentId)
+      || db.mindMapCategories.find(c => !removeIds.has(c.id))
+      || null;
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    removeIds.forEach((id) => {
+      db.mindMaps = reassignMindMapCategory(db.mindMaps, id, fallback);
+    });
+    db.mindMapCategories = db.mindMapCategories.filter(c => !removeIds.has(c.id));
+    saveDb(db);
+    res.json({ success: true, categories: db.mindMapCategories });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/mind-maps', (req, res) => {
   try {
     const db = getDb();
@@ -2791,7 +2881,8 @@ app.get('/api/mind-maps', (req, res) => {
     res.json({
       success: true,
       mindMaps,
-      sessions: sanitizeMindMapSessions(db.mindMapSessions)
+      sessions: sanitizeMindMapSessions(db.mindMapSessions),
+      categories: sanitizeMindMapCategories(db.mindMapCategories)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2802,8 +2893,19 @@ app.post('/api/mind-maps', (req, res) => {
   try {
     const db = getDb();
     db.mindMaps = sanitizeMindMaps(db.mindMaps);
-    const { title, description, category, color, rootLabel } = req.body || {};
-    const map = createMindMap({ title, description, category, color, rootLabel });
+    const { title, description, category, categoryId, color, rootLabel } = req.body || {};
+    db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+    const cat = categoryId
+      ? db.mindMapCategories.find(c => c.id === categoryId)
+      : db.mindMapCategories.find(c => c.name.toLowerCase() === String(category || '').toLowerCase());
+    const map = createMindMap({
+      title,
+      description,
+      category: cat?.name || category,
+      categoryId: cat?.id || categoryId || null,
+      color: color || cat?.color,
+      rootLabel
+    });
     db.mindMaps.unshift(map);
     saveDb(db);
     res.json({
@@ -2836,7 +2938,7 @@ app.put('/api/mind-maps/:id', (req, res) => {
     const index = db.mindMaps.findIndex(m => m.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
 
-    const { title, description, category, color, rootLabel, nodes, layout } = req.body || {};
+    const { title, description, category, categoryId, color, rootLabel, nodes, layout } = req.body || {};
     let next = db.mindMaps[index];
 
     if (Array.isArray(nodes)) {
@@ -2849,8 +2951,21 @@ app.put('/api/mind-maps/:id', (req, res) => {
       if (!next) return res.status(400).json({ error: 'Mapa mental inválido.' });
     }
 
-    if (title !== undefined || description !== undefined || category !== undefined || color !== undefined || rootLabel !== undefined) {
-      next = updateMindMapMeta(next, { title, description, category, color, rootLabel });
+    if (title !== undefined || description !== undefined || category !== undefined || categoryId !== undefined || color !== undefined || rootLabel !== undefined) {
+      db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+      const cat = categoryId
+        ? db.mindMapCategories.find(c => c.id === categoryId)
+        : (category
+          ? db.mindMapCategories.find(c => c.name.toLowerCase() === String(category).toLowerCase())
+          : null);
+      next = updateMindMapMeta(next, {
+        title,
+        description,
+        category: cat?.name ?? category,
+        categoryId: categoryId !== undefined ? (cat?.id || categoryId || null) : undefined,
+        color,
+        rootLabel
+      });
     }
 
     if (layout) {

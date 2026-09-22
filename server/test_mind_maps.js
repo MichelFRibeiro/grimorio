@@ -9,6 +9,11 @@ import {
   computeStudyRewards,
   sanitizeMindMap,
   sanitizeMindMaps,
+  sanitizeMindMapCategories,
+  createMindMapCategory,
+  groupMapsByCategory,
+  mindMapCategoryLabel,
+  reassignMindMapCategory,
   countBranches,
   getRootNode,
   childrenOf
@@ -110,6 +115,31 @@ function runTests() {
     untitled = true;
   }
   assert(untitled, 'Rejeita mapa sem título');
+
+  const cats = [];
+  const constitucional = createMindMapCategory({ name: 'Direito Constitucional', color: '#a855f7' }, cats);
+  cats.push(constitucional);
+  const cf88 = createMindMapCategory({ name: 'CF/88', parentId: constitucional.id }, cats);
+  cats.push(cf88);
+  assert(cf88.parentId === constitucional.id, 'Subassunto aponta para o assunto');
+  let deep = false;
+  try {
+    createMindMapCategory({ name: 'Art. 5', parentId: cf88.id }, cats);
+  } catch {
+    deep = true;
+  }
+  assert(deep, 'Impede terceiro nível de assunto');
+
+  const mapped = createMindMap({ title: 'Princípios fundamentais', categoryId: cf88.id, category: cf88.name });
+  assert(mindMapCategoryLabel(cats, mapped.categoryId) === 'Direito Constitucional · CF/88', 'Rótulo composto assunto · subassunto');
+  const grouped = groupMapsByCategory([mapped], cats);
+  assert(grouped[0].root.name === 'Direito Constitucional', 'Agrupa pelo assunto raiz');
+  assert(grouped[0].topics.some(t => t.category.id === cf88.id && t.maps.length === 1), 'Coloca o mapa no subassunto');
+
+  const moved = reassignMindMapCategory([mapped], cf88.id, constitucional);
+  assert(moved[0].categoryId === constitucional.id, 'Reatribui mapas ao excluir subassunto');
+  assert(sanitizeMindMapCategories().length > 0, 'Categorias padrão preenchem lista ausente');
+  assert(sanitizeMindMapCategories([]).length === 0, 'Lista vazia permanece vazia');
 
   console.log('\n🎉 Mapas mentais validados com sucesso!');
 }

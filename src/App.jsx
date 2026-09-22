@@ -111,7 +111,10 @@ export function App() {
     deleteMindMapNode,
     layoutMindMap,
     studyMindMap,
-    deleteMindMap
+    deleteMindMap,
+    addMindMapCategory,
+    updateMindMapCategory,
+    deleteMindMapCategory
   } = useGameData();
 
   if (loadingAuth || (isAuthenticated && loading)) {
@@ -184,7 +187,8 @@ export function App() {
     dailyVictories,
     dailyVictoryBonuses,
     mindMaps,
-    mindMapSessions
+    mindMapSessions,
+    mindMapCategories
   } = data || {};
 
   const pendingQuestsCount = (quests || []).filter(q => !q.completed).length;
@@ -354,7 +358,7 @@ export function App() {
           <MindMapsView
             mindMaps={mindMaps}
             mindMapSessions={mindMapSessions}
-            questCategories={questCategories}
+            mindMapCategories={mindMapCategories}
             onAddMap={addMindMap}
             onUpdateMap={updateMindMap}
             onAddNode={addMindMapNode}
@@ -363,6 +367,9 @@ export function App() {
             onLayoutMap={layoutMindMap}
             onStudyMap={studyMindMap}
             onDeleteMap={deleteMindMap}
+            onAddCategory={addMindMapCategory}
+            onUpdateCategory={updateMindMapCategory}
+            onDeleteCategory={deleteMindMapCategory}
           />
         )}
 

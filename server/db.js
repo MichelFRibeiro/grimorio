@@ -15,7 +15,7 @@ import { createDefaultAguPlan } from '../src/data/aguCurriculum.js';
 import { sanitizeAguPlan, ensureCurrentCycle } from '../src/utils/aguCycle.js';
 import { sanitizeNinetyDayGoals } from '../src/utils/ninetyDayGoals.js';
 import { sanitizeDailyVictories, sanitizeDailyVictoryBonuses } from '../src/utils/dailyVictories.js';
-import { sanitizeMindMaps, sanitizeMindMapSessions } from '../src/utils/mindMaps.js';
+import { sanitizeMindMaps, sanitizeMindMapSessions, sanitizeMindMapCategories } from '../src/utils/mindMaps.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -281,7 +281,8 @@ export const defaultDatabase = () => {
     dailyVictories: [],
     dailyVictoryBonuses: {},
     mindMaps: [],
-    mindMapSessions: []
+    mindMapSessions: [],
+    mindMapCategories: sanitizeMindMapCategories()
   };
 };
 
@@ -309,6 +310,18 @@ export function sanitizeDb(db) {
   db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
   db.mindMaps = sanitizeMindMaps(db.mindMaps);
   db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
+  db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+  if (db.mindMaps.length && db.mindMapCategories.length) {
+    db.mindMaps = db.mindMaps.map((map) => {
+      if (map.categoryId && db.mindMapCategories.some(c => c.id === map.categoryId)) {
+        const cat = db.mindMapCategories.find(c => c.id === map.categoryId);
+        return { ...map, category: cat?.name || map.category };
+      }
+      const byName = db.mindMapCategories.find(c => c.name.toLowerCase() === String(map.category || '').toLowerCase());
+      if (byName) return { ...map, categoryId: byName.id, category: byName.name };
+      return map;
+    });
+  }
   db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
   if (db.aguPlan?.startedAt) {
     db.aguPlan = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);

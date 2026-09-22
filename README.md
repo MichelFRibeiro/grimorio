@@ -61,6 +61,8 @@ O script irá:
 - **Modo estudo**: recobrir ramos do pai ou cartões pai → filho, com cronômetro.
 - Revisão espaçada (Esqueci / Difícil / Bom / Fácil) concede XP, Sabedoria e Moedas.
 - Ramos vencidos voltam para a fila de estudo até consolidar a matéria.
+- **Assuntos e subassuntos** próprios da Cartografia (ex: Direito Constitucional → CF/88), com filtro e agrupamento na lista.
+- **Tela cheia** no editor e no modo estudo (Esc para sair).
 
 ### ⚡ Linha de Operações (Processos em Lote)
 - Para metas como *"Analisar 10 processos judiciais"*, *"Revisar 15 relatórios"*, *"Estudar 8 aulas"*.
@@ -154,6 +156,7 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 - `add_mind_map_node`, `update_mind_map_node`, `delete_mind_map_node`.
 - `study_mind_map`: registra revisão espaçada (qualidade 0–3) e concede XP/Sabedoria.
 - `delete_mind_map`: exclui o mapa e estorna as sessões de estudo.
+- `list_mind_map_categories`, `create_mind_map_category`, `update_mind_map_category`, `delete_mind_map_category` (assunto + subassunto via `parentId`).
 
 #### 8. 📝 Banco de Questões / Simulados (`examQuestions`)
 - `list_exam_questions`, `log_exam_questions`, `update_exam_questions`, `delete_exam_questions`.

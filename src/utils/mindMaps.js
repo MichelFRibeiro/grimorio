@@ -24,6 +24,15 @@ export const STUDY_QUALITY = {
   easy: 3
 };
 
+export const DEFAULT_MIND_MAP_CATEGORIES = [
+  { id: 'mmc-constitucional', name: 'Direito Constitucional', color: '#a855f7', parentId: null },
+  { id: 'mmc-cf88', name: 'CF/88', color: '#c084fc', parentId: 'mmc-constitucional' },
+  { id: 'mmc-administrativo', name: 'Direito Administrativo', color: '#38bdf8', parentId: null },
+  { id: 'mmc-atos', name: 'Atos administrativos', color: '#7dd3fc', parentId: 'mmc-administrativo' },
+  { id: 'mmc-portugues', name: 'Língua Portuguesa', color: '#f59e0b', parentId: null },
+  { id: 'mmc-geral', name: 'Geral', color: '#94a3b8', parentId: null }
+];
+
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function uidMind(prefix = 'mm') {
@@ -79,10 +88,128 @@ export function createMindMapNode({
   };
 }
 
+export function createMindMapCategory({
+  name,
+  color,
+  parentId = null
+} = {}, existing = []) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) throw new Error('Informe o nome do assunto.');
+  const parent = parentId ? existing.find(c => c.id === parentId) : null;
+  if (parentId && !parent) throw new Error('Assunto pai não encontrado.');
+  if (parent?.parentId) throw new Error('Subassuntos não podem ter outros subassuntos.');
+  const siblings = existing.filter(c => (c.parentId || null) === (parentId || null));
+  if (siblings.some(c => c.name.toLowerCase() === trimmed.toLowerCase())) {
+    throw new Error('Já existe um assunto com este nome neste nível.');
+  }
+  return {
+    id: uidMind('mmc'),
+    name: trimmed,
+    color: color || colorForIndex(existing.length),
+    parentId: parentId || null
+  };
+}
+
+export function sanitizeMindMapCategory(raw, index = 0) {
+  if (!raw || typeof raw !== 'object') return null;
+  const name = String(raw.name || '').trim();
+  if (!name) return null;
+  return {
+    id: raw.id || uidMind('mmc'),
+    name,
+    color: raw.color || colorForIndex(index),
+    parentId: raw.parentId || null
+  };
+}
+
+export function sanitizeMindMapCategories(list) {
+  const source = Array.isArray(list) ? list : DEFAULT_MIND_MAP_CATEGORIES;
+  const cats = source.map((item, i) => sanitizeMindMapCategory(item, i)).filter(Boolean);
+  const ids = new Set(cats.map(c => c.id));
+  const cleaned = cats.map((c) => (
+    c.parentId && !ids.has(c.parentId) ? { ...c, parentId: null } : c
+  ));
+  return cleaned.filter((c) => {
+    if (!c.parentId) return true;
+    const parent = cleaned.find(p => p.id === c.parentId);
+    return parent && !parent.parentId;
+  });
+}
+
+export function findMindMapCategory(categories = [], id) {
+  if (!id) return null;
+  return (categories || []).find(c => c.id === id) || null;
+}
+
+export function mindMapCategoryPath(categories = [], id) {
+  const cat = findMindMapCategory(categories, id);
+  if (!cat) return [];
+  const parent = cat.parentId ? findMindMapCategory(categories, cat.parentId) : null;
+  return parent ? [parent, cat] : [cat];
+}
+
+export function mindMapCategoryLabel(categories = [], id, fallback = '') {
+  const path = mindMapCategoryPath(categories, id);
+  if (!path.length) return fallback;
+  return path.map(c => c.name).join(' · ');
+}
+
+export function groupMapsByCategory(maps = [], categories = []) {
+  const cats = sanitizeMindMapCategories(categories);
+  const roots = cats.filter(c => !c.parentId);
+  const used = new Set();
+  const groups = roots.map((root) => {
+    const children = cats.filter(c => c.parentId === root.id);
+    const topics = [
+      {
+        category: root,
+        maps: maps.filter(m => m.categoryId === root.id)
+      },
+      ...children.map((child) => ({
+        category: child,
+        maps: maps.filter(m => m.categoryId === child.id)
+      }))
+    ];
+    topics.forEach(t => t.maps.forEach(m => used.add(m.id)));
+    return { root, topics };
+  });
+  const uncategorized = maps.filter(m => !used.has(m.id));
+  if (uncategorized.length) {
+    groups.push({
+      root: { id: 'uncategorized', name: 'Sem assunto', color: '#64748b', parentId: null },
+      topics: [{ category: { id: 'uncategorized', name: 'Sem assunto', color: '#64748b' }, maps: uncategorized }]
+    });
+  }
+  return groups;
+}
+
+export function applyMindMapCategoryRename(maps = [], oldId, next) {
+  return (maps || []).map((map) => {
+    if (map.categoryId !== oldId) return map;
+    return {
+      ...map,
+      categoryId: next?.id || map.categoryId,
+      category: next?.name || map.category
+    };
+  });
+}
+
+export function reassignMindMapCategory(maps = [], fromId, toCategory) {
+  return (maps || []).map((map) => {
+    if (map.categoryId !== fromId) return map;
+    return {
+      ...map,
+      categoryId: toCategory?.id || null,
+      category: toCategory?.name || 'Geral'
+    };
+  });
+}
+
 export function createMindMap({
   title,
   description = '',
-  category = 'Estudos',
+  category = 'Geral',
+  categoryId = null,
   color,
   rootLabel
 } = {}) {
@@ -103,7 +230,8 @@ export function createMindMap({
     id: uidMind('mm'),
     title: trimmedTitle,
     description: String(description || '').trim(),
-    category: String(category || 'Estudos').trim() || 'Estudos',
+    category: String(category || 'Geral').trim() || 'Geral',
+    categoryId: categoryId || null,
     color: color || root.color,
     createdAt: now,
     updatedAt: now,
@@ -254,7 +382,8 @@ export function updateMindMapMeta(map, patch = {}) {
     next.title = trimmed;
   }
   if (patch.description !== undefined) next.description = String(patch.description || '').trim();
-  if (patch.category !== undefined) next.category = String(patch.category || 'Estudos').trim() || 'Estudos';
+  if (patch.category !== undefined) next.category = String(patch.category || 'Geral').trim() || 'Geral';
+  if (patch.categoryId !== undefined) next.categoryId = patch.categoryId || null;
   if (patch.color !== undefined && patch.color) next.color = patch.color;
   if (patch.rootLabel !== undefined) {
     const root = getRootNode(next);
@@ -511,7 +640,8 @@ export function sanitizeMindMap(raw) {
     id: raw.id || uidMind('mm'),
     title,
     description: String(raw.description || '').trim(),
-    category: String(raw.category || 'Estudos').trim() || 'Estudos',
+    category: String(raw.category || 'Geral').trim() || 'Geral',
+    categoryId: raw.categoryId || null,
     color: raw.color || root.color,
     createdAt: raw.createdAt || new Date().toISOString(),
     updatedAt: raw.updatedAt || raw.createdAt || new Date().toISOString(),

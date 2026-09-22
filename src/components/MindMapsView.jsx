@@ -21,7 +21,11 @@ import {
   AlertCircle,
   Bookmark,
   GraduationCap,
-  Layers
+  Layers,
+  Maximize2,
+  Minimize2,
+  Tag,
+  FolderTree
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { useStopwatch, formatTimer } from '../hooks/useStopwatch';
@@ -32,7 +36,10 @@ import {
   computeMapStats,
   getRootNode,
   getStudyQueue,
+  groupMapsByCategory,
+  mindMapCategoryLabel,
   nodePath,
+  sanitizeMindMapCategories,
   visibleNodeIds
 } from '../utils/mindMaps';
 
@@ -53,7 +60,9 @@ function MindMapCanvas({
   onSelect,
   onMoveNode,
   onAddChild,
-  readOnly = false
+  readOnly = false,
+  fullscreen = false,
+  onToggleFullscreen
 }) {
   const wrapRef = useRef(null);
   const [zoom, setZoom] = useState(1);
@@ -246,6 +255,11 @@ function MindMapCanvas({
         </g>
       </svg>
       <div className="mindmap-zoom">
+        {onToggleFullscreen && (
+          <button type="button" onClick={onToggleFullscreen} title={fullscreen ? 'Sair da tela cheia' : 'Tela cheia'}>
+            {fullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
+        )}
         <button type="button" onClick={() => setZoom(z => Math.max(0.4, z - 0.1))}>−</button>
         <span>{Math.round(zoom * 100)}%</span>
         <button type="button" onClick={() => setZoom(z => Math.min(2.2, z + 0.1))}>+</button>
@@ -257,7 +271,7 @@ function MindMapCanvas({
 export function MindMapsView({
   mindMaps = [],
   mindMapSessions = [],
-  questCategories = [],
+  mindMapCategories = [],
   onAddMap,
   onUpdateMap,
   onAddNode,
@@ -265,32 +279,32 @@ export function MindMapsView({
   onDeleteNode,
   onLayoutMap,
   onStudyMap,
-  onDeleteMap
+  onDeleteMap,
+  onAddCategory,
+  onUpdateCategory,
+  onDeleteCategory
 }) {
   const todayStr = getSaoPauloDateStr();
-  const defaultCategoryList = [
-    { id: 'cat-1', name: 'Trabalho', color: '#38bdf8' },
-    { id: 'cat-2', name: 'Estudos', color: '#a855f7' },
-    { id: 'cat-3', name: 'Pessoal', color: '#10b981' },
-    { id: 'cat-4', name: 'Projetos', color: '#f59e0b' },
-    { id: 'cat-5', name: 'Saúde', color: '#f43f5e' },
-    { id: 'cat-6', name: 'Finanças', color: '#eab308' }
-  ];
-  const activeCategories = Array.isArray(questCategories) && questCategories.length > 0
-    ? questCategories
-    : defaultCategoryList;
-  const defaultCatName = activeCategories.find(c => (typeof c === 'string' ? c : c.name) === 'Estudos')
-    ? 'Estudos'
-    : (activeCategories[0] ? (typeof activeCategories[0] === 'string' ? activeCategories[0] : activeCategories[0].name) : 'Estudos');
+  const categories = sanitizeMindMapCategories(mindMapCategories);
+  const rootCategories = categories.filter(c => !c.parentId);
+  const defaultCategoryId = rootCategories[0]?.id || categories[0]?.id || '';
 
   const [view, setView] = useState('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
-  const [newCategory, setNewCategory] = useState(defaultCatName);
+  const [newCategoryId, setNewCategoryId] = useState(defaultCategoryId);
   const [newColor, setNewColor] = useState(MIND_MAP_NODE_COLORS[0]);
   const [formError, setFormError] = useState('');
+  const [filterCategoryId, setFilterCategoryId] = useState('all');
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [catName, setCatName] = useState('');
+  const [catColor, setCatColor] = useState(MIND_MAP_NODE_COLORS[1]);
+  const [catParentId, setCatParentId] = useState('');
+  const [catError, setCatError] = useState('');
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [fullscreen, setFullscreen] = useState(false);
 
   const [activeMapId, setActiveMapId] = useState(null);
   const [pendingMap, setPendingMap] = useState(null);
@@ -324,6 +338,10 @@ export function MindMapsView({
   useEffect(() => {
     if (pendingMap && maps.some(m => m.id === pendingMap.id)) setPendingMap(null);
   }, [maps, pendingMap]);
+
+  useEffect(() => {
+    if (!newCategoryId && defaultCategoryId) setNewCategoryId(defaultCategoryId);
+  }, [defaultCategoryId, newCategoryId]);
   const editorMap = liveMap
     ? { ...liveMap, nodes: localNodes || liveMap.nodes }
     : null;
@@ -342,16 +360,39 @@ export function MindMapsView({
     }
   }, [selectedNode?.id]);
 
+  const matchingCategoryIds = useMemo(() => {
+    if (filterCategoryId === 'all') return null;
+    const childIds = categories.filter(c => c.parentId === filterCategoryId).map(c => c.id);
+    return new Set([filterCategoryId, ...childIds]);
+  }, [categories, filterCategoryId]);
+
   const filteredMaps = maps.filter((m) => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return true;
-    return (
+    const matchSearch = !q || (
       m.title.toLowerCase().includes(q)
       || (m.description || '').toLowerCase().includes(q)
       || (m.category || '').toLowerCase().includes(q)
+      || mindMapCategoryLabel(categories, m.categoryId).toLowerCase().includes(q)
       || (m.nodes || []).some(n => n.label.toLowerCase().includes(q) || (n.notes || '').toLowerCase().includes(q))
     );
+    const matchCat = !matchingCategoryIds || matchingCategoryIds.has(m.categoryId);
+    return matchSearch && matchCat;
   });
+  const groupedMaps = groupMapsByCategory(filteredMaps, categories);
+
+  useEffect(() => {
+    if (!fullscreen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [fullscreen]);
 
   const dueCount = maps.reduce((acc, m) => acc + (computeMapStats(m, { today: todayStr }).dueBranches || 0), 0);
   const sessions = mindMapSessions || [];
@@ -380,11 +421,13 @@ export function MindMapsView({
       return;
     }
     try {
+      const cat = categories.find(c => c.id === newCategoryId);
       const created = await onAddMap({
         title: newTitle.trim(),
         description: newDescription.trim(),
-        category: newCategory,
-        color: newColor,
+        category: cat?.name || 'Geral',
+        categoryId: cat?.id || newCategoryId || null,
+        color: newColor || cat?.color,
         rootLabel: newTitle.trim()
       });
       setShowAddModal(false);
@@ -484,6 +527,68 @@ export function MindMapsView({
     });
   };
 
+  const handleCreateCategory = async (e) => {
+    e.preventDefault();
+    if (!catName.trim()) {
+      setCatError('Informe o nome do assunto.');
+      return;
+    }
+    try {
+      if (editingCategory) {
+        await onUpdateCategory(editingCategory.id, {
+          name: catName.trim(),
+          color: catColor,
+          parentId: catParentId || null
+        });
+      } else {
+        await onAddCategory({
+          name: catName.trim(),
+          color: catColor,
+          parentId: catParentId || null
+        });
+      }
+      setCatName('');
+      setCatParentId('');
+      setEditingCategory(null);
+      setCatError('');
+    } catch (err) {
+      setCatError(err.message || 'Não foi possível salvar o assunto.');
+    }
+  };
+
+  const promptDeleteCategory = (cat) => {
+    const kids = categories.filter(c => c.parentId === cat.id).length;
+    setConfirmModal({
+      isOpen: true,
+      title: cat.parentId ? 'Excluir subassunto' : 'Excluir assunto',
+      message: kids
+        ? `Excluir "${cat.name}" também remove ${kids} subassunto(s). Os mapas serão movidos para outro assunto.`
+        : `Excluir "${cat.name}"? Os mapas deste assunto serão movidos para outro assunto.`,
+      confirmText: 'Sim, excluir',
+      cancelText: 'Cancelar',
+      confirmVariant: 'danger',
+      icon: Trash2,
+      onConfirm: () => {
+        if (onDeleteCategory) onDeleteCategory(cat.id);
+        if (editingCategory?.id === cat.id) setEditingCategory(null);
+        closeConfirmModal();
+      }
+    });
+  };
+
+  const categoryOptions = (
+    <>
+      {rootCategories.map((root) => (
+        <optgroup key={root.id} label={root.name}>
+          <option value={root.id}>{root.name}</option>
+          {categories.filter(c => c.parentId === root.id).map((child) => (
+            <option key={child.id} value={child.id}>{root.name} · {child.name}</option>
+          ))}
+        </optgroup>
+      ))}
+    </>
+  );
+
   const promptDeleteNode = () => {
     if (!editorMap || !selectedNode) return;
     const root = getRootNode(editorMap);
@@ -506,44 +611,16 @@ export function MindMapsView({
 
   if (view === 'editor' && editorMap) {
     const stats = computeMapStats(editorMap, { today: todayStr });
-    return (
-      <div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-            <button type="button" className="mindmap-ghost-btn" onClick={() => { setView('list'); setActiveMapId(null); }}>
-              <ArrowLeft size={16} /> Mapas
-            </button>
-            <div>
-              <h2 className="font-cinzel" style={{ fontSize: '1.25rem', fontWeight: 800 }}>{editorMap.title}</h2>
-              <p style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
-                {stats.branches} ramos · {stats.dueBranches} para revisar · maestria {stats.mastery}%
-              </p>
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            <button type="button" className="mindmap-ghost-btn" onClick={() => onLayoutMap(editorMap.id)}>
-              <Layout size={15} /> Organizar
-            </button>
-            <button
-              type="button"
-              onClick={() => openStudy(editorMap)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '12px',
-                background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)', color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer'
-              }}
-            >
-              <GraduationCap size={16} /> Estudar mapa
-            </button>
-          </div>
-        </div>
-
-        <div className="mindmap-editor-grid">
+    const editorBody = (
+        <div className={`mindmap-editor-grid ${fullscreen ? 'is-fullscreen' : ''}`}>
           <MindMapCanvas
             map={editorMap}
             selectedId={selectedId}
             onSelect={setSelectedId}
             onMoveNode={handleMoveNode}
             onAddChild={handleAddChild}
+            fullscreen={fullscreen}
+            onToggleFullscreen={() => setFullscreen(v => !v)}
           />
           <aside className="glass-panel mindmap-side">
             {selectedNode ? (
@@ -596,6 +673,17 @@ export function MindMapsView({
                     </button>
                   )}
                 </div>
+                <label style={{ ...labelStyle, marginTop: 14 }}>Assunto</label>
+                <select
+                  value={editorMap.categoryId || ''}
+                  onChange={(e) => {
+                    const cat = categories.find(c => c.id === e.target.value);
+                    if (onUpdateMap) onUpdateMap(editorMap.id, { categoryId: cat?.id || null, category: cat?.name || 'Geral' });
+                  }}
+                  style={inputStyle}
+                >
+                  {categoryOptions}
+                </select>
                 <div style={{ marginTop: '16px', fontSize: '0.75rem', color: '#64748b', lineHeight: 1.5 }}>
                   Caminho: {nodePath(editorMap, selectedNode.id).map(n => n.label).join(' → ')}
                 </div>
@@ -605,6 +693,52 @@ export function MindMapsView({
             )}
           </aside>
         </div>
+    );
+    return (
+      <div className={fullscreen ? 'mindmap-fullscreen-root' : undefined}>
+        {!fullscreen && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+              <button type="button" className="mindmap-ghost-btn" onClick={() => { setFullscreen(false); setView('list'); setActiveMapId(null); }}>
+                <ArrowLeft size={16} /> Mapas
+              </button>
+              <div>
+                <h2 className="font-cinzel" style={{ fontSize: '1.25rem', fontWeight: 800 }}>{editorMap.title}</h2>
+                <p style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
+                  {mindMapCategoryLabel(categories, editorMap.categoryId, editorMap.category)} · {stats.branches} ramos · {stats.dueBranches} para revisar
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              <button type="button" className="mindmap-ghost-btn" onClick={() => setFullscreen(true)}>
+                <Maximize2 size={15} /> Tela cheia
+              </button>
+              <button type="button" className="mindmap-ghost-btn" onClick={() => onLayoutMap(editorMap.id)}>
+                <Layout size={15} /> Organizar
+              </button>
+              <button
+                type="button"
+                onClick={() => openStudy(editorMap)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)', color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer'
+                }}
+              >
+                <GraduationCap size={16} /> Estudar mapa
+              </button>
+            </div>
+          </div>
+        )}
+        {fullscreen && (
+          <div className="mindmap-fullscreen-bar">
+            <span className="font-cinzel">{editorMap.title}</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="mindmap-ghost-btn" onClick={() => onLayoutMap(editorMap.id)}><Layout size={14} /> Organizar</button>
+              <button type="button" className="mindmap-ghost-btn" onClick={() => setFullscreen(false)}><Minimize2 size={14} /> Sair</button>
+            </div>
+          </div>
+        )}
+        {editorBody}
         <ConfirmModal {...confirmModal} onCancel={closeConfirmModal} />
       </div>
     );
@@ -613,9 +747,9 @@ export function MindMapsView({
   if (view === 'study' && liveMap) {
     const done = studyIndex >= dueQueue.length && studyReviews.length > 0;
     return (
-      <div>
+      <div className={fullscreen ? 'mindmap-fullscreen-root mindmap-study-fullscreen' : undefined}>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
-          <button type="button" className="mindmap-ghost-btn" onClick={() => { stopwatch.reset(); setView('editor'); }}>
+          <button type="button" className="mindmap-ghost-btn" onClick={() => { stopwatch.reset(); setFullscreen(false); setView('editor'); }}>
             <ArrowLeft size={16} /> Voltar ao mapa
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>
@@ -624,6 +758,10 @@ export function MindMapsView({
               {stopwatch.isRunning ? <Pause size={14} /> : <Play size={14} />}
             </button>
             <button type="button" className="mindmap-ghost-btn" onClick={stopwatch.reset}><RotateCcw size={14} /></button>
+            <button type="button" className="mindmap-ghost-btn" onClick={() => setFullscreen(v => !v)}>
+              {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              {fullscreen ? 'Sair' : 'Tela cheia'}
+            </button>
           </div>
         </div>
 
@@ -733,16 +871,25 @@ export function MindMapsView({
             Crie mapas mentais, ramifique ideias e estude depois com revisão espaçada.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => { setShowAddModal(true); setFormError(''); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '12px',
-            background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)', color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer'
-          }}
-        >
-          <Plus size={18} /> Novo mapa
-        </button>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          <button
+            type="button"
+            className="mindmap-ghost-btn"
+            onClick={() => { setShowCategoryModal(true); setCatError(''); setEditingCategory(null); setCatName(''); setCatParentId(''); }}
+          >
+            <FolderTree size={16} /> Assuntos
+          </button>
+          <button
+            type="button"
+            onClick={() => { setShowAddModal(true); setFormError(''); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '12px',
+              background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)', color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer'
+            }}
+          >
+            <Plus size={18} /> Novo mapa
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '12px', marginBottom: '18px' }}>
@@ -751,15 +898,25 @@ export function MindMapsView({
         <StatCard label="Sessões de estudo" value={sessions.length} color="#38bdf8" />
       </div>
 
-      <div className="glass-panel" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
-        <Search size={16} color="#94a3b8" />
-        <input
-          type="text"
-          placeholder="Buscar mapa, ramo ou anotação..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ background: 'transparent', border: 'none', color: '#fff', width: '100%', outline: 'none' }}
-        />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '18px' }}>
+        <div className="glass-panel" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '220px' }}>
+          <Search size={16} color="#94a3b8" />
+          <input
+            type="text"
+            placeholder="Buscar mapa, ramo ou anotação..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ background: 'transparent', border: 'none', color: '#fff', width: '100%', outline: 'none' }}
+          />
+        </div>
+        <select
+          value={filterCategoryId}
+          onChange={(e) => setFilterCategoryId(e.target.value)}
+          style={{ ...inputStyle, width: 'auto', minWidth: 220 }}
+        >
+          <option value="all">Todos os assuntos</option>
+          {categoryOptions}
+        </select>
       </div>
 
       {sessions.length > 0 && (
@@ -786,50 +943,69 @@ export function MindMapsView({
           <p>Nenhum mapa mental ainda. Crie o primeiro núcleo e ramifique a matéria.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
-          {filteredMaps.map((map) => {
-            const stats = computeMapStats(map, { today: todayStr });
-            return (
-              <div key={map.id} className="rpg-card" style={{ padding: '18px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-                  <div>
-                    <div style={{ fontSize: '0.72rem', color: map.color || '#c084fc', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      {map.category || 'Estudos'}
-                    </div>
-                    <h3 className="font-cinzel" style={{ fontSize: '1.05rem', margin: '6px 0' }}>{map.title}</h3>
-                    {map.description && <p style={{ color: '#94a3b8', fontSize: '0.82rem' }}>{map.description}</p>}
-                  </div>
-                  <button type="button" className="mindmap-ghost-btn is-danger" onClick={() => promptDeleteMap(map)} title="Excluir">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-                <div style={{ display: 'flex', gap: '12px', margin: '14px 0', fontSize: '0.78rem', color: '#cbd5e1' }}>
-                  <span><GitBranch size={12} /> {stats.branches} ramos</span>
-                  <span><Bookmark size={12} /> {stats.withNotes} notas</span>
-                  <span><Brain size={12} /> {stats.mastery}%</span>
-                </div>
-                <div className="progress-container" style={{ height: 8, marginBottom: 14 }}>
-                  <div style={{ width: `${stats.mastery}%`, height: '100%', background: map.color || '#a855f7', borderRadius: 999 }} />
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button type="button" className="mindmap-ghost-btn" onClick={() => openEditor(map)} style={{ flex: 1, justifyContent: 'center' }}>
-                    <Pencil size={14} /> Editar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openStudy(map)}
-                    style={{
-                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      padding: '8px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 800,
-                      background: 'rgba(168,85,247,0.18)', color: '#e9d5ff'
-                    }}
-                  >
-                    <GraduationCap size={14} /> Estudar
-                  </button>
-                </div>
+        <div style={{ display: 'grid', gap: '22px' }}>
+          {groupedMaps.filter(g => g.topics.some(t => t.maps.length)).map((group) => (
+            <section key={group.root.id}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: group.root.color || '#a855f7' }} />
+                <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#e2e8f0' }}>{group.root.name}</h3>
               </div>
-            );
-          })}
+              {group.topics.filter(t => t.maps.length > 0).map((topic) => (
+                <div key={topic.category.id} style={{ marginBottom: 14 }}>
+                  {topic.category.id !== group.root.id && (
+                    <div style={{ fontSize: '0.75rem', color: topic.category.color || '#94a3b8', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', margin: '6px 0 10px 18px' }}>
+                      {topic.category.name}
+                    </div>
+                  )}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
+                    {topic.maps.map((map) => {
+                      const stats = computeMapStats(map, { today: todayStr });
+                      return (
+                        <div key={map.id} className="rpg-card" style={{ padding: '18px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                            <div>
+                              <div style={{ fontSize: '0.72rem', color: map.color || topic.category.color || '#c084fc', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                {mindMapCategoryLabel(categories, map.categoryId, map.category || 'Geral')}
+                              </div>
+                              <h3 className="font-cinzel" style={{ fontSize: '1.05rem', margin: '6px 0' }}>{map.title}</h3>
+                              {map.description && <p style={{ color: '#94a3b8', fontSize: '0.82rem' }}>{map.description}</p>}
+                            </div>
+                            <button type="button" className="mindmap-ghost-btn is-danger" onClick={() => promptDeleteMap(map)} title="Excluir">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                          <div style={{ display: 'flex', gap: '12px', margin: '14px 0', fontSize: '0.78rem', color: '#cbd5e1' }}>
+                            <span><GitBranch size={12} /> {stats.branches} ramos</span>
+                            <span><Bookmark size={12} /> {stats.withNotes} notas</span>
+                            <span><Brain size={12} /> {stats.mastery}%</span>
+                          </div>
+                          <div className="progress-container" style={{ height: 8, marginBottom: 14 }}>
+                            <div style={{ width: `${stats.mastery}%`, height: '100%', background: map.color || '#a855f7', borderRadius: 999 }} />
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button type="button" className="mindmap-ghost-btn" onClick={() => openEditor(map)} style={{ flex: 1, justifyContent: 'center' }}>
+                              <Pencil size={14} /> Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openStudy(map)}
+                              style={{
+                                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                padding: '8px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 800,
+                                background: 'rgba(168,85,247,0.18)', color: '#e9d5ff'
+                              }}
+                            >
+                              <GraduationCap size={14} /> Estudar
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </section>
+          ))}
         </div>
       )}
 
@@ -844,12 +1020,9 @@ export function MindMapsView({
             <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Ex: Direito Constitucional" style={inputStyle} autoFocus />
             <label style={{ ...labelStyle, marginTop: 12 }}>Descrição</label>
             <textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} rows={3} style={{ ...inputStyle, resize: 'vertical' }} placeholder="O que este mapa vai organizar?" />
-            <label style={{ ...labelStyle, marginTop: 12 }}>Categoria</label>
-            <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} style={inputStyle}>
-              {activeCategories.map((c) => {
-                const name = typeof c === 'string' ? c : c.name;
-                return <option key={name} value={name}>{name}</option>;
-              })}
+            <label style={{ ...labelStyle, marginTop: 12 }}>Assunto / subassunto</label>
+            <select value={newCategoryId} onChange={(e) => setNewCategoryId(e.target.value)} style={inputStyle}>
+              {categoryOptions}
             </select>
             <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
               {MIND_MAP_NODE_COLORS.map((color) => (
@@ -876,6 +1049,79 @@ export function MindMapsView({
               <Check size={14} style={{ marginRight: 6 }} /> Criar e abrir editor
             </button>
           </form>
+        </div>
+      )}
+
+      {showCategoryModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(5,7,13,0.88)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div className="modal-sheet glass-panel" style={{ maxWidth: 560, width: '100%', padding: 22 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 className="font-cinzel" style={{ color: '#c084fc', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Tag size={18} /> Assuntos e subassuntos
+              </h3>
+              <button type="button" className="mindmap-ghost-btn" onClick={() => setShowCategoryModal(false)}><X size={16} /></button>
+            </div>
+            <form onSubmit={handleCreateCategory} style={{ marginBottom: 18, padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <label style={labelStyle}>{editingCategory ? 'Editar assunto' : 'Novo assunto'}</label>
+              <input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="Ex: Direito Constitucional" style={inputStyle} />
+              <label style={{ ...labelStyle, marginTop: 10 }}>Nível</label>
+              <select value={catParentId} onChange={(e) => setCatParentId(e.target.value)} style={inputStyle}>
+                <option value="">Assunto (matéria)</option>
+                {rootCategories.filter(c => c.id !== editingCategory?.id).map((root) => (
+                  <option key={root.id} value={root.id}>Subassunto de {root.name}</option>
+                ))}
+              </select>
+              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                {MIND_MAP_NODE_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setCatColor(color)}
+                    style={{ width: 20, height: 20, borderRadius: '50%', background: color, border: catColor === color ? '2px solid #fff' : '2px solid transparent', cursor: 'pointer' }}
+                  />
+                ))}
+              </div>
+              {catError && <p style={{ color: '#f87171', marginTop: 10, fontSize: '0.8rem' }}>{catError}</p>}
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button type="submit" className="mindmap-ghost-btn" style={{ color: '#e9d5ff', borderColor: 'rgba(168,85,247,0.4)' }}>
+                  <Check size={14} /> {editingCategory ? 'Salvar' : 'Adicionar'}
+                </button>
+                {editingCategory && (
+                  <button type="button" className="mindmap-ghost-btn" onClick={() => { setEditingCategory(null); setCatName(''); setCatParentId(''); }}>
+                    Cancelar edição
+                  </button>
+                )}
+              </div>
+            </form>
+            <div style={{ display: 'grid', gap: 8, maxHeight: 280, overflowY: 'auto' }}>
+              {rootCategories.map((root) => (
+                <div key={root.id}>
+                  <div className="mindmap-cat-row">
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: root.color }} />
+                      <strong>{root.name}</strong>
+                    </span>
+                    <span>
+                      <button type="button" className="mindmap-ghost-btn" onClick={() => { setEditingCategory(root); setCatName(root.name); setCatColor(root.color); setCatParentId(''); }}><Pencil size={12} /></button>
+                      <button type="button" className="mindmap-ghost-btn is-danger" onClick={() => promptDeleteCategory(root)}><Trash2 size={12} /></button>
+                    </span>
+                  </div>
+                  {categories.filter(c => c.parentId === root.id).map((child) => (
+                    <div key={child.id} className="mindmap-cat-row is-child">
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: child.color }} />
+                        {child.name}
+                      </span>
+                      <span>
+                        <button type="button" className="mindmap-ghost-btn" onClick={() => { setEditingCategory(child); setCatName(child.name); setCatColor(child.color); setCatParentId(child.parentId || ''); }}><Pencil size={12} /></button>
+                        <button type="button" className="mindmap-ghost-btn is-danger" onClick={() => promptDeleteCategory(child)}><Trash2 size={12} /></button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

@@ -585,6 +585,53 @@ export function useGameData() {
     return false;
   };
 
+  const addMindMapCategory = async (categoryData) => {
+    playClick();
+    const res = await fetch('/api/mind-map-categories', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(categoryData)
+    });
+    if (res.ok) {
+      fetchState();
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao criar o assunto.');
+    throw new Error(errJson.error || 'Erro ao criar o assunto.');
+  };
+
+  const updateMindMapCategory = async (id, categoryData) => {
+    playClick();
+    const res = await fetch(`/api/mind-map-categories/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(categoryData)
+    });
+    if (res.ok) {
+      fetchState();
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao atualizar o assunto.');
+    return false;
+  };
+
+  const deleteMindMapCategory = async (id) => {
+    playClick();
+    const res = await fetch(`/api/mind-map-categories/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      fetchState();
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao excluir o assunto.');
+    return false;
+  };
+
   const deleteMindMapSession = async (id) => {
     playClick();
     const res = await fetch(`/api/mind-map-sessions/${id}`, {
@@ -1257,6 +1304,9 @@ export function useGameData() {
     layoutMindMap,
     studyMindMap,
     deleteMindMap,
-    deleteMindMapSession
+    deleteMindMapSession,
+    addMindMapCategory,
+    updateMindMapCategory,
+    deleteMindMapCategory
   };
 }
