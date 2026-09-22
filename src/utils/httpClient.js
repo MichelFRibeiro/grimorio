@@ -52,8 +52,8 @@ function isAbortError(err) {
  */
 export async function fetchWithRetry(url, options = {}, config = {}) {
   const {
-    retries = 5,
-    retryOn = (res) => res && isTransientHttpStatus(res.status),
+    retries = 2,
+    retryOn = (res) => res && isTransientHttpStatus(res.status) && res.status !== 429,
     signal = options.signal
   } = config;
 

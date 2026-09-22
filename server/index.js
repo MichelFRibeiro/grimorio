@@ -2868,7 +2868,7 @@ app.delete('/api/mind-map-categories/:id', (req, res) => {
     });
     db.mindMapCategories = db.mindMapCategories.filter(c => !removeIds.has(c.id));
     saveDb(db);
-    res.json({ success: true, categories: db.mindMapCategories });
+    res.json({ success: true, categories: db.mindMapCategories, mindMaps: db.mindMaps });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

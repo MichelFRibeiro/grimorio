@@ -35,6 +35,34 @@ export function useGameData() {
     playClick
   } = useSoundEffects();
 
+  const applyMindMapPayload = useCallback((result) => {
+    if (!result?.mindMap) return;
+    setData((prev) => {
+      if (!prev) return prev;
+      const maps = Array.isArray(prev.mindMaps) ? prev.mindMaps.slice() : [];
+      const idx = maps.findIndex(m => m.id === result.mindMap.id);
+      if (idx === -1) maps.unshift(result.mindMap);
+      else maps[idx] = result.mindMap;
+      const next = { ...prev, mindMaps: maps };
+      if (result.categories) next.mindMapCategories = result.categories;
+      if (result.sessions) next.mindMapSessions = result.sessions;
+      dataRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const applyMindMapCategories = useCallback((result) => {
+    if (!result) return;
+    setData((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev };
+      if (result.categories) next.mindMapCategories = result.categories;
+      if (result.mindMaps) next.mindMaps = result.mindMaps;
+      dataRef.current = next;
+      return next;
+    });
+  }, []);
+
   const fetchState = useCallback(async (signal) => {
     const abortSignal = signal instanceof AbortSignal ? signal : undefined;
     const gen = ++fetchGenRef.current;
@@ -42,7 +70,7 @@ export function useGameData() {
       const res = await fetchWithRetry('/api/state', {
         headers: getAuthHeaders(),
         signal: abortSignal
-      }, { retries: 5, signal: abortSignal });
+      }, { retries: 2, signal: abortSignal });
       if (gen !== fetchGenRef.current) return;
       if (!res.ok) {
         throw Object.assign(
@@ -65,7 +93,7 @@ export function useGameData() {
       const message = connectionErrorMessage(err, err.status) || err.message;
       if (!dataRef.current) {
         setError(message);
-        setRetryNonce((n) => n + 1);
+        if (err?.status !== 429) setRetryNonce((n) => n + 1);
       }
     } finally {
       if (gen === fetchGenRef.current) setLoading(false);
@@ -522,7 +550,7 @@ export function useGameData() {
     });
     if (res.ok) {
       const result = await res.json().catch(() => ({}));
-      fetchState();
+      applyMindMapPayload(result);
       return result.mindMap || null;
     }
     const errJson = await res.json().catch(() => ({}));
@@ -538,7 +566,8 @@ export function useGameData() {
       body: JSON.stringify(mapData)
     });
     if (res.ok) {
-      fetchState();
+      const result = await res.json().catch(() => ({}));
+      applyMindMapPayload(result);
       return true;
     }
     const errJson = await res.json().catch(() => ({}));
@@ -554,7 +583,8 @@ export function useGameData() {
       body: JSON.stringify(nodeData)
     });
     if (res.ok) {
-      fetchState();
+      const result = await res.json().catch(() => ({}));
+      applyMindMapPayload(result);
       return true;
     }
     const errJson = await res.json().catch(() => ({}));
@@ -569,7 +599,8 @@ export function useGameData() {
       body: JSON.stringify(nodeData)
     });
     if (res.ok) {
-      fetchState();
+      const result = await res.json().catch(() => ({}));
+      applyMindMapPayload(result);
       return true;
     }
     const errJson = await res.json().catch(() => ({}));
@@ -584,7 +615,8 @@ export function useGameData() {
       headers: getAuthHeaders()
     });
     if (res.ok) {
-      fetchState();
+      const result = await res.json().catch(() => ({}));
+      applyMindMapPayload(result);
       return true;
     }
     const errJson = await res.json().catch(() => ({}));
@@ -599,7 +631,8 @@ export function useGameData() {
       headers: getAuthHeaders()
     });
     if (res.ok) {
-      fetchState();
+      const result = await res.json().catch(() => ({}));
+      applyMindMapPayload(result);
       return true;
     }
     const errJson = await res.json().catch(() => ({}));
@@ -627,7 +660,17 @@ export function useGameData() {
           origin: { y: 0.65 }
         });
       }
-      fetchState();
+      applyMindMapPayload(result);
+      if (result.session) {
+        setData((prev) => {
+          if (!prev) return prev;
+          const sessions = [result.session, ...(prev.mindMapSessions || []).filter(s => s.id !== result.session.id)];
+          const next = { ...prev, mindMapSessions: sessions };
+          if (result.profile) next.profile = result.profile;
+          dataRef.current = next;
+          return next;
+        });
+      }
       return result;
     }
     const errJson = await res.json().catch(() => ({}));
@@ -642,7 +685,18 @@ export function useGameData() {
       headers: getAuthHeaders()
     });
     if (res.ok) {
-      fetchState();
+      const result = await res.json().catch(() => ({}));
+      setData((prev) => {
+        if (!prev) return prev;
+        const next = {
+          ...prev,
+          mindMaps: (prev.mindMaps || []).filter(m => m.id !== id),
+          mindMapSessions: (prev.mindMapSessions || []).filter(s => s.mapId !== id)
+        };
+        if (result.profile) next.profile = result.profile;
+        dataRef.current = next;
+        return next;
+      });
       return true;
     }
     const errJson = await res.json().catch(() => ({}));
@@ -658,7 +712,8 @@ export function useGameData() {
       body: JSON.stringify(categoryData)
     });
     if (res.ok) {
-      fetchState();
+      const result = await res.json().catch(() => ({}));
+      applyMindMapCategories(result);
       return true;
     }
     const errJson = await res.json().catch(() => ({}));
@@ -674,7 +729,8 @@ export function useGameData() {
       body: JSON.stringify(categoryData)
     });
     if (res.ok) {
-      fetchState();
+      const result = await res.json().catch(() => ({}));
+      applyMindMapCategories(result);
       return true;
     }
     const errJson = await res.json().catch(() => ({}));
@@ -689,7 +745,8 @@ export function useGameData() {
       headers: getAuthHeaders()
     });
     if (res.ok) {
-      fetchState();
+      const result = await res.json().catch(() => ({}));
+      applyMindMapCategories(result);
       return true;
     }
     const errJson = await res.json().catch(() => ({}));
@@ -704,7 +761,17 @@ export function useGameData() {
       headers: getAuthHeaders()
     });
     if (res.ok) {
-      fetchState();
+      const result = await res.json().catch(() => ({}));
+      setData((prev) => {
+        if (!prev) return prev;
+        const next = {
+          ...prev,
+          mindMapSessions: (prev.mindMapSessions || []).filter(s => s.id !== id)
+        };
+        if (result.profile) next.profile = result.profile;
+        dataRef.current = next;
+        return next;
+      });
       return true;
     }
     const errJson = await res.json().catch(() => ({}));

@@ -47,6 +47,16 @@ function run() {
     assert.strictEqual(res.status, 200);
     assert.strictEqual(calls, 3);
     console.log('✅ fetchWithRetry recupera após 503 transitório.');
+  }).then(async () => {
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return { ok: false, status: 429, headers: { get: () => '1' } };
+    };
+    const res = await fetchWithRetry('/api/busy', {}, { retries: 4 });
+    assert.strictEqual(res.status, 429);
+    assert.strictEqual(calls, 1);
+    console.log('✅ 429 não dispara nova tentativa imediata.');
     console.log('\n🎉 TODOS OS TESTES DO CLIENTE HTTP PASSARAM!');
   }).finally(() => {
     globalThis.fetch = originalFetch;

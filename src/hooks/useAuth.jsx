@@ -37,7 +37,7 @@ export function AuthProvider({ children }) {
         headers: {
           'Authorization': `Bearer ${storedToken}`
         }
-      }, { retries: 5 });
+      }, { retries: 2 });
       if (!res.ok) {
         if (isTransientHttpStatus(res.status)) {
           throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
