@@ -1034,6 +1034,7 @@ export function MindMapsView({
   const [fillAnswers, setFillAnswers] = useState({});
   const [fillVerdicts, setFillVerdicts] = useState({});
   const [fillPhase, setFillPhase] = useState('fill');
+  const [fillMasteredIds, setFillMasteredIds] = useState([]);
   const stopwatch = useStopwatch();
 
   const [confirmModal, setConfirmModal] = useState({
@@ -1222,6 +1223,7 @@ export function MindMapsView({
     setFillAnswers({});
     setFillVerdicts({});
     setFillPhase('fill');
+    setFillMasteredIds([]);
     setStudyReviews([]);
   };
 
@@ -1502,11 +1504,40 @@ export function MindMapsView({
     setFillPhase('review');
   };
 
+  const fillReviewsFromRound = () => {
+    const seen = new Set();
+    const reviews = [];
+    fillMasteredIds.forEach((nodeId) => {
+      if (seen.has(nodeId)) return;
+      seen.add(nodeId);
+      reviews.push({ nodeId, quality: 2 });
+    });
+    fillBlankIds.forEach((nodeId) => {
+      if (seen.has(nodeId)) return;
+      seen.add(nodeId);
+      reviews.push({ nodeId, quality: fillVerdicts[nodeId] === 'hit' ? 2 : 0 });
+    });
+    return reviews;
+  };
+
+  const retryFillMisses = () => {
+    const hits = fillBlankIds.filter(id => fillVerdicts[id] === 'hit');
+    const misses = fillBlankIds.filter(id => fillVerdicts[id] === 'miss');
+    if (!misses.length) return;
+    setFillMasteredIds(prev => [...new Set([...prev, ...hits])]);
+    setFillBlankIds(misses);
+    setFillAnswers((prev) => {
+      const next = { ...prev };
+      misses.forEach((id) => { delete next[id]; });
+      return next;
+    });
+    setFillVerdicts({});
+    setFillPhase('fill');
+    if (!stopwatch.isRunning) stopwatch.start();
+  };
+
   const commitFillStudy = async () => {
-    const reviews = fillBlankIds.map((nodeId) => ({
-      nodeId,
-      quality: fillVerdicts[nodeId] === 'hit' ? 2 : 0
-    }));
+    const reviews = fillReviewsFromRound();
     setStudyReviews(reviews);
     await finishStudy(reviews);
   };
@@ -2001,7 +2032,9 @@ export function MindMapsView({
     const fillBlankSet = new Set(fillBlankIds);
     const fillMarked = fillBlankIds.filter(id => fillVerdicts[id]).length;
     const fillHits = fillBlankIds.filter(id => fillVerdicts[id] === 'hit').length;
+    const fillMisses = fillBlankIds.filter(id => fillVerdicts[id] === 'miss').length;
     const fillReady = fillPhase === 'review' && fillBlankIds.length > 0 && fillMarked === fillBlankIds.length;
+    const fillPerfect = fillReady && fillMisses === 0;
     const hasBranches = (liveMap.nodes || []).some(n => n.parentId);
     return (
       <div className={fullscreen ? 'mindmap-fullscreen-root mindmap-study-fullscreen' : undefined}>
@@ -2075,23 +2108,34 @@ export function MindMapsView({
                 <p className="mindmap-fill-copy">
                   {fillPhase === 'fill'
                     ? `Preencha os ${fillBlankIds.length} nós em branco e clique em Finalizar.`
-                    : `Respostas reveladas. Marque cada nó como acerto ou erro (${fillMarked}/${fillBlankIds.length}).`}
+                    : fillReady
+                      ? (fillPerfect
+                        ? `Tudo certo: ${fillHits}/${fillBlankIds.length}. Registre o estudo.`
+                        : `${fillHits}/${fillBlankIds.length} acertos. Refaça os errados ou registre o estudo.`)
+                      : `Respostas reveladas. Marque cada nó como acerto ou erro (${fillMarked}/${fillBlankIds.length}).`}
                 </p>
                 {fillPhase === 'fill' ? (
                   <button type="button" className="mindmap-fill-cta" onClick={revealFillAnswers}>
                     Finalizar
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    className="mindmap-fill-cta"
-                    disabled={!fillReady}
-                    onClick={commitFillStudy}
-                  >
-                    {fillReady
-                      ? `Registrar estudo · ${fillHits}/${fillBlankIds.length} acertos`
-                      : 'Marque acerto ou erro em cada nó'}
-                  </button>
+                  <div className="mindmap-fill-actions">
+                    {fillReady && fillMisses > 0 && (
+                      <button type="button" className="mindmap-fill-cta is-secondary" onClick={retryFillMisses}>
+                        <RotateCcw size={14} /> Refazer Errados ({fillMisses})
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="mindmap-fill-cta"
+                      disabled={!fillReady}
+                      onClick={commitFillStudy}
+                    >
+                      {fillReady
+                        ? `Registrar estudo · ${fillHits}/${fillBlankIds.length} acertos`
+                        : 'Marque acerto ou erro em cada nó'}
+                    </button>
+                  </div>
                 )}
               </div>
               <MindMapCanvas
