@@ -608,6 +608,25 @@ export function useGameData() {
     return false;
   };
 
+  const updateMindMapNodes = async (mapId, nodeIds, nodeData) => {
+    const ids = Array.isArray(nodeIds) ? nodeIds.filter(Boolean) : [];
+    if (!ids.length) return false;
+    if (ids.length === 1) return updateMindMapNode(mapId, ids[0], nodeData);
+    const res = await fetch(`/api/mind-maps/${mapId}/nodes`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ nodeIds: ids, ...(nodeData || {}) })
+    });
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      applyMindMapPayload(result);
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao atualizar os ramos.');
+    return false;
+  };
+
   const deleteMindMapNode = async (mapId, nodeId) => {
     playClick();
     const res = await fetch(`/api/mind-maps/${mapId}/nodes/${nodeId}`, {
@@ -1481,6 +1500,7 @@ export function useGameData() {
     updateMindMap,
     addMindMapNode,
     updateMindMapNode,
+    updateMindMapNodes,
     deleteMindMapNode,
     addMindMapCrossLink,
     updateMindMapCrossLink,

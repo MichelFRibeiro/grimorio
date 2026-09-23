@@ -108,6 +108,7 @@ export function App() {
     updateMindMap,
     addMindMapNode,
     updateMindMapNode,
+    updateMindMapNodes,
     deleteMindMapNode,
     addMindMapCrossLink,
     updateMindMapCrossLink,
@@ -369,6 +370,7 @@ export function App() {
             onUpdateMap={updateMindMap}
             onAddNode={addMindMapNode}
             onUpdateNode={updateMindMapNode}
+            onUpdateNodes={updateMindMapNodes}
             onDeleteNode={deleteMindMapNode}
             onAddCrossLink={addMindMapCrossLink}
             onUpdateCrossLink={updateMindMapCrossLink}

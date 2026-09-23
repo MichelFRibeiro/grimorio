@@ -402,7 +402,15 @@ export function updateMindMapNode(map, nodeId, patch = {}) {
   if (patch.x !== undefined) next.x = clampNumber(patch.x, current.x);
   if (patch.y !== undefined) next.y = clampNumber(patch.y, current.y);
   if (patch.collapsed !== undefined) next.collapsed = !!patch.collapsed;
-  if (patch.fontSize !== undefined) next.fontSize = sanitizeMindMapNodeFontSize(patch.fontSize, null);
+  if (patch.fontSize !== undefined) {
+    next.fontSize = sanitizeMindMapNodeFontSize(patch.fontSize, null);
+  } else if (patch.fontSizeDelta !== undefined) {
+    const delta = Number(patch.fontSizeDelta);
+    if (Number.isFinite(delta) && delta !== 0) {
+      const currentSize = mindMapNodeFontSize(nodeDepth(map, nodeId), !!map.scaleFontByDepth, current.fontSize);
+      next.fontSize = stepMindMapNodeFontSize(currentSize, delta);
+    }
+  }
   const nodes = map.nodes.slice();
   nodes[index] = next;
   return {
@@ -410,6 +418,34 @@ export function updateMindMapNode(map, nodeId, patch = {}) {
     updatedAt: new Date().toISOString(),
     nodes
   };
+}
+
+export function updateMindMapNodes(map, nodeIds, patch = {}) {
+  if (!map) throw new Error('Mapa mental não encontrado.');
+  if (Array.isArray(patch.updates) && patch.updates.length) {
+    let next = map;
+    const known = new Set((map.nodes || []).map(n => n.id));
+    patch.updates.forEach((item) => {
+      const id = String(item?.id || item?.nodeId || '');
+      if (!id || !known.has(id)) throw new Error('Ramo não encontrado.');
+      const rest = { ...item };
+      delete rest.id;
+      delete rest.nodeId;
+      delete rest.updates;
+      delete rest.nodeIds;
+      next = updateMindMapNode(next, id, rest);
+    });
+    return next;
+  }
+  const ids = [...new Set((Array.isArray(nodeIds) ? nodeIds : [nodeIds]).filter(Boolean).map(String))];
+  if (!ids.length) throw new Error('Selecione ao menos um ramo.');
+  const known = new Set((map.nodes || []).map(n => n.id));
+  if (ids.some(id => !known.has(id))) throw new Error('Ramo não encontrado.');
+  let next = map;
+  ids.forEach((id) => {
+    next = updateMindMapNode(next, id, patch);
+  });
+  return next;
 }
 
 export function deleteMindMapNode(map, nodeId) {

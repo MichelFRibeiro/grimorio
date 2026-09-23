@@ -158,13 +158,19 @@ function crossLinkCurve(fromNode, toNode, fromFont, toFont) {
   };
 }
 
+function rectsOverlap(a, b) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
 function MindMapCanvas({
   map,
   selectedId,
+  selectedIds = [],
   selectedLinkId,
   onSelect,
   onSelectLink,
   onMoveNode,
+  onCommitMoves,
   onAddChild,
   linkingFromId = null,
   onLinkTarget,
@@ -175,7 +181,9 @@ function MindMapCanvas({
   const wrapRef = useRef(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 420, y: 280 });
+  const [marquee, setMarquee] = useState(null);
   const dragRef = useRef(null);
+  const selectedIdSet = useMemo(() => new Set(selectedIds.filter(Boolean)), [selectedIds]);
 
   const lineStyle = sanitizeMindMapLineStyle(map?.lineStyle);
   const scaleFont = !!map?.scaleFontByDepth;
@@ -225,6 +233,17 @@ function MindMapCanvas({
 
   const onPointerDownBg = (e) => {
     if (e.target !== e.currentTarget && e.target.dataset.role !== 'canvas') return;
+    if (!readOnly && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+      const start = toWorld(e.clientX, e.clientY);
+      dragRef.current = {
+        kind: 'marquee',
+        additive: !!(e.ctrlKey || e.metaKey),
+        start,
+        current: start
+      };
+      setMarquee({ x1: start.x, y1: start.y, x2: start.x, y2: start.y });
+      return;
+    }
     dragRef.current = {
       kind: 'pan',
       startX: e.clientX,
@@ -232,7 +251,7 @@ function MindMapCanvas({
       panX: pan.x,
       panY: pan.y
     };
-    onSelect(null);
+    if (onSelect) onSelect(null);
     if (onSelectLink) onSelectLink(null);
   };
 
@@ -242,17 +261,30 @@ function MindMapCanvas({
       onLinkTarget(node.id);
       return;
     }
-    if (onSelect) onSelect(node.id);
+    const additive = !!(e.ctrlKey || e.metaKey);
+    const range = !!e.shiftKey;
+    const keepGroup = !additive && !range && selectedIdSet.has(node.id) && selectedIdSet.size > 1;
+    if (onSelect && !keepGroup) onSelect(node.id, { additive, range });
     if (onSelectLink) onSelectLink(null);
-    if (readOnly) return;
+    if (readOnly || additive || range) return;
+    const movingIds = keepGroup ? [...selectedIdSet] : [node.id];
+    const origins = {};
+    movingIds.forEach((id) => {
+      const n = (map?.nodes || []).find(item => item.id === id);
+      if (n) origins[id] = { x: n.x, y: n.y };
+    });
     dragRef.current = {
       kind: 'node',
       id: node.id,
+      ids: movingIds,
+      origins,
       originX: node.x,
       originY: node.y,
       start: toWorld(e.clientX, e.clientY),
+      lastDelta: { x: 0, y: 0 },
       lastPos: { x: node.x, y: node.y },
-      moved: false
+      moved: false,
+      collapseOnClick: keepGroup
     };
   };
 
@@ -265,22 +297,63 @@ function MindMapCanvas({
           x: drag.panX + (e.clientX - drag.startX),
           y: drag.panY + (e.clientY - drag.startY)
         });
+      } else if (drag.kind === 'marquee') {
+        const world = toWorld(e.clientX, e.clientY);
+        drag.current = world;
+        setMarquee({ x1: drag.start.x, y1: drag.start.y, x2: world.x, y2: world.y });
       } else if (drag.kind === 'node' && onMoveNode) {
         const world = toWorld(e.clientX, e.clientY);
-        const next = {
-          x: Math.round(drag.originX + (world.x - drag.start.x)),
-          y: Math.round(drag.originY + (world.y - drag.start.y))
+        const dx = Math.round(world.x - drag.start.x);
+        const dy = Math.round(world.y - drag.start.y);
+        if (dx !== drag.lastDelta.x || dy !== drag.lastDelta.y) drag.moved = true;
+        drag.lastDelta = { x: dx, y: dy };
+        drag.lastPos = {
+          x: Math.round(drag.originX + dx),
+          y: Math.round(drag.originY + dy)
         };
-        if (next.x !== drag.lastPos.x || next.y !== drag.lastPos.y) drag.moved = true;
-        drag.lastPos = next;
-        onMoveNode(drag.id, next, false);
+        (drag.ids || [drag.id]).forEach((id) => {
+          const origin = drag.origins?.[id];
+          if (!origin) return;
+          onMoveNode(id, { x: origin.x + dx, y: origin.y + dy }, false);
+        });
       }
     };
     const onUp = () => {
       const drag = dragRef.current;
-      if (drag?.kind === 'node' && drag.moved && onMoveNode) {
-        onMoveNode(drag.id, drag.lastPos, true);
+      if (drag?.kind === 'node' && drag.moved) {
+        const moves = (drag.ids || [drag.id]).map((id) => {
+          const origin = drag.origins?.[id];
+          if (!origin) return null;
+          return { id, x: origin.x + drag.lastDelta.x, y: origin.y + drag.lastDelta.y };
+        }).filter(Boolean);
+        if (onCommitMoves && moves.length) onCommitMoves(moves);
+        else if (onMoveNode) {
+          moves.forEach((move) => onMoveNode(move.id, { x: move.x, y: move.y }, true));
+        }
+      } else if (drag?.kind === 'node' && drag.collapseOnClick && onSelect) {
+        onSelect(drag.id);
+      } else if (drag?.kind === 'marquee' && onSelect) {
+        const x1 = Math.min(drag.start.x, drag.current.x);
+        const y1 = Math.min(drag.start.y, drag.current.y);
+        const x2 = Math.max(drag.start.x, drag.current.x);
+        const y2 = Math.max(drag.start.y, drag.current.y);
+        const box = { left: x1, top: y1, right: x2, bottom: y2 };
+        const tooSmall = (x2 - x1) < 6 && (y2 - y1) < 6;
+        if (!tooSmall) {
+          const hits = visible.filter((node) => {
+            const fontSize = fontFor(node);
+            const { w, h } = nodeSize(node, fontSize);
+            return rectsOverlap(box, {
+              left: node.x - w / 2,
+              top: node.y - h / 2,
+              right: node.x + w / 2,
+              bottom: node.y + h / 2
+            });
+          }).map(n => n.id);
+          onSelect(hits, { additive: drag.additive, marquee: true });
+        }
       }
+      setMarquee(null);
       dragRef.current = null;
     };
     window.addEventListener('pointermove', onMove);
@@ -289,7 +362,7 @@ function MindMapCanvas({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [map, onMoveNode, pan.x, pan.y, zoom]);
+  }, [map, onMoveNode, onSelect, pan.x, pan.y, zoom, visible]);
 
   return (
     <div
@@ -390,13 +463,14 @@ function MindMapCanvas({
         {visible.map((node) => {
           const fontSize = fontFor(node);
           const { w, h } = nodeSize(node, fontSize);
-          const selected = selectedId === node.id;
+          const selected = selectedIdSet.has(node.id) || selectedId === node.id;
+          const primary = selectedId === node.id;
           const linkingFrom = linkingFromId === node.id;
           const kids = childrenOf(map, node.id).length;
           return (
             <div
               key={node.id}
-              className={`mindmap-node ${selected ? 'is-selected' : ''} ${linkingFrom ? 'is-linking' : ''}`}
+              className={`mindmap-node ${selected ? 'is-selected' : ''} ${selected && !primary ? 'is-multi' : ''} ${linkingFrom ? 'is-linking' : ''}`}
               style={{
                 width: w,
                 minHeight: h,
@@ -423,7 +497,7 @@ function MindMapCanvas({
                   {node.collapsed ? '+' : kids}
                 </span>
               )}
-              {!readOnly && selected && (
+              {!readOnly && primary && (
                 <button
                   type="button"
                   className="mindmap-node-add"
@@ -439,9 +513,25 @@ function MindMapCanvas({
           );
         })}
       </div>
+      {marquee && (
+        <div
+          className="mindmap-marquee"
+          style={{
+            left: pan.x + Math.min(marquee.x1, marquee.x2) * zoom,
+            top: pan.y + Math.min(marquee.y1, marquee.y2) * zoom,
+            width: Math.abs(marquee.x2 - marquee.x1) * zoom,
+            height: Math.abs(marquee.y2 - marquee.y1) * zoom
+          }}
+        />
+      )}
       {linkingFromId && (
         <div className="mindmap-link-hint">
           Clique no outro ramo para ligar · Esc cancela
+        </div>
+      )}
+      {!readOnly && !linkingFromId && (
+        <div className="mindmap-select-hint">
+          Ctrl/Cmd+clique ou Shift+arrastar para selecionar vários
         </div>
       )}
       <div className="mindmap-zoom">
@@ -466,6 +556,7 @@ export function MindMapsView({
   onUpdateMap,
   onAddNode,
   onUpdateNode,
+  onUpdateNodes,
   onDeleteNode,
   onAddCrossLink,
   onUpdateCrossLink,
@@ -501,7 +592,7 @@ export function MindMapsView({
 
   const [activeMapId, setActiveMapId] = useState(null);
   const [pendingMap, setPendingMap] = useState(null);
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
   const [selectedLinkId, setSelectedLinkId] = useState(null);
   const [linkingFromId, setLinkingFromId] = useState(null);
   const [draftLabel, setDraftLabel] = useState('');
@@ -542,14 +633,33 @@ export function MindMapsView({
   const editorMap = liveMap
     ? { ...liveMap, nodes: localNodes || liveMap.nodes }
     : null;
-  const selectedNode = editorMap && selectedId
-    ? (editorMap.nodes || []).find(n => n.id === selectedId)
-    : null;
+  const selectedId = selectedIds[selectedIds.length - 1] || null;
+  const selectedNodes = editorMap
+    ? selectedIds.map(id => (editorMap.nodes || []).find(n => n.id === id)).filter(Boolean)
+    : [];
+  const selectedNode = selectedNodes[selectedNodes.length - 1] || null;
+  const multiSelected = selectedNodes.length > 1;
   const selectedLink = editorMap && selectedLinkId
     ? (editorMap.crossLinks || []).find(l => l.id === selectedLinkId)
     : null;
   const selectedNodeFont = selectedNode
     ? mindMapNodeFontSize(nodeDepth(editorMap, selectedNode.id), !!editorMap.scaleFontByDepth, selectedNode.fontSize)
+    : 14;
+  const sharedColor = selectedNodes.length && selectedNodes.every(n => n.color === selectedNodes[0].color)
+    ? selectedNodes[0].color
+    : null;
+  const sharedIcon = selectedNodes.length && selectedNodes.every(n => (n.icon || '') === (selectedNodes[0].icon || ''))
+    ? (selectedNodes[0].icon || '')
+    : '';
+  const sharedImage = selectedNodes.length && selectedNodes.every(n => (n.imageUrl || '') === (selectedNodes[0].imageUrl || ''))
+    ? (selectedNodes[0].imageUrl || '')
+    : '';
+  const mixedMedia = selectedNodes.length > 1 && selectedNodes.some(n => (n.icon || '') !== sharedIcon || (n.imageUrl || '') !== sharedImage);
+  const minSelectedFont = selectedNodes.length
+    ? Math.min(...selectedNodes.map(n => mindMapNodeFontSize(nodeDepth(editorMap, n.id), !!editorMap.scaleFontByDepth, n.fontSize)))
+    : 14;
+  const maxSelectedFont = selectedNodes.length
+    ? Math.max(...selectedNodes.map(n => mindMapNodeFontSize(nodeDepth(editorMap, n.id), !!editorMap.scaleFontByDepth, n.fontSize)))
     : 14;
 
   useEffect(() => {
@@ -589,12 +699,17 @@ export function MindMapsView({
   const groupedMaps = groupMapsByCategory(filteredMaps, categories);
 
   useEffect(() => {
-    if (!fullscreen && !linkingFromId) return undefined;
+    if (!fullscreen && !linkingFromId && selectedIds.length <= 1) return undefined;
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
       if (linkingFromId) {
         e.preventDefault();
         cancelLinking();
+        return;
+      }
+      if (selectedIds.length > 1) {
+        e.preventDefault();
+        setSelectedIds(selectedId ? [selectedId] : []);
         return;
       }
       if (fullscreen) setFullscreen(false);
@@ -606,14 +721,14 @@ export function MindMapsView({
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [fullscreen, linkingFromId]);
+  }, [fullscreen, linkingFromId, selectedIds.length, selectedId]);
 
   const dueCount = maps.reduce((acc, m) => acc + (computeMapStats(m, { today: todayStr }).dueBranches || 0), 0);
   const sessions = mindMapSessions || [];
 
   const openEditor = (map) => {
     setActiveMapId(map.id);
-    setSelectedId(map.rootId);
+    setSelectedIds(map.rootId ? [map.rootId] : []);
     setSelectedLinkId(null);
     setLinkingFromId(null);
     setLocalNodes(null);
@@ -668,6 +783,37 @@ export function MindMapsView({
     if (commit && onUpdateNode) onUpdateNode(editorMap.id, nodeId, pos);
   };
 
+  const handleCommitMoves = (moves = []) => {
+    if (!editorMap || !moves.length) return;
+    setLocalNodes((prev) => {
+      const base = prev || editorMap.nodes;
+      const byId = new Map(moves.map(m => [m.id, m]));
+      return base.map(n => (byId.has(n.id) ? { ...n, x: byId.get(n.id).x, y: byId.get(n.id).y } : n));
+    });
+    if (moves.length === 1) {
+      onUpdateNode?.(editorMap.id, moves[0].id, { x: moves[0].x, y: moves[0].y });
+      return;
+    }
+    if (onUpdateNodes) {
+      onUpdateNodes(editorMap.id, moves.map(m => m.id), { updates: moves });
+      return;
+    }
+    moves.forEach((move) => onUpdateNode?.(editorMap.id, move.id, { x: move.x, y: move.y }));
+  };
+
+  const handleUpdateSelectedAppearance = (patch) => {
+    if (!editorMap || !selectedIds.length) return;
+    if (selectedIds.length === 1) {
+      onUpdateNode?.(editorMap.id, selectedIds[0], patch);
+      return;
+    }
+    if (onUpdateNodes) {
+      onUpdateNodes(editorMap.id, selectedIds, patch);
+      return;
+    }
+    selectedIds.forEach((id) => onUpdateNode?.(editorMap.id, id, patch));
+  };
+
   const handleSaveNode = () => {
     if (!editorMap || !selectedNode) return;
     const label = draftLabel.trim() || selectedNode.label;
@@ -685,14 +831,53 @@ export function MindMapsView({
     onAddNode(editorMap.id, { parentId, label: 'Novo ramo' });
   };
 
-  const handleSelectNode = (nodeId) => {
-    setSelectedId(nodeId);
-    if (nodeId) setSelectedLinkId(null);
+  const handleSelectNode = (nodeIdOrIds, options = {}) => {
+    if (nodeIdOrIds == null || (Array.isArray(nodeIdOrIds) && nodeIdOrIds.length === 0)) {
+      if (options.marquee && options.additive) return;
+      setSelectedIds([]);
+      return;
+    }
+    const incoming = Array.isArray(nodeIdOrIds) ? nodeIdOrIds.filter(Boolean) : [nodeIdOrIds];
+    setSelectedLinkId(null);
+    setSelectedIds((prev) => {
+      if (options.marquee) {
+        if (options.additive) {
+          const next = prev.slice();
+          incoming.forEach((id) => {
+            if (!next.includes(id)) next.push(id);
+          });
+          return next;
+        }
+        return incoming;
+      }
+      const id = incoming[0];
+      if (options.additive) {
+        if (prev.includes(id)) {
+          const next = prev.filter(item => item !== id);
+          return next;
+        }
+        return [...prev, id];
+      }
+      if (options.range && prev.length) {
+        const nodes = editorMap?.nodes || [];
+        const last = prev[prev.length - 1];
+        const from = nodes.findIndex(n => n.id === last);
+        const to = nodes.findIndex(n => n.id === id);
+        if (from !== -1 && to !== -1) {
+          const start = Math.min(from, to);
+          const end = Math.max(from, to);
+          const rangeIds = nodes.slice(start, end + 1).map(n => n.id);
+          const base = prev.filter(item => !rangeIds.includes(item));
+          return [...base, ...rangeIds];
+        }
+      }
+      return [id];
+    });
   };
 
   const handleSelectLink = (linkId) => {
     setSelectedLinkId(linkId);
-    if (linkId) setSelectedId(null);
+    if (linkId) setSelectedIds([]);
     setLinkingFromId(null);
   };
 
@@ -723,7 +908,7 @@ export function MindMapsView({
         || null;
       if (newId) {
         setSelectedLinkId(newId);
-        setSelectedId(null);
+        setSelectedIds([]);
       }
     } catch (err) {
       setLinkError(err.message || 'Não foi possível criar a ligação.');
@@ -869,7 +1054,7 @@ export function MindMapsView({
       icon: Trash2,
       onConfirm: () => {
         onDeleteNode(editorMap.id, selectedNode.id);
-        setSelectedId(editorMap.rootId);
+        setSelectedIds(editorMap.rootId ? [editorMap.rootId] : []);
         closeConfirmModal();
       }
     });
@@ -882,10 +1067,12 @@ export function MindMapsView({
           <MindMapCanvas
             map={editorMap}
             selectedId={selectedId}
+            selectedIds={selectedIds}
             selectedLinkId={selectedLinkId}
             onSelect={handleSelectNode}
             onSelectLink={handleSelectLink}
             onMoveNode={handleMoveNode}
+            onCommitMoves={handleCommitMoves}
             onAddChild={handleAddChild}
             linkingFromId={linkingFromId}
             onLinkTarget={handleLinkTarget}
@@ -948,95 +1135,137 @@ export function MindMapsView({
             ) : selectedNode ? (
               <>
                 <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
-                  Ramo selecionado
+                  {multiSelected ? `${selectedNodes.length} ramos selecionados` : 'Ramo selecionado'}
                 </div>
-                <input
-                  value={draftLabel}
-                  onChange={(e) => setDraftLabel(e.target.value)}
-                  onBlur={handleSaveNode}
-                  style={inputStyle}
-                />
+                {multiSelected ? (
+                  <>
+                    <p style={{ color: '#cbd5e1', fontSize: '0.82rem', margin: '0 0 10px', lineHeight: 1.45 }}>
+                      Alterações de cor, fonte, ícone e imagem valem para todos os ramos destacados.
+                    </p>
+                    <div className="mindmap-multi-list">
+                      {selectedNodes.slice(0, 8).map((n) => (
+                        <span key={n.id} className="mindmap-multi-chip">{n.label}</span>
+                      ))}
+                      {selectedNodes.length > 8 && (
+                        <span className="mindmap-multi-chip">+{selectedNodes.length - 8}</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="mindmap-ghost-btn"
+                      style={{ marginBottom: 10 }}
+                      onClick={() => setSelectedIds(selectedId ? [selectedId] : [])}
+                    >
+                      Manter só o último
+                    </button>
+                  </>
+                ) : (
+                  <input
+                    value={draftLabel}
+                    onChange={(e) => setDraftLabel(e.target.value)}
+                    onBlur={handleSaveNode}
+                    style={inputStyle}
+                  />
+                )}
                 <label style={{ ...labelStyle, marginTop: 12 }}>Tamanho do texto</label>
                 <div className="mindmap-font-stepper">
                   <button
                     type="button"
                     className="mindmap-ghost-btn mindmap-font-step"
                     title="Diminuir fonte"
-                    disabled={selectedNodeFont <= MIND_MAP_MIN_FONT_SIZE}
-                    onClick={() => onUpdateNode(editorMap.id, selectedNode.id, {
-                      fontSize: stepMindMapNodeFontSize(selectedNodeFont, -1)
-                    })}
+                    disabled={minSelectedFont <= MIND_MAP_MIN_FONT_SIZE}
+                    onClick={() => handleUpdateSelectedAppearance(
+                      multiSelected
+                        ? { fontSizeDelta: -1 }
+                        : { fontSize: stepMindMapNodeFontSize(selectedNodeFont, -1) }
+                    )}
                   >
                     <Minus size={16} />
                   </button>
-                  <span className="mindmap-font-value">{selectedNodeFont}px</span>
+                  <span className="mindmap-font-value">
+                    {multiSelected && minSelectedFont !== maxSelectedFont
+                      ? `${minSelectedFont}–${maxSelectedFont}px`
+                      : `${selectedNodeFont}px`}
+                  </span>
                   <button
                     type="button"
                     className="mindmap-ghost-btn mindmap-font-step"
                     title="Aumentar fonte"
-                    disabled={selectedNodeFont >= MIND_MAP_MAX_FONT_SIZE}
-                    onClick={() => onUpdateNode(editorMap.id, selectedNode.id, {
-                      fontSize: stepMindMapNodeFontSize(selectedNodeFont, 1)
-                    })}
+                    disabled={maxSelectedFont >= MIND_MAP_MAX_FONT_SIZE}
+                    onClick={() => handleUpdateSelectedAppearance(
+                      multiSelected
+                        ? { fontSizeDelta: 1 }
+                        : { fontSize: stepMindMapNodeFontSize(selectedNodeFont, 1) }
+                    )}
                   >
                     <Plus size={16} />
                   </button>
                 </div>
-                <textarea
-                  value={draftNotes}
-                  onChange={(e) => setDraftNotes(e.target.value)}
-                  onBlur={handleSaveNode}
-                  placeholder="Anotação, artigo, pegadinha, exemplo..."
-                  rows={6}
-                  style={{ ...inputStyle, marginTop: '10px', resize: 'vertical', minHeight: '120px' }}
-                />
+                {!multiSelected && (
+                  <textarea
+                    value={draftNotes}
+                    onChange={(e) => setDraftNotes(e.target.value)}
+                    onBlur={handleSaveNode}
+                    placeholder="Anotação, artigo, pegadinha, exemplo..."
+                    rows={6}
+                    style={{ ...inputStyle, marginTop: '10px', resize: 'vertical', minHeight: '120px' }}
+                  />
+                )}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
                   {MIND_MAP_NODE_COLORS.map((color) => (
                     <button
                       key={color}
                       type="button"
-                      onClick={() => onUpdateNode(editorMap.id, selectedNode.id, { color })}
+                      onClick={() => handleUpdateSelectedAppearance({ color })}
                       style={{
                         width: 22, height: 22, borderRadius: '50%', background: color, cursor: 'pointer',
-                        border: selectedNode.color === color ? '2px solid #fff' : '2px solid transparent'
+                        border: sharedColor === color ? '2px solid #fff' : '2px solid transparent'
                       }}
                     />
                   ))}
                 </div>
                 <MindMapMediaPicker
-                  icon={selectedNode.icon || ''}
-                  imageUrl={selectedNode.imageUrl || ''}
-                  color={selectedNode.color}
-                  onChange={(patch) => onUpdateNode(editorMap.id, selectedNode.id, patch)}
+                  icon={sharedIcon}
+                  imageUrl={sharedImage}
+                  color={sharedColor || selectedNode.color}
+                  title={multiSelected ? 'Ícone ou imagem de todos' : 'Ícone ou imagem'}
+                  onChange={(patch) => handleUpdateSelectedAppearance(patch)}
                 />
-                <div style={{ display: 'grid', gap: '8px', marginTop: '16px' }}>
-                  <button type="button" className="mindmap-ghost-btn" onClick={() => handleAddChild(selectedNode.id)}>
-                    <Plus size={14} /> Novo ramo filho
-                  </button>
-                  {linkingFromId === selectedNode.id ? (
-                    <button type="button" className="mindmap-ghost-btn" style={{ borderColor: 'rgba(56,189,248,0.5)', color: '#38bdf8' }} onClick={cancelLinking}>
-                      <X size={14} /> Cancelar ligação
+                {mixedMedia && (
+                  <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '6px 0 0', lineHeight: 1.45 }}>
+                    Os ramos têm mídias diferentes. Escolher um ícone ou imagem substitui em todos.
+                  </p>
+                )}
+                {!multiSelected && (
+                  <div style={{ display: 'grid', gap: '8px', marginTop: '16px' }}>
+                    <button type="button" className="mindmap-ghost-btn" onClick={() => handleAddChild(selectedNode.id)}>
+                      <Plus size={14} /> Novo ramo filho
                     </button>
-                  ) : (
-                    <button type="button" className="mindmap-ghost-btn" onClick={startLinkFromSelected}>
-                      <Link2 size={14} /> Ligar a outro ramo
+                    {linkingFromId === selectedNode.id ? (
+                      <button type="button" className="mindmap-ghost-btn" style={{ borderColor: 'rgba(56,189,248,0.5)', color: '#38bdf8' }} onClick={cancelLinking}>
+                        <X size={14} /> Cancelar ligação
+                      </button>
+                    ) : (
+                      <button type="button" className="mindmap-ghost-btn" onClick={startLinkFromSelected}>
+                        <Link2 size={14} /> Ligar a outro ramo
+                      </button>
+                    )}
+                    {linkError && <p style={{ color: '#f87171', fontSize: '0.78rem', margin: 0 }}>{linkError}</p>}
+                    <button
+                      type="button"
+                      className="mindmap-ghost-btn"
+                      onClick={() => onUpdateNode(editorMap.id, selectedNode.id, { collapsed: !selectedNode.collapsed })}
+                    >
+                      {selectedNode.collapsed ? <Eye size={14} /> : <EyeOff size={14} />}
+                      {selectedNode.collapsed ? 'Expandir ramos' : 'Recolher ramos'}
                     </button>
-                  )}
-                  {linkError && <p style={{ color: '#f87171', fontSize: '0.78rem', margin: 0 }}>{linkError}</p>}
-                  <button
-                    type="button"
-                    className="mindmap-ghost-btn"
-                    onClick={() => onUpdateNode(editorMap.id, selectedNode.id, { collapsed: !selectedNode.collapsed })}
-                  >
-                    {selectedNode.collapsed ? <Eye size={14} /> : <EyeOff size={14} />}
-                    {selectedNode.collapsed ? 'Expandir ramos' : 'Recolher ramos'}
-                  </button>
-                  {selectedNode.id !== editorMap.rootId && (
-                    <button type="button" className="mindmap-ghost-btn is-danger" onClick={promptDeleteNode}>
-                      <Trash2 size={14} /> Excluir ramo
-                    </button>
-                  )}
-                </div>
+                    {selectedNode.id !== editorMap.rootId && (
+                      <button type="button" className="mindmap-ghost-btn is-danger" onClick={promptDeleteNode}>
+                        <Trash2 size={14} /> Excluir ramo
+                      </button>
+                    )}
+                  </div>
+                )}
                 <label style={{ ...labelStyle, marginTop: 14 }}>Linhas do mapa</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
                   <button
@@ -1079,13 +1308,15 @@ export function MindMapsView({
                 >
                   {categoryOptions}
                 </select>
-                <div style={{ marginTop: '16px', fontSize: '0.75rem', color: '#64748b', lineHeight: 1.5 }}>
-                  Caminho: {nodePath(editorMap, selectedNode.id).map(n => n.label).join(' → ')}
-                </div>
+                {!multiSelected && (
+                  <div style={{ marginTop: '16px', fontSize: '0.75rem', color: '#64748b', lineHeight: 1.5 }}>
+                    Caminho: {nodePath(editorMap, selectedNode.id).map(n => n.label).join(' → ')}
+                  </div>
+                )}
               </>
             ) : (
               <p style={{ color: '#94a3b8', fontSize: '0.88rem' }}>
-                Clique em um ramo para editar, anotar ou ramificar. Para ligar ideias de ramos diferentes, selecione um e use “Ligar a outro ramo”.
+                Clique em um ramo para editar, anotar ou ramificar. Ctrl/Cmd+clique ou Shift+arrastar no fundo seleciona vários para mudar cor, fonte e ícone juntos. Para ligar ideias de ramos diferentes, selecione um e use “Ligar a outro ramo”.
               </p>
             )}
           </aside>

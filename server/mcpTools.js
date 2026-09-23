@@ -69,6 +69,7 @@ import {
   createMindMap,
   addMindMapNode,
   updateMindMapNode,
+  updateMindMapNodes,
   deleteMindMapNode,
   addMindMapCrossLink,
   updateMindMapCrossLink,
@@ -1475,6 +1476,34 @@ export const toolsDefinition = [
         db.mindMaps[index] = next;
         saveDb(db);
         return formatSuccess(next, 'Ramo atualizado.');
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'update_mind_map_nodes',
+    description: 'Atualizar a aparência de vários ramos de uma vez (cor, ícone, imagem, tamanho da fonte).',
+    schema: {
+      mapId: z.string().describe('ID do mapa'),
+      nodeIds: z.array(z.string()).describe('IDs dos ramos a atualizar'),
+      color: z.string().optional(),
+      icon: z.string().optional().describe('Nome do ícone Lucide (vazio para remover)'),
+      imageUrl: z.string().optional().describe('URL ou data URI da imagem (vazio para remover)'),
+      collapsed: z.boolean().optional(),
+      fontSize: z.number().optional().describe('Tamanho da fonte do ramo em pixels (10 a 32)'),
+      fontSizeDelta: z.number().optional().describe('Ajuste relativo da fonte em pixels (ex: 1 ou -1)')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      const index = db.mindMaps.findIndex(m => m.id === args.mapId);
+      if (index === -1) return formatError(`Mapa mental '${args.mapId}' não encontrado.`);
+      try {
+        const next = updateMindMapNodes(db.mindMaps[index], args.nodeIds, args);
+        db.mindMaps[index] = next;
+        saveDb(db);
+        return formatSuccess(next, `${args.nodeIds.length} ramos atualizados.`);
       } catch (err) {
         return formatError(err.message);
       }

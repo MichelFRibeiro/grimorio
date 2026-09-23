@@ -70,6 +70,20 @@ async function run() {
     });
     assert(g.status === 200 && g.body.mindMap.nodes.length === 3, 'POST ramifica o filho');
 
+    const sibling = await request({ ...base, path: `/api/mind-maps/${mapId}/nodes`, method: 'POST' }, {
+      parentId: rootId,
+      label: 'Princípios'
+    });
+    const batchIds = sibling.body.mindMap.nodes.filter(n => n.parentId).map(n => n.id);
+    const bulk = await request({ ...base, path: `/api/mind-maps/${mapId}/nodes`, method: 'PUT' }, {
+      nodeIds: batchIds,
+      color: '#10b981',
+      fontSize: 18
+    });
+    assert(bulk.status === 200, 'PUT em lote atualiza vários ramos');
+    const bulkNodes = (bulk.body.mindMap.nodes || []).filter(n => batchIds.includes(n.id));
+    assert(bulkNodes.length === batchIds.length && bulkNodes.every(n => n.color === '#10b981' && n.fontSize === 18), 'Lote aplica cor e fonte');
+
     const study = await request({ ...base, path: `/api/mind-maps/${mapId}/study`, method: 'POST' }, {
       reviews: [{ nodeId: grandchildParent, quality: 3 }],
       durationMinutes: 12,

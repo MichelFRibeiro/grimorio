@@ -783,6 +783,57 @@ img, video, canvas {
   border-width: 2.4px;
 }
 
+.mindmap-node.is-multi {
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.22);
+}
+
+.mindmap-marquee {
+  position: absolute;
+  border: 1.5px dashed rgba(251, 191, 36, 0.85);
+  background: rgba(251, 191, 36, 0.12);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.mindmap-select-hint {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 3;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: rgba(8, 14, 24, 0.88);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: #fbbf24;
+  font-size: 0.72rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.mindmap-multi-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 12px;
+}
+
+.mindmap-multi-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  color: #fde68a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mindmap-node.is-linking {
   border-width: 2.4px;
 }

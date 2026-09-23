@@ -2,6 +2,7 @@ import {
   createMindMap,
   addMindMapNode,
   updateMindMapNode,
+  updateMindMapNodes,
   updateMindMapMeta,
   deleteMindMapNode,
   addMindMapCrossLink,
@@ -179,6 +180,16 @@ function runTests() {
   assert(stepMindMapNodeFontSize(MIND_MAP_BASE_FONT_SIZE, 1) === MIND_MAP_BASE_FONT_SIZE + 1, 'Aumenta a fonte do ramo em 1px');
   const sized = updateMindMapNode(map, map.rootId, { fontSize: 20 });
   assert(getRootNode(sized).fontSize === 20, 'Persiste tamanho de fonte no ramo');
+  const batchBase = addMindMapNode(addMindMapNode(map, { parentId: map.rootId, label: 'Ramo A' }), { parentId: map.rootId, label: 'Ramo B' });
+  const batchIds = childrenOf(batchBase, batchBase.rootId).map(n => n.id);
+  const batched = updateMindMapNodes(batchBase, batchIds, { color: '#10b981', fontSize: 18 });
+  assert(childrenOf(batched, batched.rootId).every(n => n.color === '#10b981' && n.fontSize === 18), 'Atualiza aparência de vários ramos');
+  const stepped = updateMindMapNodes(batched, batchIds, { fontSizeDelta: 1 });
+  assert(childrenOf(stepped, stepped.rootId).every(n => n.fontSize === 19), 'Ajusta a fonte de vários ramos em 1px');
+  const relocated = updateMindMapNodes(stepped, batchIds, {
+    updates: batchIds.map((id, i) => ({ id, x: 40 + i * 10, y: 80 }))
+  });
+  assert(childrenOf(relocated, relocated.rootId).every((n, i) => n.x === 40 + i * 10 && n.y === 80), 'Move vários ramos com patches individuais');
   assert(sanitizeMindMap({ title: 'X', nodes: [{ label: 'X', fontSize: 22 }] }).nodes[0].fontSize === 22, 'Sanitize preserva fonte do ramo');
   assert(sanitizeMindMap({ title: 'X', lineStyle: 'taper', nodes: [{ label: 'X' }] }).lineStyle === 'taper', 'Sanitize preserva galhos');
   assert(sanitizeMindMap({ title: 'X', scaleFontByDepth: true, nodes: [{ label: 'X' }] }).scaleFontByDepth === true, 'Sanitize preserva escala de fonte');

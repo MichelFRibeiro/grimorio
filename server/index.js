@@ -88,6 +88,7 @@ import {
   createMindMap,
   addMindMapNode,
   updateMindMapNode,
+  updateMindMapNodes,
   deleteMindMapNode,
   addMindMapCrossLink,
   updateMindMapCrossLink,
@@ -3018,6 +3019,25 @@ app.put('/api/mind-maps/:id/nodes/:nodeId', (req, res) => {
     const index = db.mindMaps.findIndex(m => m.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
     const next = updateMindMapNode(db.mindMaps[index], req.params.nodeId, req.body || {});
+    db.mindMaps[index] = next;
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...next, stats: computeMapStats(next) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/mind-maps/:id/nodes', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    const { nodeIds, ...patch } = req.body || {};
+    const next = updateMindMapNodes(db.mindMaps[index], nodeIds, patch);
     db.mindMaps[index] = next;
     saveDb(db);
     res.json({
