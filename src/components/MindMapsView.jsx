@@ -42,6 +42,7 @@ import {
   getRootNode,
   getStudyQueue,
   pickFillBlankNodeIds,
+  sanitizeFillHideableNodeIds,
   sanitizeFillMapDifficulty,
   groupMapsByCategory,
   mindMapCategoryLabel,
@@ -427,7 +428,8 @@ function MindMapCanvas({
   readOnly = false,
   fullscreen = false,
   onToggleFullscreen,
-  fillMode = null
+  fillMode = null,
+  hideablePicker = null
 }) {
   const wrapRef = useRef(null);
   const [zoom, setZoom] = useState(1);
@@ -521,6 +523,10 @@ function MindMapCanvas({
   const onPointerDownNode = (e, node) => {
     e.stopPropagation();
     if (fillMode) return;
+    if (hideablePicker) {
+      hideablePicker.onToggle?.(node.id);
+      return;
+    }
     if (linkingFromId && onLinkTarget) {
       onLinkTarget(node.id);
       return;
@@ -701,7 +707,7 @@ function MindMapCanvas({
                     if (onSelectBranch) onSelectBranch(link.to.id);
                     if (onSelect) onSelect(null);
                     if (onSelectLink) onSelectLink(null);
-                    if (readOnly || !onBendBranch) return;
+                    if (readOnly || hideablePicker || !onBendBranch) return;
                     const world = toWorld(e.clientX, e.clientY);
                     dragRef.current = {
                       kind: 'branch',
@@ -799,7 +805,7 @@ function MindMapCanvas({
                 if (onSelectBranch) onSelectBranch(link.to.id);
                 if (onSelect) onSelect(null);
                 if (onSelectLink) onSelectLink(null);
-                if (readOnly || !onBendBranch) return;
+                if (readOnly || hideablePicker || !onBendBranch) return;
                 dragRef.current = {
                   kind: 'branch',
                   nodeId: link.to.id,
@@ -838,30 +844,39 @@ function MindMapCanvas({
           const fillClass = fillState
             ? ` is-fill-blank${fillReview || fillDone ? ' is-fill-review' : ''}${verdict === 'hit' ? ' is-fill-hit' : ''}${verdict === 'miss' ? ' is-fill-miss' : ''}`
             : '';
+          const hideableOn = !!hideablePicker?.ids?.has(node.id);
+          const hideableClass = hideablePicker
+            ? ` is-hideable-pick${hideableOn ? ' is-hideable-on' : ''}`
+            : '';
           return (
             <div
               key={node.id}
-              className={`mindmap-node ${selected ? 'is-selected' : ''} ${selected && !primary ? 'is-multi' : ''} ${linkingFrom ? 'is-linking' : ''}${fillClass}`}
+              className={`mindmap-node ${selected ? 'is-selected' : ''} ${selected && !primary ? 'is-multi' : ''} ${linkingFrom ? 'is-linking' : ''}${fillClass}${hideableClass}`}
               style={{
                 width: w,
                 minHeight: h,
                 left: node.x - w / 2,
                 top: node.y - h / 2,
                 fontSize,
+                cursor: hideablePicker ? 'pointer' : undefined,
                 borderColor: linkingFrom
                   ? '#38bdf8'
-                  : (verdict === 'hit'
-                    ? '#10b981'
-                    : (verdict === 'miss'
-                      ? '#f43f5e'
-                      : (fillState ? '#c084fc' : (selected ? '#fbbf24' : (node.color || '#64748b'))))),
+                  : (hideableOn
+                    ? '#38bdf8'
+                    : (verdict === 'hit'
+                      ? '#10b981'
+                      : (verdict === 'miss'
+                        ? '#f43f5e'
+                        : (fillState ? '#c084fc' : (selected ? '#fbbf24' : (node.color || '#64748b')))))),
                 boxShadow: linkingFrom
                   ? '0 0 14px rgba(56,189,248,0.45)'
-                  : (verdict === 'hit'
-                    ? '0 0 12px rgba(16,185,129,0.35)'
-                    : (verdict === 'miss'
-                      ? '0 0 12px rgba(244,63,94,0.35)'
-                      : (selected ? '0 0 12px rgba(251,191,36,0.35)' : 'none')))
+                  : (hideableOn
+                    ? '0 0 12px rgba(56,189,248,0.4)'
+                    : (verdict === 'hit'
+                      ? '0 0 12px rgba(16,185,129,0.35)'
+                      : (verdict === 'miss'
+                        ? '0 0 12px rgba(244,63,94,0.35)'
+                        : (selected ? '0 0 12px rgba(251,191,36,0.35)' : 'none'))))
               }}
               onPointerDown={(e) => onPointerDownNode(e, node)}
             >
@@ -946,7 +961,12 @@ function MindMapCanvas({
           Clique no outro ramo para ligar · Esc cancela
         </div>
       )}
-      {!readOnly && !linkingFromId && (
+      {hideablePicker && (
+        <div className="mindmap-link-hint">
+          Clique nos nós que podem ser ocultados no Preencher Mapa · Esc sai
+        </div>
+      )}
+      {!readOnly && !linkingFromId && !hideablePicker && (
         <div className="mindmap-select-hint">
           Ctrl/Cmd+clique para vários · arraste o galho, as âncoras ou os 3 pontos de rota
         </div>
@@ -1035,6 +1055,8 @@ export function MindMapsView({
   const [fillVerdicts, setFillVerdicts] = useState({});
   const [fillPhase, setFillPhase] = useState('fill');
   const [fillMasteredIds, setFillMasteredIds] = useState([]);
+  const [pickingHideable, setPickingHideable] = useState(false);
+  const [draftHideableIds, setDraftHideableIds] = useState([]);
   const stopwatch = useStopwatch();
 
   const [confirmModal, setConfirmModal] = useState({
@@ -1175,9 +1197,14 @@ export function MindMapsView({
   const groupedMaps = groupMapsByCategory(filteredMaps, categories);
 
   useEffect(() => {
-    if (!fullscreen && !linkingFromId && selectedIds.length <= 1 && !selectedBranchId) return undefined;
+    if (!fullscreen && !linkingFromId && !pickingHideable && selectedIds.length <= 1 && !selectedBranchId) return undefined;
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
+      if (pickingHideable) {
+        e.preventDefault();
+        setPickingHideable(false);
+        return;
+      }
       if (linkingFromId) {
         e.preventDefault();
         cancelLinking();
@@ -1202,7 +1229,7 @@ export function MindMapsView({
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [fullscreen, linkingFromId, selectedIds.length, selectedId, selectedBranchId]);
+  }, [fullscreen, linkingFromId, pickingHideable, selectedIds.length, selectedId, selectedBranchId]);
 
   const dueCount = maps.reduce((acc, m) => acc + (computeMapStats(m, { today: todayStr }).dueBranches || 0), 0);
   const sessions = mindMapSessions || [];
@@ -1214,6 +1241,8 @@ export function MindMapsView({
     setSelectedBranchId(null);
     setLinkingFromId(null);
     setLocalNodes(null);
+    setPickingHideable(false);
+    setDraftHideableIds([]);
     setView('editor');
   };
 
@@ -1409,6 +1438,36 @@ export function MindMapsView({
     if (!selectedNode) return;
     setLinkError('');
     setLinkingFromId(selectedNode.id);
+  };
+
+  const startHideablePicker = () => {
+    if (!editorMap) return;
+    cancelLinking();
+    setSelectedIds([]);
+    setSelectedLinkId(null);
+    setSelectedBranchId(null);
+    const saved = sanitizeFillHideableNodeIds(editorMap.fillHideableNodeIds, editorMap.nodes) || [];
+    setDraftHideableIds(saved);
+    setPickingHideable(true);
+  };
+
+  const toggleHideableNode = (nodeId) => {
+    if (!nodeId) return;
+    setDraftHideableIds((prev) => (
+      prev.includes(nodeId) ? prev.filter(id => id !== nodeId) : [...prev, nodeId]
+    ));
+  };
+
+  const saveHideablePicker = () => {
+    if (!editorMap) return;
+    const cleaned = sanitizeFillHideableNodeIds(draftHideableIds, editorMap.nodes);
+    onUpdateMap?.(editorMap.id, { fillHideableNodeIds: cleaned });
+    setPickingHideable(false);
+  };
+
+  const cancelHideablePicker = () => {
+    setPickingHideable(false);
+    setDraftHideableIds([]);
   };
 
   const cancelLinking = () => {
@@ -1646,28 +1705,59 @@ export function MindMapsView({
 
   if (view === 'editor' && editorMap) {
     const stats = computeMapStats(editorMap, { today: todayStr });
+    const savedHideable = sanitizeFillHideableNodeIds(editorMap.fillHideableNodeIds, editorMap.nodes);
+    const hideableCount = pickingHideable ? draftHideableIds.length : (savedHideable?.length || 0);
     const editorBody = (
         <div className={`mindmap-editor-grid ${fullscreen ? 'is-fullscreen' : ''}`}>
           <MindMapCanvas
             map={editorMap}
-            selectedId={selectedId}
-            selectedIds={selectedIds}
-            selectedLinkId={selectedLinkId}
-            selectedBranchId={selectedBranchId}
-            onSelect={handleSelectNode}
-            onSelectLink={handleSelectLink}
-            onSelectBranch={handleSelectBranch}
-            onMoveNode={handleMoveNode}
-            onCommitMoves={handleCommitMoves}
-            onBendBranch={handleBendBranch}
-            onAddChild={handleAddChild}
-            linkingFromId={linkingFromId}
-            onLinkTarget={handleLinkTarget}
+            selectedId={pickingHideable ? null : selectedId}
+            selectedIds={pickingHideable ? [] : selectedIds}
+            selectedLinkId={pickingHideable ? null : selectedLinkId}
+            selectedBranchId={pickingHideable ? null : selectedBranchId}
+            onSelect={pickingHideable ? undefined : handleSelectNode}
+            onSelectLink={pickingHideable ? undefined : handleSelectLink}
+            onSelectBranch={pickingHideable ? undefined : handleSelectBranch}
+            onMoveNode={pickingHideable ? undefined : handleMoveNode}
+            onCommitMoves={pickingHideable ? undefined : handleCommitMoves}
+            onBendBranch={pickingHideable ? undefined : handleBendBranch}
+            onAddChild={pickingHideable ? undefined : handleAddChild}
+            linkingFromId={pickingHideable ? null : linkingFromId}
+            onLinkTarget={pickingHideable ? undefined : handleLinkTarget}
             fullscreen={fullscreen}
             onToggleFullscreen={() => setFullscreen(v => !v)}
+            hideablePicker={pickingHideable ? {
+              ids: new Set(draftHideableIds),
+              onToggle: toggleHideableNode
+            } : null}
           />
           <aside className="glass-panel mindmap-side">
-            {selectedBranch && selectedBranchParent ? (
+            {pickingHideable ? (
+              <>
+                <div style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
+                  Nós ocultáveis
+                </div>
+                <p style={{ color: '#cbd5e1', fontSize: '0.85rem', marginBottom: 12, lineHeight: 1.45 }}>
+                  Clique nos ramos que podem ficar em branco no modo Preencher Mapa. Os marcados em azul entram no sorteio de ocultação.
+                </p>
+                <p style={{ color: '#94a3b8', fontSize: '0.8rem', margin: '0 0 14px', lineHeight: 1.45 }}>
+                  {hideableCount
+                    ? `${hideableCount} nó(s) marcado(s). Sem marcação, qualquer ramo pode ser ocultado.`
+                    : 'Nenhum nó marcado: o Preencher Mapa volta a ocultar qualquer ramo, conforme a dificuldade.'}
+                </p>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <button type="button" className="mindmap-ghost-btn" onClick={saveHideablePicker} style={{ borderColor: 'rgba(56,189,248,0.5)', color: '#38bdf8' }}>
+                    <Check size={14} /> Salvar seleção
+                  </button>
+                  <button type="button" className="mindmap-ghost-btn" onClick={() => setDraftHideableIds([])}>
+                    Limpar marcação
+                  </button>
+                  <button type="button" className="mindmap-ghost-btn" onClick={cancelHideablePicker}>
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            ) : selectedBranch && selectedBranchParent ? (
               <>
                 <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
                   Galho selecionado
@@ -1981,6 +2071,31 @@ export function MindMapsView({
               >
                 <GitBranch size={15} /> {editorMap.lineStyle === 'taper' ? 'Galhos' : 'Linhas'}
               </button>
+              {pickingHideable ? (
+                <>
+                  <button type="button" className="mindmap-ghost-btn" onClick={cancelHideablePicker}>
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="mindmap-ghost-btn"
+                    onClick={saveHideablePicker}
+                    style={{ borderColor: 'rgba(56,189,248,0.5)', color: '#38bdf8' }}
+                  >
+                    <Check size={15} /> Salvar ocultáveis ({hideableCount})
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="mindmap-ghost-btn"
+                  onClick={startHideablePicker}
+                  title="Escolher quais nós podem ficar em branco no Preencher Mapa"
+                  style={savedHideable ? { borderColor: 'rgba(56,189,248,0.45)', color: '#38bdf8' } : undefined}
+                >
+                  <EyeOff size={15} /> {savedHideable ? `Ocultáveis (${hideableCount})` : 'Nós ocultáveis'}
+                </button>
+              )}
               <button type="button" className="mindmap-ghost-btn" onClick={() => onLayoutMap(editorMap.id)}>
                 <Layout size={15} /> Organizar
               </button>
@@ -2016,6 +2131,25 @@ export function MindMapsView({
               >
                 <GitBranch size={14} /> {editorMap.lineStyle === 'taper' ? 'Galhos' : 'Linhas'}
               </button>
+              {pickingHideable ? (
+                <button
+                  type="button"
+                  className="mindmap-ghost-btn"
+                  onClick={saveHideablePicker}
+                  style={{ borderColor: 'rgba(56,189,248,0.5)', color: '#38bdf8' }}
+                >
+                  <Check size={14} /> Salvar ocultáveis
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="mindmap-ghost-btn"
+                  onClick={startHideablePicker}
+                  style={savedHideable ? { borderColor: 'rgba(56,189,248,0.45)', color: '#38bdf8' } : undefined}
+                >
+                  <EyeOff size={14} /> Ocultáveis
+                </button>
+              )}
               <button type="button" className="mindmap-ghost-btn" onClick={() => onLayoutMap(editorMap.id)}><Layout size={14} /> Organizar</button>
               <button type="button" className="mindmap-ghost-btn" onClick={() => setFullscreen(false)}><Minimize2 size={14} /> Sair</button>
             </div>

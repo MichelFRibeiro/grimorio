@@ -18,6 +18,7 @@ import {
   getStudyQueue,
   pickFillBlankNodeIds,
   fillBlankRatio,
+  fillHideablePool,
   applyStudySession,
   computeStudyRewards,
   sanitizeMindMap,
@@ -111,6 +112,19 @@ function runTests() {
   });
   assert(fillStudied.session.mode === 'fill', 'Sessão registra o modo Preencher Mapa');
   assert(fillStudied.session.reviewed === fillHard.length, 'Sessão de preenchimento conta os nós ocultos');
+
+  const hideable = updateMindMapMeta(art5, { fillHideableNodeIds: [art5Id, 'missing'] });
+  assert(hideable.fillHideableNodeIds.length === 1 && hideable.fillHideableNodeIds[0] === art5Id, 'Salva só nós ocultáveis válidos');
+  assert(fillHideablePool(hideable).every(n => n.id === art5Id), 'Pool de ocultação respeita a lista do mapa');
+  const fillRestricted = pickFillBlankNodeIds(hideable, 'hard');
+  assert(fillRestricted.length === 1 && fillRestricted[0] === art5Id, 'Difícil com lista oculta só os nós marcados');
+  const clearedHideable = updateMindMapMeta(hideable, { fillHideableNodeIds: [] });
+  assert(clearedHideable.fillHideableNodeIds == null, 'Lista vazia volta a permitir qualquer nó');
+  const prunedHideable = deleteMindMapNode(
+    updateMindMapMeta(extra, { fillHideableNodeIds: [art5Id, extra.nodes.find(n => n.label === 'Direito de petição').id] }),
+    rightsId
+  );
+  assert((prunedHideable.fillHideableNodeIds || []).every(id => prunedHideable.nodes.some(n => n.id === id)), 'Excluir ramo limpa IDs ocultáveis órfãos');
 
   const rewards = computeStudyRewards({ reviewed: 4, recalled: 4, durationMinutes: 12 });
   assert(rewards.xp >= 32 + 25 + 5, 'Bônus de sessão perfeita e duração');

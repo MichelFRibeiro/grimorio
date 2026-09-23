@@ -2946,7 +2946,7 @@ app.put('/api/mind-maps/:id', (req, res) => {
     const index = db.mindMaps.findIndex(m => m.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
 
-    const { title, description, category, categoryId, color, rootLabel, lineStyle, scaleFontByDepth, nodes, layout } = req.body || {};
+    const { title, description, category, categoryId, color, rootLabel, lineStyle, scaleFontByDepth, fillHideableNodeIds, nodes, layout } = req.body || {};
     let next = db.mindMaps[index];
 
     if (Array.isArray(nodes)) {
@@ -2959,7 +2959,7 @@ app.put('/api/mind-maps/:id', (req, res) => {
       if (!next) return res.status(400).json({ error: 'Mapa mental inválido.' });
     }
 
-    if (title !== undefined || description !== undefined || category !== undefined || categoryId !== undefined || color !== undefined || rootLabel !== undefined || lineStyle !== undefined || scaleFontByDepth !== undefined) {
+    if (title !== undefined || description !== undefined || category !== undefined || categoryId !== undefined || color !== undefined || rootLabel !== undefined || lineStyle !== undefined || scaleFontByDepth !== undefined || fillHideableNodeIds !== undefined) {
       db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
       const cat = categoryId
         ? db.mindMapCategories.find(c => c.id === categoryId)
@@ -2974,7 +2974,8 @@ app.put('/api/mind-maps/:id', (req, res) => {
         color,
         rootLabel,
         lineStyle,
-        scaleFontByDepth
+        scaleFontByDepth,
+        fillHideableNodeIds
       });
     }
 

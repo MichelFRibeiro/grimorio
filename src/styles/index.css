@@ -1348,6 +1348,15 @@ img, video, canvas {
   background: rgba(32, 10, 16, 0.96);
 }
 
+.mindmap-node.is-hideable-pick {
+  opacity: 0.55;
+}
+
+.mindmap-node.is-hideable-on {
+  opacity: 1;
+  background: rgba(8, 24, 36, 0.96);
+}
+
 @media (max-width: 900px) {
   .mindmap-editor-grid,
   .mindmap-editor-grid.is-fullscreen {

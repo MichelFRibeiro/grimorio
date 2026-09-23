@@ -333,7 +333,8 @@ export function createMindMap({
     lastStudiedAt: null,
     nodes: [root],
     rootId: root.id,
-    crossLinks: []
+    crossLinks: [],
+    fillHideableNodeIds: null
   };
 }
 
@@ -504,13 +505,15 @@ export function deleteMindMapNode(map, nodeId) {
     throw new Error('O núcleo do mapa não pode ser excluído.');
   }
   const remove = new Set([node.id, ...descendantIds(map, node.id)]);
+  const remaining = map.nodes.filter(n => !remove.has(n.id));
   return {
     ...map,
     updatedAt: new Date().toISOString(),
-    nodes: map.nodes.filter(n => !remove.has(n.id)),
+    nodes: remaining,
+    fillHideableNodeIds: sanitizeFillHideableNodeIds(map.fillHideableNodeIds, remaining),
     crossLinks: sanitizeMindMapCrossLinks(
       (map.crossLinks || []).filter(l => !remove.has(l.fromId) && !remove.has(l.toId)),
-      map.nodes.filter(n => !remove.has(n.id))
+      remaining
     )
   };
 }
@@ -529,6 +532,9 @@ export function updateMindMapMeta(map, patch = {}) {
   if (patch.color !== undefined && patch.color) next.color = patch.color;
   if (patch.lineStyle !== undefined) next.lineStyle = sanitizeMindMapLineStyle(patch.lineStyle);
   if (patch.scaleFontByDepth !== undefined) next.scaleFontByDepth = !!patch.scaleFontByDepth;
+  if (patch.fillHideableNodeIds !== undefined) {
+    next.fillHideableNodeIds = sanitizeFillHideableNodeIds(patch.fillHideableNodeIds, next.nodes);
+  }
   if (patch.rootLabel !== undefined) {
     const root = getRootNode(next);
     if (root) {
@@ -722,6 +728,21 @@ export function fillBlankRatio(difficulty = 'medium') {
   return 0.6;
 }
 
+export function sanitizeFillHideableNodeIds(value, nodes = []) {
+  if (value == null || value === false) return null;
+  if (!Array.isArray(value)) return null;
+  const known = new Set((nodes || []).map(n => n.id));
+  const cleaned = [...new Set(value.map(id => String(id || '').trim()).filter(id => known.has(id)))];
+  return cleaned.length ? cleaned : null;
+}
+
+export function fillHideablePool(map) {
+  const nodes = map?.nodes || [];
+  const restricted = sanitizeFillHideableNodeIds(map?.fillHideableNodeIds, nodes);
+  if (restricted) return nodes.filter(n => restricted.includes(n.id));
+  return nodes.filter(n => n.id);
+}
+
 function shuffleWithRng(list, rng = Math.random) {
   const arr = [...list];
   for (let i = arr.length - 1; i > 0; i -= 1) {
@@ -737,11 +758,15 @@ export function pickFillBlankNodeIds(map, difficulty = 'medium', rng = Math.rand
   const nodes = map?.nodes || [];
   if (!root || nodes.length <= 1) return [];
 
-  const level = sanitizeFillMapDifficulty(difficulty);
-  const nonRoot = nodes.filter(n => n.id !== root.id);
-  if (level === 'hard') return nonRoot.map(n => n.id);
+  const restricted = sanitizeFillHideableNodeIds(map.fillHideableNodeIds, nodes);
+  const pool = fillHideablePool(map);
+  if (!pool.length) return [];
 
-  const pool = nodes.filter(n => n.id);
+  const level = sanitizeFillMapDifficulty(difficulty);
+  if (level === 'hard') {
+    return (restricted ? pool : pool.filter(n => n.id !== root.id)).map(n => n.id);
+  }
+
   const ratio = fillBlankRatio(level);
   const count = Math.min(pool.length, Math.max(1, Math.round(pool.length * ratio)));
   return shuffleWithRng(pool, rng).slice(0, count).map(n => n.id);
@@ -962,7 +987,8 @@ export function sanitizeMindMap(raw) {
     lastStudiedAt: sanitizeDate(raw.lastStudiedAt, null),
     rootId: root.id,
     nodes,
-    crossLinks: sanitizeMindMapCrossLinks(raw.crossLinks, nodes)
+    crossLinks: sanitizeMindMapCrossLinks(raw.crossLinks, nodes),
+    fillHideableNodeIds: sanitizeFillHideableNodeIds(raw.fillHideableNodeIds, nodes)
   };
 }
 

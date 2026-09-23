@@ -1407,6 +1407,7 @@ export const toolsDefinition = [
       rootLabel: z.string().optional(),
       lineStyle: z.enum(['curve', 'taper']).optional().describe('curve = linhas, taper = galhos que afinam'),
       scaleFontByDepth: z.boolean().optional().describe('Se true, a fonte fica maior perto do núcleo e menor nas pontas'),
+      fillHideableNodeIds: z.array(z.string()).nullable().optional().describe('IDs dos nós que podem ser ocultados no modo Preencher Mapa. Null = qualquer nó'),
       layout: z.boolean().optional().describe('Se true, reorganiza automaticamente os ramos')
     },
     handler: async (args) => {
