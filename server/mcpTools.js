@@ -1619,7 +1619,7 @@ export const toolsDefinition = [
         quality: z.number().describe('0 esqueci, 1 difícil, 2 bom, 3 fácil')
       })).describe('Avaliações dos ramos'),
       durationMinutes: z.number().optional().describe('Duração da sessão em minutos'),
-      mode: z.enum(['branches', 'cards']).optional().describe('Modo de estudo')
+      mode: z.enum(['branches', 'cards', 'fill']).optional().describe('Modo de estudo: ramos, cartões ou preencher mapa')
     },
     handler: async (args) => {
       const db = getDb();

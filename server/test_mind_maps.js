@@ -16,6 +16,8 @@ import {
   MIND_MAP_MAX_FONT_SIZE,
   MIND_MAP_MIN_FONT_SIZE,
   getStudyQueue,
+  pickFillBlankNodeIds,
+  fillBlankRatio,
   applyStudySession,
   computeStudyRewards,
   sanitizeMindMap,
@@ -93,6 +95,22 @@ function runTests() {
 
   const queueCards = getStudyQueue(art5, { today: '2026-04-01', mode: 'cards' });
   assert(queueCards.some(q => q.answer === 'Art. 5º'), 'Modo cartão usa o filho como resposta');
+
+  assert(fillBlankRatio('easy') === 0.3, 'Fácil oculta 30% dos nós');
+  assert(fillBlankRatio('medium') === 0.6, 'Médio oculta 60% dos nós');
+  assert(fillBlankRatio('hard') === 1, 'Difícil oculta todos os ramos');
+  const fillEasy = pickFillBlankNodeIds(art5, 'easy', () => 0);
+  const fillHard = pickFillBlankNodeIds(art5, 'hard');
+  assert(fillEasy.length === Math.max(1, Math.round(art5.nodes.length * 0.3)), 'Fácil escolhe ~30% dos nós');
+  assert(fillHard.length === art5.nodes.length - 1, 'Difícil oculta todos menos o núcleo');
+  assert(!fillHard.includes(art5.rootId), 'Difícil nunca oculta o núcleo');
+  const fillStudied = applyStudySession(art5, fillHard.map((id, i) => ({ nodeId: id, quality: i === 0 ? 2 : 0 })), {
+    today: '2026-04-01',
+    durationMinutes: 8,
+    mode: 'fill'
+  });
+  assert(fillStudied.session.mode === 'fill', 'Sessão registra o modo Preencher Mapa');
+  assert(fillStudied.session.reviewed === fillHard.length, 'Sessão de preenchimento conta os nós ocultos');
 
   const rewards = computeStudyRewards({ reviewed: 4, recalled: 4, durationMinutes: 12 });
   assert(rewards.xp >= 32 + 25 + 5, 'Bônus de sessão perfeita e duração');

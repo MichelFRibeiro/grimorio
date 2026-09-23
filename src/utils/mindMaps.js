@@ -704,9 +704,54 @@ export function isNodeDue(node, todayStr) {
   return node.dueDate <= todayStr;
 }
 
+export const MIND_MAP_STUDY_MODES = ['branches', 'cards', 'fill'];
+export const FILL_MAP_DIFFICULTIES = ['easy', 'medium', 'hard'];
+
+export function sanitizeMindMapStudyMode(value) {
+  return MIND_MAP_STUDY_MODES.includes(value) ? value : 'branches';
+}
+
+export function sanitizeFillMapDifficulty(value) {
+  return FILL_MAP_DIFFICULTIES.includes(value) ? value : 'medium';
+}
+
+export function fillBlankRatio(difficulty = 'medium') {
+  const level = sanitizeFillMapDifficulty(difficulty);
+  if (level === 'easy') return 0.3;
+  if (level === 'hard') return 1;
+  return 0.6;
+}
+
+function shuffleWithRng(list, rng = Math.random) {
+  const arr = [...list];
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const draw = typeof rng === 'function' ? rng() : Math.random();
+    const j = Math.max(0, Math.min(i, Math.floor(draw * (i + 1))));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+export function pickFillBlankNodeIds(map, difficulty = 'medium', rng = Math.random) {
+  const root = getRootNode(map);
+  const nodes = map?.nodes || [];
+  if (!root || nodes.length <= 1) return [];
+
+  const level = sanitizeFillMapDifficulty(difficulty);
+  const nonRoot = nodes.filter(n => n.id !== root.id);
+  if (level === 'hard') return nonRoot.map(n => n.id);
+
+  const pool = nodes.filter(n => n.id);
+  const ratio = fillBlankRatio(level);
+  const count = Math.min(pool.length, Math.max(1, Math.round(pool.length * ratio)));
+  return shuffleWithRng(pool, rng).slice(0, count).map(n => n.id);
+}
+
 export function getStudyQueue(map, { today = getSaoPauloDateStr(), mode = 'branches', includeNotDue = false } = {}) {
   const root = getRootNode(map);
   if (!root) return [];
+
+  if (mode === 'fill') return [];
 
   if (mode === 'cards') {
     return (map.nodes || [])
@@ -801,6 +846,7 @@ export function applyStudySession(map, reviews = [], {
   durationMinutes = 0,
   mode = 'branches'
 } = {}) {
+  const studyMode = sanitizeMindMapStudyMode(mode);
   if (!map) throw new Error('Mapa mental não encontrado.');
   const list = Array.isArray(reviews) ? reviews : [];
   if (!list.length) throw new Error('Registre ao menos um ramo revisado.');
@@ -839,7 +885,7 @@ export function applyStudySession(map, reviews = [], {
     mapId: map.id,
     mapTitle: map.title,
     category: map.category || 'Estudos',
-    mode,
+    mode: studyMode,
     date: today,
     durationMinutes: Math.max(0, Math.round(clampNumber(durationMinutes, 0))),
     reviewed: applied.length,
@@ -930,7 +976,7 @@ export function sanitizeMindMapSessions(list = []) {
     mapId: s.mapId,
     mapTitle: s.mapTitle || '',
     category: s.category || 'Estudos',
-    mode: s.mode === 'cards' ? 'cards' : 'branches',
+    mode: sanitizeMindMapStudyMode(s.mode),
     date: sanitizeDate(s.date, null) || getSaoPauloDateStr(),
     durationMinutes: Math.max(0, Math.round(clampNumber(s.durationMinutes, 0))),
     reviewed: Math.max(0, Math.round(clampNumber(s.reviewed, 0))),

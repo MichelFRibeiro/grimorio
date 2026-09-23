@@ -28,7 +28,8 @@ import {
   Tag,
   FolderTree,
   Link2,
-  Unlink
+  Unlink,
+  PenLine
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { MindMapIcon, MindMapMediaPicker, MindMapThumb } from './MindMapMedia';
@@ -40,6 +41,8 @@ import {
   computeMapStats,
   getRootNode,
   getStudyQueue,
+  pickFillBlankNodeIds,
+  sanitizeFillMapDifficulty,
   groupMapsByCategory,
   mindMapCategoryLabel,
   mindMapNodeFontSize,
@@ -60,28 +63,37 @@ const QUALITY_OPTIONS = [
   { value: 3, label: 'Fácil', hint: 'Mais intervalo', color: '#10b981' }
 ];
 
-function nodeSize(node = {}, fontSize = 14) {
+const FILL_LEVELS = [
+  { id: 'easy', label: 'Fácil', hint: '30% ocultos' },
+  { id: 'medium', label: 'Médio', hint: '60% ocultos' },
+  { id: 'hard', label: 'Difícil', hint: 'só o núcleo visível' }
+];
+
+function nodeSize(node = {}, fontSize = 14, fillState = null) {
   const fs = Number(fontSize) || 14;
   const scale = fs / 14;
-  const hasMedia = !!(node.imageUrl || node.icon);
-  const extra = node.imageUrl ? 36 * scale : (node.icon ? 28 * scale : 0);
-  const label = String(node.label || '');
+  const blank = !!fillState?.blank;
+  const review = fillState?.phase === 'review' || fillState?.phase === 'done';
+  const hasMedia = !blank && !!(node.imageUrl || node.icon);
+  const extra = node.imageUrl && !blank ? 36 * scale : (node.icon && !blank ? 28 * scale : 0);
+  const label = String(node.label || (blank ? '_______________' : ''));
   const charW = fs * 0.62;
   const padding = 28;
   const minW = (hasMedia ? 148 : 120) * Math.max(1, scale * 0.9);
   const maxW = 460;
-  const singleLineW = padding + label.length * charW + extra;
+  const singleLineW = padding + Math.max(label.length, blank ? 12 : 0) * charW + extra + (blank ? 18 : 0);
   const w = Math.max(minW, Math.min(maxW, singleLineW));
   const innerW = Math.max(48, w - padding - extra);
   const charsPerLine = Math.max(8, Math.floor(innerW / Math.max(charW, 1)));
   const lines = Math.max(1, Math.ceil(label.length / charsPerLine));
-  const minH = (node.imageUrl ? 72 : 44) * Math.max(1, scale * 0.92);
-  const h = Math.max(minH, 18 + lines * fs * 1.35);
+  const minH = (!blank && node.imageUrl ? 72 : 44) * Math.max(1, scale * 0.92);
+  const extraH = blank ? (review ? fs * 2.4 : fs * 0.35) : 0;
+  const h = Math.max(minH, 18 + lines * fs * 1.35 + extraH);
   return { w, h };
 }
 
-function nodeRect(node, fontSize) {
-  const { w, h } = nodeSize(node, fontSize);
+function nodeRect(node, fontSize, fillState = null) {
+  const { w, h } = nodeSize(node, fontSize, fillState);
   return {
     w,
     h,
@@ -106,8 +118,8 @@ function pointOnNodeSide(rect, side, t) {
   return { x: rect.left + u * rect.w, y: rect.bottom };
 }
 
-function closestAnchorOnNode(node, fontSize, world) {
-  const rect = nodeRect(node, fontSize);
+function closestAnchorOnNode(node, fontSize, world, fillState = null) {
+  const rect = nodeRect(node, fontSize, fillState);
   const px = world?.x || 0;
   const py = world?.y || 0;
   const inside = px > rect.left && px < rect.right && py > rect.top && py < rect.bottom;
@@ -131,8 +143,8 @@ function closestAnchorOnNode(node, fontSize, world) {
   return { side: best.side, t: Math.round(clamp01(best.t) * 1000) / 1000 };
 }
 
-function nodeAnchor(node, toward, fontSize, custom) {
-  const rect = nodeRect(node, fontSize);
+function nodeAnchor(node, toward, fontSize, custom, fillState = null) {
+  const rect = nodeRect(node, fontSize, fillState);
   if (custom?.side) return pointOnNodeSide(rect, custom.side, custom.t);
   const dx = (toward?.x || 0) - (node?.x || 0);
   const dy = (toward?.y || 0) - (node?.y || 0);
@@ -414,7 +426,8 @@ function MindMapCanvas({
   onLinkTarget,
   readOnly = false,
   fullscreen = false,
-  onToggleFullscreen
+  onToggleFullscreen,
+  fillMode = null
 }) {
   const wrapRef = useRef(null);
   const [zoom, setZoom] = useState(1);
@@ -426,6 +439,17 @@ function MindMapCanvas({
   const lineStyle = sanitizeMindMapLineStyle(map?.lineStyle);
   const scaleFont = !!map?.scaleFontByDepth;
   const fontFor = (node) => mindMapNodeFontSize(nodeDepth(map, node?.id), scaleFont, node?.fontSize);
+  const fillStateFor = (node) => (
+    fillMode?.blankIds?.has(node?.id)
+      ? {
+          blank: true,
+          phase: fillMode.phase || 'fill',
+          value: fillMode.answers?.[node.id] || '',
+          verdict: fillMode.verdicts?.[node.id]
+        }
+      : null
+  );
+  const sizeFor = (node) => nodeSize(node, fontFor(node), fillStateFor(node));
   const visible = useMemo(() => visibleNodeIds(map), [map]);
   const visibleIds = useMemo(() => new Set(visible.map(n => n.id)), [visible]);
   const links = useMemo(() => (
@@ -496,6 +520,7 @@ function MindMapCanvas({
 
   const onPointerDownNode = (e, node) => {
     e.stopPropagation();
+    if (fillMode) return;
     if (linkingFromId && onLinkTarget) {
       onLinkTarget(node.id);
       return;
@@ -598,8 +623,7 @@ function MindMapCanvas({
         const tooSmall = (x2 - x1) < 6 && (y2 - y1) < 6;
         if (!tooSmall) {
           const hits = visible.filter((node) => {
-            const fontSize = fontFor(node);
-            const { w, h } = nodeSize(node, fontSize);
+            const { w, h } = sizeFor(node);
             return rectsOverlap(box, {
               left: node.x - w / 2,
               top: node.y - h / 2,
@@ -801,38 +825,91 @@ function MindMapCanvas({
           );
         })}
         {visible.map((node) => {
+          const fillState = fillStateFor(node);
           const fontSize = fontFor(node);
-          const { w, h } = nodeSize(node, fontSize);
+          const { w, h } = sizeFor(node);
           const selected = selectedIdSet.has(node.id) || selectedId === node.id;
           const primary = selectedId === node.id;
           const linkingFrom = linkingFromId === node.id;
           const kids = childrenOf(map, node.id).length;
+          const fillReview = fillState?.phase === 'review';
+          const fillDone = fillState?.phase === 'done';
+          const verdict = fillState?.verdict;
+          const fillClass = fillState
+            ? ` is-fill-blank${fillReview || fillDone ? ' is-fill-review' : ''}${verdict === 'hit' ? ' is-fill-hit' : ''}${verdict === 'miss' ? ' is-fill-miss' : ''}`
+            : '';
           return (
             <div
               key={node.id}
-              className={`mindmap-node ${selected ? 'is-selected' : ''} ${selected && !primary ? 'is-multi' : ''} ${linkingFrom ? 'is-linking' : ''}`}
+              className={`mindmap-node ${selected ? 'is-selected' : ''} ${selected && !primary ? 'is-multi' : ''} ${linkingFrom ? 'is-linking' : ''}${fillClass}`}
               style={{
                 width: w,
                 minHeight: h,
                 left: node.x - w / 2,
                 top: node.y - h / 2,
                 fontSize,
-                borderColor: linkingFrom ? '#38bdf8' : (selected ? '#fbbf24' : (node.color || '#64748b')),
+                borderColor: linkingFrom
+                  ? '#38bdf8'
+                  : (verdict === 'hit'
+                    ? '#10b981'
+                    : (verdict === 'miss'
+                      ? '#f43f5e'
+                      : (fillState ? '#c084fc' : (selected ? '#fbbf24' : (node.color || '#64748b'))))),
                 boxShadow: linkingFrom
                   ? '0 0 14px rgba(56,189,248,0.45)'
-                  : (selected ? '0 0 12px rgba(251,191,36,0.35)' : 'none')
+                  : (verdict === 'hit'
+                    ? '0 0 12px rgba(16,185,129,0.35)'
+                    : (verdict === 'miss'
+                      ? '0 0 12px rgba(244,63,94,0.35)'
+                      : (selected ? '0 0 12px rgba(251,191,36,0.35)' : 'none')))
               }}
               onPointerDown={(e) => onPointerDownNode(e, node)}
             >
-              {node.imageUrl ? (
+              {node.imageUrl && !fillState ? (
                 <img src={node.imageUrl} alt="" className="mindmap-node-photo" draggable={false} />
-              ) : node.icon ? (
+              ) : node.icon && !fillState ? (
                 <span className="mindmap-node-icon" style={{ color: node.color || '#c084fc' }}>
                   <MindMapIcon name={node.icon} size={Math.max(14, Math.round(fontSize + 3))} color={node.color || '#c084fc'} />
                 </span>
               ) : null}
-              <span className="mindmap-node-label">{node.label}</span>
-              {kids > 0 && (
+              {fillState && !fillReview && !fillDone ? (
+                <input
+                  className="mindmap-fill-input"
+                  value={fillState.value}
+                  placeholder="Preencha…"
+                  aria-label={`Preencher ramo oculto`}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onChange={(e) => fillMode.onChange?.(node.id, e.target.value)}
+                />
+              ) : fillState && (fillReview || fillDone) ? (
+                <div className="mindmap-fill-review">
+                  <span className="mindmap-fill-guess">{fillState.value?.trim() ? fillState.value : '—'}</span>
+                  <span className="mindmap-fill-answer">{node.label}</span>
+                  {fillReview && (
+                    <div className="mindmap-fill-verdict">
+                      <button
+                        type="button"
+                        className={`mindmap-fill-hit ${verdict === 'hit' ? 'is-on' : ''}`}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => fillMode.onVerdict?.(node.id, 'hit')}
+                      >
+                        Acertei
+                      </button>
+                      <button
+                        type="button"
+                        className={`mindmap-fill-miss ${verdict === 'miss' ? 'is-on' : ''}`}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => fillMode.onVerdict?.(node.id, 'miss')}
+                      >
+                        Errei
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <span className="mindmap-node-label">{node.label}</span>
+              )}
+              {kids > 0 && !fillState && (
                 <span className="mindmap-node-badge" style={{ background: node.color || '#64748b' }}>
                   {node.collapsed ? '+' : kids}
                 </span>
@@ -952,6 +1029,11 @@ export function MindMapsView({
   const [studyIndex, setStudyIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [studyReviews, setStudyReviews] = useState([]);
+  const [fillDifficulty, setFillDifficulty] = useState('medium');
+  const [fillBlankIds, setFillBlankIds] = useState([]);
+  const [fillAnswers, setFillAnswers] = useState({});
+  const [fillVerdicts, setFillVerdicts] = useState({});
+  const [fillPhase, setFillPhase] = useState('fill');
   const stopwatch = useStopwatch();
 
   const [confirmModal, setConfirmModal] = useState({
@@ -1134,11 +1216,21 @@ export function MindMapsView({
     setView('editor');
   };
 
+  const resetFillSession = (map, difficulty = fillDifficulty) => {
+    const ids = pickFillBlankNodeIds(map, difficulty);
+    setFillBlankIds(ids);
+    setFillAnswers({});
+    setFillVerdicts({});
+    setFillPhase('fill');
+    setStudyReviews([]);
+  };
+
   const openStudy = (map) => {
     setActiveMapId(map.id);
     setStudyIndex(0);
     setRevealed(false);
     setStudyReviews([]);
+    resetFillSession(map, fillDifficulty);
     stopwatch.reset();
     stopwatch.start();
     setView('study');
@@ -1374,10 +1466,10 @@ export function MindMapsView({
     }
   };
 
-  const finishStudy = async () => {
-    if (!liveMap || !studyReviews.length) return;
+  const finishStudy = async (reviews = studyReviews) => {
+    if (!liveMap || !reviews.length) return;
     await onStudyMap(liveMap.id, {
-      reviews: studyReviews,
+      reviews,
       durationMinutes: Math.max(1, Math.round((stopwatch.seconds || 0) / 60)),
       mode: studyMode,
       date: todayStr
@@ -1385,6 +1477,38 @@ export function MindMapsView({
     stopwatch.reset();
     setView('list');
     setActiveMapId(null);
+  };
+
+  const startFillMode = (difficulty = fillDifficulty) => {
+    const level = sanitizeFillMapDifficulty(difficulty);
+    setStudyMode('fill');
+    setFillDifficulty(level);
+    setStudyIndex(0);
+    setRevealed(false);
+    if (liveMap) resetFillSession(liveMap, level);
+  };
+
+  const handleFillAnswer = (nodeId, value) => {
+    setFillAnswers(prev => ({ ...prev, [nodeId]: value }));
+  };
+
+  const handleFillVerdict = (nodeId, verdict) => {
+    setFillVerdicts(prev => ({ ...prev, [nodeId]: verdict }));
+  };
+
+  const revealFillAnswers = () => {
+    if (!fillBlankIds.length) return;
+    stopwatch.pause();
+    setFillPhase('review');
+  };
+
+  const commitFillStudy = async () => {
+    const reviews = fillBlankIds.map((nodeId) => ({
+      nodeId,
+      quality: fillVerdicts[nodeId] === 'hit' ? 2 : 0
+    }));
+    setStudyReviews(reviews);
+    await finishStudy(reviews);
   };
 
   const promptDeleteMap = (map) => {
@@ -1873,7 +1997,12 @@ export function MindMapsView({
   }
 
   if (view === 'study' && liveMap) {
-    const done = studyIndex >= dueQueue.length && studyReviews.length > 0;
+    const done = studyMode !== 'fill' && studyIndex >= dueQueue.length && studyReviews.length > 0;
+    const fillBlankSet = new Set(fillBlankIds);
+    const fillMarked = fillBlankIds.filter(id => fillVerdicts[id]).length;
+    const fillHits = fillBlankIds.filter(id => fillVerdicts[id] === 'hit').length;
+    const fillReady = fillPhase === 'review' && fillBlankIds.length > 0 && fillMarked === fillBlankIds.length;
+    const hasBranches = (liveMap.nodes || []).some(n => n.parentId);
     return (
       <div className={fullscreen ? 'mindmap-fullscreen-root mindmap-study-fullscreen' : undefined}>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
@@ -1893,7 +2022,7 @@ export function MindMapsView({
           </div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '10px', display: 'inline-flex', gap: '8px', marginBottom: '16px' }}>
+        <div className="glass-panel" style={{ padding: '10px', display: 'inline-flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
           <button
             type="button"
             onClick={() => { setStudyMode('branches'); setStudyIndex(0); setRevealed(false); setStudyReviews([]); }}
@@ -1910,9 +2039,78 @@ export function MindMapsView({
           >
             <Layers size={14} /> Cartões pai → filho
           </button>
+          <button
+            type="button"
+            onClick={() => startFillMode(fillDifficulty)}
+            className="mindmap-ghost-btn"
+            style={studyMode === 'fill' ? { borderColor: 'rgba(251,191,36,0.5)', color: '#fbbf24' } : undefined}
+          >
+            <PenLine size={14} /> Preencher mapa
+          </button>
         </div>
 
-        {dueQueue.length === 0 ? (
+        {studyMode === 'fill' ? (
+          !hasBranches ? (
+            <div className="glass-panel" style={{ padding: '40px 20px', textAlign: 'center', color: '#64748b' }}>
+              <Brain size={40} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
+              <p>Este mapa ainda não tem ramos para preencher. Volte ao editor e ramifique o núcleo.</p>
+            </div>
+          ) : (
+            <div className="mindmap-fill-study">
+              <div className="glass-panel mindmap-fill-toolbar">
+                <div className="mindmap-fill-levels">
+                  {FILL_LEVELS.map((level) => (
+                    <button
+                      key={level.id}
+                      type="button"
+                      className="mindmap-ghost-btn"
+                      onClick={() => startFillMode(level.id)}
+                      style={fillDifficulty === level.id ? { borderColor: 'rgba(251,191,36,0.5)', color: '#fbbf24' } : undefined}
+                    >
+                      {level.label}
+                      <span className="mindmap-fill-level-hint">{level.hint}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="mindmap-fill-copy">
+                  {fillPhase === 'fill'
+                    ? `Preencha os ${fillBlankIds.length} nós em branco e clique em Finalizar.`
+                    : `Respostas reveladas. Marque cada nó como acerto ou erro (${fillMarked}/${fillBlankIds.length}).`}
+                </p>
+                {fillPhase === 'fill' ? (
+                  <button type="button" className="mindmap-fill-cta" onClick={revealFillAnswers}>
+                    Finalizar
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="mindmap-fill-cta"
+                    disabled={!fillReady}
+                    onClick={commitFillStudy}
+                  >
+                    {fillReady
+                      ? `Registrar estudo · ${fillHits}/${fillBlankIds.length} acertos`
+                      : 'Marque acerto ou erro em cada nó'}
+                  </button>
+                )}
+              </div>
+              <MindMapCanvas
+                map={{ ...liveMap, nodes: (liveMap.nodes || []).map(n => ({ ...n, collapsed: false })) }}
+                readOnly
+                fullscreen={fullscreen}
+                onToggleFullscreen={() => setFullscreen(v => !v)}
+                fillMode={{
+                  blankIds: fillBlankSet,
+                  answers: fillAnswers,
+                  verdicts: fillVerdicts,
+                  phase: fillPhase,
+                  onChange: handleFillAnswer,
+                  onVerdict: handleFillVerdict
+                }}
+              />
+            </div>
+          )
+        ) : dueQueue.length === 0 ? (
           <div className="glass-panel" style={{ padding: '40px 20px', textAlign: 'center', color: '#64748b' }}>
             <Brain size={40} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
             <p>Este mapa ainda não tem ramos para estudar. Volte ao editor e ramifique o núcleo.</p>
@@ -1926,7 +2124,7 @@ export function MindMapsView({
             </p>
             <button
               type="button"
-              onClick={finishStudy}
+              onClick={() => finishStudy()}
               style={{
                 padding: '12px 22px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 800,
                 background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#000'
