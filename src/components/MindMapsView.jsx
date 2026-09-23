@@ -941,6 +941,12 @@ export function MindMapsView({
   const [draftLinkLabel, setDraftLinkLabel] = useState('');
   const [linkError, setLinkError] = useState('');
   const [localNodes, setLocalNodes] = useState(null);
+  const draftOwnerIdRef = useRef(null);
+  const draftLabelRef = useRef('');
+  const draftNotesRef = useRef('');
+  const lastSavedDraftRef = useRef({ id: null, label: '', notes: '' });
+  const draftLinkOwnerIdRef = useRef(null);
+  const draftLinkLabelRef = useRef('');
 
   const [studyMode, setStudyMode] = useState('branches');
   const [studyIndex, setStudyIndex] = useState(0);
@@ -1013,16 +1019,56 @@ export function MindMapsView({
     setLocalNodes(null);
   }, [liveMap?.updatedAt, liveMap?.nodes?.length, liveMap?.crossLinks?.length]);
 
+  const persistNodeDraft = (nodeId) => {
+    if (!editorMap || !nodeId) return;
+    const node = (editorMap.nodes || []).find(n => n.id === nodeId);
+    if (!node) return;
+    const label = (draftLabelRef.current || '').trim() || node.label;
+    const notes = draftNotesRef.current || '';
+    const last = lastSavedDraftRef.current;
+    if (last.id === nodeId && last.label === label && last.notes === notes) return;
+    lastSavedDraftRef.current = { id: nodeId, label, notes };
+    if (label === (node.label || '') && notes === (node.notes || '')) return;
+    onUpdateNode(editorMap.id, nodeId, { label, notes });
+    if (nodeId === editorMap.rootId && onUpdateMap && label !== editorMap.title) {
+      onUpdateMap(editorMap.id, { title: label, rootLabel: label });
+    }
+  };
+
+  const persistLinkDraft = (linkId) => {
+    if (!editorMap || !linkId || !onUpdateCrossLink) return;
+    const link = (editorMap.crossLinks || []).find(l => l.id === linkId);
+    if (!link) return;
+    const label = draftLinkLabelRef.current || '';
+    if ((link.label || '') === label) return;
+    onUpdateCrossLink(editorMap.id, linkId, { label });
+  };
+
   useEffect(() => {
+    const prevId = draftOwnerIdRef.current;
+    if (prevId && prevId !== selectedNode?.id) persistNodeDraft(prevId);
     if (selectedNode) {
-      setDraftLabel(selectedNode.label || '');
-      setDraftNotes(selectedNode.notes || '');
+      const label = selectedNode.label || '';
+      const notes = selectedNode.notes || '';
+      setDraftLabel(label);
+      setDraftNotes(notes);
+      draftOwnerIdRef.current = selectedNode.id;
+      draftLabelRef.current = label;
+      draftNotesRef.current = notes;
+      lastSavedDraftRef.current = { id: selectedNode.id, label, notes };
+    } else {
+      draftOwnerIdRef.current = null;
     }
   }, [selectedNode?.id]);
 
   useEffect(() => {
-    setDraftLinkLabel(selectedLink?.label || '');
+    const prevId = draftLinkOwnerIdRef.current;
+    if (prevId && prevId !== selectedLink?.id) persistLinkDraft(prevId);
+    const label = selectedLink?.label || '';
+    setDraftLinkLabel(label);
     setLinkError('');
+    draftLinkOwnerIdRef.current = selectedLink?.id || null;
+    draftLinkLabelRef.current = label;
   }, [selectedLink?.id]);
 
   const matchingCategoryIds = useMemo(() => {
@@ -1168,15 +1214,7 @@ export function MindMapsView({
   };
 
   const handleSaveNode = () => {
-    if (!editorMap || !selectedNode) return;
-    const label = draftLabel.trim() || selectedNode.label;
-    onUpdateNode(editorMap.id, selectedNode.id, {
-      label,
-      notes: draftNotes
-    });
-    if (selectedNode.id === editorMap.rootId && onUpdateMap && label !== editorMap.title) {
-      onUpdateMap(editorMap.id, { title: label, rootLabel: label });
-    }
+    persistNodeDraft(draftOwnerIdRef.current);
   };
 
   const handleAddChild = (parentId) => {
@@ -1187,10 +1225,14 @@ export function MindMapsView({
   const handleSelectNode = (nodeIdOrIds, options = {}) => {
     if (nodeIdOrIds == null || (Array.isArray(nodeIdOrIds) && nodeIdOrIds.length === 0)) {
       if (options.marquee && options.additive) return;
+      persistNodeDraft(draftOwnerIdRef.current);
+      persistLinkDraft(draftLinkOwnerIdRef.current);
       setSelectedIds([]);
       return;
     }
     const incoming = Array.isArray(nodeIdOrIds) ? nodeIdOrIds.filter(Boolean) : [nodeIdOrIds];
+    persistNodeDraft(draftOwnerIdRef.current);
+    persistLinkDraft(draftLinkOwnerIdRef.current);
     setSelectedLinkId(null);
     setSelectedBranchId(null);
     setSelectedIds((prev) => {
@@ -1230,6 +1272,8 @@ export function MindMapsView({
   };
 
   const handleSelectLink = (linkId) => {
+    persistNodeDraft(draftOwnerIdRef.current);
+    persistLinkDraft(draftLinkOwnerIdRef.current);
     setSelectedLinkId(linkId);
     if (linkId) {
       setSelectedIds([]);
@@ -1239,6 +1283,8 @@ export function MindMapsView({
   };
 
   const handleSelectBranch = (nodeId) => {
+    persistNodeDraft(draftOwnerIdRef.current);
+    persistLinkDraft(draftLinkOwnerIdRef.current);
     setSelectedBranchId(nodeId);
     if (nodeId) {
       setSelectedIds([]);
@@ -1300,8 +1346,7 @@ export function MindMapsView({
   };
 
   const handleSaveLink = () => {
-    if (!editorMap || !selectedLink || !onUpdateCrossLink) return;
-    onUpdateCrossLink(editorMap.id, selectedLink.id, { label: draftLinkLabel });
+    persistLinkDraft(draftLinkOwnerIdRef.current);
   };
 
   const studyQueue = useMemo(() => {
@@ -1502,7 +1547,11 @@ export function MindMapsView({
                 <label style={labelStyle}>Rótulo (opcional)</label>
                 <input
                   value={draftLinkLabel}
-                  onChange={(e) => setDraftLinkLabel(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    draftLinkLabelRef.current = value;
+                    setDraftLinkLabel(value);
+                  }}
                   onBlur={handleSaveLink}
                   placeholder="ex: causa, exceção, vs."
                   style={inputStyle}
@@ -1570,8 +1619,13 @@ export function MindMapsView({
                   </>
                 ) : (
                   <input
+                    key={selectedNode.id}
                     value={draftLabel}
-                    onChange={(e) => setDraftLabel(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      draftLabelRef.current = value;
+                      setDraftLabel(value);
+                    }}
                     onBlur={handleSaveNode}
                     style={inputStyle}
                   />
@@ -1612,8 +1666,13 @@ export function MindMapsView({
                 </div>
                 {!multiSelected && (
                   <textarea
+                    key={`${selectedNode.id}-notes`}
                     value={draftNotes}
-                    onChange={(e) => setDraftNotes(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      draftNotesRef.current = value;
+                      setDraftNotes(value);
+                    }}
                     onBlur={handleSaveNode}
                     placeholder="Anotação, artigo, pegadinha, exemplo..."
                     rows={6}
