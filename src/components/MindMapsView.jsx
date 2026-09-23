@@ -99,30 +99,57 @@ function hashStr(value) {
   return h;
 }
 
-function taperBranchPath(fromNode, toNode, depth, linkId, fromFont, toFont) {
+function branchGeometry(fromNode, toNode, fromFont, toFont, curve, linkId) {
   const start = nodeAnchor(fromNode, toNode, fromFont);
   const end = nodeAnchor(toNode, fromNode, toFont);
+  const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+  if (curve && Number.isFinite(Number(curve.x)) && Number.isFinite(Number(curve.y))) {
+    return {
+      start,
+      end,
+      mid,
+      control: { x: mid.x + Number(curve.x), y: mid.y + Number(curve.y) }
+    };
+  }
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const len = Math.hypot(dx, dy) || 1;
   const nx = -dy / len;
   const ny = dx / len;
+  const sign = hashStr(linkId || '') % 2 === 0 ? 1 : -1;
+  const bulge = Math.min(56, Math.max(16, len * 0.2)) * sign;
+  return {
+    start,
+    end,
+    mid,
+    control: { x: mid.x + nx * bulge, y: mid.y + ny * bulge }
+  };
+}
+
+function curveOffsetFromPointer(fromNode, toNode, fromFont, toFont, world) {
+  const start = nodeAnchor(fromNode, toNode, fromFont);
+  const end = nodeAnchor(toNode, fromNode, toFont);
+  const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+  return {
+    x: Math.round(2 * ((world?.x || 0) - mid.x)),
+    y: Math.round(2 * ((world?.y || 0) - mid.y))
+  };
+}
+
+function taperBranchPath(fromNode, toNode, depth, linkId, fromFont, toFont, curve) {
+  const { start, end, control } = branchGeometry(fromNode, toNode, fromFont, toFont, curve, linkId);
   const startW = Math.max(3.2, 16.5 - Math.max(0, depth - 1) * 3.15);
   const endW = Math.max(1.2, startW * 0.28);
-  const sign = hashStr(linkId) % 2 === 0 ? 1 : -1;
-  const bulge = Math.min(56, Math.max(16, len * 0.2)) * sign;
-  const cx = (start.x + end.x) / 2 + nx * bulge;
-  const cy = (start.y + end.y) / 2 + ny * bulge;
   const steps = 10;
   const left = [];
   const right = [];
   for (let i = 0; i <= steps; i += 1) {
     const t = i / steps;
     const u = 1 - t;
-    const px = u * u * start.x + 2 * u * t * cx + t * t * end.x;
-    const py = u * u * start.y + 2 * u * t * cy + t * t * end.y;
-    const tx = 2 * u * (cx - start.x) + 2 * t * (end.x - cx);
-    const ty = 2 * u * (cy - start.y) + 2 * t * (end.y - cy);
+    const px = u * u * start.x + 2 * u * t * control.x + t * t * end.x;
+    const py = u * u * start.y + 2 * u * t * control.y + t * t * end.y;
+    const tx = 2 * u * (control.x - start.x) + 2 * t * (end.x - control.x);
+    const ty = 2 * u * (control.y - start.y) + 2 * t * (end.y - control.y);
     const tl = Math.hypot(tx, ty) || 1;
     const ox = -ty / tl;
     const oy = tx / tl;
@@ -131,6 +158,15 @@ function taperBranchPath(fromNode, toNode, depth, linkId, fromFont, toFont) {
     right.push(`${px - ox * (w / 2)} ${py - oy * (w / 2)}`);
   }
   return `M ${left.join(' L ')} L ${right.reverse().join(' L ')} Z`;
+}
+
+function branchCenterline(fromNode, toNode, fromFont, toFont, curve, linkId) {
+  const { start, end, control } = branchGeometry(fromNode, toNode, fromFont, toFont, curve, linkId);
+  return {
+    d: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`,
+    mid: quadraticPoint(start, control, end, 0.5),
+    control
+  };
 }
 
 function quadraticPoint(start, control, end, t = 0.5) {
@@ -167,10 +203,13 @@ function MindMapCanvas({
   selectedId,
   selectedIds = [],
   selectedLinkId,
+  selectedBranchId = null,
   onSelect,
   onSelectLink,
+  onSelectBranch,
   onMoveNode,
   onCommitMoves,
+  onBendBranch,
   onAddChild,
   linkingFromId = null,
   onLinkTarget,
@@ -253,6 +292,7 @@ function MindMapCanvas({
     };
     if (onSelect) onSelect(null);
     if (onSelectLink) onSelectLink(null);
+    if (onSelectBranch) onSelectBranch(null);
   };
 
   const onPointerDownNode = (e, node) => {
@@ -266,6 +306,7 @@ function MindMapCanvas({
     const keepGroup = !additive && !range && selectedIdSet.has(node.id) && selectedIdSet.size > 1;
     if (onSelect && !keepGroup) onSelect(node.id, { additive, range });
     if (onSelectLink) onSelectLink(null);
+    if (onSelectBranch) onSelectBranch(null);
     if (readOnly || additive || range) return;
     const movingIds = keepGroup ? [...selectedIdSet] : [node.id];
     const origins = {};
@@ -301,6 +342,12 @@ function MindMapCanvas({
         const world = toWorld(e.clientX, e.clientY);
         drag.current = world;
         setMarquee({ x1: drag.start.x, y1: drag.start.y, x2: world.x, y2: world.y });
+      } else if (drag.kind === 'branch' && onBendBranch) {
+        const world = toWorld(e.clientX, e.clientY);
+        const curve = curveOffsetFromPointer(drag.from, drag.to, drag.fromFont, drag.toFont, world);
+        if (!drag.lastCurve || curve.x !== drag.lastCurve.x || curve.y !== drag.lastCurve.y) drag.moved = true;
+        drag.lastCurve = curve;
+        onBendBranch(drag.nodeId, curve, false);
       } else if (drag.kind === 'node' && onMoveNode) {
         const world = toWorld(e.clientX, e.clientY);
         const dx = Math.round(world.x - drag.start.x);
@@ -330,6 +377,8 @@ function MindMapCanvas({
         else if (onMoveNode) {
           moves.forEach((move) => onMoveNode(move.id, { x: move.x, y: move.y }, true));
         }
+      } else if (drag?.kind === 'branch' && drag.moved && onBendBranch) {
+        onBendBranch(drag.nodeId, drag.lastCurve, true);
       } else if (drag?.kind === 'node' && drag.collapseOnClick && onSelect) {
         onSelect(drag.id);
       } else if (drag?.kind === 'marquee' && onSelect) {
@@ -362,7 +411,7 @@ function MindMapCanvas({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [map, onMoveNode, onSelect, pan.x, pan.y, zoom, visible]);
+  }, [map, onMoveNode, onBendBranch, onSelect, pan.x, pan.y, zoom, visible]);
 
   return (
     <div
@@ -379,28 +428,62 @@ function MindMapCanvas({
         </defs>
         <rect width="100%" height="100%" fill="url(#mm-grid)" data-role="canvas" />
         <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
-          {links.map((link) => (
-            lineStyle === 'taper' ? (
-              <path
-                key={link.id}
-                d={taperBranchPath(link.from, link.to, link.depth, link.id, fontFor(link.from), fontFor(link.to))}
-                fill={link.to.color || '#64748b'}
-                opacity="0.82"
-                stroke={link.to.color || '#64748b'}
-                strokeWidth="0.4"
-                strokeLinejoin="round"
-              />
-            ) : (
-              <path
-                key={link.id}
-                d={`M ${link.from.x} ${link.from.y} Q ${(link.from.x + link.to.x) / 2} ${(link.from.y + link.to.y) / 2 - 24} ${link.to.x} ${link.to.y}`}
-                fill="none"
-                stroke={link.to.color || '#64748b'}
-                strokeWidth={Math.max(1.4, 4.2 - (link.depth - 1) * 0.7)}
-                opacity="0.7"
-              />
-            )
-          ))}
+          {links.map((link) => {
+            const fromFont = fontFor(link.from);
+            const toFont = fontFor(link.to);
+            const selected = selectedBranchId === link.to.id;
+            const color = link.to.color || '#64748b';
+            const visiblePath = lineStyle === 'taper'
+              ? taperBranchPath(link.from, link.to, link.depth, link.id, fromFont, toFont, link.to.curve)
+              : branchCenterline(link.from, link.to, fromFont, toFont, link.to.curve, link.id).d;
+            const hitPath = branchCenterline(link.from, link.to, fromFont, toFont, link.to.curve, link.id);
+            return (
+              <g key={link.id}>
+                {lineStyle === 'taper' ? (
+                  <path
+                    d={visiblePath}
+                    fill={color}
+                    opacity={selected ? 0.95 : 0.82}
+                    stroke={selected ? '#fbbf24' : color}
+                    strokeWidth={selected ? 1.2 : 0.4}
+                    strokeLinejoin="round"
+                  />
+                ) : (
+                  <path
+                    d={visiblePath}
+                    fill="none"
+                    stroke={selected ? '#fbbf24' : color}
+                    strokeWidth={selected ? Math.max(2.6, 5.1 - (link.depth - 1) * 0.7) : Math.max(1.4, 4.2 - (link.depth - 1) * 0.7)}
+                    opacity={selected ? 0.95 : 0.7}
+                  />
+                )}
+                <path
+                  d={hitPath.d}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth="18"
+                  style={{ cursor: readOnly ? 'default' : 'pointer' }}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    if (onSelectBranch) onSelectBranch(link.to.id);
+                    if (onSelect) onSelect(null);
+                    if (onSelectLink) onSelectLink(null);
+                    if (readOnly || !onBendBranch) return;
+                    dragRef.current = {
+                      kind: 'branch',
+                      nodeId: link.to.id,
+                      from: link.from,
+                      to: link.to,
+                      fromFont,
+                      toFont,
+                      lastCurve: link.to.curve || { x: 0, y: 0 },
+                      moved: false
+                    };
+                  }}
+                />
+              </g>
+            );
+          })}
           {crossLinks.map((link) => {
             const curve = crossLinkCurve(link.from, link.to, fontFor(link.from), fontFor(link.to));
             const selected = selectedLinkId === link.id;
@@ -426,6 +509,7 @@ function MindMapCanvas({
                     e.stopPropagation();
                     if (onSelectLink) onSelectLink(link.id);
                     if (onSelect) onSelect(null);
+                    if (onSelectBranch) onSelectBranch(null);
                   }}
                 />
               </g>
@@ -453,11 +537,49 @@ function MindMapCanvas({
                 e.stopPropagation();
                 if (onSelectLink) onSelectLink(link.id);
                 if (onSelect) onSelect(null);
+                if (onSelectBranch) onSelectBranch(null);
               }}
             >
               {link.icon ? <MindMapIcon name={link.icon} size={12} color={link.color || '#7dd3fc'} /> : null}
               {link.label ? <span>{link.label}</span> : null}
             </button>
+          );
+        })}
+        {links.map((link) => {
+          if (selectedBranchId !== link.to.id) return null;
+          const handle = branchCenterline(
+            link.from,
+            link.to,
+            fontFor(link.from),
+            fontFor(link.to),
+            link.to.curve,
+            link.id
+          );
+          return (
+            <button
+              key={`${link.id}-handle`}
+              type="button"
+              className="mindmap-curve-handle"
+              style={{ left: handle.mid.x, top: handle.mid.y }}
+              title="Arraste para curvar o galho"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                if (onSelectBranch) onSelectBranch(link.to.id);
+                if (onSelect) onSelect(null);
+                if (onSelectLink) onSelectLink(null);
+                if (readOnly || !onBendBranch) return;
+                dragRef.current = {
+                  kind: 'branch',
+                  nodeId: link.to.id,
+                  from: link.from,
+                  to: link.to,
+                  fromFont: fontFor(link.from),
+                  toFont: fontFor(link.to),
+                  lastCurve: link.to.curve || { x: 0, y: 0 },
+                  moved: false
+                };
+              }}
+            />
           );
         })}
         {visible.map((node) => {
@@ -531,7 +653,7 @@ function MindMapCanvas({
       )}
       {!readOnly && !linkingFromId && (
         <div className="mindmap-select-hint">
-          Ctrl/Cmd+clique ou Shift+arrastar para selecionar vários
+          Ctrl/Cmd+clique para vários · arraste um galho para desviar o caminho
         </div>
       )}
       <div className="mindmap-zoom">
@@ -594,6 +716,7 @@ export function MindMapsView({
   const [pendingMap, setPendingMap] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [selectedLinkId, setSelectedLinkId] = useState(null);
+  const [selectedBranchId, setSelectedBranchId] = useState(null);
   const [linkingFromId, setLinkingFromId] = useState(null);
   const [draftLabel, setDraftLabel] = useState('');
   const [draftNotes, setDraftNotes] = useState('');
@@ -641,6 +764,12 @@ export function MindMapsView({
   const multiSelected = selectedNodes.length > 1;
   const selectedLink = editorMap && selectedLinkId
     ? (editorMap.crossLinks || []).find(l => l.id === selectedLinkId)
+    : null;
+  const selectedBranch = editorMap && selectedBranchId
+    ? (editorMap.nodes || []).find(n => n.id === selectedBranchId)
+    : null;
+  const selectedBranchParent = selectedBranch?.parentId
+    ? (editorMap.nodes || []).find(n => n.id === selectedBranch.parentId)
     : null;
   const selectedNodeFont = selectedNode
     ? mindMapNodeFontSize(nodeDepth(editorMap, selectedNode.id), !!editorMap.scaleFontByDepth, selectedNode.fontSize)
@@ -699,12 +828,17 @@ export function MindMapsView({
   const groupedMaps = groupMapsByCategory(filteredMaps, categories);
 
   useEffect(() => {
-    if (!fullscreen && !linkingFromId && selectedIds.length <= 1) return undefined;
+    if (!fullscreen && !linkingFromId && selectedIds.length <= 1 && !selectedBranchId) return undefined;
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
       if (linkingFromId) {
         e.preventDefault();
         cancelLinking();
+        return;
+      }
+      if (selectedBranchId) {
+        e.preventDefault();
+        setSelectedBranchId(null);
         return;
       }
       if (selectedIds.length > 1) {
@@ -721,7 +855,7 @@ export function MindMapsView({
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [fullscreen, linkingFromId, selectedIds.length, selectedId]);
+  }, [fullscreen, linkingFromId, selectedIds.length, selectedId, selectedBranchId]);
 
   const dueCount = maps.reduce((acc, m) => acc + (computeMapStats(m, { today: todayStr }).dueBranches || 0), 0);
   const sessions = mindMapSessions || [];
@@ -730,6 +864,7 @@ export function MindMapsView({
     setActiveMapId(map.id);
     setSelectedIds(map.rootId ? [map.rootId] : []);
     setSelectedLinkId(null);
+    setSelectedBranchId(null);
     setLinkingFromId(null);
     setLocalNodes(null);
     setView('editor');
@@ -839,6 +974,7 @@ export function MindMapsView({
     }
     const incoming = Array.isArray(nodeIdOrIds) ? nodeIdOrIds.filter(Boolean) : [nodeIdOrIds];
     setSelectedLinkId(null);
+    setSelectedBranchId(null);
     setSelectedIds((prev) => {
       if (options.marquee) {
         if (options.additive) {
@@ -877,8 +1013,38 @@ export function MindMapsView({
 
   const handleSelectLink = (linkId) => {
     setSelectedLinkId(linkId);
-    if (linkId) setSelectedIds([]);
+    if (linkId) {
+      setSelectedIds([]);
+      setSelectedBranchId(null);
+    }
     setLinkingFromId(null);
+  };
+
+  const handleSelectBranch = (nodeId) => {
+    setSelectedBranchId(nodeId);
+    if (nodeId) {
+      setSelectedIds([]);
+      setSelectedLinkId(null);
+      setLinkingFromId(null);
+    }
+  };
+
+  const handleBendBranch = (nodeId, curve, commit) => {
+    if (!editorMap || !nodeId) return;
+    setLocalNodes((prev) => {
+      const base = prev || editorMap.nodes;
+      return base.map(n => (n.id === nodeId ? { ...n, curve } : n));
+    });
+    if (commit && onUpdateNode) onUpdateNode(editorMap.id, nodeId, { curve });
+  };
+
+  const handleResetBranchCurve = () => {
+    if (!editorMap || !selectedBranchId) return;
+    setLocalNodes((prev) => {
+      const base = prev || editorMap.nodes;
+      return base.map(n => (n.id === selectedBranchId ? { ...n, curve: null } : n));
+    });
+    onUpdateNode?.(editorMap.id, selectedBranchId, { curve: null });
   };
 
   const startLinkFromSelected = () => {
@@ -1069,10 +1235,13 @@ export function MindMapsView({
             selectedId={selectedId}
             selectedIds={selectedIds}
             selectedLinkId={selectedLinkId}
+            selectedBranchId={selectedBranchId}
             onSelect={handleSelectNode}
             onSelectLink={handleSelectLink}
+            onSelectBranch={handleSelectBranch}
             onMoveNode={handleMoveNode}
             onCommitMoves={handleCommitMoves}
+            onBendBranch={handleBendBranch}
             onAddChild={handleAddChild}
             linkingFromId={linkingFromId}
             onLinkTarget={handleLinkTarget}
@@ -1080,7 +1249,29 @@ export function MindMapsView({
             onToggleFullscreen={() => setFullscreen(v => !v)}
           />
           <aside className="glass-panel mindmap-side">
-            {selectedLink ? (
+            {selectedBranch && selectedBranchParent ? (
+              <>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
+                  Galho selecionado
+                </div>
+                <p style={{ color: '#cbd5e1', fontSize: '0.85rem', marginBottom: 10, lineHeight: 1.45 }}>
+                  {selectedBranchParent.label} → {selectedBranch.label}
+                </p>
+                <p style={{ color: '#94a3b8', fontSize: '0.8rem', margin: '0 0 12px', lineHeight: 1.45 }}>
+                  Arraste a linha para desviá-la de outros ramos. O caminho fica salvo neste galho.
+                </p>
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="mindmap-ghost-btn"
+                    disabled={!selectedBranch.curve}
+                    onClick={handleResetBranchCurve}
+                  >
+                    <RotateCcw size={14} /> Restaurar curva natural
+                  </button>
+                </div>
+              </>
+            ) : selectedLink ? (
               <>
                 <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
                   Ligação entre ramos
@@ -1316,7 +1507,7 @@ export function MindMapsView({
               </>
             ) : (
               <p style={{ color: '#94a3b8', fontSize: '0.88rem' }}>
-                Clique em um ramo para editar, anotar ou ramificar. Ctrl/Cmd+clique ou Shift+arrastar no fundo seleciona vários para mudar cor, fonte e ícone juntos. Para ligar ideias de ramos diferentes, selecione um e use “Ligar a outro ramo”.
+                Clique em um ramo para editar, anotar ou ramificar. Arraste um galho para desviar o caminho. Ctrl/Cmd+clique ou Shift+arrastar no fundo seleciona vários para mudar cor, fonte e ícone juntos.
               </p>
             )}
           </aside>

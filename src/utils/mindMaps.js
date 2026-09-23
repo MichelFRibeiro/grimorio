@@ -29,6 +29,17 @@ export const MIND_MAP_MIN_FONT_SIZE = 10;
 export const MIND_MAP_MAX_FONT_SIZE = 32;
 export const MIND_MAP_FONT_STEP = 1;
 export const MIND_MAP_DEPTH_FONT_SIZES = [20, 16.5, 14, 12.5, 11.5, 10.5];
+export const MIND_MAP_MAX_CURVE_OFFSET = 720;
+
+export function sanitizeMindMapCurve(value) {
+  if (value == null || value === false) return null;
+  if (typeof value !== 'object') return null;
+  if (!Number.isFinite(Number(value.x)) || !Number.isFinite(Number(value.y))) return null;
+  return {
+    x: Math.max(-MIND_MAP_MAX_CURVE_OFFSET, Math.min(MIND_MAP_MAX_CURVE_OFFSET, Math.round(Number(value.x)))),
+    y: Math.max(-MIND_MAP_MAX_CURVE_OFFSET, Math.min(MIND_MAP_MAX_CURVE_OFFSET, Math.round(Number(value.y))))
+  };
+}
 
 export function sanitizeMindMapNodeFontSize(value, fallback = null) {
   if (value == null || value === '') return fallback;
@@ -105,6 +116,7 @@ export function createMindMapNode({
   x = 0,
   y = 0,
   collapsed = false,
+  curve = null,
   fontSize = null,
   ease = 2.5,
   interval = 0,
@@ -125,6 +137,7 @@ export function createMindMapNode({
     x: clampNumber(x, 0),
     y: clampNumber(y, 0),
     collapsed: !!collapsed,
+    curve: sanitizeMindMapCurve(curve),
     fontSize: sanitizeMindMapNodeFontSize(fontSize, null),
     ease: Math.max(1.3, clampNumber(ease, 2.5)),
     interval: Math.max(0, Math.round(clampNumber(interval, 0))),
@@ -402,6 +415,7 @@ export function updateMindMapNode(map, nodeId, patch = {}) {
   if (patch.x !== undefined) next.x = clampNumber(patch.x, current.x);
   if (patch.y !== undefined) next.y = clampNumber(patch.y, current.y);
   if (patch.collapsed !== undefined) next.collapsed = !!patch.collapsed;
+  if (patch.curve !== undefined) next.curve = patch.curve === null ? null : sanitizeMindMapCurve(patch.curve);
   if (patch.fontSize !== undefined) {
     next.fontSize = sanitizeMindMapNodeFontSize(patch.fontSize, null);
   } else if (patch.fontSizeDelta !== undefined) {
@@ -634,7 +648,11 @@ export function layoutMindMap(map, { radius = 200 } = {}) {
   };
 
   place(root, -Math.PI, Math.PI, radius);
-  return { ...map, updatedAt: new Date().toISOString(), nodes };
+  return {
+    ...map,
+    updatedAt: new Date().toISOString(),
+    nodes: nodes.map(n => ({ ...n, curve: null }))
+  };
 }
 
 export function visibleNodeIds(map) {

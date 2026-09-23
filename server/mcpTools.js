@@ -1454,7 +1454,7 @@ export const toolsDefinition = [
   },
   {
     name: 'update_mind_map_node',
-    description: 'Atualizar o texto, anotação, cor, ícone, imagem, tamanho da fonte ou posição de um ramo.',
+    description: 'Atualizar o texto, anotação, cor, ícone, imagem, tamanho da fonte, curva do galho ou posição de um ramo.',
     schema: {
       mapId: z.string().describe('ID do mapa'),
       nodeId: z.string().describe('ID do ramo'),
@@ -1464,7 +1464,11 @@ export const toolsDefinition = [
       icon: z.string().optional().describe('Nome do ícone Lucide (vazio para remover)'),
       imageUrl: z.string().optional().describe('URL ou data URI da imagem (vazio para remover)'),
       collapsed: z.boolean().optional(),
-      fontSize: z.number().optional().describe('Tamanho da fonte do ramo em pixels (10 a 32)')
+      fontSize: z.number().optional().describe('Tamanho da fonte do ramo em pixels (10 a 32)'),
+      curve: z.object({
+        x: z.number(),
+        y: z.number()
+      }).nullable().optional().describe('Desvio do galho em relação ao meio da ligação (null restaura a curva natural)')
     },
     handler: async (args) => {
       const db = getDb();

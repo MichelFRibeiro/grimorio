@@ -838,6 +838,20 @@ img, video, canvas {
   border-width: 2.4px;
 }
 
+.mindmap-curve-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid #fbbf24;
+  background: rgba(12, 16, 24, 0.95);
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.45);
+  cursor: grab;
+  pointer-events: auto;
+  z-index: 5;
+}
+
 .mindmap-cross-label {
   position: absolute;
   transform: translate(-50%, -50%);

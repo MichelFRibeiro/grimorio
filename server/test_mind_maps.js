@@ -180,6 +180,14 @@ function runTests() {
   assert(stepMindMapNodeFontSize(MIND_MAP_BASE_FONT_SIZE, 1) === MIND_MAP_BASE_FONT_SIZE + 1, 'Aumenta a fonte do ramo em 1px');
   const sized = updateMindMapNode(map, map.rootId, { fontSize: 20 });
   assert(getRootNode(sized).fontSize === 20, 'Persiste tamanho de fonte no ramo');
+  const curvedChild = childrenOf(withOrg, withOrg.rootId)[0];
+  const bent = updateMindMapNode(withOrg, curvedChild.id, { curve: { x: -80, y: 40 } });
+  assert(bent.nodes.find(n => n.id === curvedChild.id).curve.x === -80, 'Persiste desvio do galho');
+  const straightened = updateMindMapNode(bent, curvedChild.id, { curve: null });
+  assert(straightened.nodes.find(n => n.id === curvedChild.id).curve === null, 'Restaura a curva natural do galho');
+  const laidCurves = layoutMindMap(bent);
+  assert(laidCurves.nodes.every(n => !n.curve), 'Organizar layout limpa desvios dos galhos');
+  assert(sanitizeMindMap({ title: 'X', nodes: [{ label: 'X', curve: { x: 12.4, y: -3.2 } }] }).nodes[0].curve.x === 12, 'Sanitize arredonda o desvio do galho');
   const batchBase = addMindMapNode(addMindMapNode(map, { parentId: map.rootId, label: 'Ramo A' }), { parentId: map.rootId, label: 'Ramo B' });
   const batchIds = childrenOf(batchBase, batchBase.rootId).map(n => n.id);
   const batched = updateMindMapNodes(batchBase, batchIds, { color: '#10b981', fontSize: 18 });
