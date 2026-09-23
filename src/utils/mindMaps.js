@@ -30,15 +30,48 @@ export const MIND_MAP_MAX_FONT_SIZE = 32;
 export const MIND_MAP_FONT_STEP = 1;
 export const MIND_MAP_DEPTH_FONT_SIZES = [20, 16.5, 14, 12.5, 11.5, 10.5];
 export const MIND_MAP_MAX_CURVE_OFFSET = 720;
+export const MIND_MAP_CURVE_SIDES = ['left', 'right', 'top', 'bottom'];
+export const MIND_MAP_CURVE_POINT_COUNT = 3;
+
+function clampCurveOffset(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(-MIND_MAP_MAX_CURVE_OFFSET, Math.min(MIND_MAP_MAX_CURVE_OFFSET, Math.round(n)));
+}
+
+function sanitizeMindMapCurveAnchor(value) {
+  if (!value || typeof value !== 'object') return null;
+  const side = MIND_MAP_CURVE_SIDES.includes(value.side) ? value.side : null;
+  if (!side) return null;
+  const t = Number(value.t);
+  const clamped = Number.isFinite(t) ? Math.max(0, Math.min(1, t)) : 0.5;
+  return { side, t: Math.round(clamped * 1000) / 1000 };
+}
+
+function sanitizeMindMapCurvePoint(value) {
+  if (!value || typeof value !== 'object') return null;
+  if (!Number.isFinite(Number(value.x)) || !Number.isFinite(Number(value.y))) return null;
+  return { x: clampCurveOffset(value.x), y: clampCurveOffset(value.y) };
+}
 
 export function sanitizeMindMapCurve(value) {
   if (value == null || value === false) return null;
   if (typeof value !== 'object') return null;
-  if (!Number.isFinite(Number(value.x)) || !Number.isFinite(Number(value.y))) return null;
-  return {
-    x: Math.max(-MIND_MAP_MAX_CURVE_OFFSET, Math.min(MIND_MAP_MAX_CURVE_OFFSET, Math.round(Number(value.x)))),
-    y: Math.max(-MIND_MAP_MAX_CURVE_OFFSET, Math.min(MIND_MAP_MAX_CURVE_OFFSET, Math.round(Number(value.y))))
-  };
+  const from = sanitizeMindMapCurveAnchor(value.from);
+  const to = sanitizeMindMapCurveAnchor(value.to);
+  let points = Array.isArray(value.points)
+    ? value.points.map(sanitizeMindMapCurvePoint).filter(Boolean).slice(0, MIND_MAP_CURVE_POINT_COUNT)
+    : [];
+  if (!points.length && Number.isFinite(Number(value.x)) && Number.isFinite(Number(value.y))) {
+    const legacy = sanitizeMindMapCurvePoint({ x: value.x, y: value.y });
+    if (legacy) points = [legacy];
+  }
+  if (!from && !to && !points.length) return null;
+  const next = {};
+  if (from) next.from = from;
+  if (to) next.to = to;
+  if (points.length) next.points = points;
+  return next;
 }
 
 export function sanitizeMindMapNodeFontSize(value, fallback = null) {

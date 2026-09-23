@@ -80,14 +80,66 @@ function nodeSize(node = {}, fontSize = 14) {
   return { w, h };
 }
 
-function nodeAnchor(node, toward, fontSize) {
+function nodeRect(node, fontSize) {
   const { w, h } = nodeSize(node, fontSize);
+  return {
+    w,
+    h,
+    left: (node?.x || 0) - w / 2,
+    right: (node?.x || 0) + w / 2,
+    top: (node?.y || 0) - h / 2,
+    bottom: (node?.y || 0) + h / 2
+  };
+}
+
+function clamp01(value, fallback = 0.5) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(1, n));
+}
+
+function pointOnNodeSide(rect, side, t) {
+  const u = clamp01(t);
+  if (side === 'left') return { x: rect.left, y: rect.top + u * rect.h };
+  if (side === 'right') return { x: rect.right, y: rect.top + u * rect.h };
+  if (side === 'top') return { x: rect.left + u * rect.w, y: rect.top };
+  return { x: rect.left + u * rect.w, y: rect.bottom };
+}
+
+function closestAnchorOnNode(node, fontSize, world) {
+  const rect = nodeRect(node, fontSize);
+  const px = world?.x || 0;
+  const py = world?.y || 0;
+  const inside = px > rect.left && px < rect.right && py > rect.top && py < rect.bottom;
+  const sides = [
+    { side: 'left', x: rect.left, y: Math.max(rect.top, Math.min(rect.bottom, py)), t: (Math.max(rect.top, Math.min(rect.bottom, py)) - rect.top) / Math.max(rect.h, 1) },
+    { side: 'right', x: rect.right, y: Math.max(rect.top, Math.min(rect.bottom, py)), t: (Math.max(rect.top, Math.min(rect.bottom, py)) - rect.top) / Math.max(rect.h, 1) },
+    { side: 'top', x: Math.max(rect.left, Math.min(rect.right, px)), y: rect.top, t: (Math.max(rect.left, Math.min(rect.right, px)) - rect.left) / Math.max(rect.w, 1) },
+    { side: 'bottom', x: Math.max(rect.left, Math.min(rect.right, px)), y: rect.bottom, t: (Math.max(rect.left, Math.min(rect.right, px)) - rect.left) / Math.max(rect.w, 1) }
+  ];
+  let best = sides[0];
+  let bestD = Infinity;
+  sides.forEach((item) => {
+    const d = inside
+      ? Math.abs(item.side === 'left' || item.side === 'right' ? px - item.x : py - item.y)
+      : Math.hypot(px - item.x, py - item.y);
+    if (d < bestD) {
+      bestD = d;
+      best = item;
+    }
+  });
+  return { side: best.side, t: Math.round(clamp01(best.t) * 1000) / 1000 };
+}
+
+function nodeAnchor(node, toward, fontSize, custom) {
+  const rect = nodeRect(node, fontSize);
+  if (custom?.side) return pointOnNodeSide(rect, custom.side, custom.t);
   const dx = (toward?.x || 0) - (node?.x || 0);
   const dy = (toward?.y || 0) - (node?.y || 0);
   if (!dx && !dy) return { x: node.x, y: node.y };
   const t = Math.min(
-    (w / 2) / Math.max(Math.abs(dx), 0.0001),
-    (h / 2) / Math.max(Math.abs(dy), 0.0001)
+    (rect.w / 2) / Math.max(Math.abs(dx), 0.0001),
+    (rect.h / 2) / Math.max(Math.abs(dy), 0.0001)
   );
   return { x: node.x + dx * t, y: node.y + dy * t };
 }
@@ -99,73 +151,10 @@ function hashStr(value) {
   return h;
 }
 
-function branchGeometry(fromNode, toNode, fromFont, toFont, curve, linkId) {
-  const start = nodeAnchor(fromNode, toNode, fromFont);
-  const end = nodeAnchor(toNode, fromNode, toFont);
-  const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-  if (curve && Number.isFinite(Number(curve.x)) && Number.isFinite(Number(curve.y))) {
-    return {
-      start,
-      end,
-      mid,
-      control: { x: mid.x + Number(curve.x), y: mid.y + Number(curve.y) }
-    };
-  }
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const nx = -dy / len;
-  const ny = dx / len;
-  const sign = hashStr(linkId || '') % 2 === 0 ? 1 : -1;
-  const bulge = Math.min(56, Math.max(16, len * 0.2)) * sign;
+function lerpPoint(a, b, t) {
   return {
-    start,
-    end,
-    mid,
-    control: { x: mid.x + nx * bulge, y: mid.y + ny * bulge }
-  };
-}
-
-function curveOffsetFromPointer(fromNode, toNode, fromFont, toFont, world) {
-  const start = nodeAnchor(fromNode, toNode, fromFont);
-  const end = nodeAnchor(toNode, fromNode, toFont);
-  const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-  return {
-    x: Math.round(2 * ((world?.x || 0) - mid.x)),
-    y: Math.round(2 * ((world?.y || 0) - mid.y))
-  };
-}
-
-function taperBranchPath(fromNode, toNode, depth, linkId, fromFont, toFont, curve) {
-  const { start, end, control } = branchGeometry(fromNode, toNode, fromFont, toFont, curve, linkId);
-  const startW = Math.max(3.2, 16.5 - Math.max(0, depth - 1) * 3.15);
-  const endW = Math.max(1.2, startW * 0.28);
-  const steps = 10;
-  const left = [];
-  const right = [];
-  for (let i = 0; i <= steps; i += 1) {
-    const t = i / steps;
-    const u = 1 - t;
-    const px = u * u * start.x + 2 * u * t * control.x + t * t * end.x;
-    const py = u * u * start.y + 2 * u * t * control.y + t * t * end.y;
-    const tx = 2 * u * (control.x - start.x) + 2 * t * (end.x - control.x);
-    const ty = 2 * u * (control.y - start.y) + 2 * t * (end.y - control.y);
-    const tl = Math.hypot(tx, ty) || 1;
-    const ox = -ty / tl;
-    const oy = tx / tl;
-    const w = startW * (1 - t) + endW * t;
-    left.push(`${px + ox * (w / 2)} ${py + oy * (w / 2)}`);
-    right.push(`${px - ox * (w / 2)} ${py - oy * (w / 2)}`);
-  }
-  return `M ${left.join(' L ')} L ${right.reverse().join(' L ')} Z`;
-}
-
-function branchCenterline(fromNode, toNode, fromFont, toFont, curve, linkId) {
-  const { start, end, control } = branchGeometry(fromNode, toNode, fromFont, toFont, curve, linkId);
-  return {
-    d: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`,
-    mid: quadraticPoint(start, control, end, 0.5),
-    control
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t
   };
 }
 
@@ -174,6 +163,216 @@ function quadraticPoint(start, control, end, t = 0.5) {
   return {
     x: u * u * start.x + 2 * u * t * control.x + t * t * end.x,
     y: u * u * start.y + 2 * u * t * control.y + t * t * end.y
+  };
+}
+
+function defaultBulgeControl(start, end, linkId) {
+  const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const sign = hashStr(linkId || '') % 2 === 0 ? 1 : -1;
+  const bulge = Math.min(56, Math.max(16, len * 0.2)) * sign;
+  return {
+    x: mid.x + (-dy / len) * bulge,
+    y: mid.y + (dx / len) * bulge
+  };
+}
+
+function defaultRouteOffsets(start, end, control) {
+  return [0.25, 0.5, 0.75].map((t) => {
+    const along = quadraticPoint(start, control, end, t);
+    const chord = lerpPoint(start, end, t);
+    return { x: Math.round(along.x - chord.x), y: Math.round(along.y - chord.y) };
+  });
+}
+
+function resolvedRouteOffsets(start, end, curve, control) {
+  const defaults = defaultRouteOffsets(start, end, control);
+  const stored = Array.isArray(curve?.points) ? curve.points.filter(p => p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))) : [];
+  if (stored.length >= 3) return stored.slice(0, 3).map(p => ({ x: Number(p.x), y: Number(p.y) }));
+  if (stored.length === 1) return [defaults[0], { x: Number(stored[0].x), y: Number(stored[0].y) }, defaults[2]];
+  if (stored.length === 2) return [stored[0], stored[1], defaults[2]].map(p => ({ x: Number(p.x), y: Number(p.y) }));
+  return defaults;
+}
+
+function routeWorldPoints(start, end, offsets) {
+  return [0.25, 0.5, 0.75].map((t, i) => {
+    const chord = lerpPoint(start, end, t);
+    const off = offsets[i] || { x: 0, y: 0 };
+    return { x: chord.x + off.x, y: chord.y + off.y, t, index: i };
+  });
+}
+
+function cubicPoint(p0, c1, c2, p1, t) {
+  const u = 1 - t;
+  return {
+    x: u * u * u * p0.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * p1.x,
+    y: u * u * u * p0.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * p1.y
+  };
+}
+
+function cubicTangent(p0, c1, c2, p1, t) {
+  const u = 1 - t;
+  return {
+    x: 3 * u * u * (c1.x - p0.x) + 6 * u * t * (c2.x - c1.x) + 3 * t * t * (p1.x - c2.x),
+    y: 3 * u * u * (c1.y - p0.y) + 6 * u * t * (c2.y - c1.y) + 3 * t * t * (p1.y - c2.y)
+  };
+}
+
+function inferAnchorSide(node, fontSize, point, custom) {
+  if (custom?.side) return custom.side;
+  const rect = nodeRect(node, fontSize);
+  const scores = [
+    { side: 'left', d: Math.abs(point.x - rect.left) },
+    { side: 'right', d: Math.abs(point.x - rect.right) },
+    { side: 'top', d: Math.abs(point.y - rect.top) },
+    { side: 'bottom', d: Math.abs(point.y - rect.bottom) }
+  ];
+  return scores.sort((a, b) => a.d - b.d)[0].side;
+}
+
+function sideOutward(side, dist = 42) {
+  if (side === 'left') return { x: -dist, y: 0 };
+  if (side === 'right') return { x: dist, y: 0 };
+  if (side === 'top') return { x: 0, y: -dist };
+  if (side === 'bottom') return { x: 0, y: dist };
+  return { x: 0, y: 0 };
+}
+
+function phantomPoint(point, node, fontSize, custom) {
+  const out = sideOutward(inferAnchorSide(node, fontSize, point, custom), 48);
+  return { x: point.x + out.x, y: point.y + out.y };
+}
+
+function catmullRomSegments(points, phantomStart, phantomEnd) {
+  const segs = [];
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = i === 0 ? (phantomStart || points[i]) : points[i - 1];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = i === points.length - 2 ? (phantomEnd || p2) : (points[i + 2] || p2);
+    segs.push({
+      p0: p1,
+      c1: { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 },
+      c2: { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 },
+      p1: p2
+    });
+  }
+  return segs;
+}
+
+function sampleSegments(segments, stepsPer = 16) {
+  const samples = [];
+  segments.forEach((seg, s) => {
+    for (let i = s === 0 ? 0 : 1; i <= stepsPer; i += 1) {
+      const t = i / stepsPer;
+      const p = cubicPoint(seg.p0, seg.c1, seg.c2, seg.p1, t);
+      const tan = cubicTangent(seg.p0, seg.c1, seg.c2, seg.p1, t);
+      samples.push({ x: p.x, y: p.y, tx: tan.x, ty: tan.y });
+    }
+  });
+  return samples;
+}
+
+function pathFromSegments(segments) {
+  if (!segments.length) return '';
+  const start = segments[0].p0;
+  const rest = segments.map(seg => `C ${seg.c1.x} ${seg.c1.y} ${seg.c2.x} ${seg.c2.y} ${seg.p1.x} ${seg.p1.y}`);
+  return `M ${start.x} ${start.y} ${rest.join(' ')}`;
+}
+
+function taperFromSamples(samples, startW, endW) {
+  const left = [];
+  const right = [];
+  const last = Math.max(samples.length - 1, 1);
+  samples.forEach((s, i) => {
+    const t = i / last;
+    const tl = Math.hypot(s.tx, s.ty) || 1;
+    const ox = -s.ty / tl;
+    const oy = s.tx / tl;
+    const w = startW * (1 - t) + endW * t;
+    left.push(`${s.x + ox * (w / 2)} ${s.y + oy * (w / 2)}`);
+    right.push(`${s.x - ox * (w / 2)} ${s.y - oy * (w / 2)}`);
+  });
+  return `M ${left.join(' L ')} L ${right.reverse().join(' L ')} Z`;
+}
+
+function branchGeometry(fromNode, toNode, fromFont, toFont, curve, linkId) {
+  const start = nodeAnchor(fromNode, toNode, fromFont, curve?.from);
+  const end = nodeAnchor(toNode, fromNode, toFont, curve?.to);
+  const control = defaultBulgeControl(start, end, linkId);
+  const offsets = resolvedRouteOffsets(start, end, curve, control);
+  const route = routeWorldPoints(start, end, offsets);
+  const knots = [start, ...route, end];
+  const segments = catmullRomSegments(
+    knots,
+    phantomPoint(start, fromNode, fromFont, curve?.from),
+    phantomPoint(end, toNode, toFont, curve?.to)
+  );
+  return {
+    start,
+    end,
+    control,
+    offsets,
+    route,
+    knots,
+    segments,
+    samples: sampleSegments(segments, 20),
+    centerline: pathFromSegments(segments)
+  };
+}
+
+function patchBranchCurve(fromNode, toNode, fromFont, toFont, curve, handle, world, linkId) {
+  const geo = branchGeometry(fromNode, toNode, fromFont, toFont, curve, linkId);
+  const next = {
+    ...(curve && typeof curve === 'object' ? curve : {}),
+    points: geo.offsets.map(p => ({ ...p }))
+  };
+  if (handle === 'from') {
+    next.from = closestAnchorOnNode(fromNode, fromFont, world);
+  } else if (handle === 'to') {
+    next.to = closestAnchorOnNode(toNode, toFont, world);
+  } else if (handle === 0 || handle === 1 || handle === 2) {
+    const t = (Number(handle) + 1) / 4;
+    const chord = lerpPoint(geo.start, geo.end, t);
+    next.points[handle] = {
+      x: Math.round((world?.x || 0) - chord.x),
+      y: Math.round((world?.y || 0) - chord.y)
+    };
+  }
+  return next;
+}
+
+function nearestRouteHandle(route, world) {
+  let best = 1;
+  let bestD = Infinity;
+  (route || []).forEach((p, i) => {
+    const d = Math.hypot((world?.x || 0) - p.x, (world?.y || 0) - p.y);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  });
+  return best;
+}
+
+function taperBranchPath(fromNode, toNode, depth, linkId, fromFont, toFont, curve) {
+  const geo = branchGeometry(fromNode, toNode, fromFont, toFont, curve, linkId);
+  const startW = Math.max(3.2, 16.5 - Math.max(0, depth - 1) * 3.15);
+  const endW = Math.max(1.2, startW * 0.28);
+  return taperFromSamples(geo.samples, startW, endW);
+}
+
+function branchCenterline(fromNode, toNode, fromFont, toFont, curve, linkId) {
+  const geo = branchGeometry(fromNode, toNode, fromFont, toFont, curve, linkId);
+  return {
+    d: geo.centerline,
+    mid: geo.route[1] || lerpPoint(geo.start, geo.end, 0.5),
+    control: geo.control,
+    start: geo.start,
+    end: geo.end,
+    route: geo.route
   };
 }
 
@@ -344,8 +543,17 @@ function MindMapCanvas({
         setMarquee({ x1: drag.start.x, y1: drag.start.y, x2: world.x, y2: world.y });
       } else if (drag.kind === 'branch' && onBendBranch) {
         const world = toWorld(e.clientX, e.clientY);
-        const curve = curveOffsetFromPointer(drag.from, drag.to, drag.fromFont, drag.toFont, world);
-        if (!drag.lastCurve || curve.x !== drag.lastCurve.x || curve.y !== drag.lastCurve.y) drag.moved = true;
+        const curve = patchBranchCurve(
+          drag.from,
+          drag.to,
+          drag.fromFont,
+          drag.toFont,
+          drag.baseCurve,
+          drag.handle,
+          world,
+          drag.linkId
+        );
+        drag.moved = true;
         drag.lastCurve = curve;
         onBendBranch(drag.nodeId, curve, false);
       } else if (drag.kind === 'node' && onMoveNode) {
@@ -447,6 +655,7 @@ function MindMapCanvas({
                     stroke={selected ? '#fbbf24' : color}
                     strokeWidth={selected ? 1.2 : 0.4}
                     strokeLinejoin="round"
+                    strokeLinecap="round"
                   />
                 ) : (
                   <path
@@ -469,14 +678,18 @@ function MindMapCanvas({
                     if (onSelect) onSelect(null);
                     if (onSelectLink) onSelectLink(null);
                     if (readOnly || !onBendBranch) return;
+                    const world = toWorld(e.clientX, e.clientY);
                     dragRef.current = {
                       kind: 'branch',
                       nodeId: link.to.id,
+                      linkId: link.id,
                       from: link.from,
                       to: link.to,
                       fromFont,
                       toFont,
-                      lastCurve: link.to.curve || { x: 0, y: 0 },
+                      handle: nearestRouteHandle(hitPath.route, world),
+                      baseCurve: link.to.curve || {},
+                      lastCurve: link.to.curve || {},
                       moved: false
                     };
                   }}
@@ -547,21 +760,16 @@ function MindMapCanvas({
         })}
         {links.map((link) => {
           if (selectedBranchId !== link.to.id) return null;
-          const handle = branchCenterline(
-            link.from,
-            link.to,
-            fontFor(link.from),
-            fontFor(link.to),
-            link.to.curve,
-            link.id
-          );
-          return (
+          const fromFont = fontFor(link.from);
+          const toFont = fontFor(link.to);
+          const geo = branchCenterline(link.from, link.to, fromFont, toFont, link.to.curve, link.id);
+          const startHandle = (kind, point, title, extraClass = '') => (
             <button
-              key={`${link.id}-handle`}
+              key={`${link.id}-${kind}`}
               type="button"
-              className="mindmap-curve-handle"
-              style={{ left: handle.mid.x, top: handle.mid.y }}
-              title="Arraste para curvar o galho"
+              className={`mindmap-curve-handle ${extraClass}`}
+              style={{ left: point.x, top: point.y }}
+              title={title}
               onPointerDown={(e) => {
                 e.stopPropagation();
                 if (onSelectBranch) onSelectBranch(link.to.id);
@@ -571,15 +779,25 @@ function MindMapCanvas({
                 dragRef.current = {
                   kind: 'branch',
                   nodeId: link.to.id,
+                  linkId: link.id,
                   from: link.from,
                   to: link.to,
-                  fromFont: fontFor(link.from),
-                  toFont: fontFor(link.to),
-                  lastCurve: link.to.curve || { x: 0, y: 0 },
+                  fromFont,
+                  toFont,
+                  handle: kind,
+                  baseCurve: link.to.curve || {},
+                  lastCurve: link.to.curve || {},
                   moved: false
                 };
               }}
             />
+          );
+          return (
+            <React.Fragment key={`${link.id}-handles`}>
+              {startHandle('from', geo.start, 'Ponto de saída no ramo de origem', 'is-anchor')}
+              {geo.route.map((point, i) => startHandle(i, point, `Ponto de rota ${i + 1}`))}
+              {startHandle('to', geo.end, 'Ponto de chegada no ramo de destino', 'is-anchor')}
+            </React.Fragment>
           );
         })}
         {visible.map((node) => {
@@ -653,7 +871,7 @@ function MindMapCanvas({
       )}
       {!readOnly && !linkingFromId && (
         <div className="mindmap-select-hint">
-          Ctrl/Cmd+clique para vários · arraste um galho para desviar o caminho
+          Ctrl/Cmd+clique para vários · arraste o galho, as âncoras ou os 3 pontos de rota
         </div>
       )}
       <div className="mindmap-zoom">
@@ -1258,7 +1476,7 @@ export function MindMapsView({
                   {selectedBranchParent.label} → {selectedBranch.label}
                 </p>
                 <p style={{ color: '#94a3b8', fontSize: '0.8rem', margin: '0 0 12px', lineHeight: 1.45 }}>
-                  Arraste a linha para desviá-la de outros ramos. O caminho fica salvo neste galho.
+                  Arraste as âncoras quadradas para mudar de onde o galho sai e onde chega. Os três pontos redondos definem o caminho.
                 </p>
                 <div style={{ display: 'grid', gap: '8px' }}>
                   <button
@@ -1507,7 +1725,7 @@ export function MindMapsView({
               </>
             ) : (
               <p style={{ color: '#94a3b8', fontSize: '0.88rem' }}>
-                Clique em um ramo para editar, anotar ou ramificar. Arraste um galho para desviar o caminho. Ctrl/Cmd+clique ou Shift+arrastar no fundo seleciona vários para mudar cor, fonte e ícone juntos.
+                Clique em um ramo para editar, anotar ou ramificar. Clique no galho para curvá-lo: âncoras nos nós e três pontos de rota. Ctrl/Cmd+clique ou Shift+arrastar no fundo seleciona vários para mudar cor, fonte e ícone juntos.
               </p>
             )}
           </aside>

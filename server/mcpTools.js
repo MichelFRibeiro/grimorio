@@ -1466,9 +1466,10 @@ export const toolsDefinition = [
       collapsed: z.boolean().optional(),
       fontSize: z.number().optional().describe('Tamanho da fonte do ramo em pixels (10 a 32)'),
       curve: z.object({
-        x: z.number(),
-        y: z.number()
-      }).nullable().optional().describe('Desvio do galho em relação ao meio da ligação (null restaura a curva natural)')
+        from: z.object({ side: z.enum(['left', 'right', 'top', 'bottom']), t: z.number().optional() }).optional(),
+        to: z.object({ side: z.enum(['left', 'right', 'top', 'bottom']), t: z.number().optional() }).optional(),
+        points: z.array(z.object({ x: z.number(), y: z.number() })).optional()
+      }).nullable().optional().describe('Âncoras e pontos de rota do galho (null restaura a curva natural)')
     },
     handler: async (args) => {
       const db = getDb();
