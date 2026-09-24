@@ -4,7 +4,8 @@ import {
   MIND_MAP_ALL_ICONS,
   MIND_MAP_FEATURED_ICONS,
   MIND_MAP_ICON_CATEGORIES,
-  sanitizeMindMapIcon
+  sanitizeMindMapIcon,
+  sanitizeMindMapImageUrl
 } from '../utils/mindMapIcons';
 
 const FALLBACK_ICON = LucideIcons.Sparkles;
@@ -61,13 +62,32 @@ function fileToDataUrl(file) {
   });
 }
 
+export function collectUsedMindMapImages(maps = []) {
+  const seen = new Set();
+  const images = [];
+  (maps || []).forEach((map) => {
+    (map?.nodes || []).forEach((node) => {
+      const url = sanitizeMindMapImageUrl(node?.imageUrl);
+      if (!url || seen.has(url)) return;
+      seen.add(url);
+      images.push({
+        url,
+        label: String(node.label || 'Ramo').replace(/\s*\n\s*/g, ' ').trim() || 'Ramo',
+        mapTitle: String(map.title || 'Mapa').trim() || 'Mapa'
+      });
+    });
+  });
+  return images;
+}
+
 export function MindMapMediaPicker({
   icon = '',
   imageUrl = '',
   color = '#c084fc',
   onChange,
   allowImage = true,
-  title = 'Ícone ou imagem'
+  title = 'Ícone ou imagem',
+  usedImages = []
 }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('Destaques');
@@ -181,6 +201,27 @@ export function MindMapMediaPicker({
             Enviar imagem
             <input type="file" accept="image/*" onChange={onPickFile} style={{ display: 'none' }} />
           </label>
+          {usedImages.length > 0 && (
+            <div className="mindmap-used-images">
+              <div className="mindmap-used-images-label">Imagens já usadas</div>
+              <div className="mindmap-used-images-row">
+                {usedImages.map((item) => {
+                  const selected = imageUrl === item.url;
+                  return (
+                    <button
+                      key={item.url}
+                      type="button"
+                      className={`mindmap-used-image ${selected ? 'is-on' : ''}`}
+                      title={`${item.label} · ${item.mapTitle}`}
+                      onClick={() => applyImage(item.url)}
+                    >
+                      <img src={item.url} alt="" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
             <input
               value={urlDraft}

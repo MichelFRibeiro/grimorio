@@ -134,6 +134,16 @@ function sanitizeDate(value, fallback = null) {
   return fallback;
 }
 
+export function normalizeMindMapLabel(value) {
+  return String(value || '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(line => line.trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function colorForIndex(index = 0) {
   return MIND_MAP_NODE_COLORS[Math.abs(index) % MIND_MAP_NODE_COLORS.length];
 }
@@ -158,7 +168,7 @@ export function createMindMapNode({
   lapses = 0,
   lastReviewedAt = null
 } = {}, siblingIndex = 0) {
-  const trimmed = String(label || '').trim() || 'Novo ramo';
+  const trimmed = normalizeMindMapLabel(label) || 'Novo ramo';
   return {
     id: id || uidMind('mn'),
     parentId: parentId || null,
@@ -438,7 +448,7 @@ export function updateMindMapNode(map, nodeId, patch = {}) {
   const current = map.nodes[index];
   const next = { ...current };
   if (patch.label !== undefined) {
-    const trimmed = String(patch.label || '').trim();
+    const trimmed = normalizeMindMapLabel(patch.label);
     if (!trimmed) throw new Error('O ramo precisa de um nome.');
     next.label = trimmed;
   }
@@ -540,7 +550,7 @@ export function updateMindMapMeta(map, patch = {}) {
     if (root) {
       next.nodes = next.nodes.map((n) => (
         n.id === root.id
-          ? { ...n, label: String(patch.rootLabel || '').trim() || n.label }
+          ? { ...n, label: normalizeMindMapLabel(patch.rootLabel) || n.label }
           : n
       ));
     }

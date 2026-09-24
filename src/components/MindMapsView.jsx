@@ -32,7 +32,7 @@ import {
   PenLine
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
-import { MindMapIcon, MindMapMediaPicker, MindMapThumb } from './MindMapMedia';
+import { MindMapIcon, MindMapMediaPicker, MindMapThumb, collectUsedMindMapImages } from './MindMapMedia';
 import { useStopwatch, formatTimer } from '../hooks/useStopwatch';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import {
@@ -78,15 +78,20 @@ function nodeSize(node = {}, fontSize = 14, fillState = null) {
   const hasMedia = !blank && !!(node.imageUrl || node.icon);
   const extra = node.imageUrl && !blank ? 36 * scale : (node.icon && !blank ? 28 * scale : 0);
   const label = String(node.label || (blank ? '_______________' : ''));
+  const labelLines = label.split('\n');
+  const longest = labelLines.reduce((max, line) => Math.max(max, line.length), 0);
   const charW = fs * 0.62;
   const padding = 28;
   const minW = (hasMedia ? 148 : 120) * Math.max(1, scale * 0.9);
   const maxW = 460;
-  const singleLineW = padding + Math.max(label.length, blank ? 12 : 0) * charW + extra + (blank ? 18 : 0);
+  const singleLineW = padding + Math.max(longest, blank ? 12 : 0) * charW + extra + (blank ? 18 : 0);
   const w = Math.max(minW, Math.min(maxW, singleLineW));
   const innerW = Math.max(48, w - padding - extra);
   const charsPerLine = Math.max(8, Math.floor(innerW / Math.max(charW, 1)));
-  const lines = Math.max(1, Math.ceil(label.length / charsPerLine));
+  const lines = labelLines.reduce(
+    (sum, line) => sum + Math.max(1, Math.ceil((line.length || 1) / charsPerLine)),
+    0
+  );
   const minH = (!blank && node.imageUrl ? 72 : 44) * Math.max(1, scale * 0.92);
   const extraH = blank ? (review ? fs * 2.4 : fs * 0.35) : 0;
   const h = Math.max(minH, 18 + lines * fs * 1.35 + extraH);
@@ -429,14 +434,33 @@ function MindMapCanvas({
   fullscreen = false,
   onToggleFullscreen,
   fillMode = null,
-  hideablePicker = null
+  hideablePicker = null,
+  nodeQuery = '',
+  onNodeQuery,
+  activeHitIndex = 0,
+  onSearchIndex,
+  onRevealNode
 }) {
   const wrapRef = useRef(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 420, y: 280 });
   const [marquee, setMarquee] = useState(null);
+  const [jumpMenuId, setJumpMenuId] = useState(null);
   const dragRef = useRef(null);
+  const pendingFocusId = useRef(null);
+  const lastAutoQuery = useRef('');
   const selectedIdSet = useMemo(() => new Set(selectedIds.filter(Boolean)), [selectedIds]);
+
+  const centerOnNode = (node, nextZoom = zoom) => {
+    const wrap = wrapRef.current;
+    if (!wrap || !node) return;
+    const rect = wrap.getBoundingClientRect();
+    setZoom(nextZoom);
+    setPan({
+      x: rect.width / 2 - (node.x || 0) * nextZoom,
+      y: rect.height / 2 - (node.y || 0) * nextZoom
+    });
+  };
 
   const lineStyle = sanitizeMindMapLineStyle(map?.lineStyle);
   const scaleFont = !!map?.scaleFontByDepth;
@@ -454,6 +478,16 @@ function MindMapCanvas({
   const sizeFor = (node) => nodeSize(node, fontFor(node), fillStateFor(node));
   const visible = useMemo(() => visibleNodeIds(map), [map]);
   const visibleIds = useMemo(() => new Set(visible.map(n => n.id)), [visible]);
+  const query = String(nodeQuery || '').trim().toLowerCase();
+  const searchHits = useMemo(() => {
+    if (!query) return [];
+    return (map?.nodes || []).filter((node) => (
+      String(node.label || '').toLowerCase().includes(query)
+      || String(node.notes || '').toLowerCase().includes(query)
+    ));
+  }, [map?.nodes, query]);
+  const activeHitId = searchHits[activeHitIndex]?.id || null;
+  const matchIds = useMemo(() => new Set(searchHits.map(n => n.id)), [searchHits]);
   const links = useMemo(() => (
     visible
       .filter(n => n.parentId && visibleIds.has(n.parentId))
@@ -472,8 +506,29 @@ function MindMapCanvas({
         from: visible.find(n => n.id === link.fromId),
         to: visible.find(n => n.id === link.toId)
       }))
-      .filter(l => l.from && l.to)
+      .filter(l => l.from || l.to)
   ), [map?.crossLinks, visible]);
+  const partnersByNode = useMemo(() => {
+    const byId = new Map();
+    const nodes = map?.nodes || [];
+    (map?.crossLinks || []).forEach((link) => {
+      const from = nodes.find(n => n.id === link.fromId);
+      const to = nodes.find(n => n.id === link.toId);
+      if (!from || !to) return;
+      const push = (source, target) => {
+        if (!byId.has(source.id)) byId.set(source.id, []);
+        byId.get(source.id).push({
+          linkId: link.id,
+          nodeId: target.id,
+          label: String(target.label || 'Ramo').replace(/\s*\n\s*/g, ' '),
+          color: link.color || '#38bdf8'
+        });
+      };
+      push(from, to);
+      push(to, from);
+    });
+    return byId;
+  }, [map?.crossLinks, map?.nodes]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -495,7 +550,70 @@ function MindMapCanvas({
     };
   };
 
+  const revealNode = (nodeId) => {
+    if (!nodeId || !onRevealNode) return;
+    const hidden = !visibleIds.has(nodeId);
+    if (hidden) onRevealNode(nodeId);
+  };
+
+  const focusHit = (index, { select = true } = {}) => {
+    if (!searchHits.length) return;
+    const next = ((index % searchHits.length) + searchHits.length) % searchHits.length;
+    const node = searchHits[next];
+    if (!node) return;
+    if (onSearchIndex && next !== activeHitIndex) onSearchIndex(next);
+    revealNode(node.id);
+    if (select && onSelect) onSelect(node.id);
+    if (select && onSelectLink) onSelectLink(null);
+    if (select && onSelectBranch) onSelectBranch(null);
+    const targetZoom = Math.max(zoom, 1);
+    if (visibleIds.has(node.id)) {
+      pendingFocusId.current = null;
+      requestAnimationFrame(() => centerOnNode(node, targetZoom));
+    } else {
+      pendingFocusId.current = node.id;
+    }
+  };
+
+  useEffect(() => {
+    if (!query || hideablePicker) {
+      lastAutoQuery.current = query;
+      return;
+    }
+    if (lastAutoQuery.current === query) return;
+    lastAutoQuery.current = query;
+    if (!searchHits.length) return;
+    focusHit(0);
+  }, [query, searchHits.map(n => n.id).join('|'), hideablePicker]);
+
+  useEffect(() => {
+    const id = pendingFocusId.current;
+    if (!id || !visibleIds.has(id)) return;
+    const node = (map?.nodes || []).find(n => n.id === id);
+    pendingFocusId.current = null;
+    if (node) requestAnimationFrame(() => centerOnNode(node, Math.max(zoom, 1)));
+  }, [visibleIds, map?.nodes]);
+
+  const jumpToNode = (nodeId) => {
+    if (!nodeId) return;
+    setJumpMenuId(null);
+    revealNode(nodeId);
+    if (onSelect) onSelect(nodeId);
+    if (onSelectLink) onSelectLink(null);
+    if (onSelectBranch) onSelectBranch(null);
+    const node = (map?.nodes || []).find(n => n.id === nodeId);
+    if (!node) return;
+    const targetZoom = Math.max(zoom, 1);
+    if (visibleIds.has(nodeId)) {
+      pendingFocusId.current = null;
+      requestAnimationFrame(() => centerOnNode(node, targetZoom));
+    } else {
+      pendingFocusId.current = nodeId;
+    }
+  };
+
   const onPointerDownBg = (e) => {
+    setJumpMenuId(null);
     if (e.target !== e.currentTarget && e.target.dataset.role !== 'canvas') return;
     if (!readOnly && (e.shiftKey || e.ctrlKey || e.metaKey)) {
       const start = toWorld(e.clientX, e.clientY);
@@ -527,6 +645,7 @@ function MindMapCanvas({
       hideablePicker.onToggle?.(node.id);
       return;
     }
+    setJumpMenuId(null);
     if (linkingFromId && onLinkTarget) {
       onLinkTarget(node.id);
       return;
@@ -728,6 +847,7 @@ function MindMapCanvas({
             );
           })}
           {crossLinks.map((link) => {
+            if (!link.from || !link.to) return null;
             const curve = crossLinkCurve(link.from, link.to, fontFor(link.from), fontFor(link.to));
             const selected = selectedLinkId === link.id;
             const color = link.color || '#38bdf8';
@@ -762,7 +882,7 @@ function MindMapCanvas({
       </svg>
       <div className="mindmap-world" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
         {crossLinks.map((link) => {
-          if (!link.label && !link.icon) return null;
+          if (!link.from || !link.to || (!link.label && !link.icon)) return null;
           const curve = crossLinkCurve(link.from, link.to, fontFor(link.from), fontFor(link.to));
           const selected = selectedLinkId === link.id;
           return (
@@ -836,8 +956,13 @@ function MindMapCanvas({
           const { w, h } = sizeFor(node);
           const selected = selectedIdSet.has(node.id) || selectedId === node.id;
           const primary = selectedId === node.id;
+          const searchMatch = !!query && matchIds.has(node.id);
+          const searchActive = activeHitId === node.id;
           const linkingFrom = linkingFromId === node.id;
           const kids = childrenOf(map, node.id).length;
+          const partners = (!fillMode && !hideablePicker && !linkingFromId)
+            ? (partnersByNode.get(node.id) || [])
+            : [];
           const fillReview = fillState?.phase === 'review';
           const fillDone = fillState?.phase === 'done';
           const verdict = fillState?.verdict;
@@ -851,7 +976,7 @@ function MindMapCanvas({
           return (
             <div
               key={node.id}
-              className={`mindmap-node ${selected ? 'is-selected' : ''} ${selected && !primary ? 'is-multi' : ''} ${linkingFrom ? 'is-linking' : ''}${fillClass}${hideableClass}`}
+              className={`mindmap-node ${selected ? 'is-selected' : ''} ${selected && !primary ? 'is-multi' : ''} ${linkingFrom ? 'is-linking' : ''}${searchMatch ? ' is-search-match' : ''}${searchActive ? ' is-search-active' : ''}${fillClass}${hideableClass}`}
               style={{
                 width: w,
                 minHeight: h,
@@ -859,24 +984,28 @@ function MindMapCanvas({
                 top: node.y - h / 2,
                 fontSize,
                 cursor: hideablePicker ? 'pointer' : undefined,
-                borderColor: linkingFrom
+                borderColor: searchActive
                   ? '#38bdf8'
-                  : (hideableOn
+                  : (linkingFrom
                     ? '#38bdf8'
-                    : (verdict === 'hit'
-                      ? '#10b981'
-                      : (verdict === 'miss'
-                        ? '#f43f5e'
-                        : (fillState ? '#c084fc' : (selected ? '#fbbf24' : (node.color || '#64748b')))))),
-                boxShadow: linkingFrom
-                  ? '0 0 14px rgba(56,189,248,0.45)'
-                  : (hideableOn
-                    ? '0 0 12px rgba(56,189,248,0.4)'
-                    : (verdict === 'hit'
-                      ? '0 0 12px rgba(16,185,129,0.35)'
-                      : (verdict === 'miss'
-                        ? '0 0 12px rgba(244,63,94,0.35)'
-                        : (selected ? '0 0 12px rgba(251,191,36,0.35)' : 'none'))))
+                    : (hideableOn
+                      ? '#38bdf8'
+                      : (verdict === 'hit'
+                        ? '#10b981'
+                        : (verdict === 'miss'
+                          ? '#f43f5e'
+                          : (fillState ? '#c084fc' : (selected ? '#fbbf24' : (searchMatch ? '#38bdf8' : (node.color || '#64748b')))))))),
+                boxShadow: searchActive
+                  ? '0 0 16px rgba(56,189,248,0.55)'
+                  : (linkingFrom
+                    ? '0 0 14px rgba(56,189,248,0.45)'
+                    : (hideableOn
+                      ? '0 0 12px rgba(56,189,248,0.4)'
+                      : (verdict === 'hit'
+                        ? '0 0 12px rgba(16,185,129,0.35)'
+                        : (verdict === 'miss'
+                          ? '0 0 12px rgba(244,63,94,0.35)'
+                          : (selected ? '0 0 12px rgba(251,191,36,0.35)' : (searchMatch ? '0 0 10px rgba(56,189,248,0.28)' : 'none'))))))
               }}
               onPointerDown={(e) => onPointerDownNode(e, node)}
             >
@@ -929,6 +1058,45 @@ function MindMapCanvas({
                   {node.collapsed ? '+' : kids}
                 </span>
               )}
+              {partners.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    className="mindmap-node-jump"
+                    title={partners.length === 1 ? `Ir para ${partners[0].label}` : `${partners.length} links — escolha o destino`}
+                    aria-label={partners.length === 1 ? `Ir para ${partners[0].label}` : 'Abrir links deste ramo'}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (partners.length === 1) {
+                        jumpToNode(partners[0].nodeId);
+                        return;
+                      }
+                      setJumpMenuId(current => (current === node.id ? null : node.id));
+                    }}
+                  >
+                    <Link2 size={11} />
+                    {partners.length > 1 ? <span>{partners.length}</span> : null}
+                  </button>
+                  {jumpMenuId === node.id && (
+                    <div className="mindmap-jump-menu" onPointerDown={(e) => e.stopPropagation()}>
+                      {partners.map((partner) => (
+                        <button
+                          key={`${partner.linkId}-${partner.nodeId}`}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            jumpToNode(partner.nodeId);
+                          }}
+                        >
+                          <Link2 size={12} color={partner.color} />
+                          <span>{partner.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
               {!readOnly && primary && (
                 <button
                   type="button"
@@ -958,7 +1126,7 @@ function MindMapCanvas({
       )}
       {linkingFromId && (
         <div className="mindmap-link-hint">
-          Clique no outro ramo para ligar · Esc cancela
+          Clique no outro nó para criar o link. Os dois ganham uma marca que leva ao outro · Esc cancela
         </div>
       )}
       {hideablePicker && (
@@ -966,10 +1134,46 @@ function MindMapCanvas({
           Clique nos nós que podem ser ocultados no Preencher Mapa · Esc sai
         </div>
       )}
-      {!readOnly && !linkingFromId && !hideablePicker && (
+      {!readOnly && !linkingFromId && !hideablePicker && !query && (
         <div className="mindmap-select-hint">
           Ctrl/Cmd+clique para vários · arraste o galho, as âncoras ou os 3 pontos de rota
         </div>
+      )}
+      {!readOnly && (
+      <form
+        className="mindmap-search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!query || !searchHits.length) return;
+          focusHit(searchHits.length > 1 ? activeHitIndex + 1 : activeHitIndex);
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <Search size={14} color="#94a3b8" />
+        <input
+          type="search"
+          value={nodeQuery}
+          onChange={(e) => onNodeQuery?.(e.target.value)}
+          placeholder="Buscar ramo ou anotação…"
+          aria-label="Buscar nó do mapa"
+        />
+        {query && (
+          <span className="mindmap-search-count">
+            {searchHits.length ? `${Math.min(activeHitIndex + 1, searchHits.length)}/${searchHits.length}` : '0'}
+          </span>
+        )}
+        {query && searchHits.length > 1 && (
+          <>
+            <button type="button" onClick={() => focusHit(activeHitIndex - 1)} title="Resultado anterior" aria-label="Resultado anterior">↑</button>
+            <button type="button" onClick={() => focusHit(activeHitIndex + 1)} title="Próximo resultado" aria-label="Próximo resultado">↓</button>
+          </>
+        )}
+        {query && (
+          <button type="button" onClick={() => onNodeQuery?.('')} title="Limpar busca" aria-label="Limpar busca">
+            <X size={12} />
+          </button>
+        )}
+      </form>
       )}
       <div className="mindmap-zoom">
         {onToggleFullscreen && (
@@ -1027,6 +1231,8 @@ export function MindMapsView({
   const [editingCategory, setEditingCategory] = useState(null);
   const [fullscreen, setFullscreen] = useState(false);
 
+  const [nodeQuery, setNodeQuery] = useState('');
+  const [searchHitIndex, setSearchHitIndex] = useState(0);
   const [activeMapId, setActiveMapId] = useState(null);
   const [pendingMap, setPendingMap] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -1073,6 +1279,7 @@ export function MindMapsView({
   const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
 
   const maps = mindMaps || [];
+  const usedImages = useMemo(() => collectUsedMindMapImages(maps), [maps]);
   const liveMap = maps.find(m => m.id === activeMapId) || (pendingMap?.id === activeMapId ? pendingMap : null);
 
   useEffect(() => {
@@ -1128,7 +1335,7 @@ export function MindMapsView({
     if (!editorMap || !nodeId) return;
     const node = (editorMap.nodes || []).find(n => n.id === nodeId);
     if (!node) return;
-    const label = (draftLabelRef.current || '').trim() || node.label;
+    const label = (draftLabelRef.current || '').replace(/\r\n?/g, '\n').trim() || node.label;
     const notes = draftNotesRef.current || '';
     const last = lastSavedDraftRef.current;
     if (last.id === nodeId && last.label === label && last.notes === notes) return;
@@ -1136,7 +1343,8 @@ export function MindMapsView({
     if (label === (node.label || '') && notes === (node.notes || '')) return;
     onUpdateNode(editorMap.id, nodeId, { label, notes });
     if (nodeId === editorMap.rootId && onUpdateMap && label !== editorMap.title) {
-      onUpdateMap(editorMap.id, { title: label, rootLabel: label });
+      const title = label.replace(/\s*\n\s*/g, ' ').replace(/\s+/g, ' ').trim();
+      if (title && title !== editorMap.title) onUpdateMap(editorMap.id, { title });
     }
   };
 
@@ -1236,6 +1444,8 @@ export function MindMapsView({
 
   const openEditor = (map) => {
     setActiveMapId(map.id);
+    setNodeQuery('');
+    setSearchHitIndex(0);
     setSelectedIds(map.rootId ? [map.rootId] : []);
     setSelectedLinkId(null);
     setSelectedBranchId(null);
@@ -1475,10 +1685,25 @@ export function MindMapsView({
     setLinkError('');
   };
 
+  const revealAncestors = (nodeId) => {
+    if (!editorMap || !nodeId || !onUpdateNode) return;
+    const collapsedIds = [];
+    let current = (editorMap.nodes || []).find(n => n.id === nodeId);
+    const seen = new Set();
+    while (current?.parentId && !seen.has(current.parentId)) {
+      seen.add(current.parentId);
+      const parent = (editorMap.nodes || []).find(n => n.id === current.parentId);
+      if (!parent) break;
+      if (parent.collapsed) collapsedIds.push(parent.id);
+      current = parent;
+    }
+    collapsedIds.forEach((id) => onUpdateNode(editorMap.id, id, { collapsed: false }));
+  };
+
   const handleLinkTarget = async (toId) => {
     if (!editorMap || !linkingFromId) return;
     if (toId === linkingFromId) {
-      setLinkError('Escolha um ramo diferente para ligar.');
+      setLinkError('Escolha outro nó para criar o link.');
       return;
     }
     try {
@@ -1494,7 +1719,7 @@ export function MindMapsView({
         setSelectedIds([]);
       }
     } catch (err) {
-      setLinkError(err.message || 'Não foi possível criar a ligação.');
+      setLinkError(err.message || 'Não foi possível criar o link.');
     }
   };
 
@@ -1726,6 +1951,14 @@ export function MindMapsView({
             onLinkTarget={pickingHideable ? undefined : handleLinkTarget}
             fullscreen={fullscreen}
             onToggleFullscreen={() => setFullscreen(v => !v)}
+            nodeQuery={nodeQuery}
+            onNodeQuery={(value) => {
+              setNodeQuery(value);
+              setSearchHitIndex(0);
+            }}
+            activeHitIndex={searchHitIndex}
+            onSearchIndex={setSearchHitIndex}
+            onRevealNode={revealAncestors}
             hideablePicker={pickingHideable ? {
               ids: new Set(draftHideableIds),
               onToggle: toggleHideableNode
@@ -1863,16 +2096,18 @@ export function MindMapsView({
                     </button>
                   </>
                 ) : (
-                  <input
+                  <textarea
                     key={selectedNode.id}
                     value={draftLabel}
+                    rows={Math.min(8, Math.max(2, draftLabel.split('\n').length + 1))}
                     onChange={(e) => {
                       const value = e.target.value;
                       draftLabelRef.current = value;
                       setDraftLabel(value);
                     }}
                     onBlur={handleSaveNode}
-                    style={inputStyle}
+                    placeholder="Texto do ramo — Enter quebra a linha"
+                    style={{ ...inputStyle, resize: 'vertical', minHeight: 64, lineHeight: 1.4 }}
                   />
                 )}
                 <label style={{ ...labelStyle, marginTop: 12 }}>Tamanho do texto</label>
@@ -1942,6 +2177,7 @@ export function MindMapsView({
                   imageUrl={sharedImage}
                   color={sharedColor || selectedNode.color}
                   title={multiSelected ? 'Ícone ou imagem de todos' : 'Ícone ou imagem'}
+                  usedImages={usedImages}
                   onChange={(patch) => handleUpdateSelectedAppearance(patch)}
                 />
                 {mixedMedia && (
@@ -1960,7 +2196,7 @@ export function MindMapsView({
                       </button>
                     ) : (
                       <button type="button" className="mindmap-ghost-btn" onClick={startLinkFromSelected}>
-                        <Link2 size={14} /> Ligar a outro ramo
+                        <Link2 size={14} /> Criar link para outro nó
                       </button>
                     )}
                     {linkError && <p style={{ color: '#f87171', fontSize: '0.78rem', margin: 0 }}>{linkError}</p>}
