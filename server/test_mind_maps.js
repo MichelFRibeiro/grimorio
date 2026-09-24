@@ -8,6 +8,10 @@ import {
   addMindMapCrossLink,
   updateMindMapCrossLink,
   deleteMindMapCrossLink,
+  addMindMapBrace,
+  updateMindMapBrace,
+  deleteMindMapBrace,
+  addBraceLabelNode,
   layoutMindMap,
   mindMapNodeFontSize,
   sanitizeMindMapNodeFontSize,
@@ -269,6 +273,44 @@ function runTests() {
     rights.id
   );
   assert(prunedLinks.crossLinks.length === 0, 'Excluir ramo remove ligações incidentes');
+  const braced = addMindMapBrace(withOrg, {
+    nodeIds: [left.id, rights.id],
+    label: 'Mamíferos',
+    side: 'right'
+  });
+  assert(braced.braces.length === 1, 'Cria chave englobando ramos');
+  assert(braced.braces[0].label === 'Mamíferos', 'Persiste rótulo da chave');
+  assert(braced.braces[0].nodeIds.length === 2, 'Chave guarda os ramos englobados');
+  const renamedBrace = updateMindMapBrace(braced, braced.braces[0].id, { label: 'Animais', side: 'left' });
+  assert(renamedBrace.braces[0].label === 'Animais' && renamedBrace.braces[0].side === 'left', 'Atualiza rótulo e lado da chave');
+  let shortBraceBlocked = false;
+  try {
+    addMindMapBrace(withOrg, { nodeIds: [left.id], label: 'Só um' });
+  } catch {
+    shortBraceBlocked = true;
+  }
+  assert(shortBraceBlocked, 'Recusa chave com menos de dois ramos');
+  const unbraced = deleteMindMapBrace(renamedBrace, renamedBrace.braces[0].id);
+  assert(unbraced.braces.length === 0, 'Remove a chave');
+  const prunedBrace = deleteMindMapNode(
+    addMindMapBrace(withOrg, { nodeIds: [left.id, rights.id], label: 'Grupo' }),
+    rights.id
+  );
+  assert(prunedBrace.braces.length === 0, 'Excluir ramo remove chave que deixa de englobar dois');
+  const labelBase = addMindMapBrace(withOrg, { nodeIds: [left.id, rights.id], label: 'Mamíferos' });
+  const withLabelNode = addBraceLabelNode(labelBase, labelBase.braces[0].id);
+  const labelNodeId = withLabelNode.braces[0].labelNodeId;
+  assert(!!withLabelNode.nodes.find(n => n.id === labelNodeId), 'Rótulo da chave vira um ramo');
+  assert(withLabelNode.nodes.find(n => n.id === labelNodeId).label === 'Mamíferos', 'Ramo do rótulo usa o texto da chave');
+  const withChild = addMindMapNode(withLabelNode, { parentId: labelNodeId, label: 'Primatas' });
+  assert(childrenOf(withChild, labelNodeId).some(n => n.label === 'Primatas'), 'Cria filho a partir do rótulo');
+  let duplicateLabelBlocked = false;
+  try {
+    addBraceLabelNode(withLabelNode, labelNodeId && withLabelNode.braces[0].id);
+  } catch {
+    duplicateLabelBlocked = true;
+  }
+  assert(duplicateLabelBlocked, 'Não cria um segundo ramo para o mesmo rótulo');
   const sanitizedLinks = sanitizeMindMap({
     title: 'Com ligações',
     nodes: [

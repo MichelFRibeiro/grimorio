@@ -114,6 +114,10 @@ export function App() {
     addMindMapCrossLink,
     updateMindMapCrossLink,
     deleteMindMapCrossLink,
+    addMindMapBrace,
+    updateMindMapBrace,
+    addBraceLabelNode,
+    deleteMindMapBrace,
     layoutMindMap,
     studyMindMap,
     deleteMindMap,
@@ -386,6 +390,10 @@ export function App() {
             onAddCrossLink={addMindMapCrossLink}
             onUpdateCrossLink={updateMindMapCrossLink}
             onDeleteCrossLink={deleteMindMapCrossLink}
+            onAddBrace={addMindMapBrace}
+            onUpdateBrace={updateMindMapBrace}
+            onAddBraceLabelNode={addBraceLabelNode}
+            onDeleteBrace={deleteMindMapBrace}
             onLayoutMap={layoutMindMap}
             onStudyMap={studyMindMap}
             onDeleteMap={deleteMindMap}

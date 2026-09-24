@@ -860,6 +860,33 @@ img, video, canvas {
   box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
 }
 
+.mindmap-brace-label {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  max-width: 180px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(12, 16, 24, 0.94);
+  border: 1px solid rgba(251, 191, 36, 0.55);
+  color: #fde68a;
+  font-size: 12px;
+  font-weight: 800;
+  pointer-events: auto;
+  cursor: pointer;
+  white-space: nowrap;
+  z-index: 4;
+}
+
+.mindmap-brace-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mindmap-brace-label.is-selected {
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
+}
+
 .mindmap-cross-label {
   position: absolute;
   transform: translate(-50%, -50%);

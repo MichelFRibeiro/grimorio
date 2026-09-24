@@ -29,7 +29,8 @@ import {
   FolderTree,
   Link2,
   Unlink,
-  PenLine
+  PenLine,
+  Braces
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { MindMapIcon, MindMapMediaPicker, MindMapThumb, collectUsedMindMapImages } from './MindMapMedia';
@@ -411,6 +412,41 @@ function crossLinkCurve(fromNode, toNode, fromFont, toFont) {
   };
 }
 
+function braceGeometry(nodes, side = 'right', fontFor) {
+  const placed = (nodes || []).filter(Boolean);
+  if (placed.length < 2) return null;
+  const rects = placed.map(node => nodeRect(node, fontFor(node)));
+  const top = Math.min(...rects.map(r => r.top));
+  const bottom = Math.max(...rects.map(r => r.bottom));
+  const reach = side === 'left'
+    ? Math.min(...rects.map(r => r.left))
+    : Math.max(...rects.map(r => r.right));
+  const span = Math.max(36, bottom - top);
+  const depth = Math.min(34, Math.max(16, span * 0.18));
+  const gap = 18;
+  const spine = side === 'left' ? reach - gap - depth : reach + gap + depth;
+  const tip = side === 'left' ? spine - depth * 0.85 : spine + depth * 0.85;
+  const midY = (top + bottom) / 2;
+  const arm = (rect) => (side === 'left' ? rect.left - 8 : rect.right + 8);
+  const ticks = rects.map((rect) => {
+    const y = rect.top + rect.h / 2;
+    const x = arm(rect);
+    return `M ${x} ${y} L ${spine} ${y}`;
+  }).join(' ');
+  const d = [
+    `M ${spine} ${top}`,
+    `C ${tip} ${top}, ${tip} ${midY - span * 0.08}, ${tip} ${midY}`,
+    `C ${tip} ${midY + span * 0.08}, ${tip} ${bottom}, ${spine} ${bottom}`,
+    ticks
+  ].join(' ');
+  return {
+    d,
+    labelX: tip + (side === 'left' ? -12 : 12),
+    labelY: midY,
+    align: side === 'left' ? 'right' : 'left'
+  };
+}
+
 function rectsOverlap(a, b) {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
@@ -435,6 +471,8 @@ function MindMapCanvas({
   onToggleFullscreen,
   fillMode = null,
   hideablePicker = null,
+  selectedBraceId = null,
+  onSelectBrace,
   nodeQuery = '',
   onNodeQuery,
   activeHitIndex = 0,
@@ -488,9 +526,13 @@ function MindMapCanvas({
   }, [map?.nodes, query]);
   const activeHitId = searchHits[activeHitIndex]?.id || null;
   const matchIds = useMemo(() => new Set(searchHits.map(n => n.id)), [searchHits]);
+  const braceLabelIds = useMemo(
+    () => new Set((map?.braces || []).map(b => b.labelNodeId).filter(Boolean)),
+    [map?.braces]
+  );
   const links = useMemo(() => (
     visible
-      .filter(n => n.parentId && visibleIds.has(n.parentId))
+      .filter(n => n.parentId && visibleIds.has(n.parentId) && !braceLabelIds.has(n.id))
       .map(n => ({
         id: `${n.parentId}-${n.id}`,
         from: visible.find(p => p.id === n.parentId),
@@ -498,7 +540,7 @@ function MindMapCanvas({
         depth: nodeDepth(map, n.id)
       }))
       .filter(l => l.from && l.to)
-  ), [visible, visibleIds, map]);
+  ), [visible, visibleIds, map, braceLabelIds]);
   const crossLinks = useMemo(() => (
     (map?.crossLinks || [])
       .map((link) => ({
@@ -529,6 +571,15 @@ function MindMapCanvas({
     });
     return byId;
   }, [map?.crossLinks, map?.nodes]);
+  const braces = useMemo(() => (
+    (map?.braces || [])
+      .map((brace) => ({
+        ...brace,
+        nodes: (brace.nodeIds || []).map(id => visible.find(n => n.id === id)).filter(Boolean),
+        labelNode: brace.labelNodeId ? visible.find(n => n.id === brace.labelNodeId) : null
+      }))
+      .filter(brace => brace.nodes.length >= 2)
+  ), [map?.braces, visible]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -636,6 +687,7 @@ function MindMapCanvas({
     if (onSelect) onSelect(null);
     if (onSelectLink) onSelectLink(null);
     if (onSelectBranch) onSelectBranch(null);
+    if (onSelectBrace) onSelectBrace(null);
   };
 
   const onPointerDownNode = (e, node) => {
@@ -656,6 +708,7 @@ function MindMapCanvas({
     if (onSelect && !keepGroup) onSelect(node.id, { additive, range });
     if (onSelectLink) onSelectLink(null);
     if (onSelectBranch) onSelectBranch(null);
+    if (onSelectBrace) onSelectBrace(null);
     if (readOnly || additive || range) return;
     const movingIds = keepGroup ? [...selectedIdSet] : [node.id];
     const origins = {};
@@ -846,6 +899,36 @@ function MindMapCanvas({
               </g>
             );
           })}
+          {braces.map((brace) => {
+            const geo = braceGeometry(brace.nodes, brace.side || 'right', fontFor);
+            if (!geo) return null;
+            const selected = selectedBraceId === brace.id;
+            const color = brace.color || '#fbbf24';
+            const tip = { x: geo.labelX - (geo.align === 'right' ? -12 : 12), y: geo.labelY };
+            const labelStem = brace.labelNode
+              ? `M ${tip.x} ${tip.y} L ${brace.labelNode.x} ${brace.labelNode.y}`
+              : '';
+            return (
+              <path
+                key={brace.id}
+                d={`${geo.d} ${labelStem}`}
+                fill="none"
+                stroke={color}
+                strokeWidth={selected ? 2.8 : 1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity={selected ? 1 : 0.9}
+                style={{ cursor: 'pointer' }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  if (onSelectBrace) onSelectBrace(brace.id);
+                  if (onSelect) onSelect(null);
+                  if (onSelectLink) onSelectLink(null);
+                  if (onSelectBranch) onSelectBranch(null);
+                }}
+              />
+            );
+          })}
           {crossLinks.map((link) => {
             if (!link.from || !link.to) return null;
             const curve = crossLinkCurve(link.from, link.to, fontFor(link.from), fontFor(link.to));
@@ -881,6 +964,36 @@ function MindMapCanvas({
         </g>
       </svg>
       <div className="mindmap-world" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
+        {braces.map((brace) => {
+          if (brace.labelNode) return null;
+          const geo = braceGeometry(brace.nodes, brace.side || 'right', fontFor);
+          if (!geo) return null;
+          const selected = selectedBraceId === brace.id;
+          const text = brace.label || 'chave';
+          return (
+            <button
+              key={`${brace.id}-label`}
+              type="button"
+              className={`mindmap-brace-label ${selected ? 'is-selected' : ''}`}
+              style={{
+                left: geo.labelX,
+                top: geo.labelY,
+                transform: geo.align === 'right' ? 'translate(-100%, -50%)' : 'translate(0, -50%)',
+                borderColor: selected ? '#fbbf24' : (brace.color || '#fbbf24'),
+                color: brace.color || '#fde68a'
+              }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                if (onSelectBrace) onSelectBrace(brace.id);
+                if (onSelect) onSelect(null);
+                if (onSelectLink) onSelectLink(null);
+                if (onSelectBranch) onSelectBranch(null);
+              }}
+            >
+              <span>{text}</span>
+            </button>
+          );
+        })}
         {crossLinks.map((link) => {
           if (!link.from || !link.to || (!link.label && !link.icon)) return null;
           const curve = crossLinkCurve(link.from, link.to, fontFor(link.from), fontFor(link.to));
@@ -959,7 +1072,7 @@ function MindMapCanvas({
           const searchMatch = !!query && matchIds.has(node.id);
           const searchActive = activeHitId === node.id;
           const linkingFrom = linkingFromId === node.id;
-          const kids = childrenOf(map, node.id).length;
+          const kids = childrenOf(map, node.id).filter(child => !braceLabelIds.has(child.id)).length;
           const partners = (!fillMode && !hideablePicker && !linkingFromId)
             ? (partnersByNode.get(node.id) || [])
             : [];
@@ -1202,6 +1315,10 @@ export function MindMapsView({
   onAddCrossLink,
   onUpdateCrossLink,
   onDeleteCrossLink,
+  onAddBrace,
+  onUpdateBrace,
+  onAddBraceLabelNode,
+  onDeleteBrace,
   onLayoutMap,
   onStudyMap,
   onDeleteMap,
@@ -1238,6 +1355,9 @@ export function MindMapsView({
   const [selectedIds, setSelectedIds] = useState([]);
   const [selectedLinkId, setSelectedLinkId] = useState(null);
   const [selectedBranchId, setSelectedBranchId] = useState(null);
+  const [selectedBraceId, setSelectedBraceId] = useState(null);
+  const [braceLabel, setBraceLabel] = useState('');
+  const [braceError, setBraceError] = useState('');
   const [linkingFromId, setLinkingFromId] = useState(null);
   const [draftLabel, setDraftLabel] = useState('');
   const [draftNotes, setDraftNotes] = useState('');
@@ -1304,6 +1424,12 @@ export function MindMapsView({
   const selectedBranch = editorMap && selectedBranchId
     ? (editorMap.nodes || []).find(n => n.id === selectedBranchId)
     : null;
+  const selectedBrace = editorMap && selectedBraceId
+    ? (editorMap.braces || []).find(b => b.id === selectedBraceId)
+    : null;
+  const selectedBraceLabelNode = selectedBrace?.labelNodeId
+    ? (editorMap.nodes || []).find(n => n.id === selectedBrace.labelNodeId)
+    : null;
   const selectedBranchParent = selectedBranch?.parentId
     ? (editorMap.nodes || []).find(n => n.id === selectedBranch.parentId)
     : null;
@@ -1329,7 +1455,7 @@ export function MindMapsView({
 
   useEffect(() => {
     setLocalNodes(null);
-  }, [liveMap?.updatedAt, liveMap?.nodes?.length, liveMap?.crossLinks?.length]);
+  }, [liveMap?.updatedAt, liveMap?.nodes?.length, liveMap?.crossLinks?.length, liveMap?.braces?.length]);
 
   const persistNodeDraft = (nodeId) => {
     if (!editorMap || !nodeId) return;
@@ -1384,6 +1510,11 @@ export function MindMapsView({
     draftLinkLabelRef.current = label;
   }, [selectedLink?.id]);
 
+  useEffect(() => {
+    setBraceLabel(selectedBrace?.label || '');
+    setBraceError('');
+  }, [selectedBrace?.id]);
+
   const matchingCategoryIds = useMemo(() => {
     if (filterCategoryId === 'all') return null;
     const childIds = categories.filter(c => c.parentId === filterCategoryId).map(c => c.id);
@@ -1405,7 +1536,7 @@ export function MindMapsView({
   const groupedMaps = groupMapsByCategory(filteredMaps, categories);
 
   useEffect(() => {
-    if (!fullscreen && !linkingFromId && !pickingHideable && selectedIds.length <= 1 && !selectedBranchId) return undefined;
+    if (!fullscreen && !linkingFromId && !pickingHideable && selectedIds.length <= 1 && !selectedBranchId && !selectedBraceId) return undefined;
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
       if (pickingHideable) {
@@ -1416,6 +1547,11 @@ export function MindMapsView({
       if (linkingFromId) {
         e.preventDefault();
         cancelLinking();
+        return;
+      }
+      if (selectedBraceId) {
+        e.preventDefault();
+        setSelectedBraceId(null);
         return;
       }
       if (selectedBranchId) {
@@ -1437,7 +1573,7 @@ export function MindMapsView({
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [fullscreen, linkingFromId, pickingHideable, selectedIds.length, selectedId, selectedBranchId]);
+  }, [fullscreen, linkingFromId, pickingHideable, selectedIds.length, selectedId, selectedBranchId, selectedBraceId]);
 
   const dueCount = maps.reduce((acc, m) => acc + (computeMapStats(m, { today: todayStr }).dueBranches || 0), 0);
   const sessions = mindMapSessions || [];
@@ -1449,6 +1585,7 @@ export function MindMapsView({
     setSelectedIds(map.rootId ? [map.rootId] : []);
     setSelectedLinkId(null);
     setSelectedBranchId(null);
+    setSelectedBraceId(null);
     setLinkingFromId(null);
     setLocalNodes(null);
     setPickingHideable(false);
@@ -1568,6 +1705,7 @@ export function MindMapsView({
     persistLinkDraft(draftLinkOwnerIdRef.current);
     setSelectedLinkId(null);
     setSelectedBranchId(null);
+    setSelectedBraceId(null);
     setSelectedIds((prev) => {
       if (options.marquee) {
         if (options.additive) {
@@ -1611,6 +1749,7 @@ export function MindMapsView({
     if (linkId) {
       setSelectedIds([]);
       setSelectedBranchId(null);
+      setSelectedBraceId(null);
     }
     setLinkingFromId(null);
   };
@@ -1622,6 +1761,19 @@ export function MindMapsView({
     if (nodeId) {
       setSelectedIds([]);
       setSelectedLinkId(null);
+      setSelectedBraceId(null);
+      setLinkingFromId(null);
+    }
+  };
+
+  const handleSelectBrace = (braceId) => {
+    persistNodeDraft(draftOwnerIdRef.current);
+    persistLinkDraft(draftLinkOwnerIdRef.current);
+    setSelectedBraceId(braceId);
+    if (braceId) {
+      setSelectedIds([]);
+      setSelectedLinkId(null);
+      setSelectedBranchId(null);
       setLinkingFromId(null);
     }
   };
@@ -1644,6 +1796,27 @@ export function MindMapsView({
     onUpdateNode?.(editorMap.id, selectedBranchId, { curve: null });
   };
 
+  const createBraceFromSelection = async (side = 'right') => {
+    if (!editorMap || selectedIds.length < 2 || !onAddBrace) return;
+    setBraceError('');
+    try {
+      const before = new Set((editorMap.braces || []).map(b => b.id));
+      const created = await onAddBrace(editorMap.id, {
+        nodeIds: selectedIds,
+        label: braceLabel.trim(),
+        side
+      });
+      setBraceLabel('');
+      const newId = (created?.braces || []).find(b => !before.has(b.id))?.id || null;
+      if (newId) {
+        setSelectedBraceId(newId);
+        setSelectedIds([]);
+      }
+    } catch (err) {
+      setBraceError(err.message || 'Não foi possível criar a chave.');
+    }
+  };
+
   const startLinkFromSelected = () => {
     if (!selectedNode) return;
     setLinkError('');
@@ -1656,6 +1829,7 @@ export function MindMapsView({
     setSelectedIds([]);
     setSelectedLinkId(null);
     setSelectedBranchId(null);
+    setSelectedBraceId(null);
     const saved = sanitizeFillHideableNodeIds(editorMap.fillHideableNodeIds, editorMap.nodes) || [];
     setDraftHideableIds(saved);
     setPickingHideable(true);
@@ -1943,6 +2117,8 @@ export function MindMapsView({
             onSelect={pickingHideable ? undefined : handleSelectNode}
             onSelectLink={pickingHideable ? undefined : handleSelectLink}
             onSelectBranch={pickingHideable ? undefined : handleSelectBranch}
+            selectedBraceId={pickingHideable ? null : selectedBraceId}
+            onSelectBrace={pickingHideable ? undefined : handleSelectBrace}
             onMoveNode={pickingHideable ? undefined : handleMoveNode}
             onCommitMoves={pickingHideable ? undefined : handleCommitMoves}
             onBendBranch={pickingHideable ? undefined : handleBendBranch}
@@ -1989,6 +2165,113 @@ export function MindMapsView({
                     Cancelar
                   </button>
                 </div>
+              </>
+            ) : selectedBrace ? (
+              <>
+                <div style={{ fontSize: '0.72rem', color: '#fbbf24', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
+                  Chave selecionada
+                </div>
+                <p style={{ color: '#cbd5e1', fontSize: '0.85rem', marginBottom: 10, lineHeight: 1.45 }}>
+                  Engloba {(selectedBrace.nodeIds || []).map((id) => {
+                    const label = (editorMap.nodes || []).find(n => n.id === id)?.label || 'ramo';
+                    return label.replace(/\s*\n\s*/g, ' ');
+                  }).join(', ')}.
+                </p>
+                <label style={labelStyle}>Rótulo da chave</label>
+                {selectedBraceLabelNode ? (
+                  <>
+                    <p style={{ color: '#fde68a', fontSize: '0.85rem', margin: '0 0 10px', lineHeight: 1.45 }}>
+                      O rótulo é o ramo “{selectedBraceLabelNode.label.replace(/\s*\n\s*/g, ' ')}”.
+                    </p>
+                    <button
+                      type="button"
+                      className="mindmap-ghost-btn"
+                      onClick={() => {
+                        setSelectedBraceId(null);
+                        setSelectedIds([selectedBraceLabelNode.id]);
+                      }}
+                    >
+                      <Plus size={14} /> Abrir ramo para criar filhos
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      value={braceLabel}
+                      onChange={(e) => setBraceLabel(e.target.value)}
+                      onBlur={() => {
+                        if ((selectedBrace.label || '') === braceLabel) return;
+                        onUpdateBrace?.(editorMap.id, selectedBrace.id, { label: braceLabel });
+                      }}
+                      placeholder="ex: Mamíferos"
+                      style={inputStyle}
+                    />
+                    <button
+                      type="button"
+                      className="mindmap-ghost-btn"
+                      style={{ marginTop: 12 }}
+                      onClick={async () => {
+                        if (!onAddBraceLabelNode) return;
+                        setBraceError('');
+                        try {
+                          const created = await onAddBraceLabelNode(editorMap.id, selectedBrace.id, { label: braceLabel });
+                          const nodeId = (created?.braces || []).find(b => b.id === selectedBrace.id)?.labelNodeId;
+                          if (nodeId) {
+                            setSelectedBraceId(null);
+                            setSelectedIds([nodeId]);
+                          }
+                        } catch (err) {
+                          setBraceError(err.message || 'Não foi possível criar o ramo do rótulo.');
+                        }
+                      }}
+                    >
+                      <Plus size={14} /> Criar ramo a partir do rótulo
+                    </button>
+                  </>
+                )}
+                {braceError && <p style={{ color: '#f87171', fontSize: '0.78rem', margin: '8px 0 0' }}>{braceError}</p>}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 12 }}>
+                  <button
+                    type="button"
+                    className="mindmap-ghost-btn"
+                    style={selectedBrace.side !== 'left' ? { borderColor: 'rgba(251,191,36,0.5)', color: '#fbbf24' } : undefined}
+                    onClick={() => onUpdateBrace?.(editorMap.id, selectedBrace.id, { side: 'right' })}
+                  >
+                    {`Chave }`}
+                  </button>
+                  <button
+                    type="button"
+                    className="mindmap-ghost-btn"
+                    style={selectedBrace.side === 'left' ? { borderColor: 'rgba(251,191,36,0.5)', color: '#fbbf24' } : undefined}
+                    onClick={() => onUpdateBrace?.(editorMap.id, selectedBrace.id, { side: 'left' })}
+                  >
+                    {`{ Chave`}
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+                  {MIND_MAP_NODE_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => onUpdateBrace?.(editorMap.id, selectedBrace.id, { color })}
+                      style={{
+                        width: 22, height: 22, borderRadius: '50%', background: color, cursor: 'pointer',
+                        border: selectedBrace.color === color ? '2px solid #fff' : '2px solid transparent'
+                      }}
+                    />
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="mindmap-ghost-btn is-danger"
+                  style={{ marginTop: 16 }}
+                  onClick={() => {
+                    onDeleteBrace?.(editorMap.id, selectedBrace.id);
+                    setSelectedBraceId(null);
+                  }}
+                >
+                  <Trash2 size={14} /> Remover chave
+                </button>
               </>
             ) : selectedBranch && selectedBranchParent ? (
               <>
@@ -2257,6 +2540,28 @@ export function MindMapsView({
                 >
                   {categoryOptions}
                 </select>
+                {selectedIds.length >= 2 && (
+                  <div style={{ display: 'grid', gap: 8, marginTop: 16, padding: 10, borderRadius: 12, border: '1px solid rgba(251,191,36,0.28)', background: 'rgba(251,191,36,0.06)' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#fde68a', fontWeight: 800 }}>
+                      Chave englobando {selectedIds.length} ramos
+                    </div>
+                    <input
+                      value={braceLabel}
+                      onChange={(e) => setBraceLabel(e.target.value)}
+                      placeholder="Rótulo, ex: Mamíferos"
+                      style={inputStyle}
+                    />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      <button type="button" className="mindmap-ghost-btn" onClick={() => createBraceFromSelection('right')}>
+                        <Braces size={14} /> {`Chave }`}
+                      </button>
+                      <button type="button" className="mindmap-ghost-btn" onClick={() => createBraceFromSelection('left')}>
+                        <Braces size={14} /> {`{ Chave`}
+                      </button>
+                    </div>
+                    {braceError && <p style={{ color: '#f87171', fontSize: '0.78rem', margin: 0 }}>{braceError}</p>}
+                  </div>
+                )}
                 {!multiSelected && (
                   <div style={{ marginTop: '16px', fontSize: '0.75rem', color: '#64748b', lineHeight: 1.5 }}>
                     Caminho: {nodePath(editorMap, selectedNode.id).map(n => n.label).join(' → ')}
@@ -2265,7 +2570,7 @@ export function MindMapsView({
               </>
             ) : (
               <p style={{ color: '#94a3b8', fontSize: '0.88rem' }}>
-                Clique em um ramo para editar, anotar ou ramificar. Clique no galho para curvá-lo: âncoras nos nós e três pontos de rota. Ctrl/Cmd+clique ou Shift+arrastar no fundo seleciona vários para mudar cor, fonte e ícone juntos.
+                Clique em um ramo para editar, anotar ou ramificar. Selecione dois ou mais ramos para criar uma chave que os engloba. Ctrl/Cmd+clique ou Shift+arrastar no fundo seleciona vários.
               </p>
             )}
           </aside>

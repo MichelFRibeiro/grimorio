@@ -692,6 +692,72 @@ export function useGameData() {
     return false;
   };
 
+  const addMindMapBrace = async (mapId, braceData) => {
+    playClick();
+    const res = await fetch(`/api/mind-maps/${mapId}/braces`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(braceData)
+    });
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      applyMindMapPayload(result);
+      return result.mindMap || null;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao criar a chave.');
+    throw new Error(errJson.error || 'Erro ao criar a chave.');
+  };
+
+  const updateMindMapBrace = async (mapId, braceId, braceData) => {
+    const res = await fetch(`/api/mind-maps/${mapId}/braces/${braceId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(braceData)
+    });
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      applyMindMapPayload(result);
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao atualizar a chave.');
+    return false;
+  };
+
+  const addBraceLabelNode = async (mapId, braceId, braceData = {}) => {
+    playClick();
+    const res = await fetch(`/api/mind-maps/${mapId}/braces/${braceId}/label-node`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(braceData)
+    });
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      applyMindMapPayload(result);
+      return result.mindMap || null;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao criar o ramo do rótulo.');
+    throw new Error(errJson.error || 'Erro ao criar o ramo do rótulo.');
+  };
+
+  const deleteMindMapBrace = async (mapId, braceId) => {
+    playClick();
+    const res = await fetch(`/api/mind-maps/${mapId}/braces/${braceId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      applyMindMapPayload(result);
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao excluir a chave.');
+    return false;
+  };
+
   const layoutMindMap = async (mapId) => {
     playClick();
     const res = await fetch(`/api/mind-maps/${mapId}/layout`, {
@@ -1505,6 +1571,10 @@ export function useGameData() {
     addMindMapCrossLink,
     updateMindMapCrossLink,
     deleteMindMapCrossLink,
+    addMindMapBrace,
+    updateMindMapBrace,
+    addBraceLabelNode,
+    deleteMindMapBrace,
     layoutMindMap,
     studyMindMap,
     deleteMindMap,

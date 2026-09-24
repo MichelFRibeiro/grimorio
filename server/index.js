@@ -93,6 +93,10 @@ import {
   addMindMapCrossLink,
   updateMindMapCrossLink,
   deleteMindMapCrossLink,
+  addMindMapBrace,
+  updateMindMapBrace,
+  deleteMindMapBrace,
+  addBraceLabelNode,
   updateMindMapMeta,
   layoutMindMap,
   applyStudySession,
@@ -3057,6 +3061,79 @@ app.delete('/api/mind-maps/:id/nodes/:nodeId', (req, res) => {
     const index = db.mindMaps.findIndex(m => m.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
     const next = deleteMindMapNode(db.mindMaps[index], req.params.nodeId);
+    db.mindMaps[index] = next;
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...next, stats: computeMapStats(next) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/mind-maps/:id/braces', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    const { nodeIds, label, color, side } = req.body || {};
+    const next = addMindMapBrace(db.mindMaps[index], { nodeIds, label, color, side });
+    db.mindMaps[index] = next;
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...next, stats: computeMapStats(next) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/mind-maps/:id/braces/:braceId', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    const next = updateMindMapBrace(db.mindMaps[index], req.params.braceId, req.body || {});
+    db.mindMaps[index] = next;
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...next, stats: computeMapStats(next) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/mind-maps/:id/braces/:braceId/label-node', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    const next = addBraceLabelNode(db.mindMaps[index], req.params.braceId, req.body || {});
+    db.mindMaps[index] = next;
+    saveDb(db);
+    res.json({
+      success: true,
+      mindMap: { ...next, stats: computeMapStats(next) }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/mind-maps/:id/braces/:braceId', (req, res) => {
+  try {
+    const db = getDb();
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    const index = db.mindMaps.findIndex(m => m.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
+    const next = deleteMindMapBrace(db.mindMaps[index], req.params.braceId);
     db.mindMaps[index] = next;
     saveDb(db);
     res.json({

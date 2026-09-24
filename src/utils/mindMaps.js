@@ -344,6 +344,7 @@ export function createMindMap({
     nodes: [root],
     rootId: root.id,
     crossLinks: [],
+    braces: [],
     fillHideableNodeIds: null
   };
 }
@@ -524,7 +525,8 @@ export function deleteMindMapNode(map, nodeId) {
     crossLinks: sanitizeMindMapCrossLinks(
       (map.crossLinks || []).filter(l => !remove.has(l.fromId) && !remove.has(l.toId)),
       remaining
-    )
+    ),
+    braces: sanitizeMindMapBraces(map.braces, remaining)
   };
 }
 
@@ -556,6 +558,135 @@ export function updateMindMapMeta(map, patch = {}) {
     }
   }
   return next;
+}
+
+export function createMindMapBrace({
+  id,
+  nodeIds = [],
+  label = '',
+  color,
+  side,
+  labelNodeId = null
+} = {}, nodes = []) {
+  const known = new Set((nodes || []).map(n => n.id));
+  const ids = [];
+  const seen = new Set();
+  (Array.isArray(nodeIds) ? nodeIds : []).forEach((raw) => {
+    const nodeId = String(raw || '').trim();
+    if (!nodeId || seen.has(nodeId)) return;
+    if (known.size && !known.has(nodeId)) return;
+    seen.add(nodeId);
+    ids.push(nodeId);
+  });
+  if (ids.length < 2) throw new Error('A chave precisa englobar pelo menos dois ramos.');
+  const braceSide = side === 'left' ? 'left' : 'right';
+  const linkedId = String(labelNodeId || '').trim();
+  const labelNode = linkedId && known.has(linkedId) && !ids.includes(linkedId) ? linkedId : null;
+  return {
+    id: id || uidMind('mb'),
+    nodeIds: ids,
+    label: normalizeMindMapLabel(label).slice(0, 80),
+    color: color || colorForIndex(hashStr(ids.join('|')) + 2),
+    side: braceSide,
+    labelNodeId: labelNode
+  };
+}
+
+export function sanitizeMindMapBrace(raw, nodes = []) {
+  if (!raw || typeof raw !== 'object') return null;
+  try {
+    return createMindMapBrace(raw, nodes);
+  } catch {
+    return null;
+  }
+}
+
+export function sanitizeMindMapBraces(list = [], nodes = []) {
+  const seen = new Set();
+  const out = [];
+  (Array.isArray(list) ? list : []).forEach((raw) => {
+    const brace = sanitizeMindMapBrace(raw, nodes);
+    if (!brace || seen.has(brace.id)) return;
+    seen.add(brace.id);
+    out.push(brace);
+  });
+  return out;
+}
+
+export function addMindMapBrace(map, payload = {}) {
+  if (!map) throw new Error('Mapa mental não encontrado.');
+  const brace = createMindMapBrace(payload, map.nodes);
+  return {
+    ...map,
+    updatedAt: new Date().toISOString(),
+    braces: [...sanitizeMindMapBraces(map.braces, map.nodes), brace]
+  };
+}
+
+export function updateMindMapBrace(map, braceId, patch = {}) {
+  if (!map) throw new Error('Mapa mental não encontrado.');
+  const braces = sanitizeMindMapBraces(map.braces, map.nodes);
+  const index = braces.findIndex(b => b.id === braceId);
+  if (index === -1) throw new Error('Chave não encontrada.');
+  const current = braces[index];
+  const nextBrace = createMindMapBrace({
+    ...current,
+    ...patch,
+    id: current.id,
+    nodeIds: patch.nodeIds !== undefined ? patch.nodeIds : current.nodeIds
+  }, map.nodes);
+  const next = braces.slice();
+  next[index] = nextBrace;
+  return {
+    ...map,
+    updatedAt: new Date().toISOString(),
+    braces: next
+  };
+}
+
+export function braceAnchor(map, brace) {
+  const members = (brace?.nodeIds || []).map(id => findNode(map, id)).filter(Boolean);
+  if (members.length < 2) return { x: 0, y: 0 };
+  const side = brace.side === 'left' ? 'left' : 'right';
+  const ys = members.map(n => n.y || 0);
+  const xs = members.map(n => n.x || 0);
+  const midY = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const edge = side === 'left' ? Math.min(...xs) : Math.max(...xs);
+  return {
+    x: Math.round(edge + (side === 'left' ? -168 : 168)),
+    y: Math.round(midY)
+  };
+}
+
+export function addBraceLabelNode(map, braceId, { label } = {}) {
+  if (!map) throw new Error('Mapa mental não encontrado.');
+  const brace = sanitizeMindMapBraces(map.braces, map.nodes).find(b => b.id === braceId);
+  if (!brace) throw new Error('Chave não encontrada.');
+  if (brace.labelNodeId && findNode(map, brace.labelNodeId)) {
+    throw new Error('Esta chave já tem um ramo no rótulo.');
+  }
+  const anchor = braceAnchor(map, brace);
+  const text = normalizeMindMapLabel(label || brace.label) || 'Novo ramo';
+  const withNode = addMindMapNode(map, {
+    parentId: map.rootId,
+    label: text,
+    color: brace.color,
+    x: anchor.x,
+    y: anchor.y
+  });
+  const created = withNode.nodes[withNode.nodes.length - 1];
+  return updateMindMapBrace(withNode, braceId, { labelNodeId: created.id, label: text });
+}
+
+export function deleteMindMapBrace(map, braceId) {
+  if (!map) throw new Error('Mapa mental não encontrado.');
+  const braces = sanitizeMindMapBraces(map.braces, map.nodes);
+  if (!braces.some(b => b.id === braceId)) throw new Error('Chave não encontrada.');
+  return {
+    ...map,
+    updatedAt: new Date().toISOString(),
+    braces: braces.filter(b => b.id !== braceId)
+  };
 }
 
 export function createMindMapCrossLink({
@@ -998,6 +1129,7 @@ export function sanitizeMindMap(raw) {
     rootId: root.id,
     nodes,
     crossLinks: sanitizeMindMapCrossLinks(raw.crossLinks, nodes),
+    braces: sanitizeMindMapBraces(raw.braces, nodes),
     fillHideableNodeIds: sanitizeFillHideableNodeIds(raw.fillHideableNodeIds, nodes)
   };
 }

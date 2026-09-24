@@ -74,6 +74,9 @@ import {
   addMindMapCrossLink,
   updateMindMapCrossLink,
   deleteMindMapCrossLink,
+  addMindMapBrace,
+  updateMindMapBrace,
+  deleteMindMapBrace,
   updateMindMapMeta,
   layoutMindMap,
   applyStudySession,
@@ -1510,6 +1513,79 @@ export const toolsDefinition = [
         db.mindMaps[index] = next;
         saveDb(db);
         return formatSuccess(next, `${args.nodeIds.length} ramos atualizados.`);
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'add_mind_map_brace',
+    description: 'Criar uma chave } que engloba dois ou mais ramos e aponta para um rótulo (ex.: A e E são Mamíferos).',
+    schema: {
+      mapId: z.string().describe('ID do mapa'),
+      nodeIds: z.array(z.string()).describe('IDs dos ramos englobados pela chave'),
+      label: z.string().optional().describe('Rótulo na ponta da chave'),
+      color: z.string().optional().describe('Cor hex da chave'),
+      side: z.enum(['left', 'right']).optional().describe('Lado da chave em relação aos ramos')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      const index = db.mindMaps.findIndex(m => m.id === args.mapId);
+      if (index === -1) return formatError(`Mapa mental '${args.mapId}' não encontrado.`);
+      try {
+        const next = addMindMapBrace(db.mindMaps[index], args);
+        db.mindMaps[index] = next;
+        saveDb(db);
+        return formatSuccess(next, 'Chave criada englobando os ramos.');
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'update_mind_map_brace',
+    description: 'Atualizar o rótulo, a cor, o lado ou os ramos de uma chave do mapa mental.',
+    schema: {
+      mapId: z.string().describe('ID do mapa'),
+      braceId: z.string().describe('ID da chave'),
+      nodeIds: z.array(z.string()).optional(),
+      label: z.string().optional(),
+      color: z.string().optional(),
+      side: z.enum(['left', 'right']).optional()
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      const index = db.mindMaps.findIndex(m => m.id === args.mapId);
+      if (index === -1) return formatError(`Mapa mental '${args.mapId}' não encontrado.`);
+      try {
+        const next = updateMindMapBrace(db.mindMaps[index], args.braceId, args);
+        db.mindMaps[index] = next;
+        saveDb(db);
+        return formatSuccess(next, 'Chave atualizada.');
+      } catch (err) {
+        return formatError(err.message);
+      }
+    }
+  },
+  {
+    name: 'delete_mind_map_brace',
+    description: 'Remover uma chave que engloba ramos do mapa mental.',
+    schema: {
+      mapId: z.string().describe('ID do mapa'),
+      braceId: z.string().describe('ID da chave')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      const index = db.mindMaps.findIndex(m => m.id === args.mapId);
+      if (index === -1) return formatError(`Mapa mental '${args.mapId}' não encontrado.`);
+      try {
+        const next = deleteMindMapBrace(db.mindMaps[index], args.braceId);
+        db.mindMaps[index] = next;
+        saveDb(db);
+        return formatSuccess(next, 'Chave removida.');
       } catch (err) {
         return formatError(err.message);
       }
