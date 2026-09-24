@@ -122,6 +122,14 @@ export function App() {
     deleteMindMapCategory
   } = useGameData();
 
+  const todayStr = getSaoPauloDateStr();
+  const homeostasisFloors = useMemo(() => ({
+    study: getAguStudyLoadSeries(data?.aguPlan, data?.examQuestions || [], todayStr, {
+      mindMapSessions: data?.mindMapSessions || []
+    }).homeostasisMinMinutes,
+    reading: getReadingLoadSeries(data?.readingSessions || [], todayStr).homeostasisMinMinutes
+  }), [data, todayStr]);
+
   if (loadingAuth || (isAuthenticated && loading)) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0c0e14', color: '#fbbf24' }}>
@@ -206,14 +214,7 @@ export function App() {
   }).length;
   const activeBooksCount = (books || []).filter(b => b.status === 'reading').length;
   const activeProcessesCount = (processes || []).filter(p => p.status === 'in_progress').length;
-  const todayStr = getSaoPauloDateStr();
   const aguToday = summarizePlan(aguPlan, examQuestions || [], todayStr).today;
-  const homeostasisFloors = useMemo(() => ({
-    study: getAguStudyLoadSeries(aguPlan, examQuestions || [], todayStr, {
-      mindMapSessions: mindMapSessions || []
-    }).homeostasisMinMinutes,
-    reading: getReadingLoadSeries(readingSessions || [], todayStr).homeostasisMinMinutes
-  }), [aguPlan, examQuestions, mindMapSessions, readingSessions, todayStr]);
   const aguTodayRemaining = Math.max(0, (aguToday.totalBlocks || 0) - (aguToday.doneCount || 0));
   const activeNinetyDayGoalsCount = (ninetyDayGoals || []).filter(g => g.status === 'active' || g.status === 'expired').length;
   const dueMindMapsCount = analytics?.summary?.mindMapBranchesDue
