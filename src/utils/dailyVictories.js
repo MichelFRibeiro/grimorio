@@ -293,16 +293,40 @@ export function listOverflowVictoriesForDate(list = [], dateStr, source) {
   return listVictoriesForDate(list, dateStr).filter(item => item.source === source);
 }
 
+/**
+ * Título exibido da vitória de homeostase: o número segue o piso vivo da faixa.
+ * Vitória manual (sem origem de homeostase) volta intacta.
+ */
+export function displayHomeostasisVictoryTitle(victory, { studyFloorMinutes, readingFloorMinutes } = {}) {
+  if (!victory) return '';
+  const source = victory.source;
+  const floor = source === DAILY_VICTORY_OVERFLOW_SOURCES.study
+    ? studyFloorMinutes
+    : source === DAILY_VICTORY_OVERFLOW_SOURCES.reading
+      ? readingFloorMinutes
+      : null;
+  if (floor == null || !Number.isFinite(Number(floor))) return victory.title || '';
+  const minutes = Math.max(0, Math.round(Number(floor)));
+  return source === DAILY_VICTORY_OVERFLOW_SOURCES.study
+    ? `Estudar no mínimo ${minutes} minutos.`
+    : `Ler no mínimo ${minutes} minutos.`;
+}
+
 export function parseHomeostasisVictoryTargetMinutes(title) {
   const match = String(title || '').match(/no m[ií]nimo\s+(\d+)\s+minutos?/i);
   return match ? Number(match[1]) : null;
 }
 
 /**
- * true/false quando o título tem meta em minutos; null se não for possível avaliar.
+ * true/false quando dá para avaliar; null se não houver alvo.
+ * O alvo vivo (piso recalculado da faixa) vence o número congelado no título,
+ * então uma vitória planejada ontem acompanha a faixa de hoje.
  */
-export function isHomeostasisVictoryFulfilled(victory, minutesDone) {
-  const target = parseHomeostasisVictoryTargetMinutes(victory?.title);
+export function isHomeostasisVictoryFulfilled(victory, minutesDone, liveTargetMinutes) {
+  const live = Number(liveTargetMinutes);
+  const target = Number.isFinite(live) && live >= 0
+    ? live
+    : parseHomeostasisVictoryTargetMinutes(victory?.title);
   if (target == null) return null;
   return (Number(minutesDone) || 0) >= target;
 }
@@ -326,7 +350,9 @@ export function planLinkedDailyVictoryUpdates(list = [], {
   questCompleted,
   questNote,
   readingMinutes,
-  studyMinutes
+  studyMinutes,
+  readingTargetMinutes,
+  studyTargetMinutes
 } = {}) {
   const updates = [];
   if (questId && questCompleted !== undefined) {
@@ -338,14 +364,14 @@ export function planLinkedDailyVictoryUpdates(list = [], {
 
   if (readingMinutes !== undefined) {
     listOverflowVictoriesForDate(list, today, DAILY_VICTORY_OVERFLOW_SOURCES.reading).forEach((victory) => {
-      if (!isHomeostasisVictoryFulfilled(victory, readingMinutes)) return;
+      if (!isHomeostasisVictoryFulfilled(victory, readingMinutes, readingTargetMinutes)) return;
       pushCompletionUpdate(updates, victory, true, `Leitura do dia: ${Number(readingMinutes) || 0} min.`);
     });
   }
 
   if (studyMinutes !== undefined) {
     listOverflowVictoriesForDate(list, today, DAILY_VICTORY_OVERFLOW_SOURCES.study).forEach((victory) => {
-      if (!isHomeostasisVictoryFulfilled(victory, studyMinutes)) return;
+      if (!isHomeostasisVictoryFulfilled(victory, studyMinutes, studyTargetMinutes)) return;
       pushCompletionUpdate(updates, victory, true, `Estudo AGU do dia: ${Number(studyMinutes) || 0} min.`);
     });
   }

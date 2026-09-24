@@ -21,7 +21,7 @@ const DEFAULT_ZONE_META = {
     label: 'Homeostase',
     color: '#10b981',
     glow: 'rgba(16, 185, 129, 0.35)',
-    copy: 'Dentro da faixa real dos últimos 14 dias (±20% da média). O ritmo atual está sendo absorvido.'
+    copy: 'Dentro da faixa dos dias em que houve sessão (±20%, sem descer do piso). O ritmo atual está sendo absorvido.'
   },
   'allostasis-under': {
     label: 'Alostase · subcarga',
@@ -218,7 +218,7 @@ export function HomeostasisLoadChart({
             </h3>
           </div>
           <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '6px', maxWidth: '640px' }}>
-            {description || `A faixa verde acompanha o tempo real dos últimos ${days} dias, com teto +20% e piso −20%. Atualiza todo dia. Fora dela o ritmo vira alostase — subcarga ou sobrecarga.`}
+            {description || `A faixa verde sai da média dos dias com sessão nos últimos ${days} dias: teto +20%, piso −20% ou o piso absoluto, o que for maior. Dia vazio não puxa a média — conta só como subcarga.`}
           </p>
           {actions}
         </div>
@@ -264,7 +264,9 @@ export function HomeostasisLoadChart({
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginTop: '14px' }}>
         <div className="rpg-card" style={{ padding: '12px 14px' }}>
-          <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Média {days}d</div>
+          <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            Média {series.activeDays ?? days}d ativos
+          </div>
           <div style={{ fontSize: '1.1rem', fontWeight: 800, color: accentColor, fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
             {formatStudyDuration(series.avgMinutes)}
           </div>

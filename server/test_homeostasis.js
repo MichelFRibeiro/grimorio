@@ -1,6 +1,7 @@
 import assert from 'assert';
 import {
   HOMEOSTASIS_BAND_RATIO,
+  HOMEOSTASIS_FLOOR_MINUTES,
   HOMEOSTASIS_WINDOW_DAYS,
   buildHomeostasisBand,
   classifyLoadMinutes,
@@ -32,12 +33,27 @@ function run() {
     todayStr: '2026-09-07',
     days: 14
   });
-  assert.strictEqual(series.avgMinutes, 10);
-  assert.strictEqual(series.homeostasisMinMinutes, 8);
-  assert.strictEqual(series.homeostasisMaxMinutes, 12);
+  assert.strictEqual(series.avgMinutes, 140, 'Dia vazio não entra na média');
+  assert.strictEqual(series.activeDays, 1);
+  assert.strictEqual(series.emptyDays, 13);
+  assert.strictEqual(series.homeostasisMinMinutes, 112);
+  assert.strictEqual(series.homeostasisMaxMinutes, 168);
   assert.strictEqual(series.today.minutes, 140);
-  assert.strictEqual(series.today.zone, 'allostasis-over');
-  console.log('✅ Série diária classifica sobrecarga contra a média real.');
+  assert.strictEqual(series.today.zone, 'homeostasis');
+  assert.strictEqual(series.points.filter((p) => p.zone === 'allostasis-under').length, 13);
+  console.log('✅ Série diária ignora o zero na média e marca dia vazio como subcarga.');
+
+  const floored = buildDailyLoadSeries({
+    minutesByDate: { '2026-09-07': 10 },
+    todayStr: '2026-09-07',
+    days: 14,
+    floorMinutes: HOMEOSTASIS_FLOOR_MINUTES.reading
+  });
+  assert.strictEqual(floored.avgMinutes, 10);
+  assert.strictEqual(floored.homeostasisMinMinutes, HOMEOSTASIS_FLOOR_MINUTES.reading);
+  assert.strictEqual(floored.floorApplied, true);
+  assert.strictEqual(floored.today.zone, 'allostasis-under');
+  console.log('✅ Piso absoluto segura a faixa quando a média murcha.');
 
   const reading = getReadingLoadSeries([
     { date: '2026-09-07', durationMinutes: 20 },
@@ -48,10 +64,12 @@ function run() {
   const earlier = reading.points.find((p) => p.dateStr === '2026-09-01');
   assert.strictEqual(today.minutes, 35);
   assert.strictEqual(earlier.minutes, 40);
-  assert.strictEqual(reading.avgMinutes, 5);
-  assert.strictEqual(reading.homeostasisMinMinutes, 4);
-  assert.strictEqual(reading.homeostasisMaxMinutes, 6);
-  console.log('✅ Tempo de leitura soma sessões do dia e monta a faixa em minutos.');
+  assert.strictEqual(reading.activeDays, 2);
+  assert.strictEqual(reading.avgMinutes, 38, 'Média só dos 2 dias com sessão: (35+40)/2');
+  assert.strictEqual(reading.homeostasisMinMinutes, 30);
+  assert.strictEqual(reading.homeostasisMaxMinutes, 46);
+  assert.strictEqual(reading.floorApplied, false);
+  console.log('✅ Tempo de leitura soma sessões do dia e monta a faixa só com dias ativos.');
 
   assert.strictEqual(formatReadingHomeostasisVictoryTitle(5), 'Ler no mínimo 5 minutos.');
   const readingVictory = buildReadingHomeostasisVictory([
@@ -59,11 +77,11 @@ function run() {
     { timestamp: '2026-09-07T22:10:00.000Z', durationMinutes: 15 },
     { date: '2026-09-01', durationMinutes: 40 }
   ], '2026-09-07', { days: 14 });
-  assert.strictEqual(readingVictory.title, 'Ler no mínimo 5 minutos.');
+  assert.strictEqual(readingVictory.title, 'Ler no mínimo 30 minutos.');
   assert.strictEqual(readingVictory.category, READING_HOMEOSTASIS_VICTORY_CATEGORY);
   assert.strictEqual(readingVictory.date, '2026-09-07');
   assert.strictEqual(readingVictory.source, DAILY_VICTORY_OVERFLOW_SOURCES.reading);
-  console.log('✅ Vitória de leitura usa o centro da faixa de homeostase.');
+  console.log('✅ Vitória de leitura usa o piso da faixa de homeostase.');
 
   console.log('\n🎉 Teste de homeostase PASSOU COM SUCESSO!');
 }

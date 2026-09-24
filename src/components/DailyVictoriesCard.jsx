@@ -26,6 +26,7 @@ import {
   formatDailyVictoryDate,
   getPlannableDates,
   summarizeDay,
+  displayHomeostasisVictoryTitle,
   DAY_OUTCOME_META,
   monthKeyFromDate,
   shiftMonthKey,
@@ -54,7 +55,9 @@ export function DailyVictoriesCard({
   onAddVictory,
   onUpdateVictory,
   onCompleteVictory,
-  onDeleteVictory
+  onDeleteVictory,
+  studyFloorMinutes = null,
+  readingFloorMinutes = null
 }) {
   const todayStr = getSaoPauloDateStr();
   const dates = getPlannableDates(todayStr);
@@ -116,6 +119,11 @@ export function DailyVictoriesCard({
     [dailyVictories, historyDate, dailyVictoryBonuses]
   );
   const weekdayLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+  const victoryTitle = (victory) => displayHomeostasisVictoryTitle(victory, {
+    studyFloorMinutes,
+    readingFloorMinutes
+  });
 
   const selectHistoryDate = (date) => {
     setHistoryDate(date);
@@ -617,7 +625,7 @@ export function DailyVictoriesCard({
                                     color: victory.completed ? '#94a3b8' : '#f8fafc',
                                     textDecoration: victory.completed ? 'line-through' : 'none'
                                   }}>
-                                    {victory.title}
+                                    {victoryTitle(victory)}
                                   </span>
                                   <span style={{
                                     fontSize: '0.65rem',
@@ -722,7 +730,7 @@ export function DailyVictoriesCard({
                       color: victory.completed ? '#94a3b8' : '#f8fafc',
                       textDecoration: victory.completed ? 'line-through' : 'none'
                     }}>
-                      {victory.title}
+                      {victoryTitle(victory)}
                     </span>
                     <span style={{
                       fontSize: '0.68rem',
@@ -949,7 +957,7 @@ export function DailyVictoriesCard({
               Registrar vitória
             </h3>
             <p style={{ color: '#cbd5e1', fontSize: '0.88rem', margin: '0 0 14px' }}>
-              {completing.title}
+              {victoryTitle(completing)}
             </p>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>
               Anotação (opcional)

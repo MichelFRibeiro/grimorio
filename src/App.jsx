@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { useGameData } from './hooks/useGameData';
 import { LoginView } from './components/LoginView';
@@ -22,7 +22,8 @@ import { AguCampaignView } from './components/AguCampaignView';
 import { FocusChamberView, FocusMiniPlayer } from './components/FocusPlayer';
 import { useFocusPlayer } from './hooks/useFocusPlayer';
 import { getSaoPauloDateStr } from './utils/timeUtils';
-import { summarizePlan } from './utils/aguCycle';
+import { summarizePlan, getAguStudyLoadSeries } from './utils/aguCycle';
+import { getReadingLoadSeries } from './utils/homeostasis';
 
 export function App() {
   const [activeTab, setActiveTab] = useState(null);
@@ -205,7 +206,14 @@ export function App() {
   }).length;
   const activeBooksCount = (books || []).filter(b => b.status === 'reading').length;
   const activeProcessesCount = (processes || []).filter(p => p.status === 'in_progress').length;
-  const aguToday = summarizePlan(aguPlan, examQuestions || [], getSaoPauloDateStr()).today;
+  const todayStr = getSaoPauloDateStr();
+  const aguToday = summarizePlan(aguPlan, examQuestions || [], todayStr).today;
+  const homeostasisFloors = useMemo(() => ({
+    study: getAguStudyLoadSeries(aguPlan, examQuestions || [], todayStr, {
+      mindMapSessions: mindMapSessions || []
+    }).homeostasisMinMinutes,
+    reading: getReadingLoadSeries(readingSessions || [], todayStr).homeostasisMinMinutes
+  }), [aguPlan, examQuestions, mindMapSessions, readingSessions, todayStr]);
   const aguTodayRemaining = Math.max(0, (aguToday.totalBlocks || 0) - (aguToday.doneCount || 0));
   const activeNinetyDayGoalsCount = (ninetyDayGoals || []).filter(g => g.status === 'active' || g.status === 'expired').length;
   const dueMindMapsCount = analytics?.summary?.mindMapBranchesDue
@@ -250,6 +258,8 @@ export function App() {
         onUpdateVictory={updateDailyVictory}
         onCompleteVictory={completeDailyVictory}
         onDeleteVictory={deleteDailyVictory}
+        studyFloorMinutes={homeostasisFloors.study}
+        readingFloorMinutes={homeostasisFloors.reading}
       />
 
       {/* Boss Raid Banner */}

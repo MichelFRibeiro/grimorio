@@ -21,6 +21,7 @@ import {
   canPlanQuestAsDailyVictory,
   isQuestPlannedForDate,
   parseHomeostasisVictoryTargetMinutes,
+  displayHomeostasisVictoryTitle,
   isHomeostasisVictoryFulfilled,
   planLinkedDailyVictoryUpdates
 } from '../src/utils/dailyVictories.js';
@@ -252,8 +253,34 @@ function runTests() {
   );
 
   assert(parseHomeostasisVictoryTargetMinutes('Ler no mínimo 12 minutos.') === 12, 'Extrai meta de minutos da vitória de leitura');
+  assert(
+    displayHomeostasisVictoryTitle(
+      { title: 'Estudar no mínimo 22 minutos.', source: DAILY_VICTORY_OVERFLOW_SOURCES.study },
+      { studyFloorMinutes: 25 }
+    ) === 'Estudar no mínimo 25 minutos.',
+    'Card reescreve a vitória de estudo com o piso vivo'
+  );
+  assert(
+    displayHomeostasisVictoryTitle(
+      { title: 'Ler no mínimo 10 minutos.', source: DAILY_VICTORY_OVERFLOW_SOURCES.reading },
+      { readingFloorMinutes: 15 }
+    ) === 'Ler no mínimo 15 minutos.',
+    'Card reescreve a vitória de leitura com o piso vivo'
+  );
+  assert(
+    displayHomeostasisVictoryTitle({ title: 'Treinar 30 min' }, { studyFloorMinutes: 25 }) === 'Treinar 30 min',
+    'Vitória manual não é reescrita'
+  );
   assert(isHomeostasisVictoryFulfilled({ title: 'Estudar no mínimo 10 minutos.' }, 10) === true, 'Homeostase cumprida no mínimo');
   assert(isHomeostasisVictoryFulfilled({ title: 'Estudar no mínimo 10 minutos.' }, 9) === false, 'Homeostase pendente abaixo da meta');
+  assert(
+    isHomeostasisVictoryFulfilled({ title: 'Estudar no mínimo 22 minutos.' }, 25, 25) === true,
+    'Alvo vivo vence o número congelado no título'
+  );
+  assert(
+    isHomeostasisVictoryFulfilled({ title: 'Estudar no mínimo 8 minutos.' }, 10, 25) === false,
+    'Título velho e baixo não completa abaixo do piso atual'
+  );
 
   const readingVictory = {
     id: 'dv-read',
@@ -275,6 +302,18 @@ function runTests() {
   assert(readingDone.length === 1 && readingDone[0].id === 'dv-read' && readingDone[0].completed, 'Leitura cumprida conclui só a vitória de leitura');
   const studyDone = planLinkedDailyVictoryUpdates([readingVictory, studyVictory], { today, studyMinutes: 10 });
   assert(studyDone.length === 1 && studyDone[0].id === 'dv-study' && studyDone[0].completed, 'Estudo cumprido conclui só a vitória de estudo');
+  const liveTarget = planLinkedDailyVictoryUpdates([studyVictory], {
+    today,
+    studyMinutes: 30,
+    studyTargetMinutes: 25
+  });
+  assert(liveTarget.length === 1 && liveTarget[0].completed, 'Piso recalculado completa título desatualizado');
+  const liveTargetShort = planLinkedDailyVictoryUpdates([studyVictory], {
+    today,
+    studyMinutes: 15,
+    studyTargetMinutes: 25
+  });
+  assert(liveTargetShort.length === 0, 'Abaixo do piso atual não completa, mesmo com título velho pedindo menos');
   const readingShort = planLinkedDailyVictoryUpdates(
     [{ ...readingVictory, completed: true }],
     { today, readingMinutes: 2 }

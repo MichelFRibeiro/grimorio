@@ -103,19 +103,23 @@ export function syncDailyVictoriesFromActivity(db, {
     list: sanitizeDailyVictories(db.dailyVictories),
     bonuses: sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses)
   };
-  const readingMinutes = syncReading
-    ? (getReadingLoadSeries(db.readingSessions || [], today).today?.minutes || 0)
-    : undefined;
-  const studyMinutes = syncStudy
-    ? (getAguStudyLoadSeries(db.aguPlan, db.examQuestions || [], today).today?.minutes || 0)
-    : undefined;
+  const readingSeries = syncReading
+    ? getReadingLoadSeries(db.readingSessions || [], today)
+    : null;
+  const studySeries = syncStudy
+    ? getAguStudyLoadSeries(db.aguPlan, db.examQuestions || [], today, {
+      mindMapSessions: db.mindMapSessions || []
+    })
+    : null;
   const updates = planLinkedDailyVictoryUpdates(state.list, {
     today,
     questId,
     questCompleted,
     questNote,
-    readingMinutes,
-    studyMinutes
+    readingMinutes: readingSeries ? (readingSeries.today?.minutes || 0) : undefined,
+    studyMinutes: studySeries ? (studySeries.today?.minutes || 0) : undefined,
+    readingTargetMinutes: readingSeries ? readingSeries.homeostasisMinMinutes : undefined,
+    studyTargetMinutes: studySeries ? studySeries.homeostasisMinMinutes : undefined
   });
 
   const settled = [];

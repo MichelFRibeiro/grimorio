@@ -28,11 +28,13 @@ import { DAILY_VICTORY_OVERFLOW_SOURCES } from './dailyVictories.js';
 import { addDaysToDateStr, getCurrentWeekDays, getSaoPauloDateStr, getSaoPauloDayOfWeek } from './timeUtils.js';
 import {
   HOMEOSTASIS_BAND_RATIO,
+  HOMEOSTASIS_FLOOR_MINUTES,
   HOMEOSTASIS_WINDOW_DAYS,
   buildDailyLoadSeries,
   buildHomeostasisBand,
   classifyLoadMinutes,
-  roundLoadMinutes
+  roundLoadMinutes,
+  sessionDateStr
 } from './homeostasis.js';
 import {
   buildSubjectStats as buildSubjectStatsDetailed,
@@ -164,11 +166,18 @@ export function getAguStudyLoadSeries(plan, examQuestions = [], todayStr, option
     if (!block.dateStr) return;
     byDate[block.dateStr] = (byDate[block.dateStr] || 0) + parseDurationMinutes(block.durationMinutes);
   });
+  (options.mindMapSessions || []).forEach((session) => {
+    const dateStr = sessionDateStr(session);
+    if (!dateStr) return;
+    byDate[dateStr] = (byDate[dateStr] || 0) + parseDurationMinutes(session.durationMinutes);
+  });
+
   return buildDailyLoadSeries({
     minutesByDate: byDate,
     todayStr,
     days: options.days || AGU_STUDY_LOAD_WINDOW_DAYS,
-    extraMinutesByDate: options.extraMinutesByDate
+    extraMinutesByDate: options.extraMinutesByDate,
+    floorMinutes: options.floorMinutes ?? HOMEOSTASIS_FLOOR_MINUTES.study
   });
 }
 
@@ -178,11 +187,14 @@ export function formatAguHomeostasisStudyVictoryTitle(minutes) {
   return `Estudar no mínimo ${roundLoadMinutes(minutes)} minutos.`;
 }
 
-/** Vitória do dia no centro da faixa de homeostase de estudo AGU. */
+/**
+ * Vitória do dia no piso da faixa de homeostase de estudo AGU.
+ * O título é só rótulo: o cumprimento usa o piso recalculado na hora.
+ */
 export function buildAguHomeostasisStudyVictory(plan, examQuestions = [], todayStr, options = {}) {
   const series = getAguStudyLoadSeries(plan, examQuestions, todayStr, options);
   return {
-    title: formatAguHomeostasisStudyVictoryTitle(series.avgMinutes),
+    title: formatAguHomeostasisStudyVictoryTitle(series.homeostasisMinMinutes),
     category: AGU_HOMEOSTASIS_VICTORY_CATEGORY,
     date: todayStr || getSaoPauloDateStr(),
     source: DAILY_VICTORY_OVERFLOW_SOURCES.study
