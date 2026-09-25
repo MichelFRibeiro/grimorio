@@ -58,7 +58,7 @@ assert(stats.portugues.accuracy === 52.4, `Português 52.4%, veio ${stats.portug
 const today = getDaySchedule(plan, monday, stats, exams);
 assert(today.blocks.length === 3, `Dia tem 3 blocos, veio ${today.blocks.length}`);
 assert(today.blocks.some((b) => b.subjectId === 'portugues'), 'Dia 1 inclui português');
-assert(today.blocks.every((b) => b.target === 20 && b.targetMinutes === 60), 'Cada bloco fecha com 20 q ou 60 min');
+assert(today.blocks.every((b) => b.target === 10 && b.targetMinutes === 30), 'Cada bloco fecha com 10 q ou 30 min');
 
 const key = today.blocks[0].key;
 plan = toggleCompletedBlock(plan, key);

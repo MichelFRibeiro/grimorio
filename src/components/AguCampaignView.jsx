@@ -28,6 +28,8 @@ import { ActivityTimerBox } from './ActivityTimerBox';
 import { consumeActivityTimerMinutes, getActivityTimerSnapshot, subscribeActivityTimers } from '../utils/liveActivityTimers';
 import { elapsedMsFrom, formatStudyDuration, parseDurationMinutes } from '../utils/activityDuration';
 import {
+  AGU_BLOCK_MINUTES,
+  AGU_BLOCK_QUESTION_TARGET,
   AGU_FOLDER_URL,
   AGU_GROUPS,
   AGU_PLATFORMS,
@@ -41,11 +43,11 @@ import { AguStudyLoadChart } from './AguStudyLoadChart';
 import { PlanHomeostasisVictoryButton } from './PlanHomeostasisVictoryButton';
 
 const PROTOCOL = [
-  'Três blocos por dia, 60 min cada. Um tópico de uma matéria por bloco.',
-  'O bloco fecha com 60 minutos ou com 20 questões — o que ocorrer primeiro.',
+  `Três blocos por dia, ${AGU_BLOCK_MINUTES} min cada. Um tópico de uma matéria por bloco.`,
+  `O bloco fecha com ${AGU_BLOCK_MINUTES} minutos ou com ${AGU_BLOCK_QUESTION_TARGET} questões — o que ocorrer primeiro.`,
   'Um dos três blocos é de Língua Portuguesa (ortografia em prioridade) até 95%+ nos 10 últimos blocos da matéria.',
   'Tópico só conclui com ≥ 60 questões no estudo inicial. Se o último bloco ficar abaixo de 80%, o tópico volta a pendente.',
-  'Depois de concluir: revisões em 1, 7, 21, 30, 90 e 120 dias (esta última, recorrente). Revisão = 1 bloco (60 min ou 20 q).',
+  `Depois de concluir: revisões em 1, 7, 21, 30, 90 e 120 dias (esta última, recorrente). Revisão = 1 bloco (${AGU_BLOCK_MINUTES} min ou ${AGU_BLOCK_QUESTION_TARGET} q).`,
   'O próximo bloco é calculado na hora: revisões devidas primeiro, depois tópicos pendentes, com a trava de português.',
   `Tec é a referência. Meta geral de acerto: ${AGU_TARGET_ACCURACY}%.`
 ];
@@ -174,7 +176,7 @@ export function AguCampaignView({
   const consumeBlockTimer = (blockKey) => consumeActivityTimerMinutes('agu', blockKey);
 
   const openLog = (block) => {
-    const remaining = block.remaining > 0 ? String(block.remaining) : '20';
+    const remaining = block.remaining > 0 ? String(block.remaining) : String(block.target || AGU_BLOCK_QUESTION_TARGET);
     const snap = getActivityTimerSnapshot('agu', block.key);
     const live = snap ? Math.floor(elapsedMsFrom(snap.accumulatedMs || 0, snap.runStartedAt || null) / 60000) : 0;
     setLogBlock(block);
@@ -224,7 +226,7 @@ export function AguCampaignView({
         totalQuestions: total,
         correctAnswers: correct,
         durationMinutes,
-        notes: `Campanha AGU · ${logBlock.kindMeta?.label || 'bloco'} · ${logBlock.topicName || ''} · ${total}/${logBlock.target || 20} q`,
+        notes: `Campanha AGU · ${logBlock.kindMeta?.label || 'bloco'} · ${logBlock.topicName || ''} · ${total}/${logBlock.target || AGU_BLOCK_QUESTION_TARGET} q`,
         notebookUrl: logBlock.subject?.tecCadernoUrl || '',
         date: todayStr
       });
@@ -247,8 +249,8 @@ export function AguCampaignView({
 
   const selected = summary.subjects.find((subject) => subject.id === selectedSubjectId) || summary.subjects[0];
   const todayBlocks = summary.today?.blocks || [];
-  const todayQuestionTarget = Math.max(summary.today?.questionTarget || (todayBlocks.length * 20), 1);
-  const todayMinuteTarget = Math.max(todayBlocks.reduce((sum, block) => sum + (block.targetMinutes || 60), 0), todayBlocks.length * 60, 1);
+  const todayQuestionTarget = Math.max(summary.today?.questionTarget || (todayBlocks.length * AGU_BLOCK_QUESTION_TARGET), 1);
+  const todayMinuteTarget = Math.max(todayBlocks.reduce((sum, block) => sum + (block.targetMinutes || AGU_BLOCK_MINUTES), 0), todayBlocks.length * AGU_BLOCK_MINUTES, 1);
   const todayMinutes = todayBlocks.reduce((sum, block) => sum + (block.minutes || 0), 0);
   const todayPercent = Math.round(Math.max(
     (summary.todayProgress.solved || 0) / todayQuestionTarget,
@@ -264,7 +266,7 @@ export function AguCampaignView({
             <Scale size={22} color="#fbbf24" /> Campanha AGU — Procurador Federal
           </h2>
           <p style={{ color: '#94a3b8', fontSize: '0.88rem', maxWidth: '720px', marginTop: '6px' }}>
-            Três blocos de 60 min por dia, um tópico por bloco. Fecha com o tempo ou com 20 questões.
+            Três blocos de {AGU_BLOCK_MINUTES} min por dia, um tópico por bloco. Fecha com o tempo ou com {AGU_BLOCK_QUESTION_TARGET} questões.
             Português é obrigatório até 95% nos 10 últimos blocos. Banca: Cebraspe. Plataforma-mãe: Tec.
           </p>
         </div>
@@ -345,7 +347,7 @@ export function AguCampaignView({
         <StatChip label="Fase" value={summary.phaseMeta?.short || 'Fundação'} sub={summary.editalPublished ? 'Lock de edital' : 'Automática'} color={summary.phaseMeta?.color || '#38bdf8'} />
         <StatChip label="Ciclo" value={`${summary.calendar.cycleNumber}`} sub={`${summary.today.weekdayLabel} · 3 blocos`} />
         <StatChip label="Blocos da quinzena" value={`${summary.cycleDoneBlocks}/${summary.cycleTotalBlocks}`} sub={`${summary.cyclePercent}% concluído`} color="#38bdf8" />
-        <StatChip label="Hoje" value={`${summary.today.doneCount}/3`} sub={`${summary.todayProgress.solved}/${summary.today.questionTarget} q · 60 min ou 20 q`} color="#10b981" />
+        <StatChip label="Hoje" value={`${summary.today.doneCount}/3`} sub={`${summary.todayProgress.solved}/${summary.today.questionTarget} q · ${AGU_BLOCK_MINUTES} min ou ${AGU_BLOCK_QUESTION_TARGET} q`} color="#10b981" />
         <StatChip label="Maestria tópico" value={`${summary.masteredSubjects}/${summary.totalSubjects}`} sub={`${summary.startedSubjects} matérias tocadas`} color="#c084fc" />
         <StatChip label="Dívida" value={`${(summary.debt || []).length}`} sub="blocos / restos" color="#f43f5e" />
       </div>
@@ -398,7 +400,7 @@ export function AguCampaignView({
           </p>
           <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '4px' }}>
             {(summary.nextBlock.reasons || []).join(' · ') || (summary.nextBlock.kind === 'revisao' ? 'Revisão espaçada' : 'Estudo inicial')}
-            {' · '}fecha com 60 min ou 20 questões
+            {' · '}fecha com {AGU_BLOCK_MINUTES} min ou {AGU_BLOCK_QUESTION_TARGET} questões
           </p>
         </section>
       )}
@@ -408,7 +410,7 @@ export function AguCampaignView({
           <div>
             <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24' }}>Hoje — {summary.today.label}</h3>
             <p style={{ color: '#94a3b8', fontSize: '0.82rem' }}>
-              {summary.today.weekdayLabel} · {todayStr} · 3 blocos de 60 min (ou 20 questões) · 1 tópico por bloco
+              {summary.today.weekdayLabel} · {todayStr} · 3 blocos de {AGU_BLOCK_MINUTES} min (ou {AGU_BLOCK_QUESTION_TARGET} questões) · 1 tópico por bloco
             </p>
           </div>
           <div style={{ minWidth: '180px', flex: '1 1 180px', maxWidth: '280px' }}>
@@ -655,7 +657,7 @@ export function AguCampaignView({
               <div>
                 <h3 className="font-cinzel" style={{ fontSize: '1.15rem', color: '#f8fafc' }}>Lançar bloco</h3>
                 <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '4px' }}>
-                  {logBlock.subject?.name} · {logBlock.topicName || 'tópico corrente'} · fecha com 20 q ou 60 min
+                  {logBlock.subject?.name} · {logBlock.topicName || 'tópico corrente'} · fecha com {AGU_BLOCK_QUESTION_TARGET} q ou {AGU_BLOCK_MINUTES} min
                 </p>
               </div>
               <button type="button" onClick={closeLog} style={{ ...ghostBtnStyle, padding: '8px' }}><X size={16} /></button>
@@ -762,7 +764,7 @@ function AguBlockCard({ block, index = 0, aguPlan, onToggle, onLog, onSetDuratio
               )}
               {block.target > 0 && (
                 <span style={{ fontSize: '0.75rem', color: block.metTarget ? '#10b981' : '#fbbf24', fontFamily: 'var(--font-mono)' }}>
-                  {block.todayProgress.solved}/{block.target} q · {block.minutes || 0}/{block.targetMinutes || 60} min
+                  {block.todayProgress.solved}/{block.target} q · {block.minutes || 0}/{block.targetMinutes || AGU_BLOCK_MINUTES} min
                 </span>
               )}
             </div>

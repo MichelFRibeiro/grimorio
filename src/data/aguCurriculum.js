@@ -9,11 +9,11 @@
 export const AGU_TARGET_ACCURACY = 90;
 export const AGU_CYCLE_LENGTH = 14;
 export const AGU_DAILY_BLOCKS = 3;
-export const AGU_BLOCK_MINUTES = 60;
-export const AGU_BLOCK_QUESTION_TARGET = 20;
-export const AGU_WEEKDAY_QUESTION_TARGET = 60;
-export const AGU_SATURDAY_QUESTION_TARGET = 60;
-export const AGU_SUNDAY_QUESTION_TARGET = 60;
+export const AGU_BLOCK_MINUTES = 30;
+export const AGU_BLOCK_QUESTION_TARGET = 10;
+export const AGU_WEEKDAY_QUESTION_TARGET = 30;
+export const AGU_SATURDAY_QUESTION_TARGET = 30;
+export const AGU_SUNDAY_QUESTION_TARGET = 30;
 export const AGU_MASTER_MIN_SOLVED = 60;
 export const AGU_STALE_DAYS = 21;
 export const AGU_TOPIC_ADVANCE_MIN = 60;
@@ -26,21 +26,21 @@ export const AGU_REVIEW_INTERVALS = [1, 7, 21, 30, 90, 120];
 export const AGU_PLAN_VERSION = 3;
 export const AGU_DEFAULT_EDITAL_PROFILE_ID = 'pf-tec-2023';
 
-/** Minutos por weekday (0=Dom … 6=Sáb). 3 blocos de 60 min todos os dias. */
+/** Minutos por weekday (0=Dom … 6=Sáb). 3 blocos de 30 min todos os dias. */
 export const AGU_DEFAULT_CAPACITY_BY_WEEKDAY = {
-  0: 180,
-  1: 180,
-  2: 180,
-  3: 180,
-  4: 180,
-  5: 180,
-  6: 180
+  0: 90,
+  1: 90,
+  2: 90,
+  3: 90,
+  4: 90,
+  5: 90,
+  6: 90
 };
 
-export const AGU_WEEKDAY_MORNING_MINUTES = 60;
+export const AGU_WEEKDAY_MORNING_MINUTES = 30;
 export const AGU_LONG_AFTERNOON_BLOCKS = 3;
 export const AGU_SHORT_AFTERNOON_BLOCKS = 3;
-export const AGU_LONG_DAY_MINUTES = 180;
+export const AGU_LONG_DAY_MINUTES = 90;
 
 export const AGU_PHASES = {
   fundacao: {
@@ -782,7 +782,7 @@ export function recommendPlatform(subject, stats) {
   const accuracy = stats?.accuracy || stats?.accSmooth || 0;
   const accuracyPct = accuracy <= 1 ? Math.round(accuracy * 1000) / 10 : accuracy;
   if (solved < AGU_MASTER_MIN_SOLVED) {
-    return { id: 'tec', reason: 'Ainda no Tec. Meta: 60 questões no tópico (cerca de 3 blocos) antes de concluir.' };
+    return { id: 'tec', reason: 'Ainda no Tec. Meta: 60 questões no tópico (cerca de 6 sessões de 10) antes de concluir.' };
   }
   if (accuracyPct >= AGU_TARGET_ACCURACY) {
     return { id: 'tec', reason: 'Meta de 90% atingida. Mantenha no Tec (revisão espaçada).' };

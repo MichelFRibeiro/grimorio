@@ -1,4 +1,5 @@
 import {
+  AGU_BLOCK_MINUTES,
   AGU_BLOCK_QUESTION_TARGET,
   AGU_CORE_SUBJECTS,
   AGU_DAILY_BLOCKS,
@@ -69,7 +70,7 @@ export function isLongAfternoon(weekday) {
 export function afternoonBlockCap(weekday, capacityByWeekday) {
   if (weekday === 0 || weekday === 6) return AGU_DAILY_BLOCKS;
   const minutes = Number(capacityByWeekday?.[weekday] ?? 0);
-  if (minutes > 0 && minutes < 180) return Math.min(AGU_DAILY_BLOCKS, AGU_SHORT_AFTERNOON_BLOCKS);
+  if (minutes > 0 && minutes < AGU_DAILY_BLOCKS * 30) return Math.min(AGU_DAILY_BLOCKS, AGU_SHORT_AFTERNOON_BLOCKS);
   if (isLongAfternoon(weekday)) return AGU_DAILY_BLOCKS;
   return AGU_DAILY_BLOCKS;
 }
@@ -682,8 +683,8 @@ export function generateFortnight(plan, examQuestions, todayStr, options = {}) {
       ...block,
       window: index === 0 ? 'morning' : 'afternoon',
       optional: false,
-      target: AGU_BLOCK_QUESTION_TARGET,
-      targetMinutes: block.targetMinutes || 60,
+      target: isQuestionKindBlock(block) ? AGU_BLOCK_QUESTION_TARGET : (block.target || 0),
+      targetMinutes: AGU_BLOCK_MINUTES,
       key: block.key || blockKey(dateStr, block.subjectId, block.kind, block.topicId)
     }));
     days.push({
@@ -701,7 +702,7 @@ export function generateFortnight(plan, examQuestions, todayStr, options = {}) {
   }
 
   const reasons = [
-    '3 blocos/dia · 60 min ou 20 questões · 1 tópico por bloco',
+    '3 blocos/dia · 30 min ou 10 questões · 1 tópico por bloco',
     builtPortugueseReason(days, topicProgress)
   ].filter(Boolean);
   ranked.slice(0, 4).forEach((row) => {
@@ -718,6 +719,11 @@ export function generateFortnight(plan, examQuestions, todayStr, options = {}) {
     warnings: [],
     generatedAt: new Date().toISOString()
   };
+}
+
+function isQuestionKindBlock(block) {
+  if (!block) return false;
+  return block.kind !== 'discursiva' && block.kind !== 'teoria' && block.kind !== 'informativo';
 }
 
 function builtPortugueseReason(days, topicProgress) {

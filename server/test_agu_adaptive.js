@@ -40,8 +40,8 @@ function assert(condition, message) {
 const monday = '2026-09-07';
 assert(getSaoPauloDayOfWeek(monday) === 1, '2026-09-07 deve ser segunda');
 assert(fortnightStartFor('2026-09-09') === monday, 'quarta ancora na segunda da quinzena');
-assert(afternoonBlockCap(2, { 2: 180 }) === 3, 'qualquer dia = 3 blocos');
-assert(afternoonBlockCap(1, { 1: 180 }) === 3, 'segunda = 3 blocos');
+assert(afternoonBlockCap(2, { 2: 90 }) === 3, 'qualquer dia = 3 blocos');
+assert(afternoonBlockCap(1, { 1: 90 }) === 3, 'segunda = 3 blocos');
 
 assert(Math.abs(laplaceAccuracy(19, 20) - (21 / 24)) < 0.0001, 'Laplace 19/20');
 assert(laplaceAccuracy(0, 0) === 0.5, 'prior 50%');
@@ -180,16 +180,17 @@ theoryPlan = {
 const afterRefresh = getDaySchedule(theoryPlan, monday, {}, []);
 const loggedPort = afterRefresh.blocks.find((b) => b.subjectId === 'portugues');
 assert(loggedPort, 'português lançado permanece no dia');
-assert((loggedPort.minutes || 0) >= 60, `bloco de português herda 67 min, veio ${loggedPort.minutes}`);
+assert((loggedPort.minutes || 0) >= 30, `bloco de português herda 67 min, veio ${loggedPort.minutes}`);
 assert(loggedPort.done === true, 'bloco de português com 67 min fica concluído após refresh');
+assert(loggedPort.target === 10 && loggedPort.targetMinutes === 30, 'bloco lançado fecha com 10 q ou 30 min');
 const subjectsToday = afterRefresh.blocks.map((b) => b.subjectId);
 assert(new Set(subjectsToday).size === subjectsToday.length, `hoje não pode repetir matéria, veio ${subjectsToday.join(', ')}`);
 assert(subjectsToday.filter((id) => id === 'portugues').length === 1, 'português entra só uma vez no dia');
 const volume = Math.round(Math.max(
-  afterRefresh.blocks.reduce((sum, b) => sum + (b.minutes || 0), 0) / 180,
+  afterRefresh.blocks.reduce((sum, b) => sum + (b.minutes || 0), 0) / 90,
   afterRefresh.doneCount / 3
 ) * 100);
-assert(volume >= 30, `volume do dia deve refletir 67/180 min, veio ${volume}%`);
+assert(volume >= 30, `volume do dia deve refletir 67/90 min, veio ${volume}%`);
 
 const later = addDaysToDateStr(monday, 3);
 const laterDay = getDaySchedule(theoryPlan, later, {}, []);
