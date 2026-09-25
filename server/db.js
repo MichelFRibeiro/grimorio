@@ -15,7 +15,7 @@ import { createDefaultAguPlan } from '../src/data/aguCurriculum.js';
 import { sanitizeAguPlan, ensureCurrentCycle } from '../src/utils/aguCycle.js';
 import { sanitizeNinetyDayGoals } from '../src/utils/ninetyDayGoals.js';
 import { sanitizeDailyVictories, sanitizeDailyVictoryBonuses } from '../src/utils/dailyVictories.js';
-import { sanitizeMindMaps, sanitizeMindMapSessions, sanitizeMindMapCategories } from '../src/utils/mindMaps.js';
+import { sanitizeMindMaps, sanitizeMindMapSessions, sanitizeMindMapCategories, sanitizeMindMapImageLibrary, mergeMindMapImageLibrary } from '../src/utils/mindMaps.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -282,7 +282,8 @@ export const defaultDatabase = () => {
     dailyVictoryBonuses: {},
     mindMaps: [],
     mindMapSessions: [],
-    mindMapCategories: sanitizeMindMapCategories()
+    mindMapCategories: sanitizeMindMapCategories(),
+    mindMapImages: []
   };
 };
 
@@ -311,6 +312,7 @@ export function sanitizeDb(db) {
   db.mindMaps = sanitizeMindMaps(db.mindMaps);
   db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
   db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+  db.mindMapImages = mergeMindMapImageLibrary(sanitizeMindMapImageLibrary(db.mindMapImages), db.mindMaps);
   if (db.mindMaps.length && db.mindMapCategories.length) {
     db.mindMaps = db.mindMaps.map((map) => {
       if (map.categoryId && db.mindMapCategories.some(c => c.id === map.categoryId)) {

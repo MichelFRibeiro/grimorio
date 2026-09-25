@@ -46,6 +46,7 @@ export function useGameData() {
       const next = { ...prev, mindMaps: maps };
       if (result.categories) next.mindMapCategories = result.categories;
       if (result.sessions) next.mindMapSessions = result.sessions;
+      if (result.images) next.mindMapImages = result.images;
       dataRef.current = next;
       return next;
     });
@@ -872,6 +873,30 @@ export function useGameData() {
     return false;
   };
 
+  const deleteMindMapImage = async (url) => {
+    playClick();
+    const res = await fetch('/api/mind-map-images', {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ url })
+    });
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      setData((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        if (result.images) next.mindMapImages = result.images;
+        if (result.mindMaps) next.mindMaps = result.mindMaps;
+        dataRef.current = next;
+        return next;
+      });
+      return true;
+    }
+    const errJson = await res.json().catch(() => ({}));
+    showRewardToast(0, 0, errJson.error || 'Erro ao excluir a imagem.');
+    return false;
+  };
+
   const deleteMindMapCategory = async (id) => {
     playClick();
     const res = await fetch(`/api/mind-map-categories/${id}`, {
@@ -1581,6 +1606,7 @@ export function useGameData() {
     deleteMindMapSession,
     addMindMapCategory,
     updateMindMapCategory,
-    deleteMindMapCategory
+    deleteMindMapCategory,
+    deleteMindMapImage
   };
 }

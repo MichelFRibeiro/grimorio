@@ -1306,6 +1306,7 @@ export function MindMapsView({
   mindMaps = [],
   mindMapSessions = [],
   mindMapCategories = [],
+  mindMapImages = [],
   onAddMap,
   onUpdateMap,
   onAddNode,
@@ -1324,7 +1325,8 @@ export function MindMapsView({
   onDeleteMap,
   onAddCategory,
   onUpdateCategory,
-  onDeleteCategory
+  onDeleteCategory,
+  onDeleteImage
 }) {
   const todayStr = getSaoPauloDateStr();
   const categories = sanitizeMindMapCategories(mindMapCategories);
@@ -1399,7 +1401,10 @@ export function MindMapsView({
   const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
 
   const maps = mindMaps || [];
-  const usedImages = useMemo(() => collectUsedMindMapImages(maps), [maps]);
+  const usedImages = useMemo(
+    () => collectUsedMindMapImages(maps, mindMapImages),
+    [maps, mindMapImages]
+  );
   const liveMap = maps.find(m => m.id === activeMapId) || (pendingMap?.id === activeMapId ? pendingMap : null);
 
   useEffect(() => {
@@ -2461,6 +2466,7 @@ export function MindMapsView({
                   color={sharedColor || selectedNode.color}
                   title={multiSelected ? 'Ícone ou imagem de todos' : 'Ícone ou imagem'}
                   usedImages={usedImages}
+                  onDeleteImage={onDeleteImage}
                   onChange={(patch) => handleUpdateSelectedAppearance(patch)}
                 />
                 {mixedMedia && (

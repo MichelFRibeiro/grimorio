@@ -34,7 +34,12 @@ import {
   reassignMindMapCategory,
   countBranches,
   getRootNode,
-  childrenOf
+  childrenOf,
+  rememberMindMapImage,
+  forgetMindMapImage,
+  mergeMindMapImageLibrary,
+  sanitizeMindMapImageLibrary,
+  stripMindMapImage
 } from '../src/utils/mindMaps.js';
 
 function assert(condition, message) {
@@ -181,6 +186,20 @@ function runTests() {
   });
   assert(sanitized.nodes[0].icon === 'BookOpen', 'Sanitize mantém ícone');
   assert(sanitized.nodes[0].imageUrl.startsWith('https://'), 'Sanitize mantém imagem http');
+
+  const library = rememberMindMapImage([], 'https://cdn.test/a.png', { label: 'Balança', mapTitle: 'Civil' });
+  assert(library.length === 1 && library[0].url.includes('cdn.test'), 'Biblioteca guarda imagem enviada');
+  const again = rememberMindMapImage(library, 'https://cdn.test/a.png', { label: 'Outra' });
+  assert(again.length === 1 && again[0].label === 'Outra', 'Reenviar a mesma imagem não duplica');
+  const rejected = rememberMindMapImage(library, 'javascript:alert(1)');
+  assert(rejected.length === 1, 'Biblioteca rejeita URL inválida');
+  const merged = mergeMindMapImageLibrary([], [withImage]);
+  assert(merged.some(item => item.url.includes('exemplo.test')), 'Imagens já nos ramos entram na biblioteca');
+  const forgotten = forgetMindMapImage(merged, merged[0].url);
+  assert(forgotten.length === merged.length - 1, 'Excluir remove a imagem da biblioteca');
+  const stripped = stripMindMapImage([withImage], imaged.imageUrl);
+  assert(!stripped[0].nodes.some(n => n.imageUrl), 'Excluir tira a imagem dos ramos');
+  assert(sanitizeMindMapImageLibrary([{ url: 'nota-url' }, null, { url: 'https://ok.test/a.png' }]).length === 1, 'Sanitize da biblioteca ignora inválidas');
 
   const cats = [];
   const constitucional = createMindMapCategory({ name: 'Direito Constitucional', color: '#a855f7' }, cats);

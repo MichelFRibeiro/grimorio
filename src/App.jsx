@@ -123,7 +123,8 @@ export function App() {
     deleteMindMap,
     addMindMapCategory,
     updateMindMapCategory,
-    deleteMindMapCategory
+    deleteMindMapCategory,
+    deleteMindMapImage
   } = useGameData();
 
   const todayStr = getSaoPauloDateStr();
@@ -208,7 +209,8 @@ export function App() {
     dailyVictoryBonuses,
     mindMaps,
     mindMapSessions,
-    mindMapCategories
+    mindMapCategories,
+    mindMapImages
   } = data || {};
 
   const pendingQuestsCount = (quests || []).filter(q => !q.completed).length;
@@ -381,6 +383,7 @@ export function App() {
             mindMaps={mindMaps}
             mindMapSessions={mindMapSessions}
             mindMapCategories={mindMapCategories}
+            mindMapImages={mindMapImages}
             onAddMap={addMindMap}
             onUpdateMap={updateMindMap}
             onAddNode={addMindMapNode}
@@ -400,6 +403,7 @@ export function App() {
             onAddCategory={addMindMapCategory}
             onUpdateCategory={updateMindMapCategory}
             onDeleteCategory={deleteMindMapCategory}
+            onDeleteImage={deleteMindMapImage}
           />
         )}
 

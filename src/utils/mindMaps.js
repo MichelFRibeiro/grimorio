@@ -1138,6 +1138,97 @@ export function sanitizeMindMaps(list = []) {
   return (Array.isArray(list) ? list : []).map(sanitizeMindMap).filter(Boolean);
 }
 
+const MIND_MAP_IMAGE_LIBRARY_LIMIT = 200;
+
+export function rememberMindMapImage(library = [], url, meta = {}) {
+  const safe = sanitizeMindMapImageUrl(url);
+  if (!safe) return Array.isArray(library) ? library : [];
+  const now = new Date().toISOString();
+  const label = String(meta.label || '').replace(/\s*\n\s*/g, ' ').trim();
+  const mapTitle = String(meta.mapTitle || '').trim();
+  const rest = (Array.isArray(library) ? library : []).filter((item) => item && item.url !== safe);
+  return [{
+    id: meta.id || uidMind('mmi'),
+    url: safe,
+    label,
+    mapTitle,
+    addedAt: meta.addedAt || now
+  }, ...rest].slice(0, MIND_MAP_IMAGE_LIBRARY_LIMIT);
+}
+
+export function forgetMindMapImage(library = [], url) {
+  const safe = sanitizeMindMapImageUrl(url) || String(url || '');
+  return (Array.isArray(library) ? library : []).filter((item) => item && item.url !== safe && item.id !== url);
+}
+
+export function collectMindMapImageUrls(maps = []) {
+  const urls = [];
+  const seen = new Set();
+  (maps || []).forEach((map) => {
+    (map?.nodes || []).forEach((node) => {
+      const url = sanitizeMindMapImageUrl(node?.imageUrl);
+      if (!url || seen.has(url)) return;
+      seen.add(url);
+      urls.push({
+        url,
+        label: String(node.label || '').replace(/\s*\n\s*/g, ' ').trim(),
+        mapTitle: String(map.title || '').trim()
+      });
+    });
+  });
+  return urls;
+}
+
+export function mergeMindMapImageLibrary(library = [], maps = []) {
+  const known = new Set(
+    (Array.isArray(library) ? library : [])
+      .map((item) => sanitizeMindMapImageUrl(item?.url))
+      .filter(Boolean)
+  );
+  let next = Array.isArray(library) ? library : [];
+  collectMindMapImageUrls(maps).forEach((item) => {
+    if (known.has(item.url)) return;
+    known.add(item.url);
+    next = rememberMindMapImage(next, item.url, item);
+  });
+  return sanitizeMindMapImageLibrary(next);
+}
+
+export function sanitizeMindMapImageLibrary(list = []) {
+  const seen = new Set();
+  const images = [];
+  (Array.isArray(list) ? list : []).forEach((raw) => {
+    if (!raw || typeof raw !== 'object') return;
+    const url = sanitizeMindMapImageUrl(raw.url);
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+    images.push({
+      id: String(raw.id || uidMind('mmi')),
+      url,
+      label: String(raw.label || '').replace(/\s*\n\s*/g, ' ').trim().slice(0, 120),
+      mapTitle: String(raw.mapTitle || '').trim().slice(0, 120),
+      addedAt: typeof raw.addedAt === 'string' ? raw.addedAt : new Date().toISOString()
+    });
+  });
+  return images.slice(0, MIND_MAP_IMAGE_LIBRARY_LIMIT);
+}
+
+export function stripMindMapImage(maps = [], url) {
+  const safe = sanitizeMindMapImageUrl(url) || String(url || '');
+  if (!safe) return Array.isArray(maps) ? maps : [];
+  return (Array.isArray(maps) ? maps : []).map((map) => {
+    if (!map || !Array.isArray(map.nodes)) return map;
+    if (!map.nodes.some((node) => node?.imageUrl === safe)) return map;
+    return {
+      ...map,
+      updatedAt: new Date().toISOString(),
+      nodes: map.nodes.map((node) => (
+        node?.imageUrl === safe ? { ...node, imageUrl: '' } : node
+      ))
+    };
+  });
+}
+
 export function sanitizeMindMapSessions(list = []) {
   return (Array.isArray(list) ? list : []).filter(s => s && s.id && s.mapId).map((s) => ({
     id: s.id,

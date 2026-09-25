@@ -87,7 +87,11 @@ import {
   applyMindMapCategoryRename,
   reassignMindMapCategory,
   computeMapStats,
-  getStudyQueue
+  getStudyQueue,
+  rememberMindMapImage,
+  forgetMindMapImage,
+  sanitizeMindMapImageLibrary,
+  stripMindMapImage
 } from '../src/utils/mindMaps.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, sumDurationMap, clearLiveActivityTimer } from '../src/utils/activityDuration.js';
 
@@ -1449,6 +1453,13 @@ export const toolsDefinition = [
       try {
         const next = addMindMapNode(db.mindMaps[index], args);
         db.mindMaps[index] = next;
+        const added = (next.nodes || []).find(n => n.imageUrl && args.imageUrl && n.imageUrl === args.imageUrl);
+        if (added?.imageUrl) {
+          db.mindMapImages = rememberMindMapImage(db.mindMapImages, added.imageUrl, {
+            label: added.label,
+            mapTitle: next.title
+          });
+        }
         saveDb(db);
         return formatSuccess(next, `Ramo '${args.label}' adicionado.`);
       } catch (err) {
@@ -1483,6 +1494,15 @@ export const toolsDefinition = [
       try {
         const next = updateMindMapNode(db.mindMaps[index], args.nodeId, args);
         db.mindMaps[index] = next;
+        if (args.imageUrl) {
+          const node = (next.nodes || []).find(n => n.id === args.nodeId && n.imageUrl);
+          if (node?.imageUrl) {
+            db.mindMapImages = rememberMindMapImage(db.mindMapImages, node.imageUrl, {
+              label: node.label,
+              mapTitle: next.title
+            });
+          }
+        }
         saveDb(db);
         return formatSuccess(next, 'Ramo atualizado.');
       } catch (err) {
@@ -1511,6 +1531,16 @@ export const toolsDefinition = [
       try {
         const next = updateMindMapNodes(db.mindMaps[index], args.nodeIds, args);
         db.mindMaps[index] = next;
+        if (args.imageUrl) {
+          const ids = new Set(args.nodeIds || []);
+          const node = (next.nodes || []).find(n => ids.has(n.id) && n.imageUrl);
+          if (node?.imageUrl) {
+            db.mindMapImages = rememberMindMapImage(db.mindMapImages, node.imageUrl, {
+              label: node.label,
+              mapTitle: next.title
+            });
+          }
+        }
         saveDb(db);
         return formatSuccess(next, `${args.nodeIds.length} ramos atualizados.`);
       } catch (err) {
@@ -1769,6 +1799,37 @@ export const toolsDefinition = [
       db.mindMapSessions = db.mindMapSessions.filter(s => s.mapId !== removed.id);
       saveDb(db);
       return formatSuccess(removed, `Mapa '${removed.title}' excluído.`);
+    }
+  },
+  {
+    name: 'list_mind_map_images',
+    description: 'Listar a biblioteca de imagens já enviadas ou usadas nos mapas mentais.',
+    schema: {},
+    handler: async () => {
+      const db = getDb();
+      const images = sanitizeMindMapImageLibrary(db.mindMapImages).map(({ url, ...rest }) => ({
+        ...rest,
+        preview: url.startsWith('data:') ? '[imagem enviada]' : url
+      }));
+      return formatSuccess({ total: images.length, images }, `${images.length} imagens na biblioteca.`);
+    }
+  },
+  {
+    name: 'delete_mind_map_image',
+    description: 'Excluir uma imagem da biblioteca de mapas mentais e removê-la dos ramos que a usam.',
+    schema: {
+      id: z.string().optional().describe('ID da imagem na biblioteca'),
+      url: z.string().optional().describe('URL da imagem, se o ID não for conhecido')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const images = sanitizeMindMapImageLibrary(db.mindMapImages);
+      const target = images.find(item => (args.id && item.id === args.id) || (args.url && item.url === args.url));
+      if (!target) return formatError('Imagem não encontrada na biblioteca.');
+      db.mindMapImages = forgetMindMapImage(images, target.url);
+      db.mindMaps = stripMindMapImage(sanitizeMindMaps(db.mindMaps), target.url);
+      saveDb(db);
+      return formatSuccess({ id: target.id, label: target.label }, 'Imagem excluída da biblioteca e dos ramos.');
     }
   },
   {

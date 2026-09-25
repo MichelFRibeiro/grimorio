@@ -106,8 +106,13 @@ import {
   createMindMapCategory,
   applyMindMapCategoryRename,
   reassignMindMapCategory,
-  computeMapStats
+  computeMapStats,
+  rememberMindMapImage,
+  forgetMindMapImage,
+  sanitizeMindMapImageLibrary,
+  stripMindMapImage
 } from '../src/utils/mindMaps.js';
+import { sanitizeMindMapImageUrl } from '../src/utils/mindMapIcons.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -433,6 +438,7 @@ app.get('/api/state', (req, res) => {
     db.mindMaps = sanitizeMindMaps(db.mindMaps);
     db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
     db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+    db.mindMapImages = sanitizeMindMapImageLibrary(db.mindMapImages);
     db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
     if (db.aguPlan?.startedAt) {
       const next = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);
@@ -2882,6 +2888,50 @@ app.delete('/api/mind-map-categories/:id', (req, res) => {
   }
 });
 
+app.get('/api/mind-map-images', (req, res) => {
+  try {
+    const db = getDb();
+    res.json({ success: true, images: sanitizeMindMapImageLibrary(db.mindMapImages) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/mind-map-images', (req, res) => {
+  try {
+    const db = getDb();
+    const url = sanitizeMindMapImageUrl(req.body?.url);
+    if (!url) return res.status(400).json({ error: 'Imagem inválida.' });
+    db.mindMapImages = rememberMindMapImage(db.mindMapImages, url, {
+      label: req.body?.label,
+      mapTitle: req.body?.mapTitle
+    });
+    saveDb(db);
+    res.json({ success: true, image: db.mindMapImages[0], images: db.mindMapImages });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/mind-map-images', (req, res) => {
+  try {
+    const db = getDb();
+    const url = req.body?.url;
+    if (!url) return res.status(400).json({ error: 'Informe a imagem a excluir.' });
+    const before = sanitizeMindMapImageLibrary(db.mindMapImages);
+    const target = before.find(item => item.url === url || item.id === url);
+    if (!target) return res.status(404).json({ error: 'Imagem não encontrada.' });
+    db.mindMapImages = forgetMindMapImage(before, target.url);
+    if (req.body?.detach !== false) {
+      db.mindMaps = stripMindMapImage(sanitizeMindMaps(db.mindMaps), target.url);
+    }
+    saveDb(db);
+    res.json({ success: true, images: db.mindMapImages, mindMaps: db.mindMaps });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/mind-maps', (req, res) => {
   try {
     const db = getDb();
@@ -3007,10 +3057,18 @@ app.post('/api/mind-maps/:id/nodes', (req, res) => {
     const { parentId, label, notes, color, icon, imageUrl, x, y } = req.body || {};
     const next = addMindMapNode(db.mindMaps[index], { parentId, label, notes, color, icon, imageUrl, x, y });
     db.mindMaps[index] = next;
+    const addedImage = (next.nodes || []).find(n => n.imageUrl && n.imageUrl === imageUrl);
+    if (addedImage?.imageUrl) {
+      db.mindMapImages = rememberMindMapImage(db.mindMapImages, addedImage.imageUrl, {
+        label: addedImage.label,
+        mapTitle: next.title
+      });
+    }
     saveDb(db);
     res.json({
       success: true,
-      mindMap: { ...next, stats: computeMapStats(next) }
+      mindMap: { ...next, stats: computeMapStats(next) },
+      images: db.mindMapImages
     });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -3025,10 +3083,20 @@ app.put('/api/mind-maps/:id/nodes/:nodeId', (req, res) => {
     if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
     const next = updateMindMapNode(db.mindMaps[index], req.params.nodeId, req.body || {});
     db.mindMaps[index] = next;
+    if (req.body && req.body.imageUrl) {
+      const node = (next.nodes || []).find(n => n.id === req.params.nodeId);
+      if (node?.imageUrl) {
+        db.mindMapImages = rememberMindMapImage(db.mindMapImages, node.imageUrl, {
+          label: node.label,
+          mapTitle: next.title
+        });
+      }
+    }
     saveDb(db);
     res.json({
       success: true,
-      mindMap: { ...next, stats: computeMapStats(next) }
+      mindMap: { ...next, stats: computeMapStats(next) },
+      images: req.body && Object.prototype.hasOwnProperty.call(req.body, 'imageUrl') ? db.mindMapImages : undefined
     });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -3044,10 +3112,21 @@ app.put('/api/mind-maps/:id/nodes', (req, res) => {
     const { nodeIds, ...patch } = req.body || {};
     const next = updateMindMapNodes(db.mindMaps[index], nodeIds, patch);
     db.mindMaps[index] = next;
+    if (patch.imageUrl) {
+      const ids = new Set(Array.isArray(nodeIds) ? nodeIds : []);
+      const node = (next.nodes || []).find(n => ids.has(n.id) && n.imageUrl);
+      if (node?.imageUrl) {
+        db.mindMapImages = rememberMindMapImage(db.mindMapImages, node.imageUrl, {
+          label: node.label,
+          mapTitle: next.title
+        });
+      }
+    }
     saveDb(db);
     res.json({
       success: true,
-      mindMap: { ...next, stats: computeMapStats(next) }
+      mindMap: { ...next, stats: computeMapStats(next) },
+      images: Object.prototype.hasOwnProperty.call(patch, 'imageUrl') ? db.mindMapImages : undefined
     });
   } catch (err) {
     res.status(400).json({ error: err.message });

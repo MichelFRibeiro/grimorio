@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { icons as LucideIcons } from 'lucide-react';
+import { icons as LucideIcons, Trash2, X } from 'lucide-react';
 import {
   MIND_MAP_ALL_ICONS,
   MIND_MAP_FEATURED_ICONS,
@@ -62,22 +62,41 @@ function fileToDataUrl(file) {
   });
 }
 
-export function collectUsedMindMapImages(maps = []) {
+export function collectUsedMindMapImages(maps = [], library = []) {
   const seen = new Set();
   const images = [];
+  const push = (url, meta = {}) => {
+    const safe = sanitizeMindMapImageUrl(url);
+    if (!safe || seen.has(safe)) return;
+    seen.add(safe);
+    images.push({
+      id: meta.id || safe,
+      url: safe,
+      label: String(meta.label || 'Imagem').replace(/\s*\n\s*/g, ' ').trim() || 'Imagem',
+      mapTitle: String(meta.mapTitle || '').trim(),
+      usageCount: meta.usageCount || 0
+    });
+  };
+  (Array.isArray(library) ? library : []).forEach((item) => {
+    push(item?.url, item);
+  });
   (maps || []).forEach((map) => {
     (map?.nodes || []).forEach((node) => {
-      const url = sanitizeMindMapImageUrl(node?.imageUrl);
-      if (!url || seen.has(url)) return;
-      seen.add(url);
-      images.push({
-        url,
-        label: String(node.label || 'Ramo').replace(/\s*\n\s*/g, ' ').trim() || 'Ramo',
-        mapTitle: String(map.title || 'Mapa').trim() || 'Mapa'
+      push(node?.imageUrl, {
+        label: node?.label || 'Ramo',
+        mapTitle: map?.title || 'Mapa'
       });
     });
   });
-  return images;
+  const usage = new Map();
+  (maps || []).forEach((map) => {
+    (map?.nodes || []).forEach((node) => {
+      const url = sanitizeMindMapImageUrl(node?.imageUrl);
+      if (!url) return;
+      usage.set(url, (usage.get(url) || 0) + 1);
+    });
+  });
+  return images.map((item) => ({ ...item, usageCount: usage.get(item.url) || 0 }));
 }
 
 export function MindMapMediaPicker({
@@ -87,12 +106,14 @@ export function MindMapMediaPicker({
   onChange,
   allowImage = true,
   title = 'Ícone ou imagem',
-  usedImages = []
+  usedImages = [],
+  onDeleteImage
 }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('Destaques');
   const [urlDraft, setUrlDraft] = useState('');
   const [error, setError] = useState('');
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   const icons = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -203,16 +224,25 @@ export function MindMapMediaPicker({
           </label>
           {usedImages.length > 0 && (
             <div className="mindmap-used-images">
-              <div className="mindmap-used-images-label">Imagens já usadas</div>
+              <div className="mindmap-used-images-head">
+                <div className="mindmap-used-images-label">Imagens já usadas</div>
+                <button
+                  type="button"
+                  className="mindmap-used-images-more"
+                  onClick={() => setLibraryOpen(true)}
+                >
+                  Ver todas ({usedImages.length})
+                </button>
+              </div>
               <div className="mindmap-used-images-row">
                 {usedImages.map((item) => {
                   const selected = imageUrl === item.url;
                   return (
                     <button
-                      key={item.url}
+                      key={item.id || item.url}
                       type="button"
                       className={`mindmap-used-image ${selected ? 'is-on' : ''}`}
-                      title={`${item.label} · ${item.mapTitle}`}
+                      title={item.mapTitle ? `${item.label} · ${item.mapTitle}` : item.label}
                       onClick={() => applyImage(item.url)}
                     >
                       <img src={item.url} alt="" />
@@ -221,6 +251,18 @@ export function MindMapMediaPicker({
                 })}
               </div>
             </div>
+          )}
+          {libraryOpen && (
+            <MindMapImageLibrary
+              images={usedImages}
+              selectedUrl={imageUrl}
+              onPick={(url) => {
+                applyImage(url);
+                setLibraryOpen(false);
+              }}
+              onDelete={onDeleteImage}
+              onClose={() => setLibraryOpen(false)}
+            />
           )}
           <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
             <input
@@ -244,6 +286,86 @@ export function MindMapMediaPicker({
         </>
       )}
       {error && <p style={{ color: '#f87171', fontSize: '0.75rem', marginTop: 8 }}>{error}</p>}
+    </div>
+  );
+}
+
+function MindMapImageLibrary({ images, selectedUrl, onPick, onDelete, onClose }) {
+  const [pendingUrl, setPendingUrl] = useState('');
+  const pending = images.find(item => item.url === pendingUrl);
+
+  return (
+    <div className="mindmap-image-library" role="dialog" aria-modal="true" aria-label="Imagens já usadas">
+      <button type="button" className="mindmap-image-library-backdrop" aria-label="Fechar" onClick={onClose} />
+      <div className="mindmap-image-library-panel">
+        <div className="mindmap-image-library-head">
+          <div>
+            <div className="mindmap-used-images-label">Imagens já usadas</div>
+            <p>{images.length} {images.length === 1 ? 'imagem' : 'imagens'}. Clique para usar. O X remove da biblioteca e dos ramos.</p>
+          </div>
+          <button type="button" className="mindmap-ghost-btn" onClick={onClose} aria-label="Fechar">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="mindmap-image-library-grid">
+          {images.map((item) => {
+            const selected = selectedUrl === item.url;
+            const title = item.mapTitle ? `${item.label} · ${item.mapTitle}` : item.label;
+            return (
+              <div key={item.id || item.url} className={`mindmap-library-card ${selected ? 'is-on' : ''}`}>
+                <button
+                  type="button"
+                  className="mindmap-library-pick"
+                  title={title}
+                  onClick={() => onPick(item.url)}
+                >
+                  <img src={item.url} alt="" />
+                </button>
+                <button
+                  type="button"
+                  className="mindmap-library-delete"
+                  title="Excluir imagem"
+                  aria-label={`Excluir ${item.label}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPendingUrl(item.url);
+                  }}
+                >
+                  <Trash2 size={12} />
+                </button>
+                {item.usageCount > 0 && (
+                  <span className="mindmap-library-usage" title={`Em ${item.usageCount} ramo(s)`}>
+                    {item.usageCount}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {pending && (
+          <div className="mindmap-library-confirm">
+            <p>
+              Excluir esta imagem
+              {pending.usageCount > 0
+                ? ` e tirá-la de ${pending.usageCount} ramo${pending.usageCount === 1 ? '' : 's'}?`
+                : ' da biblioteca?'}
+            </p>
+            <div>
+              <button type="button" className="mindmap-ghost-btn" onClick={() => setPendingUrl('')}>Cancelar</button>
+              <button
+                type="button"
+                className="mindmap-ghost-btn is-danger"
+                onClick={() => {
+                  onDelete?.(pending.url);
+                  setPendingUrl('');
+                }}
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
