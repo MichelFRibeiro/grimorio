@@ -262,8 +262,9 @@ function hydrateBlock(raw, dateStr, plan, subjectStats, topicStats, examQuestion
   todayProgress.accuracy = todayProgress.solved > 0
     ? Math.round((todayProgress.correct / todayProgress.solved) * 1000) / 10
     : 0;
-  const target = raw.target != null ? raw.target : AGU_BLOCK_QUESTION_TARGET;
-  const targetMinutes = raw.targetMinutes != null ? raw.targetMinutes : AGU_BLOCK_MINUTES;
+  const questionBlock = raw.kind !== 'discursiva' && raw.kind !== 'teoria' && raw.kind !== 'informativo';
+  const target = questionBlock ? AGU_BLOCK_QUESTION_TARGET : (raw.target || 0);
+  const targetMinutes = AGU_BLOCK_MINUTES;
   const storedMinutes = durationForStudySlot(plan, slot);
   const minutes = Math.max(storedMinutes, todayProgress.minutes);
   const remaining = Math.max(0, target - todayProgress.solved);

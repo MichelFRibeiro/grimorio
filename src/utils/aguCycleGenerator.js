@@ -721,7 +721,7 @@ export function generateFortnight(plan, examQuestions, todayStr, options = {}) {
   };
 }
 
-function isQuestionKindBlock(block) {
+export function isQuestionKindBlock(block) {
   if (!block) return false;
   return block.kind !== 'discursiva' && block.kind !== 'teoria' && block.kind !== 'informativo';
 }

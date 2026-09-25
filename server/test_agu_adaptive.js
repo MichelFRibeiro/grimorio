@@ -183,6 +183,11 @@ assert(loggedPort, 'português lançado permanece no dia');
 assert((loggedPort.minutes || 0) >= 30, `bloco de português herda 67 min, veio ${loggedPort.minutes}`);
 assert(loggedPort.done === true, 'bloco de português com 67 min fica concluído após refresh');
 assert(loggedPort.target === 10 && loggedPort.targetMinutes === 30, 'bloco lançado fecha com 10 q ou 30 min');
+theoryPlan.currentCycle.days[0].blocks = theoryPlan.currentCycle.days[0].blocks.map((block) => (
+  block.subjectId === 'portugues' ? { ...block, target: 20, targetMinutes: 60 } : block
+));
+const stale = getDaySchedule(theoryPlan, monday, {}, []).blocks.find((b) => b.subjectId === 'portugues');
+assert(stale?.target === 10 && stale?.targetMinutes === 30, 'ciclo salvo com 20/60 é exibido como 10/30');
 const subjectsToday = afterRefresh.blocks.map((b) => b.subjectId);
 assert(new Set(subjectsToday).size === subjectsToday.length, `hoje não pode repetir matéria, veio ${subjectsToday.join(', ')}`);
 assert(subjectsToday.filter((id) => id === 'portugues').length === 1, 'português entra só uma vez no dia');
