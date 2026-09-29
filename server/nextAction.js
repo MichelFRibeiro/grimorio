@@ -1,6 +1,9 @@
 /**
- * Motor de Próxima Atividade — escolhe a melhor missão ou ritual
+ * Motor de Próxima Atividade — escolhe a melhor vitória do dia, missão ou ritual
  * dado lugar, horário, prazos e histórico.
+ *
+ * Vitória Planejada para o Dia tem prioridade máxima: enquanto houver uma
+ * pendente hoje, ela vem antes de qualquer missão ou ritual.
  */
 
 import {
@@ -315,6 +318,26 @@ function scoreCandidate({
   weeklyStats
 }) {
   const reasons = [];
+
+  // A vitória do dia não disputa ponto com ninguém: ela é o plano do dia.
+  if (kind === 'victory') {
+    const remaining = Math.max(0, (item.plannedCount || 1) - (item.completedCount || 0));
+    reasons.push(remaining > 1
+      ? `Vitória planejada para hoje · faltam ${remaining}`
+      : 'Vitória planejada para hoje');
+    if (item.category) reasons.push(item.category);
+    return {
+      score: 100,
+      reasons: reasons.slice(0, 3),
+      urgency: { score: 40, label: reasons[0], overdue: false, dueToday: true, dueSoon: true },
+      urgencyClass: 4,
+      hourFit: 1,
+      dayFit: 1,
+      histSource: 'plan',
+      nextSubtask: null
+    };
+  }
+
   const urgency = kind === 'quest'
     ? urgencyScore(item, todayStr, nowMinutes)
     : { score: 8, label: extra ? 'Extra da semana' : null, overdue: false, dueToday: false, dueSoon: false };
@@ -394,7 +417,9 @@ function serializeCandidate(kind, item, scoring, extra, weeklyStats, completedTo
     overdue: !!scoring.urgency?.overdue,
     dueToday: !!scoring.urgency?.dueToday,
     reasons: scoring.reasons,
-    reason: scoring.reasons[0] || (kind === 'habit' ? 'Ritual pendente agora' : 'Missão pendente agora'),
+    reason: scoring.reasons[0] || (kind === 'victory'
+      ? 'Vitória planejada para hoje'
+      : (kind === 'habit' ? 'Ritual pendente agora' : 'Missão pendente agora')),
     nextSubtask: scoring.nextSubtask,
     extra: !!extra,
     frequency: kind === 'habit' ? (item.frequency || 'daily') : null,
@@ -432,6 +457,11 @@ function comparePriorityRank(a, b) {
 }
 
 function compareCandidates(a, b) {
+  // Vitória planejada para hoje vem antes de missão e ritual.
+  const aVictory = a.kind === 'victory' ? 1 : 0;
+  const bVictory = b.kind === 'victory' ? 1 : 0;
+  if (bVictory !== aVictory) return bVictory - aVictory;
+
   // Faixa alta (Importante/Crítico) sempre vence Dispensável/Opcional/Bom fazer.
   const aBand = priorityBand(a.priority);
   const bBand = priorityBand(b.priority);
@@ -451,6 +481,9 @@ function compareCandidates(a, b) {
     if (urgencyCmp) return urgencyCmp;
   }
 
+  const aOrder = a.planOrder || 0;
+  const bOrder = b.planOrder || 0;
+  if (aOrder !== bOrder) return aOrder - bOrder;
   const aStreak = a.currentStreak || 0;
   const bStreak = b.currentStreak || 0;
   if (bStreak !== aStreak) return bStreak - aStreak;
@@ -510,7 +543,7 @@ export function computeNextAction(db, options = {}) {
     return copy;
   };
 
-  const consider = (kind, item, extra, weeklyStats, completedToday) => {
+  const consider = (kind, item, extra, weeklyStats, completedToday, order = 0) => {
     if (snoozed.has(item.id)) return;
     const scoring = scoreCandidate({
       kind,
@@ -525,9 +558,36 @@ export function computeNextAction(db, options = {}) {
       weeklyStats
     });
     const serialized = serializeCandidate(kind, item, scoring, extra, weeklyStats, completedToday);
+    // A ordem de cadastro desempata as vitórias do dia entre si.
+    serialized.planOrder = order;
     if (extra) extras.push(serialized);
     else main.push(serialized);
   };
+
+  // Vitória planejada para hoje: prioridade máxima, na ordem em que foi cadastrada.
+  const victoriesToday = (db.dailyVictories || []).filter(v => v && v.date === todayStr);
+  const victoryPlan = {
+    plannedCount: victoriesToday.length,
+    completedCount: victoriesToday.filter(v => v.completed).length
+  };
+  (db.dailyVictories || []).forEach((victory, index) => {
+    if (!victory || victory.completed || victory.date !== todayStr) return;
+    // A vitória do dia vale em qualquer lugar, salvo se ela mesma tiver um
+    // lugar definido. Sem isso, a categoria (INSS → Escritório) a esconderia
+    // sempre que o herói estivesse em casa.
+    const item = prepareItem({ ...victory, location: victory.location || 'anywhere', ...victoryPlan });
+    const windowOk = isNowInTimeWindow(item.timeWindow, nowMinutes, WINDOW_GRACE_MINUTES);
+    const placeOk = locationMatches(item.location, location);
+    if (!placeOk) {
+      deferredSource.push(item);
+      return;
+    }
+    if (!windowOk) {
+      deferredByTimeSource.push({ kind: 'victory', item });
+      return;
+    }
+    consider('victory', item, false, null, false, index);
+  });
 
   (db.quests || []).forEach(quest => {
     if (!quest || quest.completed) return;

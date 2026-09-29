@@ -228,6 +228,7 @@ export function DailyVictoriesCard({
 
   return (
     <div
+      id="vitorias-do-dia"
       className={summary.allComplete ? 'glass-panel-gold gold-glow-pulse' : 'glass-panel'}
       style={{
         padding: '16px 20px',

@@ -284,6 +284,7 @@ export function App() {
         onCompleteQuest={completeQuest}
         onUpdateQuest={updateQuest}
         onToggleHabit={toggleHabit}
+        onCompleteVictory={completeDailyVictory}
         quests={quests}
         onOpenQuests={() => setActiveTab('quests')}
         onOpenHabits={() => setActiveTab('habits')}

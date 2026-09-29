@@ -308,7 +308,9 @@ export function learningForPrompt(db) {
 }
 
 export function localReason(item) {
-  return item?.reason || (item?.kind === 'habit' ? 'Ritual pendente agora' : 'Missão pendente agora');
+  return item?.reason || (item?.kind === 'victory'
+    ? 'Vitória planejada para hoje'
+    : (item?.kind === 'habit' ? 'Ritual pendente agora' : 'Missão pendente agora'));
 }
 
 export function declineText(reason, note) {

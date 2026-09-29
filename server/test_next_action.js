@@ -543,6 +543,50 @@ function runTests() {
   );
   assert(fortnightlyReopened.primary?.id === 'h-quinzena', 'No dia 16 a quinzena reabre mesmo com a 1ª metade feita');
 
+  // Vitória planejada para hoje tem prioridade máxima sobre missão e ritual.
+  const victoryToday = {
+    id: 'dv-peticao',
+    title: 'Finalizar petição',
+    category: 'INSS',
+    date: '2026-08-29',
+    completed: false,
+    createdAt: '2026-08-29T09:00:00.000Z'
+  };
+  const victoryLater = {
+    id: 'dv-segunda',
+    title: 'Protocolar recurso',
+    category: 'INSS',
+    date: '2026-08-29',
+    completed: false,
+    createdAt: '2026-08-29T09:30:00.000Z'
+  };
+  const victoryTomorrow = {
+    id: 'dv-amanha',
+    title: 'Vitória de amanhã',
+    category: 'Pessoal',
+    date: '2026-08-30',
+    completed: false,
+    createdAt: '2026-08-29T09:00:00.000Z'
+  };
+  const withVictory = computeNextAction(baseDb({
+    quests: [overdueHome, petition],
+    habits: [creatina, terco],
+    dailyVictories: [victoryLater, victoryToday, { ...victoryToday, id: 'dv-feita', completed: true }, victoryTomorrow]
+  }), { location: 'home', now: nowHomeSat });
+  assert(withVictory.primary?.kind === 'victory', `Vitória do dia vem antes da missão atrasada (foi ${withVictory.primary?.kind})`);
+  assert(withVictory.primary?.id === 'dv-segunda', `A primeira cadastrada vem primeiro (foi ${withVictory.primary?.id})`);
+  assert(![withVictory.primary, ...withVictory.queue].some(i => i && i.id === 'dv-feita'), 'Vitória já concluída não entra');
+  assert(![withVictory.primary, ...withVictory.queue].some(i => i && i.id === 'dv-amanha'), 'Vitória de amanhã não entra hoje');
+  assert([withVictory.primary, ...withVictory.queue].some(i => i && i.id === 'h-creatina'), 'O ritual pendente continua na fila, atrás da vitória');
+  assert(withVictory.queue.some(i => i && i.id === 'dv-peticao'), 'A segunda vitória do dia entra na fila');
+
+  const victoryDone = computeNextAction(baseDb({
+    quests: [overdueHome],
+    habits: [creatina],
+    dailyVictories: [{ ...victoryToday, completed: true }]
+  }), { location: 'home', now: nowHomeSat });
+  assert(victoryDone.primary?.id === 'q-galinheiro', 'Com a vitória concluída, a missão atrasada volta a liderar');
+
   console.log('\n🏆 Todos os testes do motor de Próxima Atividade passaram.');
 }
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Compass, CheckCircle2, Clock, MapPin, Sparkles, Flame, Scroll, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Compass, CheckCircle2, Clock, MapPin, Sparkles, Flame, Scroll, RefreshCw, ChevronDown, ChevronUp, Trophy } from 'lucide-react';
 import { LOCATIONS, getLocationMeta } from '../utils/locations';
 import { PriorityBadge } from './ActivityScaleFields';
 import { ActivityTimerBox } from './ActivityTimerBox';
@@ -13,6 +13,7 @@ export function NextActionCard({
   onCompleteQuest,
   onUpdateQuest,
   onToggleHabit,
+  onCompleteVictory,
   onOpenQuests,
   onOpenHabits,
   onRefresh,
@@ -59,6 +60,11 @@ export function NextActionCard({
     if (item.kind === 'habit' && onToggleHabit) {
       const durationMinutes = consumeActivityTimerMinutes('habit', item.id);
       onToggleHabit(item.id, null, durationMinutes > 0 ? { durationMinutes } : {});
+      return;
+    }
+    if (item.kind === 'victory' && onCompleteVictory) {
+      const durationMinutes = consumeActivityTimerMinutes('victory', item.id);
+      onCompleteVictory(item.id, durationMinutes > 0 ? { durationMinutes } : {});
       return;
     }
     if (item.kind === 'quest') {
@@ -184,11 +190,15 @@ export function NextActionCard({
     if (playClick) playClick();
     if (item.kind === 'habit' && onOpenHabits) onOpenHabits();
     if (item.kind === 'quest' && onOpenQuests) onOpenQuests();
+    if (item.kind === 'victory') {
+      document.getElementById('vitorias-do-dia')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   };
 
   const locMeta = getLocationMeta(activeLocation, catalog);
+  const kindEmoji = { habit: '🔥', victory: '🏆' };
   const collapsedHint = primary
-    ? `${primary.kind === 'habit' ? '🔥' : '📜'} ${primary.title}`
+    ? `${kindEmoji[primary.kind] || '📜'} ${primary.title}`
     : (nextAction?.emptyReason || 'Nada pendente neste lugar e neste horário.');
 
   return (
@@ -197,8 +207,8 @@ export function NextActionCard({
       style={{
         padding: collapsed ? '12px 16px' : '16px 20px',
         marginBottom: '24px',
-        border: '1px solid rgba(168, 85, 247, 0.28)',
-        background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(19, 23, 34, 0.92) 100%)'
+        border: '1px solid rgba(124, 58, 237, 0.28)',
+        background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.07) 0%, rgba(251, 247, 238, 0.96) 100%)'
       }}
     >
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: collapsed ? 0 : '14px' }}>
@@ -451,14 +461,14 @@ function OpenRouterKeyPrompt({ value, error, busy, onChange, onSubmit }) {
         style={{
           width: '100%',
           borderRadius: '10px',
-          border: '1px solid rgba(168, 85, 247, 0.35)',
-          background: 'rgba(15, 18, 28, 0.7)',
-          color: '#f8fafc',
+          border: '1px solid rgba(124, 58, 237, 0.35)',
+          background: '#fbf7ee',
+          color: '#2a2118',
           padding: '10px 12px',
           font: 'inherit'
         }}
       />
-      {error && <p style={{ color: '#fda4af', fontSize: '0.75rem', margin: '6px 0 0 0' }}>{error}</p>}
+      {error && <p style={{ color: '#9f1239', fontSize: '0.75rem', margin: '6px 0 0 0' }}>{error}</p>}
       <button type="button" onClick={onSubmit} disabled={busy} style={{ ...primaryButtonStyle, marginTop: '8px' }}>
         {busy ? 'Guardando...' : 'Guardar chave'}
       </button>
@@ -481,14 +491,14 @@ function EnergyPrompt({ text, error, busy, onChange, onSubmit, onSkip }) {
           width: '100%',
           resize: 'vertical',
           borderRadius: '10px',
-          border: '1px solid rgba(168, 85, 247, 0.35)',
-          background: 'rgba(15, 18, 28, 0.7)',
-          color: '#f8fafc',
+          border: '1px solid rgba(124, 58, 237, 0.35)',
+          background: '#fbf7ee',
+          color: '#2a2118',
           padding: '10px 12px',
           font: 'inherit'
         }}
       />
-      {error && <p style={{ color: '#fda4af', fontSize: '0.75rem', margin: '6px 0 0 0' }}>{error}</p>}
+      {error && <p style={{ color: '#9f1239', fontSize: '0.75rem', margin: '6px 0 0 0' }}>{error}</p>}
       <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
         <button type="button" onClick={onSubmit} disabled={busy} style={primaryButtonStyle}>
           {busy ? 'Lendo...' : 'Enviar'}
@@ -538,13 +548,16 @@ function PrimaryRow({
   onCancelDecline
 }) {
   const isHabit = item.kind === 'habit';
+  const isVictory = item.kind === 'victory';
+  const kindLabel = isVictory ? 'Vitória do dia' : (isHabit ? 'Ritual' : 'Missão');
+  const KindIcon = isVictory ? Trophy : (isHabit ? Flame : Scroll);
   return (
     <div
       style={{
         padding: '14px 16px',
         borderRadius: '14px',
-        background: 'rgba(15, 18, 28, 0.7)',
-        border: '1px solid rgba(168, 85, 247, 0.25)'
+        background: '#fbf7ee',
+        border: '1px solid rgba(124, 58, 237, 0.25)'
       }}
     >
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
@@ -568,15 +581,15 @@ function PrimaryRow({
                 fontWeight: 800,
                 padding: '2px 8px',
                 borderRadius: '999px',
-                background: isHabit ? 'rgba(244, 63, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                color: isHabit ? '#fb7185' : '#fbbf24',
+                background: isVictory ? 'rgba(154, 52, 18, 0.12)' : (isHabit ? 'rgba(159, 18, 57, 0.12)' : 'rgba(154, 52, 18, 0.12)'),
+                color: isVictory ? '#9a3412' : (isHabit ? '#9f1239' : '#9a3412'),
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '4px'
               }}
             >
-              {isHabit ? <Flame size={11} /> : <Scroll size={11} />}
-              {isHabit ? 'Ritual' : 'Missão'}
+              <KindIcon size={11} />
+              {kindLabel}
             </span>
             <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
               {item.locationEmoji} {item.locationLabel}
@@ -586,7 +599,7 @@ function PrimaryRow({
             )}
             {item.priority && <PriorityBadge priority={item.priority} compact />}
           </div>
-          <h4 style={{ fontSize: '1.08rem', fontWeight: 800, color: '#f8fafc', margin: '0 0 4px 0' }}>
+          <h4 style={{ fontSize: '1.08rem', fontWeight: 800, color: '#2a2118', margin: '0 0 4px 0' }}>
             {item.suggestionLabel || item.title}
           </h4>
           {item.dose?.reduced && (
@@ -596,7 +609,7 @@ function PrimaryRow({
             </p>
           )}
           {item.nextSubtask?.title && (
-            <p style={{ fontSize: '0.82rem', color: '#c4b5fd', margin: '0 0 4px 0' }}>
+            <p style={{ fontSize: '0.82rem', color: '#6d28d9', margin: '0 0 4px 0' }}>
               Próximo passo: {item.nextSubtask.title}
             </p>
           )}
@@ -624,7 +637,7 @@ function PrimaryRow({
             }}
           >
             <CheckCircle2 size={15} />
-            {item.dose?.reduced ? `Fiz ${item.dose.label}` : (isHabit ? 'Marcar ritual' : (item.nextSubtask ? 'Avançar passo' : 'Concluir'))}
+            {item.dose?.reduced ? `Fiz ${item.dose.label}` : (isVictory ? 'Concluir vitória' : (isHabit ? 'Marcar ritual' : (item.nextSubtask ? 'Avançar passo' : 'Concluir')))}
           </button>
           <button
             type="button"
@@ -672,10 +685,10 @@ function PrimaryRow({
               onChange={(event) => onNote(event.target.value)}
               rows={2}
               placeholder="Escreva o motivo"
-              style={{ borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(15,18,28,0.7)', color: '#f8fafc', padding: '8px 10px' }}
+              style={{ borderRadius: '10px', border: '1px solid rgba(61, 46, 31, 0.16)', background: '#fbf7ee', color: '#2a2118', padding: '8px 10px' }}
             />
           )}
-          {declineError && <p style={{ color: '#fda4af', fontSize: '0.75rem', margin: 0 }}>{declineError}</p>}
+          {declineError && <p style={{ color: '#9f1239', fontSize: '0.75rem', margin: 0 }}>{declineError}</p>}
           <div style={{ display: 'flex', gap: '8px' }}>
             <button type="button" onClick={onConfirmDecline} style={primaryButtonStyle}>Guardar motivo</button>
             <button type="button" onClick={onCancelDecline} style={quietButtonStyle}>Cancelar</button>
@@ -694,10 +707,10 @@ function PrimaryRow({
 
       <div style={{ marginTop: '12px' }}>
         <ActivityTimerBox
-          kind={isHabit ? 'habit' : 'quest'}
+          kind={isVictory ? 'victory' : (isHabit ? 'habit' : 'quest')}
           id={item.id}
-          label={isHabit ? 'Cronômetro do Ritual' : 'Cronômetro da Missão'}
-          accent={isHabit ? '#f87171' : '#fbbf24'}
+          label={isVictory ? 'Cronômetro da Vitória' : (isHabit ? 'Cronômetro do Ritual' : 'Cronômetro da Missão')}
+          accent={isHabit ? '#9f1239' : '#c2410c'}
           compact
         />
       </div>
