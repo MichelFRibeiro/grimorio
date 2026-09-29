@@ -1175,6 +1175,18 @@ export function useGameData() {
     return true;
   };
 
+  const saveOpenRouterKey = async (apiKey) => {
+    const res = await fetch('/api/integrations/openrouter', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ apiKey })
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: json.error || 'Não foi possível guardar a chave.' };
+    setData(prev => prev ? { ...prev, openRouter: json.openRouter } : prev);
+    return { ok: true, openRouter: json.openRouter };
+  };
+
   const submitOracleEnergy = async ({ text, location, snoozedIds } = {}) => {
     const res = await fetch('/api/next-action/energy', {
       method: 'POST',
@@ -1608,6 +1620,7 @@ export function useGameData() {
     setCurrentLocation,
     refreshNextAction,
     submitOracleEnergy,
+    saveOpenRouterKey,
     declineOracleSuggestion,
     acceptOracleDose,
     startAguPlan,

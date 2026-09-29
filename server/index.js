@@ -8,6 +8,7 @@ import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
 import { computeNextAction } from './nextAction.js';
 import { suggestNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly } from './oracleSuggest.js';
+import { openRouterKeyStatus, setStoredOpenRouterKey } from './jevClient.js';
 import { markDecisionAccepted, DECLINE_REASONS } from './oracleMemory.js';
 import {
   LOCATIONS,
@@ -451,8 +452,10 @@ app.get('/api/state', (req, res) => {
     }
     const analytics = computeAnalytics();
     const nextAction = computeNextAction(db);
+    const { integrations, ...publicDb } = db;
     res.json({
-      ...db,
+      ...publicDb,
+      openRouter: openRouterKeyStatus(),
       analytics,
       nextAction,
       locations: LOCATIONS,
@@ -564,6 +567,27 @@ app.get('/api/next-action', async (req, res) => {
       extras: [],
       locations: LOCATIONS
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/integrations/openrouter', (req, res) => {
+  res.json({ success: true, openRouter: openRouterKeyStatus() });
+});
+
+app.put('/api/integrations/openrouter', (req, res) => {
+  try {
+    const key = String(req.body?.apiKey || '').trim();
+    if (!key.startsWith('sk-or-')) {
+      return res.status(400).json({ error: 'A chave do OpenRouter começa com sk-or-.' });
+    }
+    const db = getDb();
+    if (!db.integrations) db.integrations = {};
+    db.integrations.openrouterApiKey = key;
+    setStoredOpenRouterKey(key);
+    saveDb(db);
+    res.json({ success: true, openRouter: openRouterKeyStatus() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

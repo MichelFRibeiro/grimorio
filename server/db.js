@@ -17,6 +17,7 @@ import { sanitizeNinetyDayGoals } from '../src/utils/ninetyDayGoals.js';
 import { sanitizeDailyVictories, sanitizeDailyVictoryBonuses } from '../src/utils/dailyVictories.js';
 import { sanitizeMindMaps, sanitizeMindMapSessions, sanitizeMindMapCategories, sanitizeMindMapImageLibrary, mergeMindMapImageLibrary } from '../src/utils/mindMaps.js';
 import { ensureOracleMemory } from './oracleMemory.js';
+import { setStoredOpenRouterKey } from './jevClient.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -350,6 +351,8 @@ export function sanitizeDb(db) {
     if (!db.bossRaid.rewardXp) db.bossRaid.rewardXp = 400;
   }
   ensureOracleMemory(db);
+  const savedKey = db.integrations?.openrouterApiKey;
+  if (savedKey) setStoredOpenRouterKey(savedKey);
   applyLocationDefaults(db);
   (db.quests || []).forEach((quest) => migrateActivityScale(quest));
   (db.habits || []).forEach((habit) => migrateActivityScale(habit));

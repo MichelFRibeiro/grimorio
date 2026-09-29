@@ -86,6 +86,7 @@ export function App() {
     setCurrentLocation,
     refreshNextAction,
     submitOracleEnergy,
+    saveOpenRouterKey,
     declineOracleSuggestion,
     acceptOracleDose,
     startAguPlan,
@@ -288,6 +289,8 @@ export function App() {
         onOpenHabits={() => setActiveTab('habits')}
         onRefresh={refreshNextAction}
         onSubmitEnergy={submitOracleEnergy}
+        openRouter={data?.openRouter}
+        onSaveOpenRouterKey={saveOpenRouterKey}
         onDeclineSuggestion={declineOracleSuggestion}
         onAcceptDose={acceptOracleDose}
         playClick={playClick}

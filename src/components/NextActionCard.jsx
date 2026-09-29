@@ -17,6 +17,8 @@ export function NextActionCard({
   onOpenHabits,
   onRefresh,
   onSubmitEnergy,
+  openRouter,
+  onSaveOpenRouterKey,
   onDeclineSuggestion,
   onAcceptDose,
   quests = [],
@@ -28,6 +30,9 @@ export function NextActionCard({
   const [energyText, setEnergyText] = useState('');
   const [energyError, setEnergyError] = useState('');
   const [revisingEnergy, setRevisingEnergy] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [keyError, setKeyError] = useState('');
+  const [keySaved, setKeySaved] = useState(false);
   const [askingWhy, setAskingWhy] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [declineNote, setDeclineNote] = useState('');
@@ -112,6 +117,24 @@ export function NextActionCard({
     setAskingWhy(false);
     setDeclineReason('');
     setDeclineNote('');
+  };
+
+  const handleSaveKey = async () => {
+    if (!apiKey.trim().startsWith('sk-or-')) {
+      setKeyError('A chave do OpenRouter começa com sk-or-.');
+      return;
+    }
+    if (!onSaveOpenRouterKey) return;
+    setRefreshing(true);
+    setKeyError('');
+    const result = await onSaveOpenRouterKey(apiKey.trim());
+    setRefreshing(false);
+    if (!result?.ok) {
+      setKeyError(result?.error || 'Não foi possível guardar a chave.');
+      return;
+    }
+    setApiKey('');
+    setKeySaved(true);
   };
 
   const handleEnergy = async () => {
@@ -285,7 +308,23 @@ export function NextActionCard({
       {collapsed ? null : (
         <>
 
-      {needsEnergy && (
+      {!openRouter?.configured && (
+        <OpenRouterKeyPrompt
+          value={apiKey}
+          error={keyError}
+          busy={refreshing}
+          onChange={setApiKey}
+          onSubmit={handleSaveKey}
+        />
+      )}
+
+      {openRouter?.configured && keySaved && (
+        <p style={{ fontSize: '0.75rem', color: '#86efac', margin: '0 0 10px 0' }}>
+          Chave guardada no servidor ({openRouter.hint}).
+        </p>
+      )}
+
+      {needsEnergy && openRouter?.configured && (
         <EnergyPrompt
           text={energyText}
           error={energyError}
@@ -390,6 +429,39 @@ export function NextActionCard({
       )}
         </>
       )}
+    </div>
+  );
+}
+
+function OpenRouterKeyPrompt({ value, error, busy, onChange, onSubmit }) {
+  return (
+    <div style={{ marginBottom: '12px' }}>
+      <p style={{ fontSize: '0.9rem', color: '#e9d5ff', fontWeight: 700, margin: '0 0 6px 0' }}>
+        Chave do OpenRouter
+      </p>
+      <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '0 0 8px 0' }}>
+        Fica só no servidor. O navegador não a recebe de volta.
+      </p>
+      <input
+        type="password"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="sk-or-..."
+        autoComplete="off"
+        style={{
+          width: '100%',
+          borderRadius: '10px',
+          border: '1px solid rgba(168, 85, 247, 0.35)',
+          background: 'rgba(15, 18, 28, 0.7)',
+          color: '#f8fafc',
+          padding: '10px 12px',
+          font: 'inherit'
+        }}
+      />
+      {error && <p style={{ color: '#fda4af', fontSize: '0.75rem', margin: '6px 0 0 0' }}>{error}</p>}
+      <button type="button" onClick={onSubmit} disabled={busy} style={{ ...primaryButtonStyle, marginTop: '8px' }}>
+        {busy ? 'Guardando...' : 'Guardar chave'}
+      </button>
     </div>
   );
 }

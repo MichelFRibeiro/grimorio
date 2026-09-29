@@ -7,9 +7,30 @@ const DECISIONS_URL = 'https://openrouter.ai/api/alpha/decisions';
 export const JEV_MODEL = 'typesafe/jev-1.13';
 const DEFAULT_TIMEOUT_MS = 8000;
 
+let storedOpenRouterKey = '';
+
+export function setStoredOpenRouterKey(key) {
+  storedOpenRouterKey = key && String(key).trim() ? String(key).trim() : '';
+  return !!storedOpenRouterKey;
+}
+
+export function getStoredOpenRouterKey() {
+  return storedOpenRouterKey;
+}
+
 export function getOpenRouterApiKey() {
+  if (storedOpenRouterKey) return storedOpenRouterKey;
   const key = process.env.OPENROUTER_API_KEY;
   return key && String(key).trim() ? String(key).trim() : '';
+}
+
+export function openRouterKeyStatus() {
+  const key = getOpenRouterApiKey();
+  return {
+    configured: !!key,
+    source: storedOpenRouterKey ? 'saved' : (key ? 'env' : 'missing'),
+    hint: key ? `${key.slice(0, 6)}…${key.slice(-4)}` : ''
+  };
 }
 
 export function hasOpenRouterApiKey() {
