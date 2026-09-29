@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Compass, CheckCircle2, Clock, MapPin, Sparkles, Flame, Scroll, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { LOCATIONS, getLocationMeta } from '../utils/locations';
 import { PriorityBadge } from './ActivityScaleFields';
@@ -16,27 +16,33 @@ export function NextActionCard({
   onOpenQuests,
   onOpenHabits,
   onRefresh,
+  onSubmitEnergy,
+  onDeclineSuggestion,
+  onAcceptDose,
   quests = [],
   playClick
 }) {
   const [snoozedIds, setSnoozedIds] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [collapsed, setCollapsed] = useState(true);
+  const [energyText, setEnergyText] = useState('');
+  const [energyError, setEnergyError] = useState('');
+  const [revisingEnergy, setRevisingEnergy] = useState(false);
+  const [askingWhy, setAskingWhy] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
+  const [declineNote, setDeclineNote] = useState('');
+  const [declineError, setDeclineError] = useState('');
   const catalog = (locations && locations.length) ? locations : LOCATIONS;
   const context = nextAction?.context || {};
   const activeLocation = currentLocation || context.location || 'anywhere';
 
-  const visible = useMemo(() => {
-    const list = [];
-    if (nextAction?.primary) list.push(nextAction.primary);
-    (nextAction?.queue || []).forEach(item => list.push(item));
-    return list.filter(item => item && !snoozedIds.includes(item.id));
-  }, [nextAction, snoozedIds]);
-
-  const primary = visible[0] || null;
-  const queue = visible.slice(1, 4);
-  const extras = (nextAction?.extras || []).filter(e => e && !snoozedIds.includes(e.id) && e.id !== primary?.id).slice(0, 2);
+  const primary = nextAction?.primary && !snoozedIds.includes(nextAction.primary.id)
+    ? nextAction.primary
+    : null;
   const deferred = nextAction?.deferredByLocation || [];
+  const energy = nextAction?.energy || null;
+  const needsEnergy = revisingEnergy || (nextAction?.needsEnergy !== false && !energy);
+  const declineReasons = nextAction?.declineReasons || [];
 
   const handleLocation = (id) => {
     setSnoozedIds([]);
@@ -71,7 +77,72 @@ export function NextActionCard({
   const handleSnooze = (item) => {
     if (!item) return;
     if (playClick) playClick();
+    setAskingWhy(true);
+    setDeclineError('');
+  };
+
+  const handleDecline = async () => {
+    if (!primary?.decisionId || !onDeclineSuggestion) {
+      setDeclineError('Esta indicação não pode ser recusada ainda. Reprocesse.');
+      return;
+    }
+    if (!declineReason) {
+      setDeclineError('Escolha um motivo.');
+      return;
+    }
+    if (declineReason === 'other' && !declineNote.trim()) {
+      setDeclineError('Escreva o motivo.');
+      return;
+    }
+    setRefreshing(true);
+    setDeclineError('');
+    const result = await onDeclineSuggestion({
+      decisionId: primary.decisionId,
+      reason: declineReason,
+      note: declineNote,
+      location: activeLocation,
+      snoozedIds: [...snoozedIds, primary.id]
+    });
+    setRefreshing(false);
+    if (!result?.ok) {
+      setDeclineError(result?.error || 'Não foi possível registrar a recusa.');
+      return;
+    }
+    setSnoozedIds(prev => [...prev, primary.id]);
+    setAskingWhy(false);
+    setDeclineReason('');
+    setDeclineNote('');
+  };
+
+  const handleEnergy = async () => {
+    if (!energyText.trim()) {
+      setEnergyError('Conte como você está agora.');
+      return;
+    }
+    if (!onSubmitEnergy) return;
+    setRefreshing(true);
+    setEnergyError('');
+    const result = await onSubmitEnergy({
+      text: energyText.trim(),
+      location: activeLocation,
+      snoozedIds
+    });
+    setRefreshing(false);
+    if (!result?.ok) {
+      setEnergyError(result?.error || 'Não foi possível ler a energia.');
+      return;
+    }
+    setRevisingEnergy(false);
+    setEnergyText('');
+  };
+
+  const handleDose = async (item) => {
+    if (!item?.decisionId || !onAcceptDose) return false;
+    const result = await onAcceptDose(item.decisionId);
+    if (!result?.ok) return false;
     setSnoozedIds(prev => [...prev, item.id]);
+    if (onRefresh) onRefresh({ location: activeLocation, snoozedIds: [...snoozedIds, item.id] });
+    return true;
   };
 
   const handleRefresh = async () => {
@@ -79,7 +150,7 @@ export function NextActionCard({
     if (playClick) playClick();
     setRefreshing(true);
     try {
-      await onRefresh({ snoozedIds });
+      await onRefresh({ location: activeLocation, snoozedIds, consult: true });
     } finally {
       setRefreshing(false);
     }
@@ -214,14 +285,52 @@ export function NextActionCard({
       {collapsed ? null : (
         <>
 
-      {primary ? (
+      {needsEnergy && (
+        <EnergyPrompt
+          text={energyText}
+          error={energyError}
+          busy={refreshing}
+          onChange={setEnergyText}
+          onSubmit={handleEnergy}
+          onSkip={() => onRefresh && onRefresh({ location: activeLocation, snoozedIds, consult: true })}
+        />
+      )}
+
+      {!needsEnergy && energy && (
+        <p style={{ fontSize: '0.78rem', color: '#c4b5fd', margin: '0 0 10px 0' }}>
+          Energia {energy.score}/10
+          <button
+            type="button"
+            onClick={() => {
+              setEnergyText(energy.text || '');
+              setRevisingEnergy(true);
+            }}
+            style={{ marginLeft: '8px', background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.75rem' }}
+          >
+            atualizar
+          </button>
+        </p>
+      )}
+
+      {primary && !needsEnergy && (
         <PrimaryRow
           item={primary}
           onDo={handleDo}
+          onDose={handleDose}
           onSnooze={handleSnooze}
           onOpen={handleOpen}
+          askingWhy={askingWhy}
+          declineReasons={declineReasons}
+          declineReason={declineReason}
+          declineNote={declineNote}
+          declineError={declineError}
+          onReason={setDeclineReason}
+          onNote={setDeclineNote}
+          onConfirmDecline={handleDecline}
+          onCancelDecline={() => setAskingWhy(false)}
         />
-      ) : (
+      )}
+      {!primary && !needsEnergy && (
         <div
           style={{
             padding: '16px',
@@ -236,39 +345,9 @@ export function NextActionCard({
         </div>
       )}
 
-      {queue.length > 0 && (
-        <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {queue.map((item, idx) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => handleOpen(item)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '8px 10px',
-                borderRadius: '10px',
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                color: '#cbd5e1',
-                cursor: 'pointer',
-                textAlign: 'left'
-              }}
-            >
-              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', width: '16px' }}>{idx + 2}</span>
-              <span style={{ fontSize: '0.95rem' }}>{item.kind === 'habit' ? '🔥' : '📜'}</span>
-              <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600 }}>{item.title}</span>
-              {item.priority && <PriorityBadge priority={item.priority} compact />}
-              <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{item.locationEmoji}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {extras.length > 0 && !queue.length && (
-        <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '10px' }}>
-          Extra da semana: {extras.map(e => e.title).join(' · ')}
+      {nextAction?.source === 'heuristic' && nextAction?.jevError && (
+        <p style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '8px' }}>
+          O Oráculo usou o histórico local nesta rodada.
         </p>
       )}
 
@@ -315,7 +394,77 @@ export function NextActionCard({
   );
 }
 
-function PrimaryRow({ item, onDo, onSnooze, onOpen }) {
+function EnergyPrompt({ text, error, busy, onChange, onSubmit, onSkip }) {
+  return (
+    <div style={{ marginBottom: '12px' }}>
+      <p style={{ fontSize: '0.9rem', color: '#e9d5ff', fontWeight: 700, margin: '0 0 8px 0' }}>
+        Como você está agora?
+      </p>
+      <textarea
+        value={text}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Ex.: cansado, mas consigo fazer algo curto"
+        rows={2}
+        style={{
+          width: '100%',
+          resize: 'vertical',
+          borderRadius: '10px',
+          border: '1px solid rgba(168, 85, 247, 0.35)',
+          background: 'rgba(15, 18, 28, 0.7)',
+          color: '#f8fafc',
+          padding: '10px 12px',
+          font: 'inherit'
+        }}
+      />
+      {error && <p style={{ color: '#fda4af', fontSize: '0.75rem', margin: '6px 0 0 0' }}>{error}</p>}
+      <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+        <button type="button" onClick={onSubmit} disabled={busy} style={primaryButtonStyle}>
+          {busy ? 'Lendo...' : 'Enviar'}
+        </button>
+        <button type="button" onClick={onSkip} style={quietButtonStyle}>Pular</button>
+      </div>
+    </div>
+  );
+}
+
+const primaryButtonStyle = {
+  padding: '9px 14px',
+  borderRadius: '10px',
+  background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+  color: '#fff',
+  fontWeight: 800,
+  fontSize: '0.82rem',
+  border: 'none',
+  cursor: 'pointer'
+};
+
+const quietButtonStyle = {
+  padding: '9px 12px',
+  borderRadius: '10px',
+  background: 'rgba(255,255,255,0.06)',
+  color: '#94a3b8',
+  fontWeight: 700,
+  fontSize: '0.78rem',
+  border: '1px solid rgba(255,255,255,0.1)',
+  cursor: 'pointer'
+};
+
+function PrimaryRow({
+  item,
+  onDo,
+  onDose,
+  onSnooze,
+  onOpen,
+  askingWhy,
+  declineReasons,
+  declineReason,
+  declineNote,
+  declineError,
+  onReason,
+  onNote,
+  onConfirmDecline,
+  onCancelDecline
+}) {
   const isHabit = item.kind === 'habit';
   return (
     <div
@@ -366,8 +515,14 @@ function PrimaryRow({ item, onDo, onSnooze, onOpen }) {
             {item.priority && <PriorityBadge priority={item.priority} compact />}
           </div>
           <h4 style={{ fontSize: '1.08rem', fontWeight: 800, color: '#f8fafc', margin: '0 0 4px 0' }}>
-            {item.title}
+            {item.suggestionLabel || item.title}
           </h4>
+          {item.dose?.reduced && (
+            <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '0 0 4px 0' }}>
+              A tarefa continua sendo {item.title}
+              {item.quantity?.label ? ` (${item.quantity.label})` : ''}.
+            </p>
+          )}
           {item.nextSubtask?.title && (
             <p style={{ fontSize: '0.82rem', color: '#c4b5fd', margin: '0 0 4px 0' }}>
               Próximo passo: {item.nextSubtask.title}
@@ -381,7 +536,7 @@ function PrimaryRow({ item, onDo, onSnooze, onOpen }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
           <button
             type="button"
-            onClick={() => onDo(item)}
+            onClick={() => (item.dose?.reduced ? onDose(item) : onDo(item))}
             style={{
               padding: '9px 14px',
               borderRadius: '10px',
@@ -397,7 +552,7 @@ function PrimaryRow({ item, onDo, onSnooze, onOpen }) {
             }}
           >
             <CheckCircle2 size={15} />
-            {isHabit ? 'Marcar ritual' : (item.nextSubtask ? 'Avançar passo' : 'Concluir')}
+            {item.dose?.reduced ? `Fiz ${item.dose.label}` : (isHabit ? 'Marcar ritual' : (item.nextSubtask ? 'Avançar passo' : 'Concluir'))}
           </button>
           <button
             type="button"
@@ -420,6 +575,41 @@ function PrimaryRow({ item, onDo, onSnooze, onOpen }) {
           </button>
         </div>
       </div>
+      {askingWhy && (
+        <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <p style={{ margin: 0, fontSize: '0.82rem', color: '#e9d5ff', fontWeight: 700 }}>Por que não agora?</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {declineReasons.map(reason => (
+              <button
+                key={reason.id}
+                type="button"
+                onClick={() => onReason(reason.id)}
+                style={{
+                  ...quietButtonStyle,
+                  color: declineReason === reason.id ? '#e9d5ff' : '#94a3b8',
+                  borderColor: declineReason === reason.id ? 'rgba(168, 85, 247, 0.6)' : 'rgba(255,255,255,0.1)'
+                }}
+              >
+                {reason.label}
+              </button>
+            ))}
+          </div>
+          {declineReason === 'other' && (
+            <textarea
+              value={declineNote}
+              onChange={(event) => onNote(event.target.value)}
+              rows={2}
+              placeholder="Escreva o motivo"
+              style={{ borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(15,18,28,0.7)', color: '#f8fafc', padding: '8px 10px' }}
+            />
+          )}
+          {declineError && <p style={{ color: '#fda4af', fontSize: '0.75rem', margin: 0 }}>{declineError}</p>}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" onClick={onConfirmDecline} style={primaryButtonStyle}>Guardar motivo</button>
+            <button type="button" onClick={onCancelDecline} style={quietButtonStyle}>Cancelar</button>
+          </div>
+        </div>
+      )}
 
       {(item.xpReward || item.coinReward) && (
         <div style={{ display: 'flex', gap: '10px', marginTop: '10px', fontSize: '0.75rem', color: '#fbbf24', fontWeight: 700 }}>

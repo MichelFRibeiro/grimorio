@@ -5,6 +5,8 @@ import { formatBrl } from '../src/utils/coinExchange.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings } from './rankings.js';
 import { computeNextAction } from './nextAction.js';
+import { suggestNextAction } from './oracleSuggest.js';
+import { markDecisionAccepted } from './oracleMemory.js';
 import {
   summarizePlan,
   startAguPlan,
@@ -360,6 +362,7 @@ export const toolsDefinition = [
         });
       }
 
+      if (willComplete) markDecisionAccepted(db, { entityId: quest.id, kind: 'quest' });
       const linkedVictories = syncDailyVictoriesFromActivity(db, {
         questId: quest.id,
         questCompleted: willComplete
@@ -1200,6 +1203,7 @@ export const toolsDefinition = [
         });
         if (isToday) {
           db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'habit', habit.id);
+          markDecisionAccepted(db, { entityId: habit.id, kind: 'habit' });
         }
       } else {
         habit.history = habit.history.filter(d => d !== targetDate);
@@ -2354,17 +2358,18 @@ export const toolsDefinition = [
   // ==========================================
   {
     name: 'get_next_action',
-    description: 'Indicar a próxima atividade (missão ou ritual) considerando o lugar atual, janela de horário, prazos, prioridade (dispensavel → critico) e histórico de execução. Filtra o que não pode ser feito agora e ranqueia o restante.',
+    description: 'Indicar uma única próxima atividade. O Jev escolhe a mais provável de ser iniciada agora, usando energia recente, histórico e recusas. Sem leitura de energia, usa o motor local.',
     schema: {
       location: locationEnum.optional().describe('Lugar atual (anywhere, office, home, gym). Se omitido, usa o lugar salvo no perfil ou um palpite por horário.'),
       snoozedIds: z.array(z.string()).optional().describe('IDs adiados nesta sessão (ignorados no ranking)')
     },
     handler: async (args = {}) => {
       const db = getDb();
-      const result = computeNextAction(db, {
+      const result = await suggestNextAction(db, {
         location: args.location,
         snoozedIds: args.snoozedIds || []
       });
+      saveDb(db);
       return formatSuccess({
         ...result,
         locations: LOCATIONS

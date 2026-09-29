@@ -1146,28 +1146,68 @@ export function useGameData() {
     }
   };
 
-  const refreshNextAction = async ({ location, snoozedIds } = {}) => {
+  const applyNextAction = (json) => {
+    setData(prev => {
+      if (!prev) return prev;
+      const { success, locations, userProfile, ...nextAction } = json;
+      return {
+        ...prev,
+        userProfile: userProfile || prev.userProfile,
+        nextAction,
+        locations: locations || prev.locations
+      };
+    });
+  };
+
+  const refreshNextAction = async ({ location, snoozedIds, consult = true } = {}) => {
     const params = new URLSearchParams();
     if (location) params.set('location', location);
     if (Array.isArray(snoozedIds) && snoozedIds.length > 0) {
       params.set('snoozed', snoozedIds.join(','));
     }
+    if (consult) params.set('consult', '1');
     const query = params.toString();
     const res = await fetch(`/api/next-action${query ? `?${query}` : ''}`, {
       headers: getAuthHeaders()
     });
     if (!res.ok) return false;
-    const json = await res.json();
-    setData(prev => {
-      if (!prev) return prev;
-      const { success, locations, ...nextAction } = json;
-      return {
-        ...prev,
-        nextAction,
-        locations: locations || prev.locations
-      };
-    });
+    applyNextAction(await res.json());
     return true;
+  };
+
+  const submitOracleEnergy = async ({ text, location, snoozedIds } = {}) => {
+    const res = await fetch('/api/next-action/energy', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ text, location, snoozedIds })
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: json.error || 'Não foi possível ler a energia.' };
+    applyNextAction(json);
+    return { ok: true };
+  };
+
+  const declineOracleSuggestion = async ({ decisionId, reason, note, location, snoozedIds } = {}) => {
+    const res = await fetch('/api/next-action/decline', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ decisionId, reason, note, location, snoozedIds })
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: json.error || 'Não foi possível registrar a recusa.' };
+    applyNextAction(json);
+    return { ok: true };
+  };
+
+  const acceptOracleDose = async (decisionId) => {
+    const res = await fetch('/api/next-action/accept-dose', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ decisionId })
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: json.error || 'Não foi possível registrar a dose.' };
+    return { ok: true, decision: json.decision };
   };
 
   // 7. Profile Actions
@@ -1567,6 +1607,9 @@ export function useGameData() {
     updateProfile,
     setCurrentLocation,
     refreshNextAction,
+    submitOracleEnergy,
+    declineOracleSuggestion,
+    acceptOracleDose,
     startAguPlan,
     updateAguPlan,
     toggleAguBlock,

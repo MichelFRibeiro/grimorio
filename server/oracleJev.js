@@ -1,0 +1,319 @@
+/**
+ * Julgamentos do Oráculo via Jev: energia, atividade mais provável,
+ * quantidade implícita e dose reduzida. O código faz a conta.
+ */
+
+import { callJevDecisions } from './jevClient.js';
+import {
+  AMOUNT_LADDER,
+  DOSE_FRACTIONS,
+  QUANTITY_UNITS,
+  applyDose,
+  buildLearningSummary,
+  composeQuantity,
+  declineReasonLabel,
+  energyBand,
+  formatQuantity,
+  energyFromJevScore
+} from './oracleMemory.js';
+
+const ENERGY_LEVELS = [
+  '1 — exhausted, unable to start',
+  '2 — drained, only a tiny step is realistic',
+  '3 — very low, a short easy task at most',
+  '4 — low, a reduced dose is realistic',
+  '5 — mixed, neither spent nor fresh',
+  '6 — okay, can start but may not finish a long task',
+  '7 — good, ready for a normal task',
+  '8 — strong, a demanding task is realistic',
+  '9 — very energetic',
+  '10 — at peak, ready for the hardest available task'
+];
+
+const UNIT_CRITERIA = {
+  hours: 'A duration named in hours or fractions of an hour, such as half an hour, meia hora, or two hours. The magnitude is the number of hours, not minutes.',
+  minutes: 'A duration already named in minutes, such as 15 minutes or 45 min. Not an hour-fraction.',
+  pages: 'Pages of reading or writing.',
+  questions: 'Exam or study questions.',
+  reps: 'Physical repetitions, such as sit-ups or sets.',
+  steps: 'Steps of a checklist or process.',
+  chapters: 'Chapters of a book or course.',
+  items: 'A countable batch that is none of the units above.',
+  none: 'The text states no amount and no duration, even implicitly.'
+};
+
+const AMOUNT_CRITERIA = {
+  none: 'No amount is stated or implied.',
+  quarter: 'One quarter of one unit, such as a quarter hour.',
+  third: 'One third of one unit.',
+  half: 'One half of one unit, such as half an hour or meia hora.',
+  one: 'Exactly one.',
+  two: 'Two.',
+  three: 'Three.',
+  four: 'Four.',
+  five: 'Five.',
+  six: 'Six.',
+  eight: 'Eight.',
+  ten: 'Ten.',
+  twelve: 'Twelve.',
+  fifteen: 'Fifteen.',
+  twenty: 'Twenty.',
+  twenty_five: 'Twenty-five.',
+  thirty: 'Thirty.',
+  forty: 'Forty.',
+  forty_five: 'Forty-five.',
+  fifty: 'Fifty.',
+  sixty: 'Sixty.',
+  ninety: 'Ninety.',
+  hundred: 'One hundred.',
+  hundred_twenty: 'One hundred and twenty.',
+  hundred_fifty: 'One hundred and fifty.',
+  two_hundred: 'Two hundred.',
+  other: 'An amount is stated, but none of the listed magnitudes fit.'
+};
+
+function choiceAnswer(result, id) {
+  const answer = result?.answers?.[id];
+  if (!answer || answer.type !== 'choice' || !answer.choice) return null;
+  return answer;
+}
+
+function scoreAnswer(result, id) {
+  const answer = result?.answers?.[id];
+  if (!answer || answer.type !== 'score' || answer.score == null) return null;
+  return answer;
+}
+
+export async function interpretEnergy(text, options = {}) {
+  const result = await callJevDecisions({
+    state: {
+      prompt: 'The person was asked "How are you right now?" and answered in their own words.',
+      answer: text
+    },
+    questions: {
+      energy: {
+        type: 'score',
+        instructions: 'What energy level from 1 to 10 does this self-report describe? 1 is exhausted and 10 is peak.',
+        criteria: ENERGY_LEVELS
+      }
+    }
+  }, options);
+  const answer = scoreAnswer(result, 'energy');
+  if (!answer) {
+    const error = new Error('Jev não devolveu a energia');
+    error.code = 'BAD_ANSWER';
+    throw error;
+  }
+  return {
+    score: energyFromJevScore(answer.score),
+    rawScore: answer.score,
+    confidence: answer.confidence ?? null,
+    usage: result.usage || null
+  };
+}
+
+function candidateCard(item) {
+  return {
+    id: item.id,
+    kind: item.kind,
+    title: item.title,
+    category: item.category,
+    priority: item.priority,
+    due: item.dueDate || null,
+    window: item.timeWindow || null,
+    streak: item.currentStreak,
+    localReasons: item.reasons || [],
+    estimatedMinutes: item.estimatedMinutes || null
+  };
+}
+
+export function buildChoiceState({ context, candidates, energy, learning, recentActions }) {
+  return {
+    moment: {
+      location: context?.locationLabel || context?.location || null,
+      date: context?.date || null,
+      hour: context?.hour ?? null,
+      weekday: context?.dayOfWeek ?? null
+    },
+    energy: energy ? {
+      text: energy.text,
+      score: energy.score,
+      band: energyBand(energy.score),
+      confidence: energy.confidence
+    } : null,
+    recentActions: recentActions || [],
+    learning: learning || null,
+    candidates: (candidates || []).map(candidateCard),
+    instruction: 'Pick the one activity this person is most likely to start right now. Prefer a likely start over the formally most important task. Use energy, prior accepts and declines, and what they usually do at this hour and weekday. Choose none if nothing fits.'
+  };
+}
+
+export async function chooseActivity(state, candidates, options = {}) {
+  const criteria = { none: 'None of these activities is realistic to start right now.' };
+  (candidates || []).forEach(item => {
+    criteria[item.id] = [
+      item.title,
+      item.kind === 'habit' ? 'ritual' : 'quest',
+      item.category || '',
+      item.priority || ''
+    ].filter(Boolean).join(' · ');
+  });
+  const result = await callJevDecisions({
+    state,
+    questions: {
+      most_likely_now: {
+        type: 'choice',
+        instructions: 'Which single activity is this person most likely to start right now?',
+        criteria
+      }
+    }
+  }, options);
+  const answer = choiceAnswer(result, 'most_likely_now');
+  if (!answer) {
+    const error = new Error('Jev não escolheu uma atividade');
+    error.code = 'BAD_ANSWER';
+    throw error;
+  }
+  return {
+    choice: answer.choice,
+    probability: answer.probabilities?.[answer.choice] ?? null,
+    confidence: answer.confidence ?? null,
+    probabilities: answer.probabilities || {},
+    usage: result.usage || null
+  };
+}
+
+export function quantitySourceText(item) {
+  return [item?.title, item?.description].filter(Boolean).join(' — ').slice(0, 400);
+}
+
+export async function interpretQuantity(item, options = {}) {
+  const sourceText = quantitySourceText(item);
+  const result = await callJevDecisions({
+    state: {
+      title: item?.title || '',
+      description: item?.description || '',
+      note: 'Interpret implied amounts. "meia hora" means 30 minutes. "uma hora e meia" means 90 minutes. "10 abdominais" means 10 repetitions.'
+    },
+    questions: {
+      has_quantity: {
+        type: 'noul',
+        instructions: 'Does this task state or imply a countable amount or a duration?',
+        criteria: {
+          true: 'An amount or duration is explicit or can be interpreted, such as half an hour.',
+          false: 'The task is open-ended and names no amount or duration.'
+        }
+      },
+      unit: {
+        type: 'choice',
+        instructions: 'If there is an amount, which unit is it? Choose none when there is no amount.',
+        criteria: UNIT_CRITERIA
+      },
+      magnitude: {
+        type: 'choice',
+        instructions: 'If there is an amount, which magnitude matches it, before converting hours into minutes? Choose none when there is no amount.',
+        criteria: AMOUNT_CRITERIA
+      }
+    }
+  }, options);
+  const present = result?.answers?.has_quantity;
+  const unit = choiceAnswer(result, 'unit');
+  const magnitude = choiceAnswer(result, 'magnitude');
+  const hasQuantity = !!present && present.noul >= 0.6 && unit?.choice && unit.choice !== 'none' && magnitude?.choice && magnitude.choice !== 'none' && magnitude.choice !== 'other';
+  const composed = composeQuantity(
+    hasQuantity,
+    unit?.choice,
+    magnitude?.choice
+  );
+  return {
+    sourceText,
+    hasQuantity: !!composed,
+    unit: composed?.unit || null,
+    amount: composed?.amount || null,
+    amountId: composed?.amountId || null,
+    confidence: Math.min(
+      present?.noul ?? 0,
+      unit?.confidence ?? 0,
+      magnitude?.confidence ?? 0
+    ),
+    usage: result.usage || null
+  };
+}
+
+export async function chooseDose({ item, quantity, energy, learning }, options = {}) {
+  const result = await callJevDecisions({
+    state: {
+      energy: energy?.score ?? null,
+      energyBand: energy ? energyBand(energy.score) : null,
+      energyText: energy?.text || null,
+      task: item?.title || '',
+      fullAmount: formatQuantity(quantity.amount, quantity.unit),
+      learning: learning || null,
+      note: 'The original task must stay unchanged. Choose the smaller dose this person is most likely to start at this energy. Choose full when they are likely to take the whole task.'
+    },
+    questions: {
+      dose: {
+        type: 'choice',
+        instructions: 'Which fraction of the original amount is this person most likely to start right now?',
+        criteria: {
+          tenth: 'About 10 percent. A very small start.',
+          quarter: 'About 25 percent. A short dose, such as 15 minutes of a 60-minute task.',
+          half: 'About half.',
+          three_quarters: 'About 75 percent.',
+          full: 'The whole original amount.'
+        }
+      }
+    }
+  }, options);
+  const answer = choiceAnswer(result, 'dose');
+  const fraction = DOSE_FRACTIONS.some(step => step.id === answer?.choice) ? answer.choice : 'full';
+  return {
+    fraction,
+    dose: applyDose(quantity, fraction),
+    confidence: answer?.confidence ?? null,
+    usage: result.usage || null
+  };
+}
+
+export function recentActionCards(logs, limit = 8) {
+  const relevant = new Set([
+    'quest_complete',
+    'habit_complete',
+    'reading_session',
+    'exam_questions',
+    'mind_map_study',
+    'process_step'
+  ]);
+  return (logs || [])
+    .filter(log => log && relevant.has(log.type))
+    .slice(0, limit)
+    .map(log => ({
+      type: log.type,
+      title: log.title || '',
+      hour: log.hour ?? null,
+      weekday: log.dayOfWeek ?? null,
+      date: log.date || null,
+      minutes: log.details?.durationMinutes || null,
+      category: log.details?.category || null
+    }));
+}
+
+export function learningForPrompt(db) {
+  const summary = buildLearningSummary(db);
+  return {
+    recentOutcomes: summary.recent,
+    byEnergyBand: summary.byBand,
+    declineReasons: 'tired, no_time, wrong_place, not_priority, similar_done, not_feeling, other'
+  };
+}
+
+export function localReason(item) {
+  return item?.reason || (item?.kind === 'habit' ? 'Ritual pendente agora' : 'Missão pendente agora');
+}
+
+export function declineText(reason, note) {
+  const label = declineReasonLabel(reason);
+  return note ? `${label}: ${note}` : label;
+}
+
+export { QUANTITY_UNITS, AMOUNT_LADDER };

@@ -7,6 +7,8 @@ import { getDb, saveDb, initDb, rewardPlayer, revertPlayerReward, getXpForLevel,
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
 import { computeNextAction } from './nextAction.js';
+import { suggestNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly } from './oracleSuggest.js';
+import { markDecisionAccepted, DECLINE_REASONS } from './oracleMemory.js';
 import {
   LOCATIONS,
   normalizeLocation,
@@ -535,19 +537,93 @@ app.put('/api/live-timers', (req, res) => {
 // ==========================================
 // 2.2. NEXT ACTION (ORACLE SUGGESTION)
 // ==========================================
-app.get('/api/next-action', (req, res) => {
+app.get('/api/next-action', async (req, res) => {
   try {
     const db = getDb();
     const location = req.query.location ? String(req.query.location) : undefined;
     const snoozedIds = req.query.snoozed
       ? String(req.query.snoozed).split(',').map(s => s.trim()).filter(Boolean)
       : [];
-    const result = computeNextAction(db, { location, snoozedIds });
+    const consult = req.query.consult === '1' || req.query.consult === 'true';
+    const result = consult
+      ? await suggestNextAction(db, { location, snoozedIds })
+      : {
+        ...computeNextAction(db, { location, snoozedIds }),
+        queue: [],
+        extras: [],
+        source: 'preview',
+        needsEnergy: true,
+        declineReasons: DECLINE_REASONS,
+        energy: null
+      };
+    if (consult) saveDb(db);
     res.json({
       success: true,
       ...result,
+      queue: [],
+      extras: [],
       locations: LOCATIONS
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/next-action/energy', async (req, res) => {
+  try {
+    const text = String(req.body?.text || '').trim();
+    if (!text) return res.status(400).json({ error: 'Conte como você está agora.' });
+    const db = getDb();
+    const location = req.body?.location ? String(req.body.location) : undefined;
+    const snoozedIds = Array.isArray(req.body?.snoozedIds) ? req.body.snoozedIds : [];
+    const { suggestion } = await recordEnergyAndSuggest(db, text, { location, snoozedIds });
+    saveDb(db);
+    res.json({
+      success: true,
+      ...suggestion,
+      queue: [],
+      extras: [],
+      locations: LOCATIONS
+    });
+  } catch (err) {
+    const status = err.code === 'NO_KEY' ? 503 : 502;
+    res.status(status).json({ error: err.message || 'Não foi possível ler a energia.' });
+  }
+});
+
+app.post('/api/next-action/decline', async (req, res) => {
+  try {
+    const db = getDb();
+    const remembered = declineAndRemember(db, {
+      decisionId: req.body?.decisionId,
+      reason: req.body?.reason,
+      note: req.body?.note
+    });
+    if (remembered.error) return res.status(remembered.status).json({ error: remembered.error });
+    const location = req.body?.location ? String(req.body.location) : undefined;
+    const snoozedIds = Array.isArray(req.body?.snoozedIds) ? req.body.snoozedIds : [];
+    const excluded = [...new Set([...snoozedIds, remembered.decision.entityId])];
+    const suggestion = await suggestNextAction(db, { location, snoozedIds: excluded });
+    saveDb(db);
+    res.json({
+      success: true,
+      ...suggestion,
+      queue: [],
+      extras: [],
+      locations: LOCATIONS
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/next-action/accept-dose', (req, res) => {
+  try {
+    const db = getDb();
+    const accepted = acceptDoseOnly(db, req.body?.decisionId);
+    if (accepted.error) return res.status(accepted.status).json({ error: accepted.error });
+    saveDb(db);
+    res.json({ success: true, decision: accepted.decision });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -815,6 +891,7 @@ app.post('/api/quests/:id/complete', (req, res) => {
       });
     }
 
+    if (willComplete) markDecisionAccepted(db, { entityId: quest.id, kind: 'quest' });
     const linkedVictories = syncDailyVictoriesFromActivity(db, {
       questId: quest.id,
       questCompleted: willComplete
@@ -1809,6 +1886,7 @@ app.post('/api/habits/:id/toggle', (req, res) => {
       });
       if (isToday) {
         db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'habit', habit.id);
+        markDecisionAccepted(db, { entityId: habit.id, kind: 'habit' });
       }
     }
 

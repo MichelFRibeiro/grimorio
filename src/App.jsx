@@ -85,6 +85,9 @@ export function App() {
     resetBoss,
     setCurrentLocation,
     refreshNextAction,
+    submitOracleEnergy,
+    declineOracleSuggestion,
+    acceptOracleDose,
     startAguPlan,
     toggleAguBlock,
     setAguBlockDuration,
@@ -284,6 +287,9 @@ export function App() {
         onOpenQuests={() => setActiveTab('quests')}
         onOpenHabits={() => setActiveTab('habits')}
         onRefresh={refreshNextAction}
+        onSubmitEnergy={submitOracleEnergy}
+        onDeclineSuggestion={declineOracleSuggestion}
+        onAcceptDose={acceptOracleDose}
         playClick={playClick}
       />
 

@@ -16,6 +16,7 @@ import { sanitizeAguPlan, ensureCurrentCycle } from '../src/utils/aguCycle.js';
 import { sanitizeNinetyDayGoals } from '../src/utils/ninetyDayGoals.js';
 import { sanitizeDailyVictories, sanitizeDailyVictoryBonuses } from '../src/utils/dailyVictories.js';
 import { sanitizeMindMaps, sanitizeMindMapSessions, sanitizeMindMapCategories, sanitizeMindMapImageLibrary, mergeMindMapImageLibrary } from '../src/utils/mindMaps.js';
+import { ensureOracleMemory } from './oracleMemory.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -283,7 +284,10 @@ export const defaultDatabase = () => {
     mindMaps: [],
     mindMapSessions: [],
     mindMapCategories: sanitizeMindMapCategories(),
-    mindMapImages: []
+    mindMapImages: [],
+    oracleEnergyReadings: [],
+    oracleDecisions: [],
+    oracleQuantityReads: []
   };
 };
 
@@ -345,6 +349,7 @@ export function sanitizeDb(db) {
     if (!db.bossRaid.rewardCoins) db.bossRaid.rewardCoins = 150;
     if (!db.bossRaid.rewardXp) db.bossRaid.rewardXp = 400;
   }
+  ensureOracleMemory(db);
   applyLocationDefaults(db);
   (db.quests || []).forEach((quest) => migrateActivityScale(quest));
   (db.habits || []).forEach((habit) => migrateActivityScale(habit));
