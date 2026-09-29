@@ -664,8 +664,8 @@ export function DailyVictoriesCard({
           textAlign: 'center',
           color: '#64748b',
           borderRadius: '12px',
-          border: '1px dashed rgba(245, 158, 11, 0.2)',
-          background: 'rgba(255,255,255,0.02)'
+          border: '1px dashed rgba(154, 52, 18, 0.35)',
+          background: 'rgba(154, 52, 18, 0.05)'
         }}>
           <Calendar size={22} style={{ marginBottom: 8, opacity: 0.5 }} />
           <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 600 }}>
