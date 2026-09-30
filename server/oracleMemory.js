@@ -92,7 +92,7 @@ function asNumber(value) {
 
 export function energyBand(score) {
   const n = Math.max(1, Math.min(10, Math.round(Number(score) || 1)));
-  if (n <= 2) return '1-2';
+  if (n <= 2) return '0-2';
   if (n <= 4) return '3-4';
   if (n <= 6) return '5-6';
   if (n <= 8) return '7-8';
@@ -102,15 +102,12 @@ export function energyBand(score) {
 export function clampEnergy(raw) {
   const n = asNumber(raw);
   if (n == null) return null;
-  return Math.max(1, Math.min(10, Math.round(n)));
+  return Math.max(0, Math.min(10, Math.round(n)));
 }
 
 export function energyFromJevScore(raw) {
-  const n = asNumber(raw);
-  if (n == null) return null;
-  // O Score já vem na escala descrita: 0 = nível 1 e 9 = nível 10.
-  // 5,68 fica entre o nível 6 e o 7, mais perto de 7, e não recebe +1 extra.
-  return clampEnergy(n + 1);
+  // 5,68 é a nota. O inteiro mais próximo é 6. Não se soma 1.
+  return clampEnergy(raw);
 }
 
 export function roundEnergyScore(raw) {
