@@ -284,6 +284,64 @@ export function doseFloor(unit) {
 
 const CLOCK_FRACTIONS = new Set(['quarter', 'third', 'half']);
 
+const NUMBER_WORDS = [
+  ['meia', 0.5],
+  ['half', 0.5],
+  ['duas', 2],
+  ['dois', 2],
+  ['two', 2],
+  ['três', 3],
+  ['tres', 3],
+  ['three', 3],
+  ['quatro', 4],
+  ['four', 4],
+  ['cinco', 5],
+  ['five', 5],
+  ['seis', 6],
+  ['six', 6],
+  ['sete', 7],
+  ['seven', 7],
+  ['oito', 8],
+  ['eight', 8],
+  ['nove', 9],
+  ['nine', 9],
+  ['dez', 10],
+  ['ten', 10]
+];
+
+/**
+ * O dígito do título é fato, não julgamento. "Analisar 5 PABs" tem 5
+ * mesmo quando o Jev não reconhece a sigla. Sem número, devolve null
+ * e a leitura continua inteiramente com o modelo.
+ */
+export function explicitAmount(text) {
+  const source = String(text || '');
+  const digit = source.match(/(?:^|[\s(])(\d{1,3}(?:[.,]\d+)?)(?=$|[\s).,;:])/);
+  if (digit) {
+    const value = Number(digit[1].replace(',', '.'));
+    if (value > 0 && value <= 200) return value;
+  }
+  const lower = source.toLowerCase();
+  const word = NUMBER_WORDS.find(([token]) => new RegExp(`(?:^|\\s)${token}(?:$|\\s)`, 'i').test(lower));
+  return word ? word[1] : null;
+}
+
+export function nearestAmountId(value) {
+  const n = asNumber(value);
+  if (n == null || n <= 0) return null;
+  let best = null;
+  let bestDistance = Infinity;
+  AMOUNT_LADDER.forEach(step => {
+    const distance = Math.abs(step.value - n);
+    if (distance < bestDistance) {
+      best = step;
+      bestDistance = distance;
+    }
+  });
+  if (!best || bestDistance > 0.001) return null;
+  return best.id;
+}
+
 export function composeQuantity(hasQuantity, unit, amountId) {
   if (!hasQuantity) return null;
   const value = AMOUNT_BY_ID[amountId];

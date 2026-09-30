@@ -13,7 +13,9 @@ import {
   composeQuantity,
   declineReasonLabel,
   energyBand,
+  explicitAmount,
   formatQuantity,
+  nearestAmountId,
   energyFromJevScore
 } from './oracleMemory.js';
 
@@ -35,11 +37,11 @@ const UNIT_CRITERIA = {
   minutes: 'A duration already named in minutes, such as 15 minutes or 45 min. Not an hour-fraction.',
   pages: 'Pages of reading or writing.',
   questions: 'Exam or study questions.',
-  reps: 'Physical repetitions, such as sit-ups or sets.',
+  reps: 'Physical repetitions, such as sit-ups or sets. Not a batch of documents or cases.',
   steps: 'Steps of a checklist or process.',
   chapters: 'Chapters of a book or course.',
-  items: 'A countable batch that is none of the units above.',
-  none: 'The text states no amount and no duration, even implicitly.'
+  items: 'A counted batch of things, including an unfamiliar acronym or noun, such as 5 PABs, 15 recursos, or 8 aulas. A number plus a thing is items unless a unit above fits better.',
+  none: 'The text states no amount and no duration, even implicitly. A digit next to a thing is not none.'
 };
 
 const AMOUNT_CRITERIA = {
@@ -69,13 +71,41 @@ const AMOUNT_CRITERIA = {
   hundred_twenty: 'One hundred and twenty.',
   hundred_fifty: 'One hundred and fifty.',
   two_hundred: 'Two hundred.',
-  other: 'An amount is stated, but none of the listed magnitudes fit.'
+  other: 'An amount is stated, but none of the listed magnitudes fit. Not the absence of an amount.'
 };
+
+const UNIT_CONFIDENCE_MIN = 0.45;
+const MAGNITUDE_CONFIDENCE_MIN = 0.45;
+const STATED_UNIT_CONFIDENCE_MIN = 0.2;
 
 function choiceAnswer(result, id) {
   const answer = result?.answers?.[id];
   if (!answer || answer.type !== 'choice' || !answer.choice) return null;
   return answer;
+}
+
+/**
+ * O vencedor argmax não basta. "5 PABs" já voltou com none à frente de
+ * items por uma margem ínfima e confiança 0,28. Nesse caso a massa em
+ * none não é uma leitura, é incerteza — e none não pode vencer um
+ * empate técnico contra uma unidade real.
+ */
+export function resolveChoice(answer, { reject = [], minConfidence = 0, noneMargin = 0.15 } = {}) {
+  if (!answer?.choice) return null;
+  const probabilities = answer.probabilities || {};
+  const ranked = Object.entries(probabilities)
+    .filter(([, value]) => Number.isFinite(value))
+    .sort((a, b) => b[1] - a[1]);
+  const [leader, runnerUp] = ranked;
+  const rejected = new Set(reject);
+  let choice = answer.choice;
+  if (choice === 'none' && runnerUp && !rejected.has(runnerUp[0]) && leader[1] - runnerUp[1] < noneMargin) {
+    choice = runnerUp[0];
+  }
+  if (rejected.has(choice) || choice === 'none') return null;
+  const confidence = Number.isFinite(answer.confidence) ? answer.confidence : (leader?.[1] ?? 0);
+  if (confidence < minConfidence) return null;
+  return choice;
 }
 
 function scoreAnswer(result, id) {
@@ -193,14 +223,14 @@ export async function interpretQuantity(item, options = {}) {
     state: {
       title: item?.title || '',
       description: item?.description || '',
-      note: 'Interpret implied amounts. "meia hora" means 30 minutes. "uma hora e meia" means 90 minutes. "10 abdominais" means 10 repetitions.'
+      note: 'Read the number that is written, including one next to an unfamiliar word. "5 PABs", "15 recursos" and "8 aulas" are counted batches: unit items, magnitude of that number. "meia hora" means 30 minutes. "uma hora e meia" means 90 minutes. "10 abdominais" means 10 repetitions. none means no number at all.'
     },
     questions: {
       has_quantity: {
         type: 'noul',
-        instructions: 'Does this task state or imply a countable amount or a duration?',
+        instructions: 'Does this task state or imply a countable amount or a duration? A digit next to a thing counts, even if the thing is an acronym you do not know.',
         criteria: {
-          true: 'An amount or duration is explicit or can be interpreted, such as half an hour.',
+          true: 'An amount or duration is explicit or can be interpreted, such as half an hour, 5 PABs, or 15 recursos.',
           false: 'The task is open-ended and names no amount or duration.'
         }
       },
@@ -219,12 +249,21 @@ export async function interpretQuantity(item, options = {}) {
   const present = result?.answers?.has_quantity;
   const unit = choiceAnswer(result, 'unit');
   const magnitude = choiceAnswer(result, 'magnitude');
-  const hasQuantity = !!present && present.noul >= 0.6 && unit?.choice && unit.choice !== 'none' && magnitude?.choice && magnitude.choice !== 'none' && magnitude.choice !== 'other';
-  const composed = composeQuantity(
-    hasQuantity,
-    unit?.choice,
-    magnitude?.choice
-  );
+  const stated = explicitAmount(sourceText);
+  const statedId = nearestAmountId(stated);
+  // O número escrito não depende do modelo. Com ele no texto, o Jev só
+  // classifica a unidade, e uma vitória fraca de "none" não apaga o dígito.
+  const unitChoice = resolveChoice(unit, {
+    minConfidence: statedId ? STATED_UNIT_CONFIDENCE_MIN : UNIT_CONFIDENCE_MIN
+  });
+  const magnitudeChoice = statedId || resolveChoice(magnitude, {
+    reject: ['other'],
+    minConfidence: MAGNITUDE_CONFIDENCE_MIN
+  });
+  const hasQuantity = statedId
+    ? !!unitChoice && !!magnitudeChoice
+    : !!present && present.noul >= 0.6 && !!unitChoice && !!magnitudeChoice;
+  const composed = composeQuantity(hasQuantity, unitChoice, magnitudeChoice);
   return {
     sourceText,
     hasQuantity: !!composed,

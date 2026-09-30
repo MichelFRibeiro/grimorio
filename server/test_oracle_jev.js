@@ -1,5 +1,5 @@
-import { composeQuantity, applyDose, energyBand, buildLearningSummary, markDecisionAccepted, acceptPartialDose, ensureOracleMemory } from './oracleMemory.js';
-import { interpretEnergy, chooseActivity, interpretQuantity, chooseDose } from './oracleJev.js';
+import { composeQuantity, applyDose, energyBand, buildLearningSummary, markDecisionAccepted, acceptPartialDose, ensureOracleMemory, explicitAmount, nearestAmountId } from './oracleMemory.js';
+import { interpretEnergy, chooseActivity, interpretQuantity, chooseDose, resolveChoice } from './oracleJev.js';
 import { suggestNextAction, declineAndRemember } from './oracleSuggest.js';
 
 function assert(condition, message) {
@@ -47,6 +47,9 @@ async function run() {
   const hourDose = applyDose({ hasQuantity: true, amount: 60, unit: 'minutes' }, 'quarter');
   assert(hourDose.amount === 15 && hourDose.reduced, '25% de 60 min vira 15 min');
   assert(energyBand(4) === '3-4', 'energia 4 cai na faixa 3-4');
+  assert(explicitAmount('Analisar 5 PABs') === 5, 'lê o 5 de "Analisar 5 PABs"');
+  assert(explicitAmount('Enviar o e-mail') == null, 'tarefa aberta não tem número');
+  assert(nearestAmountId(5) === 'five', '5 casa com a magnitude five');
 
   const energy = await interpretEnergy('cansado, mas consigo algo curto', {
     fetchImpl: fakeFetch({
@@ -127,6 +130,62 @@ async function run() {
   });
   const partial = acceptPartialDose(partialDb, 'od-partial');
   assert(partial?.outcome === 'accepted', 'dose parcial é aceita sem concluir a missão');
+
+  const pabAnswer = {
+    choice: 'none',
+    confidence: 0.28,
+    probabilities: { none: 0.36, items: 0.27, reps: 0.2, minutes: 0.05 }
+  };
+  assert(resolveChoice(pabAnswer, { minConfidence: 0.45 }) === null, 'sem número no texto, confiança 0,28 não vira unidade');
+  assert(resolveChoice(pabAnswer, { minConfidence: 0.2 }) === 'items', 'com o dígito no título, none por margem ínfima cede a items');
+  const openEnded = resolveChoice({
+    choice: 'none',
+    confidence: 0.8,
+    probabilities: { none: 0.84, items: 0.08 }
+  }, { minConfidence: 0.45 });
+  assert(openEnded === null, 'none folgado continua sem quantidade');
+
+  const pabs = await interpretQuantity({ title: 'Analisar 5 PABs', description: '' }, {
+    fetchImpl: fakeFetch({
+      answers: {
+        has_quantity: { type: 'noul', noul: 0.92 },
+        unit: {
+          type: 'choice',
+          choice: 'items',
+          confidence: 0.62,
+          probabilities: { items: 0.7, none: 0.12, reps: 0.1, steps: 0.08 }
+        },
+        magnitude: {
+          type: 'choice',
+          choice: 'five',
+          confidence: 0.9,
+          probabilities: { five: 0.93, none: 0.04, ten: 0.03 }
+        }
+      }
+    })
+  });
+  assert(pabs.hasQuantity && pabs.amount === 5 && pabs.unit === 'items', '5 PABs viram 5 itens quando o Jev lê o número');
+
+  const stillOpen = await interpretQuantity({ title: 'Analisar 5 PABs', description: '' }, {
+    fetchImpl: fakeFetch({
+      answers: {
+        has_quantity: { type: 'noul', noul: 0.76 },
+        unit: {
+          type: 'choice',
+          choice: 'none',
+          confidence: 0.28,
+          probabilities: { none: 0.36, items: 0.27, reps: 0.2, minutes: 0.05, hours: 0.05, questions: 0.04, steps: 0.02, pages: 0.01 }
+        },
+        magnitude: {
+          type: 'choice',
+          choice: 'none',
+          confidence: 0.65,
+          probabilities: { none: 0.67, half: 0.21, five: 0.06 }
+        }
+      }
+    })
+  });
+  assert(stillOpen.hasQuantity && stillOpen.amount === 5 && stillOpen.unit === 'items', 'a resposta real de 5 PABs vira 5 itens');
 
   const timedOut = await interpretQuantity({ title: 'Enviar o e-mail' }, {
     fetchImpl: async () => { throw Object.assign(new Error('abort'), { name: 'AbortError' }); }
