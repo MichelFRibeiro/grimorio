@@ -12,7 +12,6 @@ import {
   acceptPartialDose,
   ensureOracleMemory,
   findOracleDecision,
-  findQuantityRead,
   latestEnergyReading,
   oracleUid,
   saveEnergyReading,
@@ -88,17 +87,6 @@ function emptyPayload(heuristic, extras = {}) {
 
 async function resolveQuantity(db, item, options, trace) {
   const sourceText = quantitySourceText(item);
-  const cached = findQuantityRead(db, item.id, sourceText);
-  if (cached) {
-    trace.push({
-      step: 'quantity',
-      at: new Date().toISOString(),
-      cached: true,
-      note: 'Quantidade já interpretada para este texto. Nenhuma nova chamada ao Jev.',
-      response: cached
-    });
-    return cached;
-  }
   if (item.estimatedMinutes > 0 && !item.description) {
     const direct = {
       entityId: item.id,
@@ -273,8 +261,7 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
         dose = dosed.dose;
       }
     } else {
-      const cached = findQuantityRead(db, item.id, quantitySourceText(item));
-      quantity = cached;
+      quantity = await resolveQuantity(db, item, traced, trace);
     }
     const decision = persistDecision(db, {
       context: heuristic.context,

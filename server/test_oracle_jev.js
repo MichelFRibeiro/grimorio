@@ -1,4 +1,4 @@
-import { composeQuantity, applyDose, energyBand, buildLearningSummary, markDecisionAccepted, acceptPartialDose, ensureOracleMemory, explicitAmount, nearestAmountId } from './oracleMemory.js';
+import { composeQuantity, applyDose, energyBand, buildLearningSummary, markDecisionAccepted, acceptPartialDose, ensureOracleMemory, explicitAmount, nearestAmountId, findQuantityRead, saveQuantityRead, QUANTITY_MISS_TTL_MS } from './oracleMemory.js';
 import { interpretEnergy, chooseActivity, interpretQuantity, chooseDose, resolveChoice } from './oracleJev.js';
 import { suggestNextAction, declineAndRemember } from './oracleSuggest.js';
 
@@ -186,6 +186,24 @@ async function run() {
     })
   });
   assert(stillOpen.hasQuantity && stillOpen.amount === 5 && stillOpen.unit === 'items', 'a resposta real de 5 PABs vira 5 itens');
+
+  const cacheDb = baseDb();
+  ensureOracleMemory(cacheDb);
+  saveQuantityRead(cacheDb, {
+    entityId: 'q-pabs',
+    kind: 'quest',
+    sourceText: 'Analisar 5 PABs',
+    hasQuantity: false,
+    unit: null,
+    amount: null,
+    amountId: null,
+    confidence: 0.28,
+    readAt: '2026-09-30T13:12:07.572Z'
+  });
+  const freshMiss = findQuantityRead(cacheDb, 'q-pabs', 'Analisar 5 PABs', new Date('2026-09-30T13:20:00.000Z'));
+  assert(freshMiss && !freshMiss.hasQuantity, 'a leitura recente continua gravada, mas a consulta não a reutiliza');
+  const staleMiss = findQuantityRead(cacheDb, 'q-pabs', 'Analisar 5 PABs', new Date(new Date('2026-09-30T13:12:07.572Z').getTime() + QUANTITY_MISS_TTL_MS + 1000));
+  assert(staleMiss == null, 'um "sem quantidade" antigo não bloqueia a releitura');
 
   const timedOut = await interpretQuantity({ title: 'Enviar o e-mail' }, {
     fetchImpl: async () => { throw Object.assign(new Error('abort'), { name: 'AbortError' }); }

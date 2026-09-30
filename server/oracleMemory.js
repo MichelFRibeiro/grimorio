@@ -8,6 +8,7 @@ export const ACCEPT_WINDOW_MS = 90 * 60 * 1000;
 export const MAX_ENERGY_READINGS = 200;
 export const MAX_ORACLE_DECISIONS = 400;
 export const MAX_QUANTITY_READS = 300;
+export const QUANTITY_MISS_TTL_MS = 15 * 60 * 1000;
 export const DOSE_ENERGY_MAX = 6;
 
 export const DECLINE_REASONS = [
@@ -231,10 +232,16 @@ export function saveEnergyReading(db, reading) {
   return clean;
 }
 
-export function findQuantityRead(db, entityId, sourceText) {
+export function findQuantityRead(db, entityId, sourceText, now = new Date()) {
   ensureOracleMemory(db);
   const wanted = clip(sourceText, 400);
-  return db.oracleQuantityReads.find(read => read.entityId === entityId && read.sourceText === wanted) || null;
+  const read = db.oracleQuantityReads.find(item => item.entityId === entityId && item.sourceText === wanted) || null;
+  if (!read || read.hasQuantity) return read;
+  // Um "sem quantidade" pode ser o modelo não ter reconhecido a sigla.
+  // Não pode ficar gravado para sempre, senão a correção nunca é consultada.
+  const age = now.getTime() - new Date(read.readAt).getTime();
+  if (!Number.isFinite(age) || age < 0 || age > QUANTITY_MISS_TTL_MS) return null;
+  return read;
 }
 
 export function saveQuantityRead(db, reading) {
