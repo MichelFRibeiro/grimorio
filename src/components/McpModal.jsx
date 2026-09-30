@@ -31,7 +31,10 @@ export function McpModal({ isOpen, onClose }) {
   const fetchTokenInfo = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/mcp/token');
+      const token = localStorage.getItem('grimorio_auth_token');
+      const res = await fetch('/api/mcp/token', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       const data = await res.json();
       if (data.success) {
         setTokenInfo(data);
@@ -50,7 +53,11 @@ export function McpModal({ isOpen, onClose }) {
 
     try {
       setRegenerating(true);
-      const res = await fetch('/api/mcp/token/regenerate', { method: 'POST' });
+      const token = localStorage.getItem('grimorio_auth_token');
+      const res = await fetch('/api/mcp/token/regenerate', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       const data = await res.json();
       if (data.success) {
         setTokenInfo(data);

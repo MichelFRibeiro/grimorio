@@ -2,13 +2,20 @@ import http from 'http';
 import { fork } from 'child_process';
 import { getCurrentWeekDays, getHabitWeeklyStats, getSaoPauloDateStr } from './timeUtils.js';
 
+const PORT = Number(process.env.TEST_PORT || process.env.PORT || 3000);
+let authToken = null;
+
 function request(path, options = {}, body = null) {
   return new Promise((resolve, reject) => {
     const req = http.request({
       hostname: '127.0.0.1',
-      port: 3000,
+      port: PORT,
       path,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        ...(options.headers || {})
+      },
       ...options
     }, (res) => {
       let data = '';
@@ -29,7 +36,8 @@ function request(path, options = {}, body = null) {
 
 async function ensureServerRunning() {
   try {
-    const res = await request('/api/state');
+    // /api/health é público: serve para saber se já há servidor no ar.
+    const res = await request('/api/health');
     if (res.status === 200) return null;
   } catch (e) {
     // Start server
@@ -41,9 +49,19 @@ async function ensureServerRunning() {
   return null;
 }
 
+/** A API exige sessão: entra como convidado, como o navegador faria. */
+async function loginAsGuest() {
+  const res = await request('/api/auth/guest', { method: 'POST' }, {});
+  if (res.status !== 200 || !res.data?.token) {
+    throw new Error(`Não foi possível autenticar como convidado (HTTP ${res.status}).`);
+  }
+  authToken = res.data.token;
+}
+
 async function runWeeklyHabitsTest() {
   const serverProc = await ensureServerRunning();
   try {
+    await loginAsGuest();
     console.log('🧪 Iniciando testes de Rituais com Frequência de N Vezes por Semana...');
 
   // 1. Test unit functions in timeUtils

@@ -36,10 +36,11 @@ function run() {
   console.log('✅ Gasto de R$ 25,00 debitou 250 moedas.');
 
   const overdraft = spendMoney(db, { amountBrl: 80, item: 'jantar' });
-  assert.strictEqual(overdraft.success, true);
-  assert.strictEqual(overdraft.redemption.cost, 800);
-  assert.strictEqual(db.userProfile.coins, -50);
-  console.log('✅ Gasto acima do saldo deixa as moedas negativas.');
+  assert.ok(overdraft.error, 'gasto acima do saldo é recusado em vez de deixar moedas negativas');
+  assert.strictEqual(overdraft.status, 400);
+  assert.strictEqual(db.userProfile.coins, 750, 'o saldo não muda quando o gasto é recusado');
+  assert.strictEqual(db.rewardRedemptions.length, 1, 'nada é registrado quando o gasto é recusado');
+  console.log('✅ Gasto acima do saldo é bloqueado e o saldo fica intacto.');
 
   const missingItem = spendMoney(db, { amountBrl: 10, item: '   ' });
   assert.ok(missingItem.error);

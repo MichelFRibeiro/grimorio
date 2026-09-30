@@ -1,13 +1,21 @@
 import http from 'http';
 
+const PORT = Number(process.env.TEST_PORT || process.env.PORT || 3000);
+let authToken = null;
+
 function request(path, options = {}, body = null) {
+  const { headers: extraHeaders, ...rest } = options;
   return new Promise((resolve, reject) => {
     const req = http.request({
       hostname: 'localhost',
-      port: 3000,
+      port: PORT,
       path,
-      headers: { 'Content-Type': 'application/json' },
-      ...options
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        ...(extraHeaders || {})
+      },
+      ...rest
     }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
@@ -25,7 +33,17 @@ function request(path, options = {}, body = null) {
   });
 }
 
+/** A API exige sessão: entra como convidado, como o navegador faria. */
+async function loginAsGuest() {
+  const res = await request('/api/auth/guest', { method: 'POST' }, {});
+  if (res.status !== 200 || !res.data?.token) {
+    throw new Error(`Não foi possível autenticar (HTTP ${res.status}). Suba o servidor com "node server/index.js".`);
+  }
+  authToken = res.data.token;
+}
+
 async function runFeatureTests() {
+  await loginAsGuest();
   console.log('🧪 Iniciando testes das novas funcionalidades: Questões de Concurso & Citações de Leitura...');
 
   // 1. Get initial state

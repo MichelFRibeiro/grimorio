@@ -32,6 +32,12 @@ export function spendMoney(db, { amountBrl, item, notes } = {}) {
   }
 
   const userCoins = db.userProfile.coins ?? 0;
+  if (userCoins < cost) {
+    return {
+      error: `Moedas insuficientes. São necessárias ${cost} moedas (${formatBrl(amount)}) e você tem ${userCoins}.`,
+      status: 400
+    };
+  }
   db.userProfile.coins = userCoins - cost;
 
   const redemption = {

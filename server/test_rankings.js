@@ -73,23 +73,29 @@ async function runRankingsTests() {
   // Week 6: 0 XP (insuficiente -> deve cair de D para E)
   // Week 7: Atual (em andamento)
 
+  // Datas relativas a hoje: o histórico de ranks é montado em semanas
+  // corridas, então datas fixas saíam da janela e o teste quebrava com o
+  // passar do tempo.
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const weeksAgo = (n) => new Date(Date.now() - n * WEEK_MS).toISOString();
+
   const mockDb = {
     questCategories: [
       { id: 'cat-inss', name: 'INSS', color: '#38bdf8' },
       { id: 'cat-adv', name: 'Advocacia', color: '#f43f5e' }
     ],
     actionLogs: [
-      // Week 1 (2026-07-06) - 50 XP
-      { id: 'l-1', type: 'quest_complete', xp: 50, timestamp: '2026-07-06T10:00:00Z', details: { category: 'INSS' } },
-      // Week 2 (2026-07-13) - 150 XP (Rank D)
-      { id: 'l-2', type: 'quest_complete', xp: 150, timestamp: '2026-07-13T10:00:00Z', details: { category: 'INSS' } },
-      // Week 3 (2026-07-20) - 300 XP (Rank C)
-      { id: 'l-3', type: 'quest_complete', xp: 300, timestamp: '2026-07-20T10:00:00Z', details: { category: 'INSS' } },
-      // Week 4 (2026-07-27) - 300 XP (Mantém Rank C)
-      { id: 'l-4', type: 'quest_complete', xp: 300, timestamp: '2026-07-27T10:00:00Z', details: { category: 'INSS' } },
-      // Week 5 (2026-08-03) - 0 XP (Decai para D) -> Sem logs
-      // Week 6 (2026-08-10) - 0 XP (Decai para E) -> Sem logs
-      // Week 7 (Semana Atual): 2026-08-19 -> Ganha 500 XP nesta semana (Promovido a B-)
+      // Week 1 (6 semanas atrás) - 50 XP
+      { id: 'l-1', type: 'quest_complete', xp: 50, timestamp: weeksAgo(6), details: { category: 'INSS' } },
+      // Week 2 (5 semanas atrás) - 150 XP (Rank D)
+      { id: 'l-2', type: 'quest_complete', xp: 150, timestamp: weeksAgo(5), details: { category: 'INSS' } },
+      // Week 3 (4 semanas atrás) - 300 XP (Rank C)
+      { id: 'l-3', type: 'quest_complete', xp: 300, timestamp: weeksAgo(4), details: { category: 'INSS' } },
+      // Week 4 (3 semanas atrás) - 300 XP (Mantém Rank C)
+      { id: 'l-4', type: 'quest_complete', xp: 300, timestamp: weeksAgo(3), details: { category: 'INSS' } },
+      // Week 5 (2 semanas atrás) - 0 XP (Decai para D) -> Sem logs
+      // Week 6 (1 semana atrás) - 0 XP (Decai para E) -> Sem logs
+      // Week 7 (Semana Atual): 500 XP nesta semana (Promovido a B-)
       { id: 'l-7', type: 'quest_complete', xp: 500, timestamp: new Date().toISOString(), details: { category: 'INSS' } }
     ]
   };

@@ -44,6 +44,9 @@ export async function verifyGoogleToken(idToken) {
       });
     });
 
+    if (GOOGLE_CLIENT_ID && tokenInfo.aud && tokenInfo.aud !== GOOGLE_CLIENT_ID) {
+      throw new Error('Token do Google não pertence a este aplicativo.');
+    }
     if (tokenInfo.email) {
       return {
         googleId: tokenInfo.sub,
@@ -54,27 +57,8 @@ export async function verifyGoogleToken(idToken) {
       };
     }
   } catch (err) {
-    console.warn('Verificação online do token Google falhou, tentando fallback JWT:', err.message);
-  }
-
-  // Fallback: decode JWT payload directly if online verification failed (e.g. offline dev or mock)
-  try {
-    const parts = idToken.split('.');
-    if (parts.length === 3) {
-      const payloadBuf = Buffer.from(parts[1], 'base64');
-      const payload = JSON.parse(payloadBuf.toString('utf-8'));
-      if (payload.sub && (payload.email || payload.name)) {
-        return {
-          googleId: payload.sub,
-          email: payload.email || `${payload.sub}@google.user`,
-          name: payload.name || payload.email || 'Usuário Google',
-          picture: payload.picture || '',
-          verified: !!payload.email_verified
-        };
-      }
-    }
-  } catch (err) {
-    throw new Error('Formato do token Google inválido.');
+    console.warn('Verificação online do token Google falhou:', err.message);
+    throw new Error('Não foi possível verificar as credenciais do Google.');
   }
 
   throw new Error('Não foi possível verificar as credenciais do Google.');
@@ -122,6 +106,25 @@ export function getGoogleClientId() {
 /**
  * Express middleware to attach user to request if session exists
  */
+const PUBLIC_API_PATHS = new Set([
+  '/api/health',
+  '/api/ping',
+  '/api/auth/config',
+  '/api/auth/google',
+  '/api/auth/login',
+  '/api/auth/guest',
+  '/api/focus/audio',
+  '/api/focus/track',
+  // O MCP tem autenticação própria por Bearer Token (mcpAuthMiddleware) e é
+  // usado por agentes sem sessão de navegador.
+  '/api/mcp'
+]);
+
+export function requireSession(req, res, next) {
+  if (req.user) return next();
+  return res.status(401).json({ error: 'Não autorizado. Faça login para continuar.' });
+}
+
 export function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -131,5 +134,9 @@ export function authMiddleware(req, res, next) {
       req.user = session;
     }
   }
-  next();
+
+  if (!req.path.startsWith('/api/')) return next();
+  if (PUBLIC_API_PATHS.has(req.path)) return next();
+  if (req.path === '/api/auth/logout' || req.path === '/api/auth/me') return next();
+  return requireSession(req, res, next);
 }

@@ -47,6 +47,11 @@ async function run() {
   const base = { hostname: '127.0.0.1', port, headers: { 'Content-Type': 'application/json' } };
 
   try {
+    // A API exige sessão (authMiddleware): entra como convidado, como o navegador.
+    const login = await request({ ...base, path: '/api/auth/guest', method: 'POST' }, {});
+    assert(login.status === 200 && login.body.token, 'POST /api/auth/guest autentica o teste');
+    base.headers.Authorization = `Bearer ${login.body.token}`;
+
     const created = await request({ ...base, path: '/api/mind-maps', method: 'POST' }, {
       title: 'Direito Administrativo',
       description: 'Mapa de prova',
