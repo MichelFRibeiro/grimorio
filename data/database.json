@@ -2,10 +2,10 @@
   "userProfile": {
     "id": "hero-1",
     "name": "Mestre do Foco",
-    "level": 7,
-    "xp": 1318,
-    "xpToNextLevel": 1440,
-    "coins": 2086,
+    "level": 8,
+    "xp": 1478,
+    "xpToNextLevel": 1705,
+    "coins": 2906,
     "title": "Estrategista do Tempo",
     "avatar": "🧙‍♂️",
     "stats": {
@@ -15,23 +15,24 @@
       "consistency": 140
     },
     "streak": 1,
-    "lastActiveDate": "2026-08-28",
+    "lastActiveDate": "2026-09-23",
     "theme": "dark-fantasy",
-    "email": "convidado@grimorio.app"
+    "email": "convidado@grimorio.app",
+    "locationManual": false
   },
   "bossRaid": {
-    "id": "boss-1787582565049-iym46s",
+    "id": "boss-1790791409318-q7fwqr",
     "level": 1,
-    "name": "O Behemoth do Imediatismo",
-    "subtitle": "Fera selvagem sedenta por dopamina rápida e prazer efêmero. Conquiste a vitória do longo prazo!",
-    "icon": "🦏",
+    "name": "O Dragão da Procrastinação",
+    "subtitle": "A fera alada que sussurra \"deixe para amanhã\". Derrote-o com foco imediato!",
+    "icon": "🐉",
     "maxHp": 500,
-    "currentHp": 41,
-    "defeated": true,
+    "currentHp": 500,
+    "defeated": false,
     "rewardCoins": 150,
     "rewardXp": 400,
-    "defeatsCount": 1,
-    "weekStartDate": "2026-08-24"
+    "defeatsCount": 0,
+    "weekStartDate": "2026-09-30"
   },
   "quests": [
     {
@@ -39,8 +40,8 @@
       "title": "Missão Teste Estorno 1787139262691 [Atualizada]",
       "description": "Descrição atualizada com sucesso",
       "category": "INSS",
-      "priority": "alta",
-      "difficulty": 3,
+      "priority": "importante",
+      "difficulty": "alta",
       "xpReward": 80,
       "coinReward": 25,
       "dueDate": null,
@@ -48,15 +49,17 @@
       "subtasks": [],
       "completed": true,
       "completedAt": "2026-08-19T11:34:22.698Z",
-      "createdAt": "2026-08-19T11:34:22.691Z"
+      "createdAt": "2026-08-19T11:34:22.691Z",
+      "location": "office",
+      "timeWindow": null
     },
     {
       "id": "q-1787139241166-9piduk",
       "title": "Missão Teste Estorno 1787139241163 [Atualizada]",
       "description": "Descrição atualizada com sucesso",
       "category": "INSS",
-      "priority": "alta",
-      "difficulty": 3,
+      "priority": "importante",
+      "difficulty": "alta",
       "xpReward": 80,
       "coinReward": 25,
       "dueDate": null,
@@ -64,15 +67,17 @@
       "subtasks": [],
       "completed": true,
       "completedAt": "2026-08-19T11:34:01.177Z",
-      "createdAt": "2026-08-19T11:34:01.166Z"
+      "createdAt": "2026-08-19T11:34:01.166Z",
+      "location": "office",
+      "timeWindow": null
     },
     {
       "id": "q-1787138012088-p1b2jz",
       "title": "Limpar PROJUD",
       "description": "",
       "category": "Advocacia",
-      "priority": "media",
-      "difficulty": 2,
+      "priority": "importante",
+      "difficulty": "media",
       "xpReward": 45,
       "coinReward": 12,
       "dueDate": null,
@@ -80,15 +85,17 @@
       "subtasks": [],
       "completed": false,
       "completedAt": null,
-      "createdAt": "2026-08-19T11:13:32.088Z"
+      "createdAt": "2026-08-19T11:13:32.088Z",
+      "location": "office",
+      "timeWindow": null
     },
     {
       "id": "q-1787137992359-qnlpc8",
       "title": "Peticionar na execução da Jamirys",
       "description": "",
       "category": "Advocacia",
-      "priority": "media",
-      "difficulty": 2,
+      "priority": "importante",
+      "difficulty": "media",
       "xpReward": 45,
       "coinReward": 12,
       "dueDate": null,
@@ -96,15 +103,17 @@
       "subtasks": [],
       "completed": false,
       "completedAt": null,
-      "createdAt": "2026-08-19T11:13:12.359Z"
+      "createdAt": "2026-08-19T11:13:12.359Z",
+      "location": "office",
+      "timeWindow": null
     },
     {
       "id": "q-1787137954591-htvtld",
       "title": "Limpar PAT",
       "description": "",
       "category": "INSS",
-      "priority": "media",
-      "difficulty": 2,
+      "priority": "importante",
+      "difficulty": "media",
       "xpReward": 45,
       "coinReward": 12,
       "dueDate": null,
@@ -112,15 +121,17 @@
       "subtasks": [],
       "completed": false,
       "completedAt": null,
-      "createdAt": "2026-08-19T11:12:34.591Z"
+      "createdAt": "2026-08-19T11:12:34.591Z",
+      "location": "office",
+      "timeWindow": null
     },
     {
       "id": "q-1787062196930-2bdkuj",
       "title": "Estudar PNL",
       "description": "",
       "category": "Estudos",
-      "priority": "media",
-      "difficulty": 2,
+      "priority": "importante",
+      "difficulty": "media",
       "xpReward": 45,
       "coinReward": 12,
       "dueDate": null,
@@ -128,15 +139,17 @@
       "subtasks": [],
       "completed": true,
       "completedAt": "2026-08-18T14:09:58.988Z",
-      "createdAt": "2026-08-18T14:09:56.930Z"
+      "createdAt": "2026-08-18T14:09:56.930Z",
+      "location": "anywhere",
+      "timeWindow": null
     },
     {
       "id": "q-1786996761398-e73xpw",
       "title": "Produzir banner de seleção de novo estagiário",
       "description": "",
       "category": "INSS",
-      "priority": "media",
-      "difficulty": 2,
+      "priority": "importante",
+      "difficulty": "media",
       "xpReward": 45,
       "coinReward": 12,
       "dueDate": "2026-08-18",
@@ -144,15 +157,17 @@
       "subtasks": [],
       "completed": false,
       "completedAt": null,
-      "createdAt": "2026-08-17T19:59:21.398Z"
+      "createdAt": "2026-08-17T19:59:21.398Z",
+      "location": "office",
+      "timeWindow": null
     },
     {
       "id": "q-1786995530043-t02q9g",
       "title": "Pedir materiais",
       "description": "",
       "category": "INSS",
-      "priority": "media",
-      "difficulty": 2,
+      "priority": "importante",
+      "difficulty": "media",
       "xpReward": 45,
       "coinReward": 12,
       "dueDate": null,
@@ -160,15 +175,17 @@
       "subtasks": [],
       "completed": false,
       "completedAt": null,
-      "createdAt": "2026-08-17T19:38:50.043Z"
+      "createdAt": "2026-08-17T19:38:50.043Z",
+      "location": "office",
+      "timeWindow": null
     },
     {
       "id": "q-1786994335975-b29h0s",
       "title": "Limpar LUPA",
       "description": "",
       "category": "INSS",
-      "priority": "media",
-      "difficulty": 2,
+      "priority": "importante",
+      "difficulty": "media",
       "xpReward": 45,
       "coinReward": 12,
       "dueDate": null,
@@ -176,15 +193,17 @@
       "subtasks": [],
       "completed": true,
       "completedAt": "2026-08-17T20:06:43.979Z",
-      "createdAt": "2026-08-17T19:18:55.975Z"
+      "createdAt": "2026-08-17T19:18:55.975Z",
+      "location": "office",
+      "timeWindow": null
     },
     {
       "id": "q-1786990566060-gk8rq2",
       "title": "Limpar SEI",
       "description": "",
       "category": "INSS",
-      "priority": "baixa",
-      "difficulty": 1,
+      "priority": "importante",
+      "difficulty": "baixa",
       "xpReward": 20,
       "coinReward": 5,
       "dueDate": null,
@@ -192,15 +211,17 @@
       "subtasks": [],
       "completed": true,
       "completedAt": "2026-08-17T20:04:24.574Z",
-      "createdAt": "2026-08-17T18:16:06.060Z"
+      "createdAt": "2026-08-17T18:16:06.060Z",
+      "location": "office",
+      "timeWindow": null
     },
     {
       "id": "q-1786990550116-qhnxeg",
       "title": "Limpar e-mail",
       "description": "",
       "category": "INSS",
-      "priority": "baixa",
-      "difficulty": 1,
+      "priority": "importante",
+      "difficulty": "baixa",
       "xpReward": 20,
       "coinReward": 5,
       "dueDate": null,
@@ -208,15 +229,17 @@
       "subtasks": [],
       "completed": true,
       "completedAt": "2026-08-17T19:56:33.584Z",
-      "createdAt": "2026-08-17T18:15:50.116Z"
+      "createdAt": "2026-08-17T18:15:50.116Z",
+      "location": "office",
+      "timeWindow": null
     },
     {
       "id": "q-1786990536579-6f9nfg",
       "title": "Limpar PAT",
       "description": "",
       "category": "INSS",
-      "priority": "media",
-      "difficulty": 2,
+      "priority": "importante",
+      "difficulty": "media",
       "xpReward": 45,
       "coinReward": 12,
       "dueDate": null,
@@ -224,7 +247,9 @@
       "subtasks": [],
       "completed": true,
       "completedAt": "2026-08-17T19:52:50.282Z",
-      "createdAt": "2026-08-17T18:15:36.579Z"
+      "createdAt": "2026-08-17T18:15:36.579Z",
+      "location": "office",
+      "timeWindow": null
     }
   ],
   "books": [
@@ -643,7 +668,11 @@
       ],
       "xpReward": 30,
       "coinReward": 8,
-      "createdAt": "2026-08-24T11:48:31.401Z"
+      "createdAt": "2026-08-24T11:48:31.401Z",
+      "location": "anywhere",
+      "timeWindow": null,
+      "difficulty": "media",
+      "priority": "importante"
     },
     {
       "id": "h-1786990698272-sa92pb",
@@ -657,7 +686,11 @@
       ],
       "xpReward": 30,
       "coinReward": 8,
-      "createdAt": "2026-08-17T18:18:18.272Z"
+      "createdAt": "2026-08-17T18:18:18.272Z",
+      "location": "anywhere",
+      "timeWindow": null,
+      "difficulty": "media",
+      "priority": "importante"
     }
   ],
   "rewards": [
@@ -698,6 +731,50 @@
     }
   ],
   "actionLogs": [
+    {
+      "id": "log-1790210822259-hvb7",
+      "type": "fatal_dmg",
+      "entityId": "fatal-1",
+      "title": "Golpe Final",
+      "xp": 1000,
+      "coins": 500,
+      "details": {
+        "stats": {
+          "wisdom": 0,
+          "focus": 0,
+          "willpower": 0,
+          "consistency": 0
+        },
+        "bossDamage": 280,
+        "bossDefeated": true
+      },
+      "timestamp": "2026-09-24T00:47:02.259Z",
+      "hour": 21,
+      "dayOfWeek": 3,
+      "date": "2026-09-23"
+    },
+    {
+      "id": "log-1790210822258-im5n",
+      "type": "test_dmg",
+      "entityId": "test-1",
+      "title": "Ataque Teste",
+      "xp": 200,
+      "coins": 50,
+      "details": {
+        "stats": {
+          "wisdom": 0,
+          "focus": 0,
+          "willpower": 0,
+          "consistency": 0
+        },
+        "bossDamage": 220,
+        "bossDefeated": false
+      },
+      "timestamp": "2026-09-24T00:47:02.258Z",
+      "hour": 21,
+      "dayOfWeek": 3,
+      "date": "2026-09-23"
+    },
     {
       "id": "log-1787921372679-1k02",
       "type": "habit_complete",
@@ -1457,7 +1534,7 @@
       "picture": "",
       "googleId": null,
       "createdAt": "2026-08-19T11:34:01.114Z",
-      "lastLogin": "2026-08-19T12:11:01.231Z"
+      "lastLogin": "2026-09-30T18:03:37.103Z"
     },
     {
       "id": "usr-1787139469364-d14p9",
@@ -1474,44 +1551,196 @@
       "id": "cat-1",
       "name": "INSS",
       "color": "#38bdf8",
-      "icon": "Briefcase"
+      "icon": "Briefcase",
+      "defaultLocation": "office"
     },
     {
       "id": "cat-2",
       "name": "Estudos",
       "color": "#a855f7",
-      "icon": "GraduationCap"
+      "icon": "GraduationCap",
+      "defaultLocation": "anywhere"
     },
     {
       "id": "cat-3",
       "name": "Pessoal",
       "color": "#10b981",
-      "icon": "User"
+      "icon": "User",
+      "defaultLocation": "anywhere"
     },
     {
       "id": "cat-4",
       "name": "Projetos",
       "color": "#f59e0b",
-      "icon": "FolderGit2"
+      "icon": "FolderGit2",
+      "defaultLocation": "anywhere"
     },
     {
       "id": "cat-5",
       "name": "Saúde",
       "color": "#f43f5e",
-      "icon": "Heart"
+      "icon": "Heart",
+      "defaultLocation": "anywhere"
     },
     {
       "id": "cat-6",
       "name": "Finanças",
       "color": "#eab308",
-      "icon": "Coins"
+      "icon": "Coins",
+      "defaultLocation": "anywhere"
     },
     {
       "id": "cat-1787140031912-1pe1po",
       "name": "Advocacia",
       "color": "#f43f5e",
-      "icon": "Tag"
+      "icon": "Tag",
+      "defaultLocation": "office"
     }
   ],
-  "mcpToken": "mcp_18a3565117c5ba24cd296c4323ef14ecb2ae603dc5982ddb"
+  "mcpToken": "mcp_92d6cb1b3147b42a8b6503965ed3f3f58c3f9fd5245241dc",
+  "liveActivityTimers": {
+    "quest:q-1790791417157-jmy0m1": {
+      "accumulatedMs": 0,
+      "runStartedAt": null,
+      "updatedAt": 1790791417221,
+      "cleared": true
+    }
+  },
+  "ninetyDayGoals": [],
+  "dailyVictories": [],
+  "dailyVictoryBonuses": {},
+  "mindMaps": [],
+  "mindMapSessions": [],
+  "mindMapCategories": [
+    {
+      "id": "mmc-constitucional",
+      "name": "Direito Constitucional",
+      "color": "#a855f7",
+      "parentId": null
+    },
+    {
+      "id": "mmc-cf88",
+      "name": "CF/88",
+      "color": "#c084fc",
+      "parentId": "mmc-constitucional"
+    },
+    {
+      "id": "mmc-administrativo",
+      "name": "Direito Administrativo",
+      "color": "#38bdf8",
+      "parentId": null
+    },
+    {
+      "id": "mmc-atos",
+      "name": "Atos administrativos",
+      "color": "#7dd3fc",
+      "parentId": "mmc-administrativo"
+    },
+    {
+      "id": "mmc-portugues",
+      "name": "Língua Portuguesa",
+      "color": "#f59e0b",
+      "parentId": null
+    },
+    {
+      "id": "mmc-geral",
+      "name": "Geral",
+      "color": "#94a3b8",
+      "parentId": null
+    }
+  ],
+  "aguPlan": {
+    "version": 3,
+    "startedAt": null,
+    "phase": "fundacao",
+    "editalPublished": false,
+    "keepPortuguese": true,
+    "capacityByWeekday": {
+      "0": 180,
+      "1": 180,
+      "2": 180,
+      "3": 180,
+      "4": 180,
+      "5": 180,
+      "6": 180
+    },
+    "weekdaysMorning": 30,
+    "dailyBlocks": 3,
+    "blockMinutes": 30,
+    "blockQuestionTarget": 10,
+    "cycleNumber": 1,
+    "cycleStartDate": "2026-09-23",
+    "cycleLengthDays": 14,
+    "targetAccuracy": 90,
+    "dailyQuestionTarget": 30,
+    "masterMinSolved": 60,
+    "staleDays": 21,
+    "completedBlocks": {},
+    "blockDurations": {},
+    "topicStatus": {},
+    "subjectNotes": {},
+    "currentTopic": {},
+    "currentCycle": null,
+    "generatedCycles": [],
+    "debt": [],
+    "discursiveRotationIndex": 0,
+    "editalProfileId": "pf-tec-2023",
+    "removedSubjectIds": [],
+    "createdAt": "2026-09-23T19:41:24.194Z",
+    "updatedAt": "2026-09-23T19:41:24.194Z"
+  },
+  "mindMapImages": [],
+  "oracleEnergyReadings": [],
+  "oracleDecisions": [
+    {
+      "id": "od-mumrtp7y-kui6i",
+      "createdAt": "2026-09-29T14:27:51.406Z",
+      "date": "2026-09-29",
+      "hour": 11,
+      "dayOfWeek": 2,
+      "location": "office",
+      "entityId": "dv-1790692048351-57fr2w",
+      "kind": "quest",
+      "title": "Finalizar a petição do INSS",
+      "category": "INSS",
+      "energyReadingId": null,
+      "energyScore": null,
+      "quantity": null,
+      "dose": null,
+      "source": "heuristic",
+      "probability": 0,
+      "confidence": 0,
+      "abstained": false,
+      "outcome": "pending",
+      "declineReason": null,
+      "declineNote": "",
+      "resolvedAt": null
+    },
+    {
+      "id": "od-mumrt95g-x8aty",
+      "createdAt": "2026-09-29T14:27:30.580Z",
+      "date": "2026-09-29",
+      "hour": 11,
+      "dayOfWeek": 2,
+      "location": "office",
+      "entityId": "dv-1790692048351-57fr2w",
+      "kind": "quest",
+      "title": "Finalizar a petição do INSS",
+      "category": "INSS",
+      "energyReadingId": null,
+      "energyScore": null,
+      "quantity": null,
+      "dose": null,
+      "source": "heuristic",
+      "probability": 0,
+      "confidence": 0,
+      "abstained": false,
+      "outcome": "pending",
+      "declineReason": null,
+      "declineNote": "",
+      "resolvedAt": null
+    }
+  ],
+  "oracleQuantityReads": [],
+  "oracleEnergySkip": null
 }
