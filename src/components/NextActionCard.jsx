@@ -34,6 +34,7 @@ export function NextActionCard({
   const [apiKey, setApiKey] = useState('');
   const [keyError, setKeyError] = useState('');
   const [keySaved, setKeySaved] = useState(false);
+  const [showTrace, setShowTrace] = useState(false);
   const [askingWhy, setAskingWhy] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [declineNote, setDeclineNote] = useState('');
@@ -394,6 +395,19 @@ export function NextActionCard({
         </div>
       )}
 
+      {(nextAction?.trace || []).length > 0 && (
+        <div style={{ marginTop: '12px' }}>
+          <button
+            type="button"
+            onClick={() => setShowTrace(prev => !prev)}
+            style={quietButtonStyle}
+          >
+            {showTrace ? 'Ocultar processo' : 'Ver processo'}
+          </button>
+          {showTrace && <OracleTrace trace={nextAction.trace} />}
+        </div>
+      )}
+
       {nextAction?.source === 'heuristic' && nextAction?.jevError && (
         <p style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '8px' }}>
           O Oráculo usou o histórico local nesta rodada.
@@ -442,6 +456,60 @@ export function NextActionCard({
     </div>
   );
 }
+
+const TRACE_LABELS = {
+  energy: '1. Energia',
+  filter: '2. Filtro local',
+  choice: '3. Escolha da atividade',
+  quantity: '4. Quantidade da tarefa',
+  dose: '5. Dose sugerida',
+  fallback: 'Atalho local',
+  error: 'Falha'
+};
+
+function OracleTrace({ trace }) {
+  return (
+    <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {(trace || []).map((entry, index) => (
+        <details key={`${entry.step}-${index}`} open={index === 0} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '8px 10px', background: 'rgba(15,18,28,0.55)' }}>
+          <summary style={{ cursor: 'pointer', color: '#e9d5ff', fontWeight: 700, fontSize: '0.8rem' }}>
+            {TRACE_LABELS[entry.step] || entry.step}
+            {entry.cached ? ' · reutilizado' : ''}
+            {entry.ok === false ? ' · falhou' : ''}
+          </summary>
+          {entry.note && <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '8px 0' }}>{entry.note}</p>}
+          {entry.error && <p style={{ fontSize: '0.75rem', color: '#fda4af', margin: '8px 0' }}>{entry.error}</p>}
+          {entry.request && (
+            <>
+              <p style={{ fontSize: '0.7rem', color: '#c4b5fd', margin: '8px 0 4px' }}>Enviado ao Jev</p>
+              <pre style={tracePreStyle}>{JSON.stringify(entry.request, null, 2)}</pre>
+            </>
+          )}
+          {entry.response && (
+            <>
+              <p style={{ fontSize: '0.7rem', color: '#c4b5fd', margin: '8px 0 4px' }}>Resposta</p>
+              <pre style={tracePreStyle}>{JSON.stringify(entry.response, null, 2)}</pre>
+            </>
+          )}
+        </details>
+      ))}
+    </div>
+  );
+}
+
+const tracePreStyle = {
+  margin: 0,
+  maxHeight: '240px',
+  overflow: 'auto',
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+  fontSize: '0.68rem',
+  lineHeight: 1.45,
+  color: '#e2e8f0',
+  background: 'rgba(0,0,0,0.28)',
+  borderRadius: '8px',
+  padding: '8px'
+};
 
 function OpenRouterKeyPrompt({ value, error, busy, onChange, onSubmit }) {
   return (

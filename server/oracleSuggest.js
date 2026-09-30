@@ -86,10 +86,19 @@ function emptyPayload(heuristic, extras = {}) {
   };
 }
 
-async function resolveQuantity(db, item, options) {
+async function resolveQuantity(db, item, options, trace) {
   const sourceText = quantitySourceText(item);
   const cached = findQuantityRead(db, item.id, sourceText);
-  if (cached) return cached;
+  if (cached) {
+    trace.push({
+      step: 'quantity',
+      at: new Date().toISOString(),
+      cached: true,
+      note: 'Quantidade já interpretada para este texto. Nenhuma nova chamada ao Jev.',
+      response: cached
+    });
+    return cached;
+  }
   if (item.estimatedMinutes > 0 && !item.description) {
     const direct = {
       entityId: item.id,
@@ -101,6 +110,13 @@ async function resolveQuantity(db, item, options) {
       amountId: null,
       confidence: 1
     };
+    trace.push({
+      step: 'quantity',
+      at: new Date().toISOString(),
+      cached: false,
+      note: 'Quantidade lida do campo estimatedMinutes, sem chamada ao Jev.',
+      response: direct
+    });
     return saveQuantityRead(db, direct) || direct;
   }
   const interpreted = await interpretQuantity(item, options);
@@ -139,8 +155,24 @@ function persistDecision(db, { context, item, energy, quantity, dose, source, pr
   });
 }
 
+function publicTrace(trace) {
+  return (trace || []).map(entry => ({
+    step: entry.step,
+    at: entry.at,
+    note: entry.note || null,
+    cached: !!entry.cached,
+    ok: entry.ok !== false,
+    status: entry.status || null,
+    error: entry.error || null,
+    request: entry.request || null,
+    response: entry.response || null
+  }));
+}
+
 export async function suggestNextAction(db, options = {}, jevOptions = {}) {
   ensureOracleMemory(db);
+  const trace = [];
+  const traced = { ...jevOptions, trace };
   const heuristic = computeNextAction(db, options);
   const pool = eligiblePool(heuristic);
   const energy = options.energyReading || latestEnergyReading(db, options.now ? new Date(options.now) : new Date());
@@ -157,12 +189,37 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
     } : null,
     needsEnergy: !energy,
     source: 'heuristic',
-    jevError: null
+    jevError: null,
+    trace: []
   };
 
   if (!pool.length) {
-    return { ...base, primary: null };
+    trace.push({
+      step: 'filter',
+      at: new Date().toISOString(),
+      note: 'Nenhuma atividade elegível neste lugar e horário.',
+      response: { deferredByLocation: heuristic.deferredByLocation, deferredByTime: heuristic.deferredByTime }
+    });
+    return { ...base, primary: null, trace: publicTrace(trace) };
   }
+
+  trace.push({
+    step: 'filter',
+    at: new Date().toISOString(),
+    note: 'O motor local filtrou lugar, janela e ritual vencido. O Jev só escolhe entre estes.',
+    response: {
+      context: heuristic.context,
+      eligible: pool.map(item => ({
+        id: item.id,
+        title: item.title,
+        kind: item.kind,
+        score: item.score,
+        reasons: item.reasons
+      })),
+      excludedByLocation: heuristic.deferredByLocation,
+      excludedByTime: heuristic.deferredByTime
+    }
+  });
 
   if (!energy || options.skipJev || !hasOpenRouterApiKey()) {
     const item = withDescription(pool[0], db);
@@ -172,9 +229,18 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
       energy,
       source: 'heuristic'
     });
+    trace.push({
+      step: 'fallback',
+      at: new Date().toISOString(),
+      note: !hasOpenRouterApiKey()
+        ? 'Sem chave do OpenRouter. A indicação veio do motor local.'
+        : 'Sem leitura de energia nesta janela. A indicação veio do motor local.',
+      response: { chosenId: item.id, title: item.title }
+    });
     return {
       ...base,
       source: 'heuristic',
+      trace: publicTrace(trace),
       primary: publicPrimary(item, {
         decisionId: decision?.id,
         reason: energy ? localReason(item) : 'Sem leitura de energia nesta janela. Indicação pelo histórico local.'
@@ -190,20 +256,20 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
       learning: learningForPrompt(db),
       recentActions: recentActionCards(db.actionLogs)
     });
-    const picked = await chooseActivity(state, pool, jevOptions);
+    const picked = await chooseActivity(state, pool, traced);
     const chosen = picked.choice === 'none' ? null : findCandidate(pool, picked.choice);
     const item = withDescription(chosen || pool[0], db);
     let quantity = null;
     let dose = null;
     if (energy.score <= DOSE_ENERGY_MAX) {
-      quantity = await resolveQuantity(db, item, jevOptions);
+      quantity = await resolveQuantity(db, item, traced, trace);
       if (quantity?.hasQuantity) {
         const dosed = await chooseDose({
           item,
           quantity,
           energy,
           learning: learningForPrompt(db)
-        }, jevOptions);
+        }, traced);
         dose = dosed.dose;
       }
     } else {
@@ -226,6 +292,7 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
     return {
       ...base,
       source: chosen ? 'jev' : 'heuristic',
+      trace: publicTrace(trace),
       primary: publicPrimary(item, {
         decisionId: decision?.id,
         dose: dose?.reduced ? dose : null,
@@ -239,6 +306,13 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
       })
     };
   } catch (err) {
+    trace.push({
+      step: 'error',
+      at: new Date().toISOString(),
+      ok: false,
+      error: err.message || 'Falha ao consultar o Jev',
+      note: 'A indicação caiu no motor local.'
+    });
     const item = withDescription(pool[0], db);
     const decision = persistDecision(db, {
       context: heuristic.context,
@@ -249,6 +323,7 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
     return {
       ...base,
       source: 'heuristic',
+      trace: publicTrace(trace),
       jevError: err.code || 'JEV_ERROR',
       primary: publicPrimary(item, {
         decisionId: decision?.id,
@@ -259,7 +334,8 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
 }
 
 export async function recordEnergyAndSuggest(db, text, options = {}, jevOptions = {}) {
-  const reading = await interpretEnergy(text, jevOptions);
+  const energyTrace = [];
+  const reading = await interpretEnergy(text, { ...jevOptions, trace: energyTrace });
   const saved = saveEnergyReading(db, {
     text,
     score: reading.score,
@@ -274,6 +350,7 @@ export async function recordEnergyAndSuggest(db, text, options = {}, jevOptions 
     ...options,
     energyReading: saved
   }, jevOptions);
+  suggestion.trace = [...publicTrace(energyTrace), ...(suggestion.trace || [])];
   return { reading: saved, suggestion };
 }
 

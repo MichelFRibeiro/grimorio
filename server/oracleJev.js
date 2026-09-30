@@ -97,7 +97,7 @@ export async function interpretEnergy(text, options = {}) {
         criteria: ENERGY_LEVELS
       }
     }
-  }, options);
+  }, { ...options, step: 'energy' });
   const answer = scoreAnswer(result, 'energy');
   if (!answer) {
     const error = new Error('Jev não devolveu a energia');
@@ -167,7 +167,7 @@ export async function chooseActivity(state, candidates, options = {}) {
         criteria
       }
     }
-  }, options);
+  }, { ...options, step: 'choice' });
   const answer = choiceAnswer(result, 'most_likely_now');
   if (!answer) {
     const error = new Error('Jev não escolheu uma atividade');
@@ -215,7 +215,7 @@ export async function interpretQuantity(item, options = {}) {
         criteria: AMOUNT_CRITERIA
       }
     }
-  }, options);
+  }, { ...options, step: 'quantity' });
   const present = result?.answers?.has_quantity;
   const unit = choiceAnswer(result, 'unit');
   const magnitude = choiceAnswer(result, 'magnitude');
@@ -264,7 +264,7 @@ export async function chooseDose({ item, quantity, energy, learning }, options =
         }
       }
     }
-  }, options);
+  }, { ...options, step: 'dose' });
   const answer = choiceAnswer(result, 'dose');
   const fraction = DOSE_FRACTIONS.some(step => step.id === answer?.choice) ? answer.choice : 'full';
   return {

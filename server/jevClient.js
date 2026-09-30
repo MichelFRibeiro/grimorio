@@ -33,6 +33,14 @@ export function openRouterKeyStatus() {
   };
 }
 
+function recordTrace(options, entry) {
+  if (!Array.isArray(options?.trace)) return;
+  options.trace.push({
+    at: new Date().toISOString(),
+    ...entry
+  });
+}
+
 export function hasOpenRouterApiKey() {
   return !!getOpenRouterApiKey();
 }
@@ -52,6 +60,7 @@ export async function callJevDecisions(body, options = {}) {
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const request = { model: JEV_MODEL, ...body };
   try {
     const response = await fetchImpl(DECISIONS_URL, {
       method: 'POST',
@@ -59,10 +68,17 @@ export async function callJevDecisions(body, options = {}) {
         Authorization: `Bearer ${apiKey || 'test'}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ model: JEV_MODEL, ...body }),
+      body: JSON.stringify(request),
       signal: controller.signal
     });
     const json = await response.json().catch(() => ({}));
+    recordTrace(options, {
+      step: options.step || 'decision',
+      request,
+      response: json,
+      status: response.status,
+      ok: response.ok
+    });
     if (!response.ok) {
       const error = new Error(json?.error?.message || `Jev respondeu ${response.status}`);
       error.code = 'HTTP';
@@ -72,6 +88,13 @@ export async function callJevDecisions(body, options = {}) {
     }
     return json;
   } catch (err) {
+    recordTrace(options, {
+      step: options.step || 'decision',
+      request,
+      response: null,
+      ok: false,
+      error: err?.name === 'AbortError' ? 'Tempo esgotado' : (err.message || 'Falha na chamada')
+    });
     if (err?.name === 'AbortError') {
       const error = new Error('Jev excedeu o tempo limite');
       error.code = 'TIMEOUT';
