@@ -108,8 +108,9 @@ export function clampEnergy(raw) {
 export function energyFromJevScore(raw) {
   const n = asNumber(raw);
   if (n == null) return null;
-  // O Score do Jev começa em 0. A escala visível é 1–10.
-  return clampEnergy(Math.round(n) + 1);
+  // O Score já vem na escala descrita: 0 = nível 1 e 9 = nível 10.
+  // 5,68 fica entre o nível 6 e o 7, mais perto de 7, e não recebe +1 extra.
+  return clampEnergy(n + 1);
 }
 
 export function roundEnergyScore(raw) {

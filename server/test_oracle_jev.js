@@ -53,7 +53,13 @@ async function run() {
       answers: { energy: { type: 'score', score: 3.6, confidence: 0.8 } }
     })
   });
-  assert(energy.score === 5, 'índice 3,6 da escala 1–10 vira nota 5');
+  assert(energy.score === 5, 'score 3,6 na escala 0–9 vira energia 5');
+  const reported = await interpretEnergy('Vamos em frente.', {
+    fetchImpl: fakeFetch({
+      answers: { energy: { type: 'score', score: 5.68, confidence: 0.72 } }
+    })
+  });
+  assert(reported.score === 7, 'score 5,68 fica no nível 7, sem somar 1 outra vez');
 
   const db = baseDb();
   db.oracleEnergyReadings.unshift({

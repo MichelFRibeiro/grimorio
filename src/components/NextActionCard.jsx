@@ -471,24 +471,24 @@ function OracleTrace({ trace }) {
   return (
     <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {(trace || []).map((entry, index) => (
-        <details key={`${entry.step}-${index}`} open={index === 0} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '8px 10px', background: 'rgba(15,18,28,0.55)' }}>
-          <summary style={{ cursor: 'pointer', color: '#e9d5ff', fontWeight: 700, fontSize: '0.8rem' }}>
+        <details key={`${entry.step}-${index}`} open={index === 0} className="oracle-trace-step">
+          <summary>
             {TRACE_LABELS[entry.step] || entry.step}
             {entry.cached ? ' · reutilizado' : ''}
             {entry.ok === false ? ' · falhou' : ''}
           </summary>
-          {entry.note && <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '8px 0' }}>{entry.note}</p>}
-          {entry.error && <p style={{ fontSize: '0.75rem', color: '#fda4af', margin: '8px 0' }}>{entry.error}</p>}
+          {entry.note && <p className="oracle-trace-note">{entry.note}</p>}
+          {entry.error && <p className="oracle-trace-error">{entry.error}</p>}
           {entry.request && (
             <>
-              <p style={{ fontSize: '0.7rem', color: '#c4b5fd', margin: '8px 0 4px' }}>Enviado ao Jev</p>
-              <pre style={tracePreStyle}>{JSON.stringify(entry.request, null, 2)}</pre>
+              <p className="oracle-trace-label">Enviado ao Jev</p>
+              <pre className="oracle-trace-json">{JSON.stringify(entry.request, null, 2)}</pre>
             </>
           )}
           {entry.response && (
             <>
-              <p style={{ fontSize: '0.7rem', color: '#c4b5fd', margin: '8px 0 4px' }}>Resposta</p>
-              <pre style={tracePreStyle}>{JSON.stringify(entry.response, null, 2)}</pre>
+              <p className="oracle-trace-label">Resposta</p>
+              <pre className="oracle-trace-json">{JSON.stringify(entry.response, null, 2)}</pre>
             </>
           )}
         </details>
@@ -496,20 +496,6 @@ function OracleTrace({ trace }) {
     </div>
   );
 }
-
-const tracePreStyle = {
-  margin: 0,
-  maxHeight: '240px',
-  overflow: 'auto',
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  fontSize: '0.68rem',
-  lineHeight: 1.45,
-  color: '#e2e8f0',
-  background: 'rgba(0,0,0,0.28)',
-  borderRadius: '8px',
-  padding: '8px'
-};
 
 function OpenRouterKeyPrompt({ value, error, busy, onChange, onSubmit }) {
   return (
