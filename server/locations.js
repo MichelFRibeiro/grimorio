@@ -45,11 +45,17 @@ export const CATEGORY_DEFAULT_LOCATION = {
   Projetos: 'anywhere'
 };
 
+/**
+ * Dicas de lugar pelo título. Ficam em último recurso (só quando o item não
+ * tem lugar nem categoria com padrão) e usam fronteira de palavra: sem isso,
+ * "comprar" ou "recurso" em qualquer frase empurravam a tarefa para o lugar
+ * errado.
+ */
 const TITLE_LOCATION_HINTS = [
-  { re: /peticion|cnpj|banner|materiais|pab|sisref|audi[eê]ncia|e-?books?|imers[aã]o|safe|recurso/i, loc: 'office' },
-  { re: /jardim|galinheiro|ra[cç][aã]o|cal[cç]ado/i, loc: 'home' },
-  { re: /for[cç]a|p[eé]lvica|academia|treino|muscula[cç]/i, loc: 'gym' },
-  { re: /creatina|kegel|ter[cç]o|leitura|pnl|comprar/i, loc: 'anywhere' }
+  { re: /\b(peticion\w*|cnpj|banners?|materiais|pabs?|sisref|audi[êe]ncias?|e-?books?|imers[õo]es|safe|recursos?)\b/i, loc: 'office' },
+  { re: /\b(jardim|galinheiro|ra[çc][ãa]o|cal[çc]ados?)\b/i, loc: 'home' },
+  { re: /\b(for[çc]a|p[ée]lvica|academia|treino|muscula[çc][ãa]o)\b/i, loc: 'gym' },
+  { re: /\b(creatina|kegel|ter[çc]o|leitura|pnl)\b/i, loc: 'anywhere' }
 ];
 
 export function normalizeLocation(value, fallback = 'anywhere') {

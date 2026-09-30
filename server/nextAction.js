@@ -52,18 +52,29 @@ const RELEVANT_LOG_TYPES = new Set(['quest_complete', 'habit_complete']);
 const HOUR_FIT_MAX = 8;
 const DAY_FIT_MAX = 4;
 
+/**
+ * Converte 'YYYY-MM-DD' (ou um ISO completo) em milissegundos UTC.
+ * Devolve null para qualquer coisa que não seja uma data civil legível —
+ * antes um prazo em ISO virava NaN e a tela mostrava "Prazo em NaN dias".
+ */
+function parseDateParts(value) {
+  if (typeof value !== 'string') return null;
+  const [year, month, day] = value.trim().slice(0, 10).split('-').map(Number);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return Date.UTC(year, month - 1, day);
+}
+
 function daysBetween(fromStr, toStr) {
-  if (!fromStr || !toStr) return null;
-  const [y1, m1, d1] = fromStr.split('-').map(Number);
-  const [y2, m2, d2] = toStr.split('-').map(Number);
-  const a = Date.UTC(y1, m1 - 1, d1);
-  const b = Date.UTC(y2, m2 - 1, d2);
-  return Math.round((b - a) / 86400000);
+  const from = parseDateParts(fromStr);
+  const to = parseDateParts(toStr);
+  if (from == null || to == null) return null;
+  return Math.round((to - from) / 86400000);
 }
 
 function formatDayMonth(dateStr) {
   if (!dateStr || typeof dateStr !== 'string') return dateStr || '';
-  const parts = dateStr.split('-');
+  const parts = dateStr.trim().slice(0, 10).split('-');
   if (parts.length !== 3) return dateStr;
   return `${parts[2]}/${parts[1]}`;
 }

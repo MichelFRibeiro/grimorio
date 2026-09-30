@@ -1160,19 +1160,32 @@ export function useGameData() {
   };
 
   const refreshNextAction = async ({ location, snoozedIds, consult = true } = {}) => {
+    // A consulta ao Jev é POST: um GET que grava decisão era disparado por
+    // qualquer recarga da tela e poluía a memória do Oráculo.
+    if (consult) {
+      const res = await fetch('/api/next-action/consult', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ location, snoozedIds })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: json.error || 'Não foi possível consultar o Oráculo.' };
+      applyNextAction(json);
+      return { ok: true };
+    }
     const params = new URLSearchParams();
     if (location) params.set('location', location);
     if (Array.isArray(snoozedIds) && snoozedIds.length > 0) {
       params.set('snoozed', snoozedIds.join(','));
     }
-    if (consult) params.set('consult', '1');
     const query = params.toString();
     const res = await fetch(`/api/next-action${query ? `?${query}` : ''}`, {
       headers: getAuthHeaders()
     });
-    if (!res.ok) return false;
-    applyNextAction(await res.json());
-    return true;
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: json.error || 'Não foi possível carregar a indicação.' };
+    applyNextAction(json);
+    return { ok: true };
   };
 
   const saveOpenRouterKey = async (apiKey) => {
@@ -1195,6 +1208,20 @@ export function useGameData() {
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: json.error || 'Não foi possível ler a energia.' };
+    applyNextAction(json);
+    return { ok: true, energyError: json.energyError || null, energy: json.energy || null };
+  };
+
+  // Pular a energia vale por uma janela no servidor: sem isso a pergunta
+  // voltava na próxima atualização da tela.
+  const skipOracleEnergy = async ({ location, snoozedIds } = {}) => {
+    const res = await fetch('/api/next-action/skip-energy', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ location, snoozedIds })
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: json.error || 'Não foi possível indicar agora.' };
     applyNextAction(json);
     return { ok: true };
   };
@@ -1620,6 +1647,7 @@ export function useGameData() {
     setCurrentLocation,
     refreshNextAction,
     submitOracleEnergy,
+    skipOracleEnergy,
     saveOpenRouterKey,
     declineOracleSuggestion,
     acceptOracleDose,

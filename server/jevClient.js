@@ -29,7 +29,9 @@ export function openRouterKeyStatus() {
   return {
     configured: !!key,
     source: storedOpenRouterKey ? 'saved' : (key ? 'env' : 'missing'),
-    hint: key ? `${key.slice(0, 6)}…${key.slice(-4)}` : ''
+    // Só os 4 últimos caracteres: o suficiente para o herói reconhecer a chave
+    // sem devolver metade do segredo ao navegador.
+    hint: key ? `••••${key.slice(-4)}` : ''
   };
 }
 
@@ -72,30 +74,41 @@ export async function callJevDecisions(body, options = {}) {
       signal: controller.signal
     });
     const json = await response.json().catch(() => ({}));
-    recordTrace(options, {
-      step: options.step || 'decision',
-      request,
-      response: json,
-      status: response.status,
-      ok: response.ok
-    });
     if (!response.ok) {
       const error = new Error(json?.error?.message || `Jev respondeu ${response.status}`);
       error.code = 'HTTP';
       error.status = response.status;
       error.payload = json;
+      // Um registro por chamada: o catch abaixo não registra de novo.
+      recordTrace(options, {
+        step: options.step || 'decision',
+        request,
+        response: json,
+        status: response.status,
+        ok: false,
+        error: error.message
+      });
       throw error;
     }
+    recordTrace(options, {
+      step: options.step || 'decision',
+      request,
+      response: json,
+      status: response.status,
+      ok: true
+    });
     return json;
   } catch (err) {
+    if (err?.code === 'HTTP') throw err;
+    const timedOut = err?.name === 'AbortError';
     recordTrace(options, {
       step: options.step || 'decision',
       request,
       response: null,
       ok: false,
-      error: err?.name === 'AbortError' ? 'Tempo esgotado' : (err.message || 'Falha na chamada')
+      error: timedOut ? 'Tempo esgotado' : (err?.message || 'Falha na chamada')
     });
-    if (err?.name === 'AbortError') {
+    if (timedOut) {
       const error = new Error('Jev excedeu o tempo limite');
       error.code = 'TIMEOUT';
       throw error;

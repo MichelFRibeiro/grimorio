@@ -3,13 +3,19 @@
  * e o desfecho de cada indicação. Não altera missões nem rituais.
  */
 
+import { getSaoPauloDateStr } from './timeUtils.js';
+
 export const ENERGY_TTL_MS = 45 * 60 * 1000;
+export const ENERGY_SKIP_TTL_MS = 45 * 60 * 1000;
 export const ACCEPT_WINDOW_MS = 90 * 60 * 1000;
+export const DECISION_DEDUPE_MS = 2 * 60 * 1000;
 export const MAX_ENERGY_READINGS = 200;
 export const MAX_ORACLE_DECISIONS = 400;
 export const MAX_QUANTITY_READS = 300;
 export const QUANTITY_MISS_TTL_MS = 15 * 60 * 1000;
 export const DOSE_ENERGY_MAX = 6;
+export const DECISION_KINDS = ['quest', 'habit', 'victory'];
+export const DECISION_OUTCOMES = ['pending', 'accepted', 'declined', 'expired', 'superseded'];
 
 export const DECLINE_REASONS = [
   { id: 'tired', label: 'Estou cansado' },
@@ -87,6 +93,9 @@ function clip(value, max) {
 }
 
 function asNumber(value) {
+  // Number(null) === 0 e Number('') === 0: sem esta guarda, um campo ausente
+  // voltava como zero na releitura e contaminava a memória do Oráculo.
+  if (value == null || value === '') return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -128,10 +137,14 @@ export function sanitizeEnergyReading(raw) {
     rawScore: asNumber(raw.rawScore) ?? score,
     confidence: asNumber(raw.confidence),
     createdAt,
-    date: raw.date || createdAt.slice(0, 10),
+    // A data é civil de São Paulo: o ISO gravado é UTC e viraria o dia errado
+    // depois das 21h.
+    date: raw.date || getSaoPauloDateStr(createdAt),
     hour: Number.isInteger(raw.hour) ? raw.hour : null,
     dayOfWeek: Number.isInteger(raw.dayOfWeek) ? raw.dayOfWeek : null,
-    location: raw.location || null
+    location: raw.location || null,
+    // 'local' marca a estimativa de emergência usada quando o Jev não responde.
+    source: raw.source === 'local' ? 'local' : 'jev'
   };
 }
 
@@ -159,9 +172,7 @@ export function sanitizeQuantityRead(raw) {
 export function sanitizeOracleDecision(raw) {
   if (!raw || typeof raw !== 'object') return null;
   if (!raw.id || !raw.entityId) return null;
-  const outcome = ['pending', 'accepted', 'declined', 'expired', 'superseded'].includes(raw.outcome)
-    ? raw.outcome
-    : 'pending';
+  const outcome = DECISION_OUTCOMES.includes(raw.outcome) ? raw.outcome : 'pending';
   return {
     id: String(raw.id),
     createdAt: raw.createdAt || new Date().toISOString(),
@@ -170,7 +181,9 @@ export function sanitizeOracleDecision(raw) {
     dayOfWeek: Number.isInteger(raw.dayOfWeek) ? raw.dayOfWeek : null,
     location: raw.location || null,
     entityId: String(raw.entityId),
-    kind: raw.kind === 'habit' ? 'habit' : 'quest',
+    // 'victory' precisa sobreviver: sem isso a decisão da Vitória do Dia era
+    // gravada como missão e nunca podia ser aceita.
+    kind: DECISION_KINDS.includes(raw.kind) ? raw.kind : 'quest',
     title: clip(raw.title, 180),
     category: raw.category || null,
     energyReadingId: raw.energyReadingId || null,
@@ -188,10 +201,22 @@ export function sanitizeOracleDecision(raw) {
     source: raw.source === 'jev' ? 'jev' : 'heuristic',
     probability: asNumber(raw.probability),
     confidence: asNumber(raw.confidence),
+    abstained: !!raw.abstained,
     outcome,
     declineReason: DECLINE_IDS.has(raw.declineReason) ? raw.declineReason : null,
     declineNote: clip(raw.declineNote, 240),
     resolvedAt: raw.resolvedAt || null
+  };
+}
+
+function sanitizeEnergySkip(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const at = raw.at;
+  if (!at || !Number.isFinite(new Date(at).getTime())) return null;
+  return {
+    at,
+    date: raw.date || getSaoPauloDateStr(at),
+    hour: Number.isInteger(raw.hour) ? raw.hour : null
   };
 }
 
@@ -211,7 +236,58 @@ export function ensureOracleMemory(db) {
     .map(sanitizeQuantityRead)
     .filter(Boolean)
     .slice(0, MAX_QUANTITY_READS);
+  db.oracleEnergySkip = sanitizeEnergySkip(db.oracleEnergySkip);
+  expireStaleDecisions(db);
   return db;
+}
+
+/**
+ * Uma indicação sem resposta dentro da janela de aceite não fica pendente
+ * para sempre: ela vira histórico expirado e sai da fila de aprendizado.
+ */
+export function expireStaleDecisions(db, now = new Date()) {
+  const reference = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  if (!Number.isFinite(reference)) return db;
+  (db.oracleDecisions || []).forEach(item => {
+    if (item.outcome !== 'pending') return;
+    const age = reference - new Date(item.createdAt).getTime();
+    if (!Number.isFinite(age) || age < 0) return;
+    if (age > ACCEPT_WINDOW_MS) {
+      item.outcome = 'expired';
+      item.resolvedAt = new Date(reference).toISOString();
+    }
+  });
+  return db;
+}
+
+export function markEnergySkip(db, { now = new Date(), date, hour } = {}) {
+  ensureOracleMemory(db);
+  const reference = now instanceof Date ? now : new Date(now);
+  db.oracleEnergySkip = sanitizeEnergySkip({
+    at: reference.toISOString(),
+    date,
+    hour
+  });
+  return db.oracleEnergySkip;
+}
+
+export function clearEnergySkip(db) {
+  if (!db) return null;
+  db.oracleEnergySkip = null;
+  return null;
+}
+
+/**
+ * "Pular" precisa valer por uma janela, não só para a requisição seguinte:
+ * toda atualização da tela reavalia a indicação e a pergunta voltaria.
+ */
+export function isEnergySkipped(db, now = new Date()) {
+  const skip = db?.oracleEnergySkip;
+  if (!skip?.at) return false;
+  const reference = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  const age = reference - new Date(skip.at).getTime();
+  if (!Number.isFinite(age) || age < 0 || age > ENERGY_SKIP_TTL_MS) return false;
+  return true;
 }
 
 export function latestEnergyReading(db, now = new Date()) {
@@ -229,9 +305,17 @@ export function saveEnergyReading(db, reading) {
   if (!clean) return null;
   db.oracleEnergyReadings.unshift(clean);
   db.oracleEnergyReadings = db.oracleEnergyReadings.slice(0, MAX_ENERGY_READINGS);
+  clearEnergySkip(db);
   return clean;
 }
 
+/**
+ * Última leitura de quantidade para este texto exato (telemetria).
+ *
+ * Um "sem quantidade" NÃO é reutilizado: o modelo pode ter errado a sigla
+ * (ver commit "consultar o Jev de novo a cada leitura de quantidade"), então
+ * `resolveQuantity` só aproveita um acerto (`findQuantityHit`).
+ */
 export function findQuantityRead(db, entityId, sourceText, now = new Date()) {
   ensureOracleMemory(db);
   const wanted = clip(sourceText, 400);
@@ -242,6 +326,12 @@ export function findQuantityRead(db, entityId, sourceText, now = new Date()) {
   const age = now.getTime() - new Date(read.readAt).getTime();
   if (!Number.isFinite(age) || age < 0 || age > QUANTITY_MISS_TTL_MS) return null;
   return read;
+}
+
+/** Leitura já confirmada e ainda válida para o mesmo texto da tarefa. */
+export function findQuantityHit(db, entityId, sourceText) {
+  const read = findQuantityRead(db, entityId, sourceText);
+  return read?.hasQuantity ? read : null;
 }
 
 export function saveQuantityRead(db, reading) {
@@ -260,6 +350,29 @@ export function saveOracleDecision(db, decision) {
   ensureOracleMemory(db);
   const clean = sanitizeOracleDecision(decision);
   if (!clean) return null;
+
+  // Reprocessar a mesma indicação não pode gerar uma decisão nova a cada clique:
+  // isso poluía o aprendizado com pendências que o herói nunca viu.
+  const duplicate = db.oracleDecisions.find(item => (
+    item.outcome === 'pending'
+    && item.entityId === clean.entityId
+    && item.source === clean.source
+    && item.date === clean.date
+    && item.hour === clean.hour
+    && item.location === clean.location
+    && item.energyReadingId === clean.energyReadingId
+    && (new Date(clean.createdAt).getTime() - new Date(item.createdAt).getTime()) <= DECISION_DEDUPE_MS
+  ));
+  if (duplicate) return duplicate;
+
+  // Uma indicação nova para a mesma atividade substitui a anterior sem resposta.
+  db.oracleDecisions.forEach(item => {
+    if (item.outcome === 'pending' && item.entityId === clean.entityId) {
+      item.outcome = 'superseded';
+      item.resolvedAt = clean.createdAt;
+    }
+  });
+
   db.oracleDecisions.unshift(clean);
   db.oracleDecisions = db.oracleDecisions.slice(0, MAX_ORACLE_DECISIONS);
   return clean;
@@ -326,7 +439,7 @@ export function explicitAmount(text) {
   const digit = source.match(/(?:^|[\s(])(\d{1,3}(?:[.,]\d+)?)(?=$|[\s).,;:])/);
   if (digit) {
     const value = Number(digit[1].replace(',', '.'));
-    if (value > 0 && value <= 200) return value;
+    if (value > 0 && value <= MAX_QUANTITY_AMOUNT) return value;
   }
   const lower = source.toLowerCase();
   const word = NUMBER_WORDS.find(([token]) => new RegExp(`(?:^|\\s)${token}(?:$|\\s)`, 'i').test(lower));
@@ -349,26 +462,43 @@ export function nearestAmountId(value) {
   return best.id;
 }
 
-export function composeQuantity(hasQuantity, unit, amountId) {
+export const MAX_QUANTITY_AMOUNT = 999;
+
+/**
+ * Combina unidade e magnitude em uma quantidade.
+ *
+ * `explicitValue` é o número escrito na tarefa quando ele não está na régua
+ * (7, 9, 300…). Sem ele, "Ler 7 páginas" ficava sem quantidade e nunca
+ * recebia dose.
+ */
+export function composeQuantity(hasQuantity, unit, amountId, explicitValue = null) {
   if (!hasQuantity) return null;
-  const value = AMOUNT_BY_ID[amountId];
-  if (value == null) return null;
+  const ladderValue = AMOUNT_BY_ID[amountId];
+  const rawValue = ladderValue != null ? ladderValue : asNumber(explicitValue);
+  if (rawValue == null || rawValue <= 0 || rawValue > MAX_QUANTITY_AMOUNT) return null;
+  const resolvedId = ladderValue != null ? amountId : null;
   // hours+half = 30 min. minutes+half também, porque "meia hora" às vezes
   // é lida como duração fracionária e não como 0,5 minuto.
   if (unit === 'hours' || (unit === 'minutes' && CLOCK_FRACTIONS.has(amountId))) {
     return {
       hasQuantity: true,
       unit: 'minutes',
-      amount: Math.max(1, Math.round(value * 60)),
-      amountId
+      amount: Math.max(1, Math.round(rawValue * 60)),
+      amountId: resolvedId
     };
   }
   if (!QUANTITY_UNITS.includes(unit)) return null;
+  if (unit !== 'minutes' && !Number.isInteger(rawValue) && resolvedId == null) {
+    // Fração solta ("1,5 recursos") não vira leitura confiável.
+    return null;
+  }
   return {
     hasQuantity: true,
     unit,
-    amount: Math.round(value * 100) / 100,
-    amountId
+    amount: unit === 'minutes'
+      ? Math.max(1, Math.round(rawValue))
+      : Math.round(rawValue * 100) / 100,
+    amountId: resolvedId
   };
 }
 
@@ -418,6 +548,42 @@ export function buildLearningSummary(db, { limit = 12 } = {}) {
   });
 
   return { recent, byBand };
+}
+
+/**
+ * Retrato compacto da memória do Oráculo para a interface.
+ * Até aqui os desfechos só alimentavam o prompt do Jev e ficavam invisíveis.
+ */
+export function oracleMemoryStats(db, { limit = 20 } = {}) {
+  ensureOracleMemory(db);
+  const counts = { accepted: 0, declined: 0, pending: 0, expired: 0, superseded: 0 };
+  db.oracleDecisions.forEach(item => {
+    counts[item.outcome] = (counts[item.outcome] || 0) + 1;
+  });
+  const answered = counts.accepted + counts.declined;
+  const reading = db.oracleEnergyReadings[0] || null;
+  return {
+    counts,
+    answered,
+    acceptanceRate: answered ? Math.round((counts.accepted / answered) * 100) : null,
+    energyReadings: db.oracleEnergyReadings.length,
+    lastEnergy: reading ? {
+      score: reading.score,
+      text: reading.text,
+      createdAt: reading.createdAt
+    } : null,
+    byBand: buildLearningSummary(db, { limit }).byBand,
+    recent: db.oracleDecisions.slice(0, limit).map(item => ({
+      id: item.id,
+      title: item.title,
+      kind: item.kind,
+      outcome: item.outcome,
+      createdAt: item.createdAt,
+      energyScore: item.energyScore,
+      dose: item.dose?.label || null,
+      declineReason: item.outcome === 'declined' ? declineReasonLabel(item.declineReason) : null
+    }))
+  };
 }
 
 export function markDecisionAccepted(db, { entityId, kind, at = new Date() } = {}) {

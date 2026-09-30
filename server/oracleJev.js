@@ -78,6 +78,33 @@ const UNIT_CONFIDENCE_MIN = 0.45;
 const MAGNITUDE_CONFIDENCE_MIN = 0.45;
 const STATED_UNIT_CONFIDENCE_MIN = 0.2;
 
+/**
+ * Leitura local de energia, usada só quando o Jev não responde.
+ * Erra para baixo de propósito: energia subestimada oferece dose menor,
+ * energia superestimada empurraria uma tarefa grande em cima do herói.
+ */
+const ENERGY_HINTS = [
+  { re: /\b(exaust[oa]|esgotad[oa]|acabad[oa]|destru[íi]d[oa]|sem for[çc]as|n[ãa]o consigo|exhausted|drained|burned out)\b/i, score: 1 },
+  { re: /\b(muito cansad[oa]|cansad[íi]ssim[oa]|arrasad[oa]|na lona|batid[oa]|de rastos)\b/i, score: 2 },
+  { re: /\b(cansad[oa]|com sono|sonolent[oa]|desanimad[oa]|pra baixo|para baixo|triste|tired|sleepy|wiped)\b/i, score: 3 },
+  { re: /\b(pouca energia|sem energia|devagar|dif[íi]cil|lent[oa]|low energy|sluggish)\b/i, score: 4 },
+  { re: /\b(mais ou menos|assim assim|neutr[oa]|razo[áa]vel|mixed|meh)\b/i, score: 5 },
+  { re: /\b(bem|tranquil[oa]|consigo|d[áa] para|firme|ok|okay|good|fine)\b/i, score: 6 },
+  { re: /\b(dispost[oa]|animad[oa]|motivad[oa]|pront[oa]|boa|bom|ready|motivated)\b/i, score: 7 },
+  { re: /\b(muito bem|[óo]tim[oa]|empolgad[oa]|energizad[oa]|forte|great|strong)\b/i, score: 8 },
+  { re: /\b(no pique|a todo vapor|voando|excelente|impec[áa]vel|peak|amazing)\b/i, score: 9 }
+];
+
+export function localEnergyFromText(text) {
+  const source = String(text || '');
+  if (!source.trim()) return null;
+  const scores = ENERGY_HINTS
+    .filter(hint => hint.re.test(source))
+    .map(hint => hint.score);
+  if (!scores.length) return null;
+  return Math.min(...scores);
+}
+
 function choiceAnswer(result, id) {
   const answer = result?.answers?.[id];
   if (!answer || answer.type !== 'choice' || !answer.choice) return null;
@@ -157,6 +184,12 @@ function candidateCard(item) {
   };
 }
 
+export const KIND_LABEL = {
+  victory: 'planned victory of the day',
+  habit: 'ritual',
+  quest: 'quest'
+};
+
 export function buildChoiceState({ context, candidates, energy, learning, recentActions }) {
   return {
     moment: {
@@ -174,7 +207,7 @@ export function buildChoiceState({ context, candidates, energy, learning, recent
     recentActions: recentActions || [],
     learning: learning || null,
     candidates: (candidates || []).map(candidateCard),
-    instruction: 'Pick the one activity this person is most likely to start right now. Prefer a likely start over the formally most important task. Use energy, prior accepts and declines, and what they usually do at this hour and weekday. Choose none if nothing fits.'
+    instruction: 'Pick the one activity this person is most likely to start right now. Prefer a likely start over the formally most important task. Use energy, prior accepts and declines, and what they usually do at this hour and weekday. A planned victory of the day is the person\'s own plan for today: keep it unless it is clearly unrealistic right now. Choose none if nothing fits.'
   };
 }
 
@@ -183,7 +216,7 @@ export async function chooseActivity(state, candidates, options = {}) {
   (candidates || []).forEach(item => {
     criteria[item.id] = [
       item.title,
-      item.kind === 'habit' ? 'ritual' : 'quest',
+      KIND_LABEL[item.kind] || KIND_LABEL.quest,
       item.category || '',
       item.priority || ''
     ].filter(Boolean).join(' · ');
@@ -254,16 +287,23 @@ export async function interpretQuantity(item, options = {}) {
   // O número escrito não depende do modelo. Com ele no texto, o Jev só
   // classifica a unidade, e uma vitória fraca de "none" não apaga o dígito.
   const unitChoice = resolveChoice(unit, {
-    minConfidence: statedId ? STATED_UNIT_CONFIDENCE_MIN : UNIT_CONFIDENCE_MIN
+    minConfidence: stated ? STATED_UNIT_CONFIDENCE_MIN : UNIT_CONFIDENCE_MIN
   });
-  const magnitudeChoice = statedId || resolveChoice(magnitude, {
+  // A magnitude do Jev vem primeiro: o dígito do título pode ser o capítulo,
+  // o número do processo ou a segunda medida ("2 capítulos e 30 páginas").
+  // O dígito escrito é o plano B quando o Jev não lê magnitude nenhuma.
+  const jevMagnitude = resolveChoice(magnitude, {
     reject: ['other'],
     minConfidence: MAGNITUDE_CONFIDENCE_MIN
   });
-  const hasQuantity = statedId
-    ? !!unitChoice && !!magnitudeChoice
-    : !!present && present.noul >= 0.6 && !!unitChoice && !!magnitudeChoice;
-  const composed = composeQuantity(hasQuantity, unitChoice, magnitudeChoice);
+  const magnitudeId = jevMagnitude || statedId || null;
+  // Dígito fora da régua (7, 9, 300…) vira valor explícito. Horas ficam de
+  // fora: um dígito solto antes de "horas" viraria uma dose absurda.
+  const explicitValue = !magnitudeId && unitChoice !== 'hours' ? stated : null;
+  const hasMagnitude = !!magnitudeId || explicitValue != null;
+  const statedEnough = stated != null || (present?.noul ?? 0) >= 0.6;
+  const hasQuantity = !!unitChoice && hasMagnitude && statedEnough;
+  const composed = composeQuantity(hasQuantity, unitChoice, magnitudeId, explicitValue);
   return {
     sourceText,
     hasQuantity: !!composed,

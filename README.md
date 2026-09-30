@@ -91,10 +91,25 @@ O script irá:
 - **Linha do Tempo**: Histórico completo de tudo que foi realizado com data e hora.
 - **Backup & Restauração**: Download e upload em 1 clique de arquivo JSON para segurança total dos seus dados.
 
-### 🧭 Próxima Atividade
-- Cartão permanente que indica a melhor missão ou ritual **agora**, filtrando por lugar (Casa, Escritório, Academia ou Qualquer lugar) e janela de horário.
+### 🧭 O Oráculo indica (Próxima Atividade)
+- Cartão permanente que indica a melhor **Vitória do Dia, missão ou ritual agora**, filtrando por lugar (Casa, Escritório, Academia ou Qualquer lugar) e janela de horário.
 - Prazo (`dueDate`/`dueTime`) é diferente da janela de execução: uma audiência às 17h continua visível o dia inteiro; um terço só das 15h às 16h some fora dessa faixa.
 - Missões atrasadas no lugar certo ganham de rituais “na hora histórica”. Ritual com meta da semana já batida sai da lista principal.
+- A **Vitória Planejada do Dia** vem antes de tudo, na ordem em que foi cadastrada.
+- **Energia:** o cartão pergunta “Como você está agora?” uma vez; a leitura vale 45 minutos e **não** é pedida de novo a cada atividade concluída. O botão **Pular** vale pela mesma janela e segue com a indicação do histórico local.
+- **Jev (OpenRouter):** com a chave configurada, o modelo escolhe a atividade mais provável, lê a quantidade implícita na tarefa (`5 PABs`, `meia hora`, `15 recursos`) e, com energia igual ou abaixo de 6, propõe uma **dose menor** — a tarefa original nunca é alterada. Sem chave, ou se o Jev falhar, o motor local indica e o herói continua vendo a sugestão.
+- **Agora não:** a recusa pede um motivo (cansado, sem tempo, lugar errado…), fica na memória do Oráculo e ensina as próximas escolhas.
+- **Ver processo:** mostra exatamente o que foi enviado ao Jev e o que voltou. **Memória do Oráculo:** taxa de aceite, energia e últimos desfechos.
+- O motor local roda em `server/nextAction.js`; o julgamento do Jev, em `server/oracleJev.js`; a memória (energia, quantidades e desfechos), em `server/oracleMemory.js`.
+
+**Endpoints**
+- `GET /api/next-action` — retrato sem efeitos colaterais (energia vigente, indicação local, motivo).
+- `POST /api/next-action/consult` — consulta de verdade (grava a decisão, pode chamar o Jev).
+- `POST /api/next-action/energy` — registra a energia e devolve a indicação.
+- `POST /api/next-action/skip-energy` — pula a pergunta de energia pela janela de 45 min.
+- `POST /api/next-action/decline` — motivo da recusa e nova indicação.
+- `POST /api/next-action/accept-dose` — aceita a dose reduzida (registra no diário de ações).
+- `POST /api/next-action/location` — lugar atual (com ou sem modo automático).
 
 ---
 
@@ -183,7 +198,7 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 - `update_ninety_day_goal`, `log_ninety_day_goal_progress` (compila nos ciclos maiores), `delete_ninety_day_goal_log`, `delete_ninety_day_goal`.
 
 #### 13. 🧭 Próxima Atividade (contexto de lugar e horário)
-- `get_next_action`: Indica a próxima missão ou ritual considerando lugar (`anywhere`, `office`, `home`, `gym`), janela de horário, prazos, prioridade e histórico.
+- `get_next_action`: Indica a próxima Vitória do Dia, missão ou ritual considerando lugar (`anywhere`, `office`, `home`, `gym`), janela de horário, prazos, prioridade e histórico. Com energia recente e chave do OpenRouter, o Jev escolhe; sem isso, responde o motor local (`source: "heuristic"`).
 - `set_current_location`: Define o lugar atual do herói usado pelo Oráculo.
 
 ---
@@ -221,3 +236,28 @@ curl -X POST http://localhost:3000/api/mcp \
   }'
 ```
 
+---
+
+## 🧪 Testes
+
+Cada arquivo `server/test_*.js` roda sozinho com `node`:
+
+```bash
+node server/test_next_action.js    # motor local (lugar, janela, prioridade, prazo, vitória)
+node server/test_oracle_flow.js    # fluxo do Oráculo (energia, pular, abstenção, memória)
+node server/test_oracle_jev.js     # leitura do Jev (energia, quantidade, dose)
+node server/test_daily_victories.js
+```
+
+⚠️ **Atenção:** vários testes antigos usam o banco real (`data/database.json`) e gravam nele
+(recompensas, chefe, citações de teste). Para rodar sem tocar no seu save, aponte o Grimório
+para uma pasta temporária:
+
+```bash
+GRIMORIO_DATA_DIR=/tmp/grimorio-test node server/test_boss_progression.js
+```
+
+(No Windows: `set GRIMORIO_DATA_DIR=C:\temp\grimorio-test` antes do comando.)
+
+Os testes que precisam de um servidor no ar esperam `http://localhost:3000` e autenticação
+(`/api/auth/guest`); sem isso eles falham por conexão, não por lógica.

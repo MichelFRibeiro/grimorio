@@ -18,11 +18,13 @@ export function NextActionCard({
   onOpenHabits,
   onRefresh,
   onSubmitEnergy,
+  onSkipEnergy,
   openRouter,
   onSaveOpenRouterKey,
   onDeclineSuggestion,
   onAcceptDose,
   quests = [],
+  oracleMemory = null,
   playClick
 }) {
   const [snoozedIds, setSnoozedIds] = useState([]);
@@ -35,6 +37,8 @@ export function NextActionCard({
   const [keyError, setKeyError] = useState('');
   const [keySaved, setKeySaved] = useState(false);
   const [showTrace, setShowTrace] = useState(false);
+  const [showMemory, setShowMemory] = useState(false);
+  const [refreshError, setRefreshError] = useState('');
   const [askingWhy, setAskingWhy] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [declineNote, setDeclineNote] = useState('');
@@ -49,11 +53,15 @@ export function NextActionCard({
   const deferred = nextAction?.deferredByLocation || [];
   const energy = nextAction?.energy || null;
   const needsEnergy = revisingEnergy || (nextAction?.needsEnergy !== false && !energy);
+  // Sem chave configurada não há como enviar energia: em vez de um campo que
+  // não leva a lugar nenhum, o cartão mostra a indicação do motor local.
+  const energyBlocking = needsEnergy && !!openRouter?.configured;
   const declineReasons = nextAction?.declineReasons || [];
+  const localEnergy = energy?.source === 'local';
 
-  const handleLocation = (id) => {
+  const handleLocation = (id, manual = true) => {
     setSnoozedIds([]);
-    if (onChangeLocation) onChangeLocation(id, true);
+    if (onChangeLocation) onChangeLocation(id, manual);
   };
 
   const handleDo = (item) => {
@@ -166,10 +174,28 @@ export function NextActionCard({
     setEnergyText('');
   };
 
+  const handleSkipEnergy = async () => {
+    if (refreshing) return;
+    if (!onSkipEnergy) return;
+    setRefreshing(true);
+    setEnergyError('');
+    const result = await onSkipEnergy({ location: activeLocation, snoozedIds });
+    setRefreshing(false);
+    if (!result?.ok) {
+      setEnergyError(result?.error || 'Não foi possível indicar agora.');
+      return;
+    }
+    setRevisingEnergy(false);
+    setEnergyText('');
+  };
+
   const handleDose = async (item) => {
     if (!item?.decisionId || !onAcceptDose) return false;
     const result = await onAcceptDose(item.decisionId);
-    if (!result?.ok) return false;
+    if (!result?.ok) {
+      setRefreshError(result?.error || 'Não foi possível registrar a dose.');
+      return false;
+    }
     setSnoozedIds(prev => [...prev, item.id]);
     if (onRefresh) onRefresh({ location: activeLocation, snoozedIds: [...snoozedIds, item.id] });
     return true;
@@ -179,8 +205,14 @@ export function NextActionCard({
     if (refreshing || !onRefresh) return;
     if (playClick) playClick();
     setRefreshing(true);
+    setRefreshError('');
     try {
-      await onRefresh({ location: activeLocation, snoozedIds, consult: true });
+      const result = await onRefresh({ location: activeLocation, snoozedIds, consult: true });
+      if (result && result.ok === false) {
+        setRefreshError(result.error || 'Não foi possível reprocessar agora.');
+      }
+    } catch (err) {
+      setRefreshError(err?.message || 'Não foi possível reprocessar agora.');
     } finally {
       setRefreshing(false);
     }
@@ -313,6 +345,25 @@ export function NextActionCard({
               </button>
             );
           })}
+          {!collapsed && context.locationSource === 'saved' && (
+            <button
+              type="button"
+              onClick={() => handleLocation(null, false)}
+              title="Voltar a adivinhar o lugar pelo horário"
+              style={{
+                padding: '6px 10px',
+                borderRadius: '999px',
+                border: '1px dashed rgba(255,255,255,0.22)',
+                background: 'transparent',
+                color: '#94a3b8',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                cursor: 'pointer'
+              }}
+            >
+              Automático
+            </button>
+          )}
         </div>
       </div>
 
@@ -335,20 +386,21 @@ export function NextActionCard({
         </p>
       )}
 
-      {needsEnergy && openRouter?.configured && (
+      {energyBlocking && (
         <EnergyPrompt
           text={energyText}
           error={energyError}
           busy={refreshing}
           onChange={setEnergyText}
           onSubmit={handleEnergy}
-          onSkip={() => onRefresh && onRefresh({ location: activeLocation, snoozedIds, consult: true })}
+          onSkip={handleSkipEnergy}
         />
       )}
 
       {!needsEnergy && energy && (
         <p style={{ fontSize: '0.78rem', color: '#c4b5fd', margin: '0 0 10px 0' }}>
           Energia {energy.score}/10
+          {localEnergy ? ' · lida localmente' : ''}
           <button
             type="button"
             onClick={() => {
@@ -362,7 +414,7 @@ export function NextActionCard({
         </p>
       )}
 
-      {primary && !needsEnergy && (
+      {primary && !energyBlocking && (
         <PrimaryRow
           item={primary}
           onDo={handleDo}
@@ -380,7 +432,7 @@ export function NextActionCard({
           onCancelDecline={() => setAskingWhy(false)}
         />
       )}
-      {!primary && !needsEnergy && (
+      {!primary && !energyBlocking && (
         <div
           style={{
             padding: '16px',
@@ -395,6 +447,10 @@ export function NextActionCard({
         </div>
       )}
 
+      {refreshError && (
+        <p style={{ fontSize: '0.75rem', color: '#fda4af', margin: '10px 0 0 0' }}>{refreshError}</p>
+      )}
+
       {(nextAction?.trace || []).length > 0 && (
         <div style={{ marginTop: '12px' }}>
           <button
@@ -405,6 +461,19 @@ export function NextActionCard({
             {showTrace ? 'Ocultar processo' : 'Ver processo'}
           </button>
           {showTrace && <OracleTrace trace={nextAction.trace} />}
+        </div>
+      )}
+
+      {oracleMemory && (
+        <div style={{ marginTop: '12px' }}>
+          <button
+            type="button"
+            onClick={() => setShowMemory(prev => !prev)}
+            style={quietButtonStyle}
+          >
+            {showMemory ? 'Ocultar memória' : 'Memória do Oráculo'}
+          </button>
+          {showMemory && <OracleMemoryPanel memory={oracleMemory} />}
         </div>
       )}
 
@@ -459,6 +528,7 @@ export function NextActionCard({
 
 const TRACE_LABELS = {
   energy: '1. Energia',
+  'energy-fallback': '1b. Energia (leitura local)',
   filter: '2. Filtro local',
   choice: '3. Escolha da atividade',
   quantity: '4. Quantidade da tarefa',
@@ -466,6 +536,87 @@ const TRACE_LABELS = {
   fallback: 'Atalho local',
   error: 'Falha'
 };
+
+const OUTCOME_LABEL = {
+  accepted: 'aceita',
+  declined: 'recusada',
+  pending: 'aguardando',
+  expired: 'expirada',
+  superseded: 'substituída'
+};
+
+const OUTCOME_COLOR = {
+  accepted: '#86efac',
+  declined: '#fda4af',
+  pending: '#e9d5ff',
+  expired: '#94a3b8',
+  superseded: '#94a3b8'
+};
+
+const memoryLineStyle = {
+  fontSize: '0.75rem',
+  color: '#cbd5e1',
+  margin: 0
+};
+
+const memoryChipStyle = {
+  fontSize: '0.72rem',
+  fontWeight: 700,
+  color: '#e9d5ff',
+  background: 'rgba(168, 85, 247, 0.14)',
+  border: '1px solid rgba(168, 85, 247, 0.35)',
+  borderRadius: '999px',
+  padding: '3px 9px'
+};
+
+/**
+ * Retrato da memória do Oráculo: até agora os aceites e recusas só existiam
+ * dentro do prompt do Jev e não apareciam em lugar nenhum.
+ */
+function OracleMemoryPanel({ memory }) {
+  const counts = memory?.counts || {};
+  const bands = Object.entries(memory?.byBand || {});
+  const recent = memory?.recent || [];
+  return (
+    <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <p style={memoryLineStyle}>
+        {memory?.lastEnergy
+          ? `Última energia: ${memory.lastEnergy.score}/10`
+          : 'Sem leitura de energia recente.'}
+        {memory?.acceptanceRate != null
+          ? ` · ${memory.acceptanceRate}% de aceite em ${memory.answered} resposta(s)`
+          : ' · nenhuma indicação respondida ainda'}
+      </p>
+      <p style={memoryLineStyle}>
+        {counts.accepted || 0} aceitas · {counts.declined || 0} recusadas · {counts.pending || 0} aguardando
+        {' · '}{counts.expired || 0} expiradas
+      </p>
+      {bands.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {bands.map(([band, data]) => (
+            <span key={band} style={memoryChipStyle}>
+              energia {band}: {data.accepted || 0} ok / {data.declined || 0} não
+            </span>
+          ))}
+        </div>
+      )}
+      {recent.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {recent.slice(0, 6).map(item => (
+            <p key={item.id} style={memoryLineStyle}>
+              <span style={{ color: OUTCOME_COLOR[item.outcome] || '#94a3b8', fontWeight: 700 }}>
+                {OUTCOME_LABEL[item.outcome] || item.outcome}
+              </span>
+              {' · '}{item.title}
+              {item.energyScore != null ? ` · energia ${item.energyScore}` : ''}
+              {item.declineReason ? ` · ${item.declineReason}` : ''}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function OracleTrace({ trace }) {
   return (
@@ -667,7 +818,7 @@ function PrimaryRow({
               Próximo passo: {item.nextSubtask.title}
             </p>
           )}
-          <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>
+          <p style={{ fontSize: '0.8rem', color: item.abstained ? '#b45309' : '#94a3b8', margin: 0 }}>
             {item.reason}
           </p>
         </button>

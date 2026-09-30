@@ -6,10 +6,14 @@ import { fileURLToPath } from 'url';
 import { getDb, saveDb, initDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG, applyCategoryRename } from './db.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
-import { computeNextAction } from './nextAction.js';
-import { suggestNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly } from './oracleSuggest.js';
+import { suggestNextAction, previewNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly } from './oracleSuggest.js';
 import { openRouterKeyStatus, setStoredOpenRouterKey } from './jevClient.js';
-import { markDecisionAccepted, DECLINE_REASONS } from './oracleMemory.js';
+import {
+  markDecisionAccepted,
+  markEnergySkip,
+  oracleMemoryStats,
+  formatQuantity
+} from './oracleMemory.js';
 import {
   LOCATIONS,
   normalizeLocation,
@@ -451,13 +455,17 @@ app.get('/api/state', (req, res) => {
       }
     }
     const analytics = computeAnalytics();
-    const nextAction = computeNextAction(db);
+    // Mesmo contrato do POST /consult: energia recente, needsEnergy e motivos
+    // de recusa. Sem isso o cartão escondia a indicação a cada ação.
+    const nextAction = previewNextAction(db);
+    const oracleMemory = oracleMemoryStats(db);
     const { integrations, ...publicDb } = db;
     res.json({
       ...publicDb,
       openRouter: openRouterKeyStatus(),
       analytics,
       nextAction,
+      oracleMemory,
       locations: LOCATIONS,
       user: req.user || null
     });
@@ -540,31 +548,43 @@ app.put('/api/live-timers', (req, res) => {
 // ==========================================
 // 2.2. NEXT ACTION (ORACLE SUGGESTION)
 // ==========================================
-app.get('/api/next-action', async (req, res) => {
+// Sem efeitos colaterais: a tela chama este endpoint a cada atualização de
+// estado e precisa do mesmo contrato do Jev (energia, needsEnergy, motivos de
+// recusa) sem gravar decisões. A consulta de verdade é o POST /consult.
+function nextActionPayload(db, options = {}) {
+  const result = previewNextAction(db, options);
+  return {
+    ...result,
+    locations: LOCATIONS
+  };
+}
+
+app.get('/api/next-action', (req, res) => {
   try {
     const db = getDb();
     const location = req.query.location ? String(req.query.location) : undefined;
     const snoozedIds = req.query.snoozed
       ? String(req.query.snoozed).split(',').map(s => s.trim()).filter(Boolean)
       : [];
-    const consult = req.query.consult === '1' || req.query.consult === 'true';
-    const result = consult
-      ? await suggestNextAction(db, { location, snoozedIds })
-      : {
-        ...computeNextAction(db, { location, snoozedIds }),
-        queue: [],
-        extras: [],
-        source: 'preview',
-        needsEnergy: true,
-        declineReasons: DECLINE_REASONS,
-        energy: null
-      };
-    if (consult) saveDb(db);
+    res.json({
+      success: true,
+      ...nextActionPayload(db, { location, snoozedIds })
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/next-action/consult', async (req, res) => {
+  try {
+    const db = getDb();
+    const location = req.body?.location ? String(req.body.location) : undefined;
+    const snoozedIds = Array.isArray(req.body?.snoozedIds) ? req.body.snoozedIds : [];
+    const result = await suggestNextAction(db, { location, snoozedIds });
+    saveDb(db);
     res.json({
       success: true,
       ...result,
-      queue: [],
-      extras: [],
       locations: LOCATIONS
     });
   } catch (err) {
@@ -600,18 +620,37 @@ app.post('/api/next-action/energy', async (req, res) => {
     const db = getDb();
     const location = req.body?.location ? String(req.body.location) : undefined;
     const snoozedIds = Array.isArray(req.body?.snoozedIds) ? req.body.snoozedIds : [];
-    const { suggestion } = await recordEnergyAndSuggest(db, text, { location, snoozedIds });
+    const { suggestion, energyError } = await recordEnergyAndSuggest(db, text, { location, snoozedIds });
     saveDb(db);
     res.json({
       success: true,
       ...suggestion,
-      queue: [],
-      extras: [],
+      energyError: energyError || null,
       locations: LOCATIONS
     });
   } catch (err) {
     const status = err.code === 'NO_KEY' ? 503 : 502;
     res.status(status).json({ error: err.message || 'Não foi possível ler a energia.' });
+  }
+});
+
+// "Pular" precisa valer por uma janela: toda atualização da tela reavalia a
+// indicação, e sem isso a pergunta voltava imediatamente.
+app.post('/api/next-action/skip-energy', async (req, res) => {
+  try {
+    const db = getDb();
+    const location = req.body?.location ? String(req.body.location) : undefined;
+    const snoozedIds = Array.isArray(req.body?.snoozedIds) ? req.body.snoozedIds : [];
+    markEnergySkip(db, {});
+    const result = await suggestNextAction(db, { location, snoozedIds, skipJev: true });
+    saveDb(db);
+    res.json({
+      success: true,
+      ...result,
+      locations: LOCATIONS
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -632,8 +671,6 @@ app.post('/api/next-action/decline', async (req, res) => {
     res.json({
       success: true,
       ...suggestion,
-      queue: [],
-      extras: [],
       locations: LOCATIONS
     });
   } catch (err) {
@@ -646,8 +683,33 @@ app.post('/api/next-action/accept-dose', (req, res) => {
     const db = getDb();
     const accepted = acceptDoseOnly(db, req.body?.decisionId);
     if (accepted.error) return res.status(accepted.status).json({ error: accepted.error });
+    const { decision } = accepted;
+    // A dose aceita precisa deixar rastro: antes o aceite só existia na
+    // memória do Oráculo, sem registro do que foi feito.
+    const now = new Date();
+    db.actionLogs.unshift({
+      id: uid('log'),
+      type: 'oracle_dose',
+      entityId: decision.entityId,
+      title: `Dose aceita: ${decision.dose.label} de ${decision.title}`,
+      xp: 0,
+      coins: 0,
+      details: {
+        kind: decision.kind,
+        dose: decision.dose.label,
+        doseAmount: decision.dose.amount,
+        doseUnit: decision.dose.unit,
+        fraction: decision.dose.fraction,
+        fullAmount: decision.quantity ? formatQuantity(decision.quantity.amount, decision.quantity.unit) : null,
+        decisionId: decision.id
+      },
+      timestamp: now.toISOString(),
+      hour: getSaoPauloHour(now),
+      dayOfWeek: getSaoPauloDayOfWeek(now),
+      date: getSaoPauloDateStr(now)
+    });
     saveDb(db);
-    res.json({ success: true, decision: accepted.decision });
+    res.json({ success: true, decision });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -667,14 +729,12 @@ app.post('/api/next-action/location', (req, res) => {
       ? db.userProfile.currentLocation != null
       : !!manual;
     saveDb(db);
-    const result = computeNextAction(db, {
-      location: db.userProfile.currentLocation || 'anywhere'
-    });
+    // Sem `location` explícito: assim o contexto continua dizendo que o lugar
+    // veio do perfil salvo (e a tela sabe que pode voltar ao automático).
     res.json({
       success: true,
       userProfile: db.userProfile,
-      ...result,
-      locations: LOCATIONS
+      ...nextActionPayload(db)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1017,7 +1077,10 @@ app.post('/api/books/:id/reading-session', (req, res) => {
     if (!book) return res.status(404).json({ error: 'Livro não encontrado' });
 
     const { startPage, endPage, durationMinutes, notes, quotes } = req.body;
-    const sPage = parseInt(startPage, 10) || book.currentPage;
+    // Página 0 é uma página válida (recomeçar o livro): `|| book.currentPage`
+    // tratava o zero como "não informado" e usava a página atual.
+    const parsedStartPage = parseInt(startPage, 10);
+    const sPage = Number.isFinite(parsedStartPage) ? parsedStartPage : (book.currentPage || 0);
     const ePage = parseInt(endPage, 10);
     const duration = parseInt(durationMinutes, 10) || 20;
 
@@ -2787,6 +2850,7 @@ app.post('/api/daily-victories/:id/complete', (req, res) => {
     const result = completeDailyVictory(db.dailyVictories, db.dailyVictoryBonuses, req.params.id, {
       note: req.body?.note,
       completed: req.body?.completed,
+      durationMinutes: req.body?.durationMinutes,
       today: todayStr
     });
 
@@ -2797,6 +2861,12 @@ app.post('/api/daily-victories/:id/complete', (req, res) => {
     let bonusRewardResult = null;
 
     if (!result.stateUnchanged) {
+      db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'victory', result.victory.id);
+      // A Vitória do Dia também responde à indicação do Oráculo: sem isto a
+      // decisão ficava pendente para sempre e o aprendizado nunca via o aceite.
+      if (result.willComplete) {
+        markDecisionAccepted(db, { entityId: result.victory.id, kind: 'victory' });
+      }
       if (result.willComplete) {
         rewardResult = rewardPlayer({
           xp: DAILY_VICTORY_REWARDS.xp,
@@ -2808,7 +2878,8 @@ app.post('/api/daily-victories/:id/complete', (req, res) => {
           details: {
             category: result.victory.category,
             date: result.victory.date,
-            note: result.victory.note || ''
+            note: result.victory.note || '',
+            durationMinutes: result.victory.durationMinutes || null
           }
         });
         if (result.bonusAwardedNow) {

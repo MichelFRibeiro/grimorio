@@ -4,8 +4,7 @@ import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings } from './rankings.js';
-import { computeNextAction } from './nextAction.js';
-import { suggestNextAction } from './oracleSuggest.js';
+import { suggestNextAction, previewNextAction } from './oracleSuggest.js';
 import { markDecisionAccepted } from './oracleMemory.js';
 import {
   summarizePlan,
@@ -102,6 +101,9 @@ const timeWindowSchema = z.object({
   start: z.string().describe('Início da janela HH:mm'),
   end: z.string().describe('Fim da janela HH:mm')
 }).nullable();
+
+/** Rótulo humano do tipo de atividade indicada pelo Oráculo. */
+const KIND_TEXT = { victory: 'vitória do dia', habit: 'ritual', quest: 'missão' };
 
 // Unique ID generator
 const uid = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
@@ -2374,7 +2376,7 @@ export const toolsDefinition = [
         ...result,
         locations: LOCATIONS
       }, result.primary
-        ? `Próxima atividade: ${result.primary.title} (${result.primary.kind === 'habit' ? 'ritual' : 'missão'} · ${result.primary.locationLabel}).`
+        ? `Próxima atividade: ${result.primary.title} (${KIND_TEXT[result.primary.kind] || 'missão'} · ${result.primary.locationLabel}).`
         : (result.emptyReason || 'Nenhuma atividade elegível agora.'));
     }
   },
@@ -2390,7 +2392,9 @@ export const toolsDefinition = [
       db.userProfile.currentLocation = normalizeLocation(args.location);
       db.userProfile.locationManual = args.manual !== false;
       saveDb(db);
-      const result = computeNextAction(db, { location: db.userProfile.currentLocation });
+      // Sem lugar explícito: o contexto continua dizendo que veio do perfil
+      // salvo, e a resposta traz energia/needsEnergy como o cartão espera.
+      const result = previewNextAction(db);
       return formatSuccess({
         currentLocation: db.userProfile.currentLocation,
         locationManual: db.userProfile.locationManual,
@@ -2876,6 +2880,9 @@ export const toolsDefinition = [
         let bonusRewardResult = null;
         if (!result.stateUnchanged) {
           if (result.willComplete) {
+            // Mesmo aceite do fluxo HTTP: a indicação do Oráculo precisa saber
+            // que a Vitória do Dia foi feita.
+            markDecisionAccepted(db, { entityId: result.victory.id, kind: 'victory' });
             rewardResult = rewardPlayer({
               xp: DAILY_VICTORY_REWARDS.xp,
               coins: DAILY_VICTORY_REWARDS.coins,
@@ -2886,7 +2893,8 @@ export const toolsDefinition = [
               details: {
                 category: result.victory.category,
                 date: result.victory.date,
-                note: result.victory.note || ''
+                note: result.victory.note || '',
+                durationMinutes: result.victory.durationMinutes || null
               }
             });
             if (result.bonusAwardedNow) {

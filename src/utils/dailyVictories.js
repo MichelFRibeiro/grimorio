@@ -238,6 +238,12 @@ export function buildMonthCalendar(list = [], bonuses = {}, monthKey, today = ge
   };
 }
 
+function parseVictoryDuration(value) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(n, 24 * 60);
+}
+
 export function sanitizeDailyVictory(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const title = String(raw.title || '').trim();
@@ -259,6 +265,10 @@ export function sanitizeDailyVictory(raw) {
     coinReward: DAILY_VICTORY_REWARDS.coins,
     willpowerReward: DAILY_VICTORY_REWARDS.willpower
   };
+  // Tempo cronometrado: o cartão do Oráculo já enviava durationMinutes e ele
+  // era descartado em silêncio.
+  const duration = parseVictoryDuration(raw.durationMinutes);
+  if (duration) victory.durationMinutes = duration;
   if (isOverflowDailyVictorySource(raw.source)) {
     victory.source = raw.source;
   }
@@ -481,7 +491,7 @@ export function updateDailyVictory(list = [], id, patch = {}, { today = getSaoPa
   return { list: next, victory: existing };
 }
 
-export function completeDailyVictory(list = [], bonuses = {}, id, { note, completed, today = getSaoPauloDateStr() } = {}) {
+export function completeDailyVictory(list = [], bonuses = {}, id, { note, completed, durationMinutes, today = getSaoPauloDateStr() } = {}) {
   const current = sanitizeDailyVictories(list);
   const nextBonuses = sanitizeDailyVictoryBonuses(bonuses);
   const index = current.findIndex(item => item.id === id);
@@ -489,10 +499,12 @@ export function completeDailyVictory(list = [], bonuses = {}, id, { note, comple
 
   const existing = { ...current[index] };
   const willComplete = completed !== undefined ? !!completed : !existing.completed;
+  const duration = parseVictoryDuration(durationMinutes);
 
   if (existing.completed === willComplete) {
-    if (willComplete && note !== undefined) {
-      existing.note = String(note || '').trim();
+    if (willComplete && (note !== undefined || duration !== null)) {
+      if (note !== undefined) existing.note = String(note || '').trim();
+      if (duration !== null) existing.durationMinutes = duration;
       existing.updatedAt = new Date().toISOString();
       const next = [...current];
       next[index] = existing;
@@ -525,6 +537,8 @@ export function completeDailyVictory(list = [], bonuses = {}, id, { note, comple
   existing.completed = willComplete;
   existing.completedAt = willComplete ? nowIso : null;
   existing.note = willComplete ? String(note !== undefined ? note : existing.note || '').trim() : '';
+  if (willComplete && duration !== null) existing.durationMinutes = duration;
+  if (!willComplete) delete existing.durationMinutes;
   existing.updatedAt = nowIso;
 
   const next = [...current];

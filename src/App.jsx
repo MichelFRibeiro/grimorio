@@ -86,6 +86,7 @@ export function App() {
     setCurrentLocation,
     refreshNextAction,
     submitOracleEnergy,
+    skipOracleEnergy,
     saveOpenRouterKey,
     declineOracleSuggestion,
     acceptOracleDose,
@@ -290,6 +291,8 @@ export function App() {
         onOpenHabits={() => setActiveTab('habits')}
         onRefresh={refreshNextAction}
         onSubmitEnergy={submitOracleEnergy}
+        onSkipEnergy={skipOracleEnergy}
+        oracleMemory={data?.oracleMemory}
         openRouter={data?.openRouter}
         onSaveOpenRouterKey={saveOpenRouterKey}
         onDeclineSuggestion={declineOracleSuggestion}
