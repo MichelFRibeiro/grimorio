@@ -43,7 +43,7 @@ import { AguStudyLoadChart } from './AguStudyLoadChart';
 import { PlanHomeostasisVictoryButton } from './PlanHomeostasisVictoryButton';
 
 const PROTOCOL = [
-  `Três blocos por dia, ${AGU_BLOCK_MINUTES} min cada. Um tópico de uma matéria por bloco.`,
+  `Blocos de ${AGU_BLOCK_MINUTES} min. A quantidade do dia segue o setpoint (de 1 a 6), não um número fixo.`,
   `O bloco fecha com ${AGU_BLOCK_MINUTES} minutos ou com ${AGU_BLOCK_QUESTION_TARGET} questões — o que ocorrer primeiro.`,
   'Um dos três blocos é de Língua Portuguesa (ortografia em prioridade) até 95%+ nos 10 últimos blocos da matéria.',
   'Tópico só conclui com ≥ 60 questões no estudo inicial. Se o último bloco ficar abaixo de 80%, o tópico volta a pendente.',
@@ -100,6 +100,70 @@ function useLiveAguMinutes(blockKeys) {
 
   return minutes;
 }
+
+function SetpointCard({ summary, onUpdatePlan }) {
+  const home = summary.homeostasis || {};
+  const projection = home.projection;
+  const [target, setTarget] = useState(home.targetMinutes || 180);
+  const [horizon, setHorizon] = useState(summary.horizonMonths || 18);
+  return (
+    <section className="glass-panel" style={{ padding: '16px 18px', marginBottom: '18px' }}>
+      <h3 className="font-cinzel" style={{ fontSize: '1rem', color: '#fbbf24', marginBottom: '6px' }}>Homeostase expansiva</h3>
+      <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '10px' }}>
+        Meta de hoje: {home.todayTargetMinutes || 30} min · setpoint {home.setpointMinutes || 30}.
+        Próxima expansão em {home.daysToNextExpansion ?? '—'} dias se mantiver ≥ 4/7
+        (agora {home.adherentDays || 0}/7).
+        {projection?.weeks
+          ? ` No ritmo atual, ${home.targetMinutes} min em ~${projection.weeks} semanas (${projection.date}).`
+          : ' Setpoint já na meta.'}
+        {home.overloadWarning ? ' Três dias acima de 1,5× o setpoint: descanse antes de subir.' : ''}
+      </p>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'end' }}>
+        <label style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+          Meta (min)
+          <input value={target} onChange={(e) => setTarget(e.target.value)} type="number" min="30" max="360" style={fieldStyle} />
+        </label>
+        <label style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+          Horizonte (meses)
+          <input value={horizon} onChange={(e) => setHorizon(e.target.value)} type="number" min="6" max="36" style={fieldStyle} />
+        </label>
+        <button
+          type="button"
+          onClick={() => onUpdatePlan({
+            targetMinutes: Number(target) || 180,
+            horizonMonths: Number(horizon) || 18,
+            homeostasis: {
+              ...(summary.homeostasis?.state || {}),
+              targetMinutes: Number(target) || 180,
+              seeded: true
+            }
+          })}
+          style={ghostBtnStyle}
+        >
+          Salvar
+        </button>
+        <button
+          type="button"
+          onClick={() => onUpdatePlan({ keepPortuguese: summary.portugueseRequired })}
+          style={ghostBtnStyle}
+        >
+          {summary.portugueseRequired ? 'Dispensar português' : 'Travar português'}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+const fieldStyle = {
+  display: 'block',
+  marginTop: '4px',
+  width: '92px',
+  padding: '8px',
+  borderRadius: '8px',
+  border: '1px solid rgba(255,255,255,0.12)',
+  background: 'rgba(0,0,0,0.25)',
+  color: '#f8fafc'
+};
 
 function StudyTimeCard({ studyTime, liveMinutes = 0 }) {
   const rows = [
@@ -276,8 +340,12 @@ export function AguCampaignView({
             <Scale size={22} color="#fbbf24" /> Campanha AGU — Procurador Federal
           </h2>
           <p style={{ color: '#94a3b8', fontSize: '0.88rem', maxWidth: '720px', marginTop: '6px' }}>
-            Três blocos de {AGU_BLOCK_MINUTES} min por dia, um tópico por bloco. Fecha com o tempo ou com {AGU_BLOCK_QUESTION_TARGET} questões.
-            Português é obrigatório até 95% nos 10 últimos blocos. Banca: Cebraspe. Plataforma-mãe: Tec.
+            O dia pede {summary.homeostasis?.todayTargetMinutes || 30} min
+            ({summary.today?.totalBlocks || 1} bloco{(summary.today?.totalBlocks || 1) === 1 ? '' : 's'} de {AGU_BLOCK_MINUTES}).
+            O setpoint sobe até {summary.homeostasis?.targetMinutes || 180} min, no máximo 10% por semana.
+            {summary.coverage?.months
+              ? ` No ritmo atual o edital leva ~${summary.coverage.months} meses; o horizonte é ${summary.coverage.horizonMonths}.`
+              : ''}
           </p>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -355,11 +423,22 @@ export function AguCampaignView({
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '18px' }}>
         <StatChip label="Fase" value={summary.phaseMeta?.short || 'Fundação'} sub={summary.editalPublished ? 'Lock de edital' : 'Automática'} color={summary.phaseMeta?.color || '#38bdf8'} />
-        <StatChip label="Ciclo" value={`${summary.calendar.cycleNumber}`} sub={`${summary.today.weekdayLabel} · 3 blocos`} />
+        <StatChip label="Ciclo" value={`${summary.calendar.cycleNumber}`} sub={`${summary.today.weekdayLabel} · ${summary.today.totalBlocks} blocos`} />
         <StatChip label="Blocos da quinzena" value={`${summary.cycleDoneBlocks}/${summary.cycleTotalBlocks}`} sub={`${summary.cyclePercent}% concluído`} color="#38bdf8" />
-        <StatChip label="Hoje" value={`${summary.today.doneCount}/3`} sub={`${summary.todayProgress.solved}/${summary.today.questionTarget} q · ${AGU_BLOCK_MINUTES} min ou ${AGU_BLOCK_QUESTION_TARGET} q`} color="#10b981" />
+        <StatChip
+          label="Meta de hoje"
+          value={`${summary.homeostasis?.todayTargetMinutes || 30} min`}
+          sub={`setpoint ${summary.homeostasis?.setpointMinutes || 30} · expansão em ${summary.homeostasis?.daysToNextExpansion ?? '—'}d se ≥ 4/7`}
+          color="#10b981"
+        />
         <StatChip label="Maestria tópico" value={`${summary.masteredSubjects}/${summary.totalSubjects}`} sub={`${summary.startedSubjects} matérias tocadas`} color="#c084fc" />
-        <StatChip label="Dívida" value={`${(summary.debt || []).length}`} sub="blocos / restos" color="#f43f5e" />
+        <StatChip label="Dívida" value={`${(summary.debt || []).length}`} sub="máx. 6 · expira em 21d" color="#f43f5e" />
+        <StatChip
+          label="Edital"
+          value={`${summary.coverage?.coverage || 0}%`}
+          sub={summary.coverage?.months ? `~${summary.coverage.months} meses no ritmo atual` : 'sem ritmo ainda'}
+          color={summary.coverage?.behind ? '#f43f5e' : '#34d399'}
+        />
       </div>
 
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
@@ -401,6 +480,10 @@ export function AguCampaignView({
         )}
       />
 
+      {summary.started && onUpdatePlan && (
+        <SetpointCard summary={summary} onUpdatePlan={onUpdatePlan} />
+      )}
+
       {summary.nextBlock && (
         <section className="glass-panel-gold" style={{ padding: '16px 18px', marginBottom: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', color: '#fbbf24', fontWeight: 800 }}>
@@ -421,7 +504,7 @@ export function AguCampaignView({
           <div>
             <h3 className="font-cinzel" style={{ fontSize: '1.05rem', color: '#fbbf24' }}>Hoje — {summary.today.label}</h3>
             <p style={{ color: '#94a3b8', fontSize: '0.82rem' }}>
-              {summary.today.weekdayLabel} · {todayStr} · 3 blocos de {AGU_BLOCK_MINUTES} min (ou {AGU_BLOCK_QUESTION_TARGET} questões) · 1 tópico por bloco
+              {summary.today.weekdayLabel} · {todayStr} · {summary.today.totalBlocks} blocos de {AGU_BLOCK_MINUTES} min · meta {summary.homeostasis?.todayTargetMinutes || 30} min
             </p>
           </div>
           <div style={{ minWidth: '180px', flex: '1 1 180px', maxWidth: '280px' }}>

@@ -13,7 +13,7 @@ import { rewardPlayer, revertPlayerReward, revertLog, findRewardLog, uid } from 
 import { getSaoPauloDateStr, getSaoPauloHour, getSaoPauloDayOfWeek, calculateHabitStreak } from '../timeUtils.js';
 import { willpowerForDifficulty } from '../../src/utils/activityScale.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, clearLiveActivityTimer } from '../../src/utils/activityDuration.js';
-import { sanitizeAguPlan, applyExamToPlan } from '../../src/utils/aguCycle.js';
+import { sanitizeAguPlan, applyExamToPlan, refreshAguProgress } from '../../src/utils/aguCycle.js';
 import { syncDailyVictoriesFromActivity } from '../dailyVictorySync.js';
 import { markDecisionAccepted, markDecisionCompleted } from '../oracleMemory.js';
 import {
@@ -860,7 +860,7 @@ export function updateExamQuestions(db, id, body = {}) {
   }
 
   db.examQuestions[index] = entry;
-  if (recomputes) applyExamSideEffects(db, entry);
+  applyExamSideEffects(db, entry);
   const linkedVictories = syncDailyVictoriesFromActivity(db, { syncStudy: true });
   return { examQuestion: entry, rewardResult, linkedVictories };
 }
@@ -879,6 +879,9 @@ export function deleteExamQuestions(db, id) {
     wisdom: (removed.correctAnswers || 0) * 2,
     consistency: 10
   });
+  if (db.aguPlan) {
+    db.aguPlan = refreshAguProgress(sanitizeAguPlan(db.aguPlan, removed.date), db.examQuestions, removed.date);
+  }
   const linkedVictories = syncDailyVictoriesFromActivity(db, { syncStudy: true });
   return { removed, rewardResult, linkedVictories };
 }

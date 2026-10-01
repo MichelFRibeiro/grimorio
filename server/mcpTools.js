@@ -15,7 +15,10 @@ import {
   ensureCurrentCycle,
   advanceAguCycle,
   logDiscursiveProduct,
-  applyExamToPlan
+  applyExamToPlan,
+  addAguError,
+  reviewAguError,
+  dueAguErrors
 } from '../src/utils/aguCycle.js';
 import {
   applyDifficultyFields,
@@ -2247,6 +2250,55 @@ export const toolsDefinition = [
       saveDb(db);
       const next = summarizePlan(db.aguPlan, db.examQuestions || [], todayStr);
       return formatSuccess({ key, plan: db.aguPlan, today: next.today, linkedVictories }, `Bloco ${key} alternado.`);
+    }
+  },
+  {
+    name: 'add_agu_error',
+    description: 'Anotar um erro no caderno da Campanha AGU. Entra na revisão espaçada (1, 3, 7, 14, 30 dias).',
+    schema: {
+      note: z.string().describe('O que errou, em texto livre'),
+      subjectId: z.string().optional().describe('ID da matéria'),
+      topicId: z.string().optional().describe('ID do tópico'),
+      questionId: z.string().optional().describe('Identificador da questão'),
+      url: z.string().optional().describe('Link da questão')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      db.aguPlan = addAguError(sanitizeAguPlan(db.aguPlan, todayStr), args, todayStr);
+      saveDb(db);
+      return formatSuccess({ error: db.aguPlan.errorNotebook[0] }, 'Erro anotado no caderno AGU.');
+    }
+  },
+  {
+    name: 'list_agu_errors',
+    description: 'Listar o caderno de erros da Campanha AGU, com os vencidos primeiro.',
+    schema: {},
+    handler: async () => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      const plan = sanitizeAguPlan(db.aguPlan, todayStr);
+      const due = dueAguErrors(plan, todayStr);
+      return formatSuccess({
+        due,
+        errors: plan.errorNotebook || []
+      }, `${due.length} erro(s) vencido(s) de ${(plan.errorNotebook || []).length}.`);
+    }
+  },
+  {
+    name: 'review_agu_error',
+    description: 'Revisar um erro do caderno AGU. quality 0-1 reabre em 1 dia; 2-3 avança o intervalo.',
+    schema: {
+      id: z.string().describe('ID do erro'),
+      quality: z.number().optional().describe('0 errei de novo, 2 lembrei, 3 fácil')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const todayStr = getSaoPauloDateStr();
+      db.aguPlan = reviewAguError(sanitizeAguPlan(db.aguPlan, todayStr), args.id, args.quality ?? 2, todayStr);
+      saveDb(db);
+      const item = (db.aguPlan.errorNotebook || []).find((error) => error.id === args.id);
+      return formatSuccess({ error: item }, item ? `Próxima revisão em ${item.nextReviewAt}.` : 'Erro não encontrado.');
     }
   },
   // ==========================================

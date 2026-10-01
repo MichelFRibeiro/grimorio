@@ -12,7 +12,7 @@ import { applyLocationDefaults } from './locations.js';
 import { migrateActivityScale } from '../src/utils/activityScale.js';
 import { sanitizeLiveActivityTimers } from '../src/utils/activityDuration.js';
 import { createDefaultAguPlan } from '../src/data/aguCurriculum.js';
-import { sanitizeAguPlan, ensureCurrentCycle } from '../src/utils/aguCycle.js';
+import { sanitizeAguPlan, ensureCurrentCycle, migrateAguExams } from '../src/utils/aguCycle.js';
 import { sanitizeDailyVictories, sanitizeDailyVictoryBonuses } from '../src/utils/dailyVictories.js';
 import { sanitizeMindMaps, sanitizeMindMapSessions, sanitizeMindMapCategories, sanitizeMindMapImageLibrary, mergeMindMapImageLibrary } from '../src/utils/mindMaps.js';
 import { ensureOracleMemory } from './oracleMemory.js';
@@ -402,7 +402,8 @@ export function sanitizeDb(db) {
       return map;
     });
   }
-  db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
+  db.examQuestions = migrateAguExams(db.examQuestions || []);
+  db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr, db.examQuestions);
   if (db.aguPlan?.startedAt) {
     db.aguPlan = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);
   }

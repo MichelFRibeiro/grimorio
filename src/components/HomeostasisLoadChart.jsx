@@ -44,8 +44,10 @@ function shortDate(dateStr) {
 }
 
 function zonePointColor(zone, isToday) {
+  if (zone === 'empty') return isToday ? '#cbd5e1' : '#64748b';
   if (zone === 'homeostasis') return isToday ? '#34d399' : '#10b981';
-  return isToday ? '#fb7185' : '#f43f5e';
+  if (zone === 'allostasis-over') return isToday ? '#fb7185' : '#f43f5e';
+  return isToday ? '#fb923c' : '#f59e0b';
 }
 
 function yTickStep(maxMinutes) {
@@ -69,8 +71,9 @@ export function HomeostasisLoadChart({
   const todayPoint = series?.today;
   const todayZone = zoneCopy[todayPoint?.zone] || zoneCopy['allostasis-under'] || DEFAULT_ZONE_META['allostasis-under'];
   const peakMinutes = Math.max(
-    (series?.homeostasisMaxMinutes || 0) * 1.35,
-    ...(series?.points || []).map((point) => point.minutes),
+    (series?.homeostasisMaxMinutes || 0) * 1.2,
+    series?.targetMinutes || 0,
+    ...(series?.points || []).map((point) => Math.max(point.minutes, point.bandMax || 0)),
     20
   );
   const step = yTickStep(peakMinutes);
@@ -80,9 +83,10 @@ export function HomeostasisLoadChart({
     const points = series?.points || [];
     const labels = points.map((point) => shortDate(point.dateStr));
     const minutes = points.map((point) => point.minutes);
-    const floor = points.map(() => series.homeostasisMinMinutes);
-    const ceiling = points.map(() => series.homeostasisMaxMinutes);
-    const center = points.map(() => series.avgMinutes);
+    const floor = points.map((point) => point.bandMin ?? series.homeostasisMinMinutes);
+    const ceiling = points.map((point) => point.bandMax ?? series.homeostasisMaxMinutes);
+    const center = points.map((point) => point.setpointMinutes ?? series.setpointMinutes ?? series.avgMinutes);
+    const target = points.map(() => series.targetMinutes || null);
     const roof = points.map(() => yMax);
 
     return {
@@ -122,8 +126,20 @@ export function HomeostasisLoadChart({
           pointHoverRadius: 0,
           order: 3
         },
+        ...(series?.targetMinutes ? [{
+          label: `Meta ${series.targetMinutes} min`,
+          data: target,
+          borderColor: 'rgba(248, 250, 252, 0.35)',
+          backgroundColor: 'transparent',
+          borderWidth: 1,
+          borderDash: [2, 4],
+          fill: false,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          order: 2
+        }] : []),
         {
-          label: `Média ${days}d`,
+          label: 'Setpoint',
           data: center,
           borderColor: 'rgba(251, 191, 36, 0.55)',
           backgroundColor: 'transparent',
@@ -218,7 +234,7 @@ export function HomeostasisLoadChart({
             </h3>
           </div>
           <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '6px', maxWidth: '640px' }}>
-            {description || `A faixa verde sai da média dos dias com sessão nos últimos ${days} dias: teto +20%, piso −20% ou o piso absoluto, o que for maior. Dia vazio não puxa a média — conta só como subcarga.`}
+            {description || 'A faixa verde envolve o setpoint (85%–125%). A linha cheia é a meta de hoje; a tracejada fina é a meta final. Dia sem estudo fica cinza.'}
           </p>
           {actions}
         </div>
@@ -233,13 +249,13 @@ export function HomeostasisLoadChart({
           }}
         >
           <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            Faixa de hoje
+            Meta de hoje
           </div>
           <div style={{ fontFamily: 'var(--font-heading)', fontSize: '1.05rem', color: accentColor, lineHeight: 1.2, margin: '4px 0' }}>
             {formatStudyDuration(series.homeostasisMinMinutes)}–{formatStudyDuration(series.homeostasisMaxMinutes)}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '4px' }}>
-            centro {formatStudyDuration(series.avgMinutes)}
+            setpoint {formatStudyDuration(series.setpointMinutes || series.avgMinutes)}
           </div>
           <div style={{ fontSize: '0.78rem', color: todayZone.color, fontWeight: 800 }}>
             {todayZone.label}

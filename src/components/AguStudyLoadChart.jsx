@@ -8,7 +8,7 @@ const AGU_ZONE_COPY = {
     label: 'Homeostase',
     color: '#10b981',
     glow: 'rgba(16, 185, 129, 0.35)',
-    copy: 'Dentro da faixa real dos últimos 14 dias (±20% da média). O ritmo de estudo está sendo absorvido.'
+    copy: 'Dentro da faixa do setpoint (85%–125%). Esse volume sustenta a próxima expansão.'
   },
   'allostasis-under': {
     label: 'Alostase · subcarga',
@@ -46,7 +46,7 @@ export function AguStudyLoadChart({
       series={series}
       days={days}
       title="Carga real — Homeostase & Alostase"
-      description={`A faixa verde acompanha o que você realmente estudou: média dos últimos ${days} dias, com teto +20% e piso −20%. Atualiza todo dia. Fora dela o treino vira alostase — subcarga ou sobrecarga em relação ao ritmo recente.`}
+      description="A faixa verde é a zona do setpoint de hoje. Ela sobe no máximo 10% por semana, e só se 4 dos últimos 7 dias ficaram nela. A linha clara é a meta de 180 min."
       seriesLabel="Estudo AGU"
       accentColor="#fbbf24"
       zoneCopy={AGU_ZONE_COPY}

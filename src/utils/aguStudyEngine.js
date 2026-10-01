@@ -2,6 +2,8 @@ import {
   AGU_BLOCK_MINUTES,
   AGU_BLOCK_QUESTION_TARGET,
   AGU_DAILY_BLOCKS,
+  AGU_DAILY_BLOCKS_MAX,
+  AGU_ERROR_BLOCK_MIN,
   AGU_GROUPS,
   AGU_KIND_META,
   AGU_PORTUGUESE_WAIVE_ACCURACY,
@@ -25,6 +27,7 @@ import {
   accuracyPct,
   emptyStats,
   laplaceAccuracy,
+  rankSubjects,
   resolveExamSubject,
   resolveExamTopic,
   topicKey
@@ -91,6 +94,7 @@ function emptyTopicProgress(subject, topic) {
     correct: 0,
     wrong: 0,
     minutes: 0,
+    theoryMinutes: 0,
     sessions: 0,
     studyBlocks: 0,
     reviewBlocks: 0,
@@ -201,6 +205,7 @@ export function sameStudySlot(a, b, options = {}) {
   const right = canonicalSlot(b);
   if (left.dateStr !== right.dateStr || left.subjectId !== right.subjectId) return false;
   if (left.topicId && right.topicId && left.topicId !== right.topicId) return false;
+  if ((left.topicId || right.topicId) && left.topicId !== right.topicId && !options.ignoreTopic) return false;
   if (options.ignoreKind) return true;
   return left.kind === right.kind;
 }
@@ -338,10 +343,11 @@ export function listPortugueseQuestionBlocks(blocks = []) {
     });
 }
 
-export function isPortugueseRequired(blocks = []) {
+export function isPortugueseRequired(blocks = [], plan = null) {
+  if (plan?.keepPortuguese === false) return false;
   const last = listPortugueseQuestionBlocks(blocks).slice(0, AGU_PORTUGUESE_WAIVE_BLOCKS);
   if (last.length < AGU_PORTUGUESE_WAIVE_BLOCKS) return true;
-  return last.some((block) => (block.accuracy || 0) <= AGU_PORTUGUESE_WAIVE_ACCURACY);
+  return last.some((block) => (block.accuracy || 0) < AGU_PORTUGUESE_WAIVE_ACCURACY);
 }
 
 function scheduleReview(row, fromDate) {
@@ -395,6 +401,10 @@ function applyBlockToTopic(row, block, dateStr) {
   row.studyBlocks += 1;
   row.initialSolved += questions;
   row.initialCorrect += correct;
+  if (questions <= 0 && parseDurationMinutes(block.durationMinutes) > 0) {
+    row.theoryMinutes = (row.theoryMinutes || 0) + parseDurationMinutes(block.durationMinutes);
+    row.status = row.status === 'pending' ? 'in_progress' : row.status;
+  }
   if (questions > 0 && row.lastSessionAccuracy < AGU_TOPIC_REOPEN_ACCURACY && row.initialSolved >= AGU_TOPIC_ADVANCE_MIN) {
     reopenTopic(row);
     return;
@@ -430,7 +440,8 @@ export function buildTopicProgress(plan, examQuestions = [], todayStr) {
           completedAt: stored.completedAt || null,
           reviewStep: Number(stored.reviewStep) || 0,
           nextReviewAt: stored.nextReviewAt || null,
-          lastReviewAt: stored.lastReviewAt || null
+          lastReviewAt: stored.lastReviewAt || null,
+          theoryMinutes: Number(stored.theoryMinutes) || 0
         });
       }
     });
@@ -465,7 +476,9 @@ export function buildTopicProgress(plan, examQuestions = [], todayStr) {
     if (!row) return;
     if (!row.minutes) row.minutes = 0;
     if ((block.durationMinutes || 0) > 0 && (block.examIds || []).length === 0) {
-      row.minutes += parseDurationMinutes(block.durationMinutes);
+      const minutes = parseDurationMinutes(block.durationMinutes);
+      row.minutes += minutes;
+      if ((block.totalQuestions || 0) <= 0) row.theoryMinutes = (row.theoryMinutes || 0) + minutes;
     }
     if (!block.done && (block.totalQuestions || 0) === 0 && parseDurationMinutes(block.durationMinutes) === 0) return;
     if (block.done || (block.totalQuestions || 0) > 0 || parseDurationMinutes(block.durationMinutes) > 0) {
@@ -544,13 +557,18 @@ function pickPortugueseTopic(topicProgress) {
     || null;
 }
 
+/**
+ * Não reescreve o tópico de um bloco já planejado. O progresso fica no tópico
+ * da chave — senão uma sessão de hífen era creditada em ortografia.
+ */
 function snapBlockToOpenTopic(plan, topicProgress, block) {
-  if (!block?.subjectId) return block;
+  if (!block?.subjectId || block.kind === 'revisao' || block.kind === 'erros' || block.kind === 'divida') return block;
+  const row = topicProgress?.[topicKey(block.subjectId, block.topicId)];
+  if (isStartedTopicRow(row)) return block;
   const subject = getAguSubject(block.subjectId);
   const open = currentOpenTopic(plan, subject, topicProgress);
   if (!open?.topicId || open.topicId === block.topicId) return block;
-  const openRow = topicProgress?.[topicKey(block.subjectId, open.topicId)];
-  if (!isOpenTopicRow(openRow)) return block;
+  if (!isStartedTopicRow(topicProgress?.[topicKey(block.subjectId, open.topicId)])) return block;
   return {
     ...block,
     topicId: open.topicId,
@@ -581,109 +599,123 @@ function makeSuggestedBlock(row, dateStr, kind, reason) {
   };
 }
 
+function scoreBySubject(plan, examQuestions, todayStr) {
+  const { ranked } = rankSubjects(plan, examQuestions, todayStr);
+  const byId = {};
+  ranked.forEach((row) => {
+    byId[row.subject.id] = row.score;
+  });
+  return byId;
+}
+
+function consecutiveBlocked(subjectId, previousSubjectId, weight) {
+  if (!previousSubjectId || previousSubjectId !== subjectId) return false;
+  return (weight || 0) < 4;
+}
+
 export function suggestNextBlock(plan, examQuestions, todayStr, options = {}) {
   const today = todayStr || getSaoPauloDateStr();
   const topicProgress = options.topicProgress || buildTopicProgress(plan, examQuestions, today);
   const usedKeys = new Set(options.usedTopicKeys || []);
   const usedSubjects = new Set(options.usedSubjectIds || []);
-  usedKeys.forEach((key) => {
-    const subjectId = String(key || '').split('/')[0];
-    if (subjectId) usedSubjects.add(subjectId);
-  });
+  const scores = options.scores || scoreBySubject(plan, examQuestions, today);
+  const previousSubjectId = options.previousSubjectId || null;
   const portugueseRequired = options.portugueseRequired != null
     ? options.portugueseRequired
-    : isPortugueseRequired(options.blocks || collectStudyBlocks(plan, examQuestions));
-  const portugueseToday = Boolean(options.portugueseToday) || usedSubjects.has('portugues');
+    : isPortugueseRequired(options.blocks || collectStudyBlocks(plan, examQuestions), plan);
+  const portugueseToday = Boolean(options.portugueseToday);
   const allowed = allowedSubjectSet(plan, portugueseRequired);
+  const dueErrors = (options.dueErrors || []).filter((item) => item && !item.resolved && item.nextReviewAt && item.nextReviewAt <= today);
 
   if (portugueseRequired && !portugueseToday) {
     const row = pickPortugueseTopic(topicProgress);
-    if (row && !usedKeys.has(row.key) && !usedSubjects.has(row.subjectId) && allowed.has(row.subjectId)) {
-      const kind = row.reviewDue || row.status === 'completed'
-        ? 'revisao'
-        : 'estudo';
+    if (row && !usedKeys.has(row.key) && allowed.has(row.subjectId)) {
+      const kind = row.reviewDue || row.status === 'completed' ? 'revisao' : 'estudo';
       return makeSuggestedBlock(row, today, kind, kind === 'revisao'
         ? 'Revisão de português devida'
         : 'Bloco obrigatório de Língua Portuguesa (ortografia em prioridade)');
     }
   }
 
-  const review = dueReviews(topicProgress, today).find((row) => (
-    !usedKeys.has(row.key) && !usedSubjects.has(row.subjectId) && allowed.has(row.subjectId)
-  ));
+  const review = dueReviews(topicProgress, today)
+    .filter((row) => !usedKeys.has(row.key) && allowed.has(row.subjectId))
+    .sort((a, b) => (scores[b.subjectId] || 0) - (scores[a.subjectId] || 0))[0];
   if (review) {
     return makeSuggestedBlock(review, today, 'revisao', `Revisão devida desde ${review.nextReviewAt}`);
   }
 
-  const pending = pendingTopics(topicProgress).find((row) => {
+  if (dueErrors.length >= AGU_ERROR_BLOCK_MIN && !options.errorBlockUsed) {
+    const sample = [...dueErrors].sort((a, b) => (scores[b.subjectId] || 0) - (scores[a.subjectId] || 0))[0];
+    const subject = getAguSubject(sample.subjectId) || getAguSubject('constitucional');
+    const topic = sample.topicId ? getAguTopic(subject?.id, sample.topicId) : null;
+    return makeSuggestedBlock({
+      subjectId: subject?.id || sample.subjectId,
+      topicId: topic?.id || sample.topicId || (subject?.topics || [])[0]?.id,
+      topicName: topic?.name || 'Caderno de erros',
+      key: topicKey(subject?.id || sample.subjectId, topic?.id || sample.topicId || 'erros')
+    }, today, 'erros', `${dueErrors.length} erros vencidos no caderno`);
+  }
+
+  const openRows = pendingTopics(topicProgress).filter((row) => {
     if (usedKeys.has(row.key) || usedSubjects.has(row.subjectId)) return false;
     if (!allowed.has(row.subjectId)) return false;
     if (portugueseRequired && row.subjectId === 'portugues' && portugueseToday) return false;
     const subject = getAguSubject(row.subjectId);
+    if (consecutiveBlocked(row.subjectId, previousSubjectId, subject?.weight)) return false;
     const open = currentOpenTopic(plan, subject, topicProgress);
     if (open?.topicId && open.topicId !== row.topicId && isStartedTopicRow(topicProgress[topicKey(row.subjectId, open.topicId)])) {
       return false;
     }
     return true;
   });
+  openRows.sort((a, b) => {
+    const score = (scores[b.subjectId] || 0) - (scores[a.subjectId] || 0);
+    if (score) return score;
+    return (b.initialSolved || 0) - (a.initialSolved || 0);
+  });
+  const pending = openRows[0];
   if (pending) {
     const reason = pending.status === 'in_progress'
-      ? `Continuar tópico (${pending.initialSolved}/${AGU_TOPIC_ADVANCE_MIN} questões)`
-      : 'Tópico pendente do edital';
+      ? `Continuar tópico (${pending.initialSolved}/${AGU_TOPIC_ADVANCE_MIN} questões) · score ${scores[pending.subjectId] || 0}`
+      : `Tópico pendente · score ${scores[pending.subjectId] || 0}`;
     return makeSuggestedBlock(pending, today, 'estudo', reason);
   }
 
-  const fallback = Object.values(topicProgress).find((row) => (
+  const relaxed = pendingTopics(topicProgress).find((row) => (
     !usedKeys.has(row.key) && !usedSubjects.has(row.subjectId) && allowed.has(row.subjectId)
   ));
-  if (fallback) {
-    return makeSuggestedBlock(fallback, today, fallback.status === 'completed' ? 'revisao' : 'estudo', 'Nenhum tópico pendente — revisão extra');
+  if (relaxed) {
+    return makeSuggestedBlock(relaxed, today, 'estudo', 'Matéria repetida: não havia alternativa');
   }
   return null;
 }
 
-export function overlayLoggedDayBlocks(sourceBlocks, plan, examQuestions, dateStr) {
-  const pinned = pinExistingTodayBlocks(plan, examQuestions, dateStr);
-  const usedSubjects = new Set(pinned.map((block) => block.subjectId).filter(Boolean));
+export function overlayLoggedDayBlocks(sourceBlocks, plan, examQuestions, dateStr, options = {}) {
+  const cap = Math.min(AGU_DAILY_BLOCKS_MAX, Math.max(1, Number(options.dailyBlocks) || AGU_DAILY_BLOCKS));
+  const pinned = pinExistingTodayBlocks(plan, examQuestions, dateStr, cap);
   const usedTopics = new Set(pinned.map((block) => topicKey(block.subjectId, block.topicId)));
   const topicProgress = buildTopicProgress(plan, examQuestions, dateStr);
   const merged = [...pinned];
   (sourceBlocks || []).forEach((raw) => {
-    if (merged.length >= AGU_DAILY_BLOCKS) return;
+    if (merged.length >= cap) return;
     const block = snapBlockToOpenTopic(plan, topicProgress, raw);
-    if (block.subjectId && usedSubjects.has(block.subjectId)) return;
+    if (block.kind === 'revisao') {
+      const stamp = topicKey(block.subjectId, block.topicId);
+      if (usedTopics.has(stamp)) return;
+      usedTopics.add(stamp);
+      merged.push(block);
+      return;
+    }
     const stamp = topicKey(block.subjectId, block.topicId);
     if (usedTopics.has(stamp)) return;
-    if (block.subjectId) usedSubjects.add(block.subjectId);
+    if (merged.some((item) => item.subjectId === block.subjectId && item.kind !== 'revisao' && block.kind !== 'revisao')) return;
     usedTopics.add(stamp);
     merged.push(block);
   });
-  const allBlocks = collectStudyBlocks(plan, examQuestions);
-  const portugueseRequired = isPortugueseRequired(allBlocks);
-  while (merged.length < AGU_DAILY_BLOCKS) {
-    const next = suggestNextBlock(plan, examQuestions, dateStr, {
-      topicProgress,
-      usedTopicKeys: [...usedTopics],
-      usedSubjectIds: [...usedSubjects],
-      portugueseRequired,
-      portugueseToday: usedSubjects.has('portugues'),
-      blocks: allBlocks
-    });
-    if (!next || usedSubjects.has(next.subjectId)) break;
-    merged.push({
-      ...next,
-      window: merged.length === 0 ? 'morning' : 'afternoon',
-      optional: false,
-      target: AGU_BLOCK_QUESTION_TARGET,
-      targetMinutes: AGU_BLOCK_MINUTES
-    });
-    usedSubjects.add(next.subjectId);
-    usedTopics.add(topicKey(next.subjectId, next.topicId));
-  }
-  return merged;
+  return merged.slice(0, cap);
 }
 
-function pinExistingTodayBlocks(plan, examQuestions, dateStr) {
+function pinExistingTodayBlocks(plan, examQuestions, dateStr, cap = AGU_DAILY_BLOCKS) {
   const seen = new Set();
   const blocks = collectStudyBlocks(plan, examQuestions)
     .filter((block) => block.dateStr === dateStr && (block.done || (block.totalQuestions || 0) > 0 || parseDurationMinutes(block.durationMinutes) > 0))
@@ -692,11 +724,12 @@ function pinExistingTodayBlocks(plan, examQuestions, dateStr) {
       return (a.key || '').localeCompare(b.key || '');
     })
     .filter((block) => {
-      if (!block.subjectId || seen.has(block.subjectId)) return false;
-      seen.add(block.subjectId);
+      const stamp = topicKey(block.subjectId, block.topicId);
+      if (!block.subjectId || seen.has(stamp)) return false;
+      seen.add(stamp);
       return true;
     });
-  return blocks.slice(0, AGU_DAILY_BLOCKS).map((block, index) => ({
+  return blocks.slice(0, cap).map((block, index) => ({
     subjectId: block.subjectId,
     kind: normalizeKind(block.kind),
     topicId: block.topicId,
@@ -713,40 +746,56 @@ function pinExistingTodayBlocks(plan, examQuestions, dateStr) {
 
 function virtualApply(topicProgress, block, dateStr) {
   const row = topicProgress[topicKey(block.subjectId, block.topicId)];
-  if (!row) return;
-  if (row.status !== 'in_progress') row.status = 'in_progress';
-  row.lastTouchedAt = dateStr;
+  if (!row || block.kind === 'revisao' || block.kind === 'erros' || block.kind === 'divida') return;
+  applyBlockToTopic(row, {
+    totalQuestions: AGU_BLOCK_QUESTION_TARGET,
+    correctAnswers: Math.round(AGU_BLOCK_QUESTION_TARGET * 0.85),
+    durationMinutes: AGU_BLOCK_MINUTES,
+    kind: 'estudo'
+  }, dateStr);
   finalizeTopicRow(row, dateStr);
 }
 
 export function buildDayBlocks(plan, examQuestions, dateStr, options = {}) {
   const topicProgress = options.topicProgress || buildTopicProgress(plan, examQuestions, dateStr);
   const allBlocks = options.blocks || collectStudyBlocks(plan, examQuestions);
-  const portugueseRequired = isPortugueseRequired(allBlocks);
+  const portugueseRequired = isPortugueseRequired(allBlocks, plan);
   const pinExisting = options.pinExisting !== false && options.preview !== true;
   const advanceProgress = options.advanceProgress !== false;
-  const pinned = pinExisting ? pinExistingTodayBlocks(plan, examQuestions, dateStr) : [];
+  const cap = Math.min(
+    AGU_DAILY_BLOCKS_MAX,
+    Math.max(1, Number(options.dailyBlocks) || Number(plan?.dailyBlocks) || AGU_DAILY_BLOCKS)
+  );
+  const pinned = pinExisting ? pinExistingTodayBlocks(plan, examQuestions, dateStr, cap) : [];
   const blocks = [...pinned];
   const usedTopicKeys = new Set(blocks.map((b) => topicKey(b.subjectId, b.topicId)));
-  const usedSubjectIds = new Set(blocks.map((b) => b.subjectId).filter(Boolean));
+  const usedSubjectIds = new Set(blocks.filter((b) => b.kind !== 'revisao').map((b) => b.subjectId).filter(Boolean));
   let portugueseToday = blocks.some((b) => b.subjectId === 'portugues');
+  let errorBlockUsed = blocks.some((b) => b.kind === 'erros');
+  const scores = options.scores || null;
 
-  while (blocks.length < AGU_DAILY_BLOCKS) {
+  while (blocks.length < cap) {
     const next = suggestNextBlock(plan, examQuestions, dateStr, {
       topicProgress,
       usedTopicKeys: [...usedTopicKeys],
       usedSubjectIds: [...usedSubjectIds],
       portugueseRequired,
       portugueseToday,
-      blocks: allBlocks
+      blocks: allBlocks,
+      scores,
+      previousSubjectId: options.previousSubjectId,
+      dueErrors: options.dueErrors || [],
+      errorBlockUsed
     });
-    if (!next || usedSubjectIds.has(next.subjectId)) break;
+    if (!next) break;
+    if (next.kind !== 'revisao' && usedSubjectIds.has(next.subjectId) && next.kind !== 'erros') break;
     next.window = blocks.length === 0 ? 'morning' : 'afternoon';
-    next.key = `${dateStr}|${next.subjectId}|${next.kind}|${next.topicId}|${blocks.length}`;
+    next.key = `${dateStr}|${next.subjectId}|${next.kind}|${next.topicId}`;
     blocks.push(next);
     usedTopicKeys.add(topicKey(next.subjectId, next.topicId));
-    usedSubjectIds.add(next.subjectId);
+    if (next.kind !== 'revisao') usedSubjectIds.add(next.subjectId);
     if (next.subjectId === 'portugues') portugueseToday = true;
+    if (next.kind === 'erros') errorBlockUsed = true;
     if (advanceProgress) virtualApply(topicProgress, next, dateStr);
   }
 
@@ -820,7 +869,7 @@ export function buildEditalTable(plan, examQuestions = [], todayStr) {
     subjects,
     topicProgress,
     blocks,
-    portugueseRequired: isPortugueseRequired(blocks),
+    portugueseRequired: isPortugueseRequired(blocks, plan),
     portugueseWaiver: {
       required: AGU_PORTUGUESE_WAIVE_BLOCKS,
       accuracy: AGU_PORTUGUESE_WAIVE_ACCURACY,
@@ -844,6 +893,7 @@ export function serializeTopicStatus(topicProgress) {
       reviewStep: row.reviewStep,
       nextReviewAt: row.nextReviewAt,
       lastReviewAt: row.lastReviewAt,
+      theoryMinutes: row.theoryMinutes || 0,
       solved: row.solved,
       correct: row.correct
     };

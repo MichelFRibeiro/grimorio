@@ -1,20 +1,18 @@
 import {
   AGU_BLOCK_MINUTES,
   AGU_BLOCK_QUESTION_TARGET,
-  AGU_CORE_SUBJECTS,
   AGU_DAILY_BLOCKS,
+  AGU_DAILY_BLOCKS_MAX,
+  AGU_DEBT_EXPIRE_DAYS,
+  AGU_DEBT_MAX,
   AGU_DISCURSIVE_ROTATION,
-  AGU_LONG_AFTERNOON_BLOCKS,
   AGU_PRODUCT_META,
-  AGU_SHORT_AFTERNOON_BLOCKS,
-  AGU_SUBJECTS,
-  AGU_WINDOW_SUBJECTS,
   blockKey,
   getAguSubject,
-  getEditalProfile,
-  recommendPlatform
+  getEditalProfile
 } from '../data/aguCurriculum.js';
-import { addDaysToDateStr, getSaoPauloDayOfWeek, mondayOfDateStr } from './timeUtils.js';
+import { addDaysToDateStr, daysBetweenDateStr, getSaoPauloDayOfWeek, mondayOfDateStr } from './timeUtils.js';
+import { blocksPerDayForSetpoint } from './aguHomeostasis.js';
 import {
   currentTopicForSubject,
   detectPhase,
@@ -67,11 +65,12 @@ export function isLongAfternoon(weekday) {
   return weekday === 1 || weekday === 3 || weekday === 5;
 }
 
-export function afternoonBlockCap(weekday, capacityByWeekday) {
-  if (weekday === 0 || weekday === 6) return AGU_DAILY_BLOCKS;
+export function afternoonBlockCap(weekday, capacityByWeekday, plan = null) {
+  if (plan) return blocksPerDayForSetpoint(plan, weekday);
   const minutes = Number(capacityByWeekday?.[weekday] ?? 0);
-  if (minutes > 0 && minutes < AGU_DAILY_BLOCKS * 30) return Math.min(AGU_DAILY_BLOCKS, AGU_SHORT_AFTERNOON_BLOCKS);
-  if (isLongAfternoon(weekday)) return AGU_DAILY_BLOCKS;
+  if (minutes > 0) {
+    return Math.min(AGU_DAILY_BLOCKS_MAX, Math.max(1, Math.ceil(minutes / AGU_BLOCK_MINUTES)));
+  }
   return AGU_DAILY_BLOCKS;
 }
 
@@ -570,86 +569,108 @@ function labelForDay(weekday, weekIndex, blocks) {
   return subject ? subject.name : DAY_LABELS[weekday];
 }
 
+function debtStamp(item) {
+  return `${item.subjectId}|${item.topicId || ''}|${item.kind || 'estudo'}`;
+}
+
+export function normalizeDebt(items = [], todayStr, questionTarget = AGU_BLOCK_QUESTION_TARGET) {
+  const today = todayStr || '';
+  const seen = new Set();
+  const fresh = [];
+  (items || []).forEach((item) => {
+    if (!item?.subjectId) return;
+    const age = item.fromDate && today ? daysBetweenDateStr(item.fromDate, today) : 0;
+    if (item.fromDate && age > AGU_DEBT_EXPIRE_DAYS) return;
+    const stamp = debtStamp(item);
+    if (seen.has(stamp)) return;
+    seen.add(stamp);
+    const remaining = Math.max(0, Number(item.remainingQuestions) || 0);
+    fresh.push({
+      ...item,
+      kind: item.kind || 'estudo',
+      remainingQuestions: remaining || questionTarget,
+      reason: item.kind === 'discursiva'
+        ? (item.reason || 'discursiva pulada')
+        : `faltaram ${remaining || questionTarget} questões`
+    });
+  });
+  fresh.sort((a, b) => String(a.fromDate || '').localeCompare(String(b.fromDate || '')));
+  return fresh.slice(-AGU_DEBT_MAX);
+}
+
 export function collectDebtFromCycle(cycle, todayStr, completedBlocks = {}, examQuestions = []) {
   if (!cycle?.days) return [];
   const debt = [];
   cycle.days.forEach((day) => {
-    if (day.dateStr >= todayStr) return;
+    if (!day.dateStr || day.dateStr >= todayStr) return;
     (day.blocks || []).forEach((block) => {
-      if (block.optional && (day.weekday === 0 || day.weekday === 6)) {
-        const done = Boolean(completedBlocks[block.key]) || Boolean(block.done);
-        if (!done && block.kind === 'discursiva' && !block.productLogged) {
-          debt.push({
-            fromDate: day.dateStr,
-            fromWeekday: day.weekday,
-            subjectId: block.subjectId,
-            topicId: block.topicId,
-            kind: block.kind,
-            remainingQuestions: 0,
-            productMissing: true,
-            targetProduct: block.targetProduct,
-            reason: 'discursiva pulada'
-          });
-        } else if (!done) {
-          debt.push({
-            fromDate: day.dateStr,
-            fromWeekday: day.weekday,
-            subjectId: block.subjectId,
-            topicId: block.topicId,
-            kind: block.kind,
-            remainingQuestions: block.target || 0,
-            reason: 'fim de semana pulado'
-          });
-        }
-        return;
-      }
-      if (block.optional) return;
-      const marked = Boolean(completedBlocks[block.key]);
-      if (block.kind === 'discursiva') {
-        if (!block.productLogged && !marked) {
-          debt.push({
-            fromDate: day.dateStr,
-            fromWeekday: day.weekday,
-            subjectId: block.subjectId,
-            topicId: block.topicId,
-            kind: 'discursiva',
-            productMissing: true,
-            targetProduct: block.targetProduct,
-            reason: 'discursiva sem produto'
-          });
-        }
-        return;
-      }
-      if (block.target > 0 && ['questoes', 'erros', 'simulado', 'revisao', 'lei-seca'].includes(block.kind)) {
-        const solved = (examQuestions || []).filter((e) => (
-          (e.date || '') === day.dateStr && (e.subjectId === block.subjectId || e.blockKey === block.key)
-        )).reduce((sum, e) => sum + (e.totalQuestions || 0), 0);
-        const remaining = Math.max(0, (block.target || 0) - solved);
-        if (remaining > 0) {
-          debt.push({
-            fromDate: day.dateStr,
-            fromWeekday: day.weekday,
-            subjectId: block.subjectId,
-            topicId: block.topicId,
-            kind: block.kind,
-            remainingQuestions: remaining,
-            reason: `faltaram ${remaining} questões`
-          });
-        }
-      } else if (!marked && block.kind === 'teoria') {
-        debt.push({
-          fromDate: day.dateStr,
-          fromWeekday: day.weekday,
-          subjectId: block.subjectId,
-          topicId: block.topicId,
-          kind: 'teoria',
-          remainingQuestions: 0,
-          reason: 'teoria pulada'
-        });
-      }
+      const marked = Boolean(completedBlocks[block.key]) || Boolean(block.done);
+      if (marked) return;
+      const solved = (examQuestions || []).filter((entry) => (
+        entry.blockKey === block.key
+        || ((entry.date || '') === day.dateStr && entry.subjectId === block.subjectId && entry.topicId === block.topicId)
+      )).reduce((sum, entry) => sum + (entry.totalQuestions || 0), 0);
+      const timed = (examQuestions || []).some((entry) => entry.blockKey === block.key && (entry.durationMinutes || 0) > 0);
+      if (solved > 0 || timed) return;
+      if (block.kind === 'discursiva' && block.productLogged) return;
+      debt.push({
+        fromDate: day.dateStr,
+        fromWeekday: day.weekday,
+        subjectId: block.subjectId,
+        topicId: block.topicId,
+        kind: block.kind === 'teoria' ? 'estudo' : (block.kind || 'estudo'),
+        remainingQuestions: block.kind === 'discursiva' ? 0 : (block.target || AGU_BLOCK_QUESTION_TARGET),
+        productMissing: block.kind === 'discursiva',
+        targetProduct: block.targetProduct || null,
+        reason: block.kind === 'discursiva' ? 'discursiva pulada' : `faltaram ${block.target || AGU_BLOCK_QUESTION_TARGET} questões`
+      });
     });
   });
-  return debt;
+  return normalizeDebt(debt, todayStr);
+}
+
+function injectDebtBlock(day, item, ranked) {
+  if (!day || !item) return false;
+  if ((day.blocks || []).some((block) => block.debt)) return false;
+  const cursor = pickCursor(null, item.subjectId, ranked);
+  const victimIndex = [...(day.blocks || [])]
+    .map((block, index) => ({ block, index }))
+    .filter(({ block }) => block.kind !== 'revisao' && block.subjectId !== 'portugues')
+    .sort((a, b) => (a.block.score || 0) - (b.block.score || 0))[0]?.index;
+  const block = makeBlock({
+    dateStr: day.dateStr,
+    weekday: day.weekday,
+    window: 'afternoon',
+    subjectId: item.subjectId,
+    kind: 'divida',
+    topicId: item.topicId || cursor?.topicId,
+    topicName: cursor?.topicName,
+    reasons: [`dívida de ${item.fromDate || 'ciclo anterior'} · ${item.reason || ''}`.trim()],
+    target: item.remainingQuestions || AGU_BLOCK_QUESTION_TARGET
+  });
+  block.debt = true;
+  block.score = 99;
+  if (victimIndex == null) {
+    day.blocks.push(block);
+  } else {
+    day.blocks[victimIndex] = block;
+  }
+  return true;
+}
+
+export function liveCycleReasons(plan, examQuestions, todayStr, days = []) {
+  const { ranked } = rankSubjects(plan, examQuestions, todayStr);
+  const perDay = days.length
+    ? Math.max(...days.map((day) => (day.blocks || []).length))
+    : blocksPerDayForSetpoint(plan, getSaoPauloDayOfWeek(todayStr));
+  const reasons = [
+    `${perDay} bloco(s)/dia pelo setpoint · ${AGU_BLOCK_MINUTES} min ou ${AGU_BLOCK_QUESTION_TARGET} questões`,
+    builtPortugueseReason(days, null, plan)
+  ].filter(Boolean);
+  ranked.slice(0, 4).forEach((row) => {
+    reasons.push(`${row.subject.name}: score ${row.score} · ${row.stats.solved} q · ${row.mastery.label}`);
+  });
+  return reasons;
 }
 
 export function generateFortnight(plan, examQuestions, todayStr, options = {}) {
@@ -657,37 +678,42 @@ export function generateFortnight(plan, examQuestions, todayStr, options = {}) {
   const start = options.startDate || fortnightStartFor(options.anchorDate || todayStr);
   const cycleNumber = options.cycleNumber || (plan?.generatedCycles?.length || 0) + 1;
   const { ranked } = rankSubjects({ ...plan, phase }, examQuestions, todayStr);
+  const scores = {};
+  ranked.forEach((row) => {
+    scores[row.subject.id] = row.score;
+  });
   const topicProgress = JSON.parse(JSON.stringify(buildTopicProgress(plan, examQuestions, todayStr)));
   const historyBlocks = collectStudyBlocks(plan, examQuestions);
   const days = [];
+  let previousSubjectId = null;
+  const debtQueue = normalizeDebt(plan?.debt || [], todayStr);
 
   for (let i = 0; i < 14; i += 1) {
     const dateStr = addDaysToDateStr(start, i);
     const weekday = getSaoPauloDayOfWeek(dateStr);
     const weekIndex = i < 7 ? 0 : 1;
+    const dailyBlocks = blocksPerDayForSetpoint(plan, weekday);
     const built = buildDayBlocks(plan, examQuestions, dateStr, {
       topicProgress,
       blocks: historyBlocks,
-      preview: dateStr !== todayStr,
-      pinExisting: dateStr === todayStr,
-      advanceProgress: true
+      preview: true,
+      pinExisting: false,
+      advanceProgress: true,
+      dailyBlocks,
+      scores,
+      previousSubjectId,
+      dueErrors: plan?.errorNotebook || []
     });
-    const unique = [];
-    const usedSubjects = new Set();
-    (built.blocks || []).forEach((block) => {
-      if (block.subjectId && usedSubjects.has(block.subjectId)) return;
-      if (block.subjectId) usedSubjects.add(block.subjectId);
-      unique.push(block);
-    });
-    const blocks = unique.map((block, index) => ({
+    const blocks = (built.blocks || []).map((block, index) => ({
       ...block,
+      score: scores[block.subjectId] || 0,
       window: index === 0 ? 'morning' : 'afternoon',
       optional: false,
       target: isQuestionKindBlock(block) ? AGU_BLOCK_QUESTION_TARGET : (block.target || 0),
       targetMinutes: AGU_BLOCK_MINUTES,
-      key: block.key || blockKey(dateStr, block.subjectId, block.kind, block.topicId)
+      key: blockKey(dateStr, block.subjectId, block.kind, block.topicId)
     }));
-    days.push({
+    const day = {
       dateStr,
       weekday,
       weekdayLabel: DAY_LABELS[weekday],
@@ -698,16 +724,17 @@ export function generateFortnight(plan, examQuestions, todayStr, options = {}) {
       questionTarget: blocks.reduce((sum, b) => sum + (b.target || 0), 0),
       portugueseRequired: built.portugueseRequired,
       portugueseToday: built.portugueseToday
-    });
+    };
+    if (dateStr >= todayStr && debtQueue.length) {
+      injectDebtBlock(day, debtQueue.shift(), ranked);
+      day.questionTarget = day.blocks.reduce((sum, b) => sum + (b.target || 0), 0);
+    }
+    days.push(day);
+    const study = blocks.find((block) => block.kind === 'estudo' && block.subjectId !== 'portugues');
+    previousSubjectId = study?.subjectId || blocks[blocks.length - 1]?.subjectId || previousSubjectId;
   }
 
-  const reasons = [
-    '3 blocos/dia · 30 min ou 10 questões · 1 tópico por bloco',
-    builtPortugueseReason(days, topicProgress)
-  ].filter(Boolean);
-  ranked.slice(0, 4).forEach((row) => {
-    reasons.push(`${row.subject.name}: score ${row.score} · ${row.stats.solved} q · ${row.mastery.label}`);
-  });
+  const reasons = liveCycleReasons({ ...plan, phase }, examQuestions, todayStr, days);
 
   return {
     number: cycleNumber,
@@ -726,11 +753,11 @@ export function isQuestionKindBlock(block) {
   return block.kind !== 'discursiva' && block.kind !== 'teoria' && block.kind !== 'informativo';
 }
 
-function builtPortugueseReason(days, topicProgress) {
-  const hasPort = days.some((day) => (day.blocks || []).some((b) => b.subjectId === 'portugues'));
-  if (hasPort) return 'Português obrigatório em 1 bloco/dia até 95% nos 10 últimos blocos da matéria.';
-  const row = Object.values(topicProgress || {}).find((t) => t.subjectId === 'portugues');
-  return row ? 'Português dispensado (10 últimos blocos ≥ 95%).' : '';
+function builtPortugueseReason(days, _topicProgress, plan) {
+  if (plan?.keepPortuguese === false) return 'Português dispensado pelo herói.';
+  const hasPort = (days || []).some((day) => (day.blocks || []).some((b) => b.subjectId === 'portugues'));
+  if (hasPort) return 'Português obrigatório em 1 bloco/dia até os 10 últimos blocos ficarem em 95% ou mais.';
+  return 'Português dispensado (10 últimos blocos ≥ 95%).';
 }
 
 export { DISCURSIVE_PROMPTS, AGU_PRODUCT_META };

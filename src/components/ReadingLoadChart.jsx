@@ -41,7 +41,7 @@ export function ReadingLoadChart({
       series={series}
       days={days}
       title="Leitura real — Homeostase & Alostase"
-      description={`A faixa verde acompanha o tempo realmente lido: média dos últimos ${days} dias, com teto +20% e piso −20%. Atualiza todo dia. Fora dela a leitura vira alostase — subcarga ou sobrecarga em relação ao ritmo recente.`}
+      description="A faixa verde é a zona do setpoint de leitura. Sobe no máximo 10% por semana quando 4 dos últimos 7 dias ficaram nela, até a meta de leitura."
       seriesLabel="Leitura"
       accentColor="#34d399"
       zoneCopy={READING_ZONE_COPY}

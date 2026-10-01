@@ -7,6 +7,10 @@ import {
   buildHomeostasisBand,
   classifyLoadMinutes,
   buildDailyLoadSeries,
+  evaluateSetpoint,
+  initialSetpointFromBaseline,
+  projectTargetDate,
+  robustBaseline,
   getReadingLoadSeries,
   formatReadingHomeostasisVictoryTitle,
   buildReadingHomeostasisVictory,
@@ -21,7 +25,7 @@ function run() {
   assert.strictEqual(HOMEOSTASIS_WINDOW_DAYS, 14);
   assert.strictEqual(HOMEOSTASIS_BAND_RATIO, 0.2);
 
-  const band = buildHomeostasisBand(33.6);
+  const band = buildHomeostasisBand(33.6, 0);
   assert.strictEqual(band.avgMinutes, 34, `média 33.6 arredonda para 34 min, veio ${band.avgMinutes}`);
   assert.strictEqual(band.homeostasisMinMinutes, 27);
   assert.strictEqual(band.homeostasisMaxMinutes, 41);
@@ -33,7 +37,8 @@ function run() {
   const series = buildDailyLoadSeries({
     minutesByDate: { '2026-09-07': 140 },
     todayStr: '2026-09-07',
-    days: 14
+    days: 14,
+    mode: 'descriptive'
   });
   assert.strictEqual(series.avgMinutes, 140, 'Dia vazio não entra na média');
   assert.strictEqual(series.activeDays, 1);
@@ -49,7 +54,8 @@ function run() {
     minutesByDate: { '2026-09-07': 10 },
     todayStr: '2026-09-07',
     days: 14,
-    floorMinutes: HOMEOSTASIS_FLOOR_MINUTES.reading
+    floorMinutes: HOMEOSTASIS_FLOOR_MINUTES.reading,
+    mode: 'descriptive'
   });
   assert.strictEqual(floored.avgMinutes, 10);
   assert.strictEqual(floored.homeostasisMinMinutes, HOMEOSTASIS_FLOOR_MINUTES.reading);
@@ -61,7 +67,7 @@ function run() {
     { date: '2026-09-07', durationMinutes: 20 },
     { timestamp: '2026-09-07T22:10:00.000Z', durationMinutes: 15 },
     { date: '2026-09-01', durationMinutes: 40 }
-  ], '2026-09-07', { days: 14 });
+  ], '2026-09-07', { days: 14, mode: 'descriptive' });
   const today = reading.points.find((p) => p.dateStr === '2026-09-07');
   const earlier = reading.points.find((p) => p.dateStr === '2026-09-01');
   assert.strictEqual(today.minutes, 35);
@@ -78,12 +84,12 @@ function run() {
     { date: '2026-09-07', durationMinutes: 20 },
     { timestamp: '2026-09-07T22:10:00.000Z', durationMinutes: 15 },
     { date: '2026-09-01', durationMinutes: 40 }
-  ], '2026-09-07', { days: 14 });
+  ], '2026-09-07', { days: 14, state: { setpointMinutes: 30, targetMinutes: 30, seeded: true } });
   assert.strictEqual(readingVictory.title, 'Ler no mínimo 30 minutos.');
   assert.strictEqual(readingVictory.category, READING_HOMEOSTASIS_VICTORY_CATEGORY);
   assert.strictEqual(readingVictory.date, '2026-09-07');
   assert.strictEqual(readingVictory.source, DAILY_VICTORY_OVERFLOW_SOURCES.reading);
-  console.log('✅ Vitória de leitura usa o piso da faixa de homeostase.');
+  console.log('✅ Vitória de leitura usa o setpoint do dia.');
 
   // O tempo EM ANDAMENTO não pode mexer na faixa: senão o gráfico mostra uma
   // faixa e a vitória planejada grava outra (45 min–1h07 vs "no mínimo 30 min"),
@@ -92,13 +98,15 @@ function run() {
   const semAndamento = buildDailyLoadSeries({
     minutesByDate: historico,
     todayStr: '2026-09-07',
-    days: 14
+    days: 14,
+    mode: 'descriptive'
   });
   const comAndamento = buildDailyLoadSeries({
     minutesByDate: historico,
     todayStr: '2026-09-07',
     days: 14,
-    liveMinutesToday: 55
+    liveMinutesToday: 55,
+    mode: 'descriptive'
   });
   assert.strictEqual(comAndamento.avgMinutes, semAndamento.avgMinutes, 'tempo em andamento não entra na média da faixa');
   assert.strictEqual(comAndamento.homeostasisMinMinutes, semAndamento.homeostasisMinMinutes, 'piso da faixa estável durante a sessão');
@@ -136,6 +144,29 @@ function run() {
     'mapas mentais entram nas duas pontas (aqui sem sessões, o número coincide)'
   );
   console.log('✅ Gráfico, vitória planejada e servidor usam o mesmo número.');
+
+  const zeros = {};
+  for (let i = 0; i < 14; i += 1) zeros[`2026-08-${String(25 + i).padStart(2, '0')}`] = i === 13 ? 86 : 0;
+  const baseline = robustBaseline({ ...zeros, '2026-09-07': 86 }, '2026-09-07');
+  assert.strictEqual(baseline.samples.length, 14, 'baseline conta os 14 dias');
+  assert.strictEqual(baseline.median, 0, 'um dia de 86 min não puxa a mediana com 13 zeros');
+  assert.strictEqual(initialSetpointFromBaseline(0), 20, 'baseline abaixo de 20 começa no piso');
+  assert.strictEqual(initialSetpointFromBaseline(33), 35, 'baseline arredonda ao passo de 5');
+
+  const held = evaluateSetpoint({ setpoint: 30, samples: [30, 30, 30, 0, 0, 0, 0] });
+  assert.strictEqual(held.reason, 'hold', '3/7 não expande nem contrai');
+  const expanded = evaluateSetpoint({ setpoint: 30, samples: [30, 32, 28, 40, 30, 0, 0] });
+  assert.strictEqual(expanded.reason, 'expand', '4/7 na faixa expande');
+  assert.ok(expanded.to <= 35, `expansão máxima de 10% (30 → 33, passo 5 = 35), veio ${expanded.to}`);
+  assert.ok(expanded.to > 30, 'expansão sobe pelo menos um passo');
+  const contracted = evaluateSetpoint({ setpoint: 30, samples: [0, 0, 0, 0, 0, 40, 0] });
+  assert.strictEqual(contracted.to, 25, 'adesão < 40% recua um passo');
+  const flooredSetpoint = evaluateSetpoint({ setpoint: 20, samples: [0, 0, 0, 0, 0, 0, 0] });
+  assert.strictEqual(flooredSetpoint.to, 20, 'contração não fura o piso de 20');
+  const projection = projectTargetDate(30, 180, 0.1, '2026-09-07');
+  assert.ok(projection.weeks >= 18 && projection.weeks <= 20, `30 → 180 a 10%/semana leva ~19 semanas, veio ${projection.weeks}`);
+  assert.ok(projection.date > '2026-09-07', 'projeção tem data');
+  console.log('✅ Setpoint: baseline com zeros, expansão 4/7, contração, piso e projeção.');
 
   console.log('\n🎉 Teste de homeostase PASSOU COM SUCESSO!');
 }

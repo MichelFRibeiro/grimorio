@@ -266,7 +266,8 @@ export function TodayView({
             <>
               <p className="today-meta">
                 {payload.agu.minutesToday || 0} min
-                {payload.agu.targetMinutes ? ` · piso ${payload.agu.targetMinutes} min` : ''}
+                {payload.agu.targetMinutes ? ` · meta ${payload.agu.targetMinutes} min` : ''}
+                {payload.agu.coverage ? ` · edital ${payload.agu.coverage.coverage}%` : ''}
                 {payload.agu.remaining ? ` · ${payload.agu.remaining} bloco(s) aberto(s)` : ' · dia fechado'}
               </p>
               {(payload.agu.blocks || []).filter((block) => !block.done).slice(0, 3).map((block) => (

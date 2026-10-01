@@ -2038,12 +2038,7 @@ app.post('/api/agu-plan/block/delete', (req, res) => {
     const db = getDb();
     const todayStr = getSaoPauloDateStr();
     if (!db.examQuestions) db.examQuestions = [];
-    const examIds = new Set(
-      collectStudyBlocks(sanitizeAguPlan(db.aguPlan, todayStr), db.examQuestions)
-        .filter((block) => block.key === key)
-        .flatMap((block) => block.examIds || [])
-    );
-    const linked = db.examQuestions.filter((entry) => examIds.has(entry.id) || entry.blockKey === key);
+    const linked = db.examQuestions.filter((entry) => entry.blockKey === key);
     linked.forEach((entry) => {
       revertPlayerReward({
         xp: entry.xpEarned || 0,

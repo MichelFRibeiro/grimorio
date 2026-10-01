@@ -9,6 +9,8 @@ import {
   getTopicMastery,
   getSubjectMastery,
   matchExamToSubject,
+  resolveExamSubject,
+  resolveExamTopic,
   rankSubjects
 } from '../src/utils/aguFragility.js';
 import {
@@ -113,8 +115,8 @@ const lockPlan = generateFortnight({
 assert(!lockPlan.days.flatMap((d) => d.blocks).some((b) => b.subjectId === 'economico'), 'lock remove Econômico');
 
 const sanitized = sanitizeAguPlan({ version: 1, startedAt: monday }, monday);
-assert(sanitized.version === 3, 'migra para v3');
-assert(sanitized.dailyBlocks === 3, '3 blocos/dia');
+assert(sanitized.version === 4, 'migra para v4');
+assert(sanitized.dailyBlocks >= 1 && sanitized.dailyBlocks <= 6, 'blocos/dia saem do setpoint');
 assert(Array.isArray(sanitized.debt), 'debt array');
 
 const wednesday = '2026-09-09';
@@ -204,5 +206,33 @@ const laterPort = laterDay.blocks.find((b) => b.subjectId === 'portugues');
 assert(laterPort?.topicId === 'acentuacao', `português deve continuar em Acentuação até 60 q, veio ${laterPort?.topicId}`);
 assert((laterPort?.todayProgress?.solved || 0) < 60, 'teoria não conclui o tópico');
 
+const cfExam = { subject: 'Certificação', topic: 'cf', totalQuestions: 5, correctAnswers: 4 };
+assert(!matchExamToSubject(cfExam, AGU_SUBJECTS.find((s) => s.id === 'constitucional')), 'cf dentro de certificação não casa constitucional');
+assert(resolveExamSubject({ subject: 'Trabalho', totalQuestions: 5, correctAnswers: 3 })?.id === 'trabalho', 'Trabalho casa Direito do Trabalho');
+assert(resolveExamSubject({ subject: 'Previdência', totalQuestions: 5, correctAnswers: 3 })?.id === 'seguridade', 'Previdência casa Seguridade');
+assert(resolveExamSubject({ subject: 'Legislação', totalQuestions: 5, correctAnswers: 3 }) == null, 'Legislação ambígua não cai na primeira matéria');
+const educacao = AGU_SUBJECTS.find((s) => s.id === 'educacao-cti');
+assert(resolveExamTopic({ topic: 'cf' }, educacao)?.id === 'cf', 'cf isolado casa o tópico cf');
+assert(resolveExamTopic({ topic: 'certificação' }, educacao) == null, 'tópico sem match único não cai no primeiro');
+
+const debt = [];
+for (let i = 0; i < 15; i += 1) {
+  debt.push({ subjectId: 'civil', topicId: `topico-${i}`, kind: 'estudo', fromDate: '2026-01-01', remainingQuestions: 20, reason: 'faltaram 20 questões' });
+}
+const migrated = sanitizeAguPlan({
+  version: 3,
+  startedAt: '2026-09-11',
+  cycleNumber: 2,
+  capacityByWeekday: { 0: 180, 1: 180, 2: 180, 3: 180, 4: 180, 5: 180, 6: 180 },
+  debt,
+  topicStatus: { 'constitucional/teoria': { status: 'in_progress', initialSolved: 20 } },
+  completedBlocks: {},
+  blockDurations: { '2026-09-11|portugues|estudo|0': 30 }
+}, '2026-09-21');
+assert(migrated.version === 4, 'plano v3 migra para v4');
+assert(migrated.homeostasis.targetMinutes === 180, 'capacidade uniforme de 180 vira meta, não carga diária');
+assert(migrated.homeostasis.setpointMinutes <= 30, `setpoint nasce do baseline, não de 180, veio ${migrated.homeostasis.setpointMinutes}`);
+assert(migrated.debt.length === 0, 'dívida com mais de 21 dias expira');
+assert(migrated.horizonMonths === 18, 'horizonte padrão de 18 meses');
 console.log('🎉 Teste do motor adaptativo AGU PASSOU.');
 process.exit(0);

@@ -737,7 +737,10 @@ function aguCandidate(db, todayStr) {
     location: 'anywhere',
     priority: 'bom_fazer',
     reason: 'Bloco AGU de hoje',
-    estimatedMinutes: block.targetMinutes || summary.blockMinutes || 30,
+    estimatedMinutes: Math.min(
+      block.targetMinutes || summary.blockMinutes || 30,
+      Math.max(10, (summary.homeostasis?.todayTargetMinutes || 30) - (summary.homeostasis?.today?.minutes || 0))
+    ),
     blockKey: block.key,
     subjectId: block.subjectId,
     topicId: block.topicId || null,

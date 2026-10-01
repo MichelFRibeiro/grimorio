@@ -23,7 +23,13 @@ export const AGU_SUBJECT_MASTERY_TOPIC_RATIO = 0.7;
 export const AGU_PORTUGUESE_WAIVE_ACCURACY = 95;
 export const AGU_PORTUGUESE_WAIVE_BLOCKS = 10;
 export const AGU_REVIEW_INTERVALS = [1, 7, 21, 30, 90, 120];
-export const AGU_PLAN_VERSION = 3;
+export const AGU_ERROR_REVIEW_INTERVALS = [1, 3, 7, 14, 30];
+export const AGU_ERROR_BLOCK_MIN = 5;
+export const AGU_DEBT_MAX = 6;
+export const AGU_DEBT_EXPIRE_DAYS = 21;
+export const AGU_DAILY_BLOCKS_MAX = 6;
+export const AGU_HORIZON_MONTHS_DEFAULT = 18;
+export const AGU_PLAN_VERSION = 4;
 export const AGU_DEFAULT_EDITAL_PROFILE_ID = 'pf-tec-2023';
 
 /** Minutos por weekday (0=Dom … 6=Sáb). 3 blocos de 30 min todos os dias. */
@@ -702,6 +708,7 @@ export const AGU_KIND_META = {
   estudo: { label: 'Estudo inicial', icon: '🎯', color: '#f59e0b' },
   questoes: { label: 'Questões', icon: '🎯', color: '#f59e0b' },
   erros: { label: 'Caderno de erros', icon: '♻️', color: '#f43f5e' },
+  divida: { label: 'Dívida', icon: '⏳', color: '#fb7185' },
   revisao: { label: 'Revisão', icon: '🔁', color: '#38bdf8' },
   'lei-seca': { label: 'Lei seca', icon: '📜', color: '#a855f7' },
   discursiva: { label: 'Discursiva', icon: '✒️', color: '#c084fc' },
@@ -814,6 +821,8 @@ export function createDefaultAguPlan(todayStr) {
     cycleNumber: 1,
     cycleStartDate: todayStr || null,
     cycleLengthDays: AGU_CYCLE_LENGTH,
+    horizonMonths: AGU_HORIZON_MONTHS_DEFAULT,
+    examDate: null,
     targetAccuracy: AGU_TARGET_ACCURACY,
     dailyQuestionTarget: AGU_WEEKDAY_QUESTION_TARGET,
     masterMinSolved: AGU_MASTER_MIN_SOLVED,
@@ -826,6 +835,7 @@ export function createDefaultAguPlan(todayStr) {
     currentCycle: null,
     generatedCycles: [],
     debt: [],
+    errorNotebook: [],
     discursiveRotationIndex: 0,
     editalProfileId: AGU_DEFAULT_EDITAL_PROFILE_ID,
     removedSubjectIds: [],

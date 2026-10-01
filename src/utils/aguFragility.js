@@ -13,6 +13,7 @@ import {
   recommendPlatform
 } from '../data/aguCurriculum.js';
 import { daysBetweenDateStr } from './timeUtils.js';
+import { foldAccents, wordBoundaryIncludes } from './textMatch.js';
 
 export function emptyStats() {
   return {
@@ -38,50 +39,65 @@ export function accuracyPct(acc) {
 }
 
 function haystack(entry) {
-  return `${entry?.subject || ''} ${entry?.topic || ''} ${entry?.notes || ''}`.toLowerCase();
+  return foldAccents(`${entry?.subject || ''} ${entry?.topic || ''} ${entry?.notes || ''}`);
 }
 
 const SUBJECT_ALIASES = {
-  constitucional: ['constitucional'],
-  administrativo: ['administrativo'],
-  financeiro: ['financeiro', 'afo', 'orçamento', 'orcamento'],
-  economico: ['econômico', 'economico'],
-  tributario: ['tributário', 'tributario'],
-  seguridade: ['seguridade', 'previdenci'],
+  constitucional: ['constitucional', 'cf'],
+  administrativo: ['administrativo', 'administracao publica'],
+  financeiro: ['financeiro', 'afo', 'orcamento'],
+  economico: ['economico'],
+  tributario: ['tributario'],
+  seguridade: ['seguridade', 'previdencia', 'previdenciario'],
   ambiental: ['ambiental'],
-  'leg-agu': ['legislação da agu', 'legislacao da agu', 'lc 73', 'lei orgânica da agu', 'lei organica da agu'],
+  'leg-agu': ['legislacao da agu', 'lc 73', 'lei organica da agu'],
   civil: ['direito civil'],
   'processual-civil': ['processual civil', 'processo civil'],
-  'leg-civil-esp': ['legislação civil', 'legislacao civil', 'mandado de segurança', 'acao popular', 'ação popular'],
+  'leg-civil-esp': ['legislacao civil', 'mandado de seguranca', 'acao popular'],
   empresarial: ['empresarial', 'comercial'],
   internacional: ['internacional', 'direitos humanos'],
   penal: ['direito penal'],
   'processual-penal': ['processual penal', 'processo penal'],
-  'leg-penal-esp': ['legislação penal', 'legislacao penal', 'lei 8.137', 'lavagem'],
-  trabalho: ['direito do trabalho'],
+  'leg-penal-esp': ['legislacao penal', 'lei 8.137', 'lavagem'],
+  trabalho: ['direito do trabalho', 'trabalho'],
   'processual-trabalho': ['processual do trabalho', 'processo do trabalho'],
-  agrario: ['agrário', 'agrario'],
-  'educacao-cti': ['educação', 'educacao', 'ldb', 'inovação', 'inovacao'],
-  portugues: ['português', 'portugues', 'língua portuguesa', 'lingua portuguesa', 'ortografia']
+  agrario: ['agrario'],
+  'educacao-cti': ['educacao', 'ldb', 'inovacao'],
+  portugues: ['portugues', 'lingua portuguesa', 'ortografia']
 };
+
+/** Rótulos genéricos demais para creditar uma matéria. */
+const AMBIGUOUS_LABELS = ['legislacao', 'simulado', 'simulado misto', 'misto', 'geral'];
+
+function hasAlias(hay, alias) {
+  return wordBoundaryIncludes(hay, alias);
+}
+
+function subjectLabel(entry) {
+  return foldAccents(`${entry?.subject || ''} ${entry?.notes || ''}`);
+}
 
 export function matchExamToSubject(entry, subject) {
   if (!entry || !subject) return false;
   if (entry.subjectId && entry.subjectId === subject.id) return true;
+  if (entry.subjectId && getAguSubject(entry.subjectId)) return false;
 
   const hay = haystack(entry);
-  if (hay.includes('lindb')) {
+  const subjectOnly = foldAccents(entry.subject || '');
+  if (AMBIGUOUS_LABELS.includes(subjectOnly)) return false;
+  if (hasAlias(hay, 'lindb')) {
     if (subject.id === 'leg-civil-esp') {
-      return hay.includes('legislação civil') || hay.includes('legislacao civil') || entry.subjectId === 'leg-civil-esp';
+      return hasAlias(hay, 'legislacao civil') || entry.subjectId === 'leg-civil-esp';
     }
     if (subject.id === 'civil') {
-      return entry.subjectId !== 'leg-civil-esp' && !hay.includes('legislação civil') && !hay.includes('legislacao civil');
+      return entry.subjectId !== 'leg-civil-esp' && !hasAlias(hay, 'legislacao civil');
     }
   }
 
-  const name = subject.name.toLowerCase();
-  if (hay.includes(name)) return true;
-  return (SUBJECT_ALIASES[subject.id] || []).some((alias) => hay.includes(alias));
+  const name = foldAccents(subject.name);
+  const label = subjectLabel(entry);
+  if (hasAlias(label, name)) return true;
+  return (SUBJECT_ALIASES[subject.id] || []).some((alias) => hasAlias(label, alias));
 }
 
 export function resolveExamSubject(entry) {
@@ -90,7 +106,11 @@ export function resolveExamSubject(entry) {
     const byId = getAguSubject(entry.subjectId);
     if (byId) return byId;
   }
-  return AGU_SUBJECTS.find((subject) => matchExamToSubject(entry, subject)) || null;
+  const label = foldAccents(entry.subject || '');
+  if (AMBIGUOUS_LABELS.includes(label)) return null;
+  const hits = AGU_SUBJECTS.filter((subject) => matchExamToSubject(entry, subject));
+  if (hits.length !== 1) return null;
+  return hits[0];
 }
 
 export function resolveExamTopic(entry, subject) {
@@ -98,13 +118,14 @@ export function resolveExamTopic(entry, subject) {
   if (entry?.topicId) {
     const byId = (subject.topics || []).find((t) => t.id === entry.topicId);
     if (byId) return byId;
+    return null;
   }
-  const hay = `${entry?.topic || ''}`.toLowerCase();
-  if (!hay) return (subject.topics || [])[0] || null;
-  const hit = (subject.topics || []).find((topic) => (
-    hay.includes(String(topic.id).toLowerCase()) || hay.includes(String(topic.name).toLowerCase())
+  const hay = foldAccents(entry?.topic || '');
+  if (!hay) return null;
+  const hits = (subject.topics || []).filter((topic) => (
+    wordBoundaryIncludes(hay, topic.id) || wordBoundaryIncludes(hay, topic.name)
   ));
-  return hit || (subject.topics || [])[0] || null;
+  return hits.length === 1 ? hits[0] : null;
 }
 
 function topicKey(subjectId, topicId) {

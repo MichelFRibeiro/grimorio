@@ -188,7 +188,9 @@ function aguTodaySnapshot(db, todayStr) {
     remaining: Math.max(0, (summary.today?.totalBlocks || 0) - (summary.today?.doneCount || 0)),
     total: summary.today?.totalBlocks || 0,
     minutesToday: series.today?.minutes ?? summary.studyTime?.day ?? 0,
-    targetMinutes: series.homeostasisMinMinutes ?? null,
+    targetMinutes: series.todayTargetMinutes || series.setpointMinutes || null,
+    setpointMinutes: series.setpointMinutes || null,
+    coverage: summary.coverage || null,
     blocks
   };
 }
