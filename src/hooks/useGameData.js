@@ -1238,11 +1238,11 @@ export function useGameData() {
     return { ok: true };
   };
 
-  const acceptOracleDose = async (decisionId) => {
+  const acceptOracleDose = async (decisionId, extra = {}) => {
     const res = await fetch('/api/next-action/accept-dose', {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ decisionId })
+      body: JSON.stringify({ decisionId, ...(extra || {}) })
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: json.error || 'Não foi possível registrar a dose.' };

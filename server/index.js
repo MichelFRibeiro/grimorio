@@ -687,6 +687,7 @@ app.post('/api/next-action/accept-dose', (req, res) => {
     // A dose aceita precisa deixar rastro: antes o aceite só existia na
     // memória do Oráculo, sem registro do que foi feito.
     const now = new Date();
+    const trackedMinutes = parseDurationMinutes(req.body?.durationMinutes);
     db.actionLogs.unshift({
       id: uid('log'),
       type: 'oracle_dose',
@@ -701,6 +702,7 @@ app.post('/api/next-action/accept-dose', (req, res) => {
         doseUnit: decision.dose.unit,
         fraction: decision.dose.fraction,
         fullAmount: decision.quantity ? formatQuantity(decision.quantity.amount, decision.quantity.unit) : null,
+        trackedMinutes: trackedMinutes || null,
         decisionId: decision.id
       },
       timestamp: now.toISOString(),

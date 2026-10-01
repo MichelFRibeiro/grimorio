@@ -191,7 +191,11 @@ export function NextActionCard({
 
   const handleDose = async (item) => {
     if (!item?.decisionId || !onAcceptDose) return false;
-    const result = await onAcceptDose(item.decisionId);
+    // O cronômetro da atividade é encerrado junto: sem isto ele seguia
+    // rodando depois de "Fiz X min".
+    const timerKind = item.kind === 'habit' ? 'habit' : (item.kind === 'victory' ? 'victory' : 'quest');
+    const durationMinutes = consumeActivityTimerMinutes(timerKind, item.id);
+    const result = await onAcceptDose(item.decisionId, durationMinutes > 0 ? { durationMinutes } : {});
     if (!result?.ok) {
       setRefreshError(result?.error || 'Não foi possível registrar a dose.');
       return false;
@@ -756,6 +760,20 @@ function PrimaryRow({
   const isVictory = item.kind === 'victory';
   const kindLabel = isVictory ? 'Vitória do dia' : (isHabit ? 'Ritual' : 'Missão');
   const KindIcon = isVictory ? Trophy : (isHabit ? Flame : Scroll);
+  const hasDose = !!item.dose?.reduced;
+  // Com dose na tela, o segundo botão é o caminho "fiz tudo": o rótulo precisa
+  // deixar claro o que ele conclui (e não prometer "inteiro" quando ele só
+  // avança um passo da missão).
+  const fullActionLabel = isVictory
+    ? 'Concluir vitória'
+    : isHabit
+      ? (hasDose ? 'Marcar ritual inteiro' : 'Marcar ritual')
+      : item.nextSubtask
+        ? 'Avançar passo'
+        : (hasDose ? 'Concluir missão inteira' : 'Concluir');
+  const fullActionTitle = item.nextSubtask
+    ? `Avançar o próximo passo: ${item.nextSubtask.title}`
+    : `Concluir a atividade inteira: ${item.title}`;
   return (
     <div
       style={{
@@ -843,17 +861,45 @@ function PrimaryRow({
         </button>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+          {/* Com dose sugerida, os dois caminhos precisam existir: fazer só o
+              começo (dose) ou concluir a atividade inteira de uma vez. */}
+          {item.dose?.reduced && (
+            <button
+              type="button"
+              onClick={() => onDose(item)}
+              title="Registrar só o começo sugerido"
+              style={{
+                padding: '9px 14px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+                color: '#fff',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <CheckCircle2 size={15} />
+              Fiz {item.dose.label}
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => (item.dose?.reduced ? onDose(item) : onDo(item))}
+            onClick={() => onDo(item)}
+            title={fullActionTitle}
             style={{
               padding: '9px 14px',
               borderRadius: '10px',
-              background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
-              color: '#fff',
+              background: item.dose?.reduced
+                ? 'rgba(16, 185, 129, 0.14)'
+                : 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+              color: item.dose?.reduced ? '#047857' : '#fff',
               fontWeight: 800,
               fontSize: '0.82rem',
-              border: 'none',
+              border: item.dose?.reduced ? '1px solid rgba(16, 185, 129, 0.55)' : 'none',
               cursor: 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
@@ -861,7 +907,7 @@ function PrimaryRow({
             }}
           >
             <CheckCircle2 size={15} />
-            {item.dose?.reduced ? `Fiz ${item.dose.label}` : (isVictory ? 'Concluir vitória' : (isHabit ? 'Marcar ritual' : (item.nextSubtask ? 'Avançar passo' : 'Concluir')))}
+            {fullActionLabel}
           </button>
           <button
             type="button"
