@@ -4,7 +4,7 @@ import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings } from './rankings.js';
-import { suggestNextAction, previewNextAction } from './oracleSuggest.js';
+import { suggestNextAction, previewNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly } from './oracleSuggest.js';
 import { markDecisionAccepted } from './oracleMemory.js';
 import {
   summarizePlan,
@@ -66,6 +66,32 @@ import {
   updateDailyVictory
 } from '../src/utils/dailyVictories.js';
 import { syncDailyVictoriesFromActivity } from './dailyVictorySync.js';
+import {
+  completeQuest as domainCompleteQuest,
+  deleteQuest as domainDeleteQuest,
+  toggleHabit as domainToggleHabit,
+  deleteHabit as domainDeleteHabit,
+  logReadingSession as domainLogReadingSession,
+  updateReadingSession as domainUpdateReadingSession,
+  deleteReadingSession as domainDeleteReadingSession,
+  addQuote as domainAddQuote,
+  updateQuote as domainUpdateQuote,
+  deleteQuote as domainDeleteQuote,
+  deleteBook as domainDeleteBook,
+  logExamQuestions as domainLogExamQuestions,
+  updateExamQuestions as domainUpdateExamQuestions,
+  deleteExamQuestions as domainDeleteExamQuestions,
+  createProcess as domainCreateProcess,
+  stepProcess as domainStepProcess,
+  updateProcess as domainUpdateProcess,
+  deleteProcess as domainDeleteProcess,
+  createReward as domainCreateReward,
+  redeemReward as domainRedeemReward,
+  completeDailyVictoryUseCase,
+  deleteMindMapSession as domainDeleteMindMapSession,
+  revertMindMapSession
+} from './domain/activities.js';
+import { markEnergySkip, formatQuantity } from './oracleMemory.js';
 import {
   createMindMap,
   addMindMapNode,
@@ -315,68 +341,22 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const quest = (db.quests || []).find(q => q.id === args.id);
-      if (!quest) return formatError(`Missão '${args.id}' não encontrada.`);
-
-      const willComplete = args.completed !== undefined ? args.completed : !quest.completed;
-      if (quest.completed === willComplete) {
-        return formatSuccess({ quest, stateUnchanged: true }, `A missão já estava no estado ${willComplete ? 'concluída' : 'pendente'}.`);
-      }
-
-      quest.completed = willComplete;
-      quest.completedAt = willComplete ? new Date().toISOString() : null;
-
-      let rewardResult = null;
-      if (willComplete) {
-        const durationMinutes = parseDurationMinutes(args.durationMinutes);
-        quest.durationMinutes = durationMinutes || null;
-        const willpower = willpowerForDifficulty(quest.difficulty);
-        const focus = 10;
-        rewardResult = rewardPlayer({
-          xp: quest.xpReward,
-          coins: quest.coinReward,
-          willpower,
-          focus,
-          actionType: 'quest_complete',
-          entityId: quest.id,
-          title: quest.title,
-          details: {
-            category: quest.category,
-            priority: quest.priority,
-            difficulty: quest.difficulty,
-            location: quest.location || null,
-            durationMinutes
-          }
-        });
-        db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'quest', quest.id);
-      } else {
-        quest.durationMinutes = null;
-        db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'quest', quest.id);
-        const willpower = willpowerForDifficulty(quest.difficulty);
-        const focus = 10;
-        rewardResult = revertPlayerReward({
-          xp: quest.xpReward,
-          coins: quest.coinReward,
-          willpower,
-          focus,
-          actionType: 'quest_complete',
-          entityId: quest.id
-        });
-      }
-
-      if (willComplete) markDecisionAccepted(db, { entityId: quest.id, kind: 'quest' });
-      const linkedVictories = syncDailyVictoriesFromActivity(db, {
-        questId: quest.id,
-        questCompleted: willComplete
+      const result = domainCompleteQuest(db, {
+        id: args.id,
+        completed: args.completed,
+        durationMinutes: args.durationMinutes
       });
-
+      if (result.error) return formatError(result.error);
+      if (result.stateUnchanged) {
+        return formatSuccess({ quest: result.quest, stateUnchanged: true }, `A missão já estava no estado ${result.willComplete ? 'concluída' : 'pendente'}.`);
+      }
       saveDb(db);
       return formatSuccess({
-        quest,
-        completed: willComplete,
-        rewardResult,
-        linkedVictories
-      }, willComplete ? `🎉 Missão '${quest.title}' concluída! Recompensas concedidas.` : `Missão '${quest.title}' desmarcada e recompensas estornadas.`);
+        quest: result.quest,
+        completed: result.willComplete,
+        rewardResult: result.rewardResult,
+        linkedVictories: result.linkedVictories
+      }, result.willComplete ? `🎉 Missão '${result.quest.title}' concluída! Recompensas concedidas.` : `Missão '${result.quest.title}' desmarcada e recompensas estornadas.`);
     }
   },
   {
@@ -387,12 +367,10 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const index = (db.quests || []).findIndex(q => q.id === args.id);
-      if (index === -1) return formatError(`Missão '${args.id}' não encontrada.`);
-
-      const [removed] = db.quests.splice(index, 1);
+      const result = domainDeleteQuest(db, args.id);
+      if (result.error) return formatError(result.error);
       saveDb(db);
-      return formatSuccess(removed, `Missão '${removed.title}' excluída com sucesso.`);
+      return formatSuccess(result.removed, `Missão '${result.removed.title}' excluída com sucesso.`);
     }
   },
 
@@ -609,12 +587,10 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const index = (db.books || []).findIndex(b => b.id === args.id);
-      if (index === -1) return formatError(`Livro '${args.id}' não encontrado.`);
-
-      const [removed] = db.books.splice(index, 1);
+      const result = domainDeleteBook(db, args.id);
+      if (result.error) return formatError(result.error);
       saveDb(db);
-      return formatSuccess(removed, `Livro '${removed.title}' excluído com sucesso.`);
+      return formatSuccess(result.removed, `Livro '${result.removed.title}' excluído com sucesso.`);
     }
   },
   {
@@ -628,35 +604,10 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const book = (db.books || []).find(b => b.id === args.bookId);
-      if (!book) return formatError(`Livro '${args.bookId}' não encontrado.`);
-      if (!args.quote || !args.quote.trim()) return formatError('Texto da citação é obrigatório.');
-
-      const newQuote = {
-        id: uid('quo'),
-        bookId: book.id,
-        bookTitle: book.title,
-        quote: args.quote.trim(),
-        page: parseInt(args.page, 10) || book.currentPage,
-        note: (args.note || '').trim(),
-        createdAt: new Date().toISOString()
-      };
-
-      if (!book.quotes) book.quotes = [];
-      book.quotes.unshift(newQuote);
-
-      const rewardResult = rewardPlayer({
-        xp: 15,
-        coins: 2,
-        wisdom: 5,
-        actionType: 'book_quote',
-        entityId: newQuote.id,
-        title: `Insight em "${book.title}" (pág. ${newQuote.page})`,
-        details: { bookId: book.id, quote: newQuote.quote.substring(0, 50) }
-      });
-
+      const result = domainAddQuote(db, args);
+      if (result.error) return formatError(result.error);
       saveDb(db);
-      return formatSuccess({ quote: newQuote, rewardResult }, `Citação adicionada a '${book.title}' com sucesso! (+15 XP, +5 Sabedoria)`);
+      return formatSuccess({ quote: result.quote, rewardResult: result.rewardResult }, `Citação adicionada a '${result.book.title}' com sucesso! (+20 XP, +10 Sabedoria)`);
     }
   },
   {
@@ -668,23 +619,10 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const book = (db.books || []).find(b => b.id === args.bookId);
-      if (!book) return formatError(`Livro '${args.bookId}' não encontrado.`);
-
-      const index = (book.quotes || []).findIndex(q => q.id === args.quoteId);
-      if (index === -1) return formatError(`Citação '${args.quoteId}' não encontrada no livro.`);
-
-      const [removed] = book.quotes.splice(index, 1);
-      revertPlayerReward({
-        xp: 15,
-        coins: 2,
-        wisdom: 5,
-        actionType: 'book_quote',
-        entityId: args.quoteId
-      });
-
+      const result = domainDeleteQuote(db, { bookId: args.bookId, quoteId: args.quoteId });
+      if (result.error) return formatError(result.error);
       saveDb(db);
-      return formatSuccess(removed, 'Citação removida e recompensas estornadas com sucesso.');
+      return formatSuccess(result.removed, 'Citação removida e recompensas estornadas com sucesso.');
     }
   },
 
@@ -728,91 +666,17 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const book = (db.books || []).find(b => b.id === args.bookId);
-      if (!book) return formatError(`Livro '${args.bookId}' não encontrado.`);
-
-      const sPage = parseInt(args.startPage, 10) || book.currentPage || 0;
-      const ePage = parseInt(args.endPage, 10);
-      const duration = parseInt(args.durationMinutes, 10) || 20;
-
-      if (ePage <= sPage) {
-        return formatError(`A página final (${ePage}) deve ser maior que a página inicial (${sPage}).`);
-      }
-
-      const pagesRead = Math.min(book.totalPages, ePage) - sPage;
-      const newCurrentPage = Math.min(book.totalPages, ePage);
-      const finishedBook = newCurrentPage >= book.totalPages;
-
-      book.currentPage = newCurrentPage;
-      if (finishedBook) {
-        book.status = 'completed';
-        book.completedAt = new Date().toISOString();
-      }
-
-      // Process quotes
-      const parsedQuotes = Array.isArray(args.quotes) ? args.quotes.filter(q => q.quote && q.quote.trim()).map(q => ({
-        id: uid('quo'),
-        bookId: book.id,
-        bookTitle: book.title,
-        quote: q.quote.trim(),
-        page: parseInt(q.page, 10) || newCurrentPage,
-        note: (q.note || '').trim(),
-        createdAt: new Date().toISOString()
-      })) : [];
-
-      if (!book.quotes) book.quotes = [];
-      if (parsedQuotes.length > 0) {
-        book.quotes.unshift(...parsedQuotes);
-      }
-
-      // XP & Rewards
-      const basePageXp = pagesRead * 2;
-      const finishBonusXp = finishedBook ? 200 : 0;
-      const quoteBonusXp = parsedQuotes.length * 15;
-      const totalXp = basePageXp + finishBonusXp + quoteBonusXp;
-      const coins = Math.max(5, Math.floor(pagesRead / 3)) + (finishedBook ? 50 : 0) + parsedQuotes.length * 2;
-      const wisdom = pagesRead + (finishedBook ? 50 : 0) + parsedQuotes.length * 5;
-
-      const session = {
-        id: uid('rs'),
-        bookId: book.id,
-        bookTitle: book.title,
-        startPage: sPage,
-        endPage: newCurrentPage,
-        pagesRead,
-        durationMinutes: duration,
-        notes: args.notes || '',
-        quotes: parsedQuotes,
-        xpEarned: totalXp,
-        coinsEarned: coins,
-        wisdomEarned: wisdom,
-        date: args.date || getSaoPauloDateStr(),
-        timestamp: new Date().toISOString()
-      };
-
-      if (!db.readingSessions) db.readingSessions = [];
-      db.readingSessions.unshift(session);
-
-      const rewardResult = rewardPlayer({
-        xp: totalXp,
-        coins,
-        wisdom,
-        actionType: 'reading_session',
-        entityId: book.id,
-        title: `${book.title} (+${pagesRead} págs${parsedQuotes.length > 0 ? `, ${parsedQuotes.length} citações` : ''})`,
-        details: { category: 'Estudos', pagesRead, durationMinutes: duration, finishedBook, quotesCount: parsedQuotes.length }
-      });
-
-      const linkedVictories = syncDailyVictoriesFromActivity(db, { syncReading: true });
-
+      const result = domainLogReadingSession(db, args);
+      if (result.error) return formatError(result.error);
       saveDb(db);
+      const pages = result.session.pagesRead;
       return formatSuccess({
-        session,
-        book,
-        finishedBook,
-        rewardResult,
-        linkedVictories
-      }, `📖 Sessão de leitura registrada! +${pagesRead} páginas lidas (+${totalXp} XP, +${wisdom} Sabedoria, +${coins} Moedas).`);
+        session: result.session,
+        book: result.book,
+        finishedBook: result.finishedBook,
+        rewardResult: result.rewardResult,
+        linkedVictories: result.linkedVictories
+      }, `📖 Sessão de leitura registrada! +${pages} páginas lidas (+${result.session.xpEarned} XP, +${result.session.wisdomEarned} Sabedoria, +${result.session.coinsEarned} Moedas).`);
     }
   },
   {
@@ -823,30 +687,10 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const index = (db.readingSessions || []).findIndex(s => s.id === args.id);
-      if (index === -1) return formatError(`Sessão de leitura '${args.id}' não encontrada.`);
-
-      const [removed] = db.readingSessions.splice(index, 1);
-      const book = (db.books || []).find(b => b.id === removed.bookId);
-      if (book) {
-        book.currentPage = Math.max(0, (book.currentPage || 0) - (removed.pagesRead || 0));
-        if (book.status === 'completed' && book.currentPage < book.totalPages) {
-          book.status = 'reading';
-        }
-      }
-
-      revertPlayerReward({
-        xp: removed.xpEarned || 0,
-        coins: removed.coinsEarned || 0,
-        wisdom: removed.wisdomEarned || 0,
-        actionType: 'reading_session',
-        entityId: removed.bookId
-      });
-
-      const linkedVictories = syncDailyVictoriesFromActivity(db, { syncReading: true });
-
+      const result = domainDeleteReadingSession(db, args.id);
+      if (result.error) return formatError(result.error);
       saveDb(db);
-      return formatSuccess({ removed, book, linkedVictories }, 'Sessão de leitura excluída e progresso estornado com sucesso.');
+      return formatSuccess({ removed: result.removed, book: result.book, linkedVictories: result.linkedVictories }, 'Sessão de leitura excluída e progresso estornado com sucesso.');
     }
   },
 
@@ -857,14 +701,15 @@ export const toolsDefinition = [
     name: 'list_processes',
     description: 'Listar processos da Linha de Operações (processos em lote).',
     schema: {
-      status: z.enum(['active', 'completed', 'all']).optional().describe('Status dos processos'),
+      status: z.enum(['active', 'in_progress', 'completed', 'all']).optional().describe('Status dos processos (active é alias de in_progress)'),
       category: z.string().optional().describe('Filtrar por categoria')
     },
     handler: async (args) => {
       const db = getDb();
       let processes = [...(db.processes || [])];
       if (args.status && args.status !== 'all') {
-        processes = processes.filter(p => p.status === args.status);
+        const wanted = args.status === 'active' ? 'in_progress' : args.status;
+        processes = processes.filter(p => p.status === wanted || (args.status === 'active' && p.status === 'active'));
       }
       if (args.category) {
         processes = processes.filter(p => (p.category || '').toLowerCase() === args.category.toLowerCase().trim());
@@ -898,30 +743,10 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      if (!args.title || !args.title.trim()) return formatError('Título do processo é obrigatório.');
-
-      const total = parseInt(args.totalSteps, 10) || 10;
-      const current = Math.min(total, Math.max(0, parseInt(args.currentStep, 10) || 0));
-
-      const defaultCategory = db.questCategories?.[0]?.name || 'Geral';
-      const newProcess = {
-        id: uid('proc'),
-        title: args.title.trim(),
-        description: (args.description || '').trim(),
-        totalSteps: total,
-        currentStep: current,
-        completedUnits: current,
-        stepUnit: args.stepUnit || 'processos',
-        category: args.category || defaultCategory,
-        status: current >= total ? 'completed' : 'active',
-        stepHistory: [],
-        createdAt: new Date().toISOString()
-      };
-
-      if (!db.processes) db.processes = [];
-      db.processes.unshift(newProcess);
+      const result = domainCreateProcess(db, args);
+      if (result.error) return formatError(result.error);
       saveDb(db);
-      return formatSuccess(newProcess, `Processo em lote '${newProcess.title}' criado com sucesso.`);
+      return formatSuccess(result.process, `Processo em lote '${result.process.title}' criado com sucesso.`);
     }
   },
   {
@@ -934,58 +759,21 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const process = (db.processes || []).find(p => p.id === args.id);
-      if (!process) return formatError(`Processo '${args.id}' não encontrado.`);
-
-      const increment = parseInt(args.stepCount, 10) || 1;
-      const prevStep = process.currentStep || 0;
-      const newStep = Math.min(process.totalSteps, prevStep + increment);
-      const actualAdvance = newStep - prevStep;
-
-      if (actualAdvance <= 0) {
-        return formatSuccess({ process, unchanged: true }, 'O processo já atingiu 100% das etapas.');
+      const result = domainStepProcess(db, args.id, args);
+      if (result.error) {
+        if (result.error.includes('totalmente concluído')) {
+          const process = (db.processes || []).find(p => p.id === args.id);
+          return formatSuccess({ process, unchanged: true }, 'O processo já atingiu 100% das etapas.');
+        }
+        return formatError(result.error);
       }
-
-      process.currentStep = newStep;
-      process.completedUnits = newStep;
-      const finished = newStep >= process.totalSteps;
-      if (finished) {
-        process.status = 'completed';
-        process.completedAt = new Date().toISOString();
-      }
-
-      if (!process.stepHistory) process.stepHistory = [];
-      const historyEntry = {
-        id: uid('step'),
-        stepNumber: newStep,
-        advancedCount: actualAdvance,
-        note: (args.note || '').trim(),
-        timestamp: new Date().toISOString()
-      };
-      process.stepHistory.unshift(historyEntry);
-
-      // XP & Rewards
-      const xp = actualAdvance * 15 + (finished ? 100 : 0);
-      const coins = actualAdvance * 3 + (finished ? 20 : 0);
-      const focus = actualAdvance * 5 + (finished ? 25 : 0);
-
-      const rewardResult = rewardPlayer({
-        xp,
-        coins,
-        focus,
-        actionType: 'process_step',
-        entityId: process.id,
-        title: `${process.title} (+${actualAdvance} ${process.stepUnit})`,
-        details: { category: process.category, finished }
-      });
-
       saveDb(db);
       return formatSuccess({
-        process,
-        historyEntry,
-        finished,
-        rewardResult
-      }, `⚡ +${actualAdvance} ${process.stepUnit} concluído(s)! (+${xp} XP, +${focus} Foco, +${coins} Moedas).`);
+        process: result.process,
+        historyEntry: result.historyEntry,
+        finished: result.finished,
+        rewardResult: result.rewardResult
+      }, `⚡ +${result.step.unitsAdded} ${result.process.unitName} concluído(s)! (+${result.step.xpEarned} XP, +${result.rewardResult?.logEntry?.focus || result.step.unitsAdded * 10} Foco, +${result.step.coinsEarned} Moedas).`);
     }
   },
   {
@@ -1003,22 +791,10 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const process = (db.processes || []).find(p => p.id === args.id);
-      if (!process) return formatError(`Processo '${args.id}' não encontrado.`);
-
-      if (args.title !== undefined) process.title = args.title.trim();
-      if (args.description !== undefined) process.description = args.description.trim();
-      if (args.totalSteps !== undefined) process.totalSteps = parseInt(args.totalSteps, 10);
-      if (args.currentStep !== undefined) {
-        process.currentStep = Math.min(process.totalSteps, Math.max(0, parseInt(args.currentStep, 10)));
-        process.completedUnits = process.currentStep;
-      }
-      if (args.stepUnit !== undefined) process.stepUnit = args.stepUnit.trim();
-      if (args.category !== undefined) process.category = args.category.trim();
-      if (args.status !== undefined) process.status = args.status;
-
+      const result = domainUpdateProcess(db, args.id, args);
+      if (result.error) return formatError(result.error);
       saveDb(db);
-      return formatSuccess(process, `Processo '${process.title}' atualizado com sucesso.`);
+      return formatSuccess(result.process, `Processo '${result.process.title}' atualizado com sucesso.`);
     }
   },
   {
@@ -1029,12 +805,10 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const index = (db.processes || []).findIndex(p => p.id === args.id);
-      if (index === -1) return formatError(`Processo '${args.id}' não encontrado.`);
-
-      const [removed] = db.processes.splice(index, 1);
+      const result = domainDeleteProcess(db, args.id);
+      if (result.error) return formatError(result.error);
       saveDb(db);
-      return formatSuccess(removed, `Processo '${removed.title}' excluído.`);
+      return formatSuccess(result.removed, `Processo '${result.removed.title}' excluído.`);
     }
   },
 
@@ -1157,95 +931,25 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const habit = (db.habits || []).find(h => h.id === args.id);
-      if (!habit) return formatError(`Ritual '${args.id}' não encontrado.`);
-
-      const todayStr = getSaoPauloDateStr();
-      const targetDate = args.date || todayStr;
-
-      if (targetDate > todayStr) {
-        return formatError(`Não é permitido marcar rituais em datas futuras (${targetDate}).`);
-      }
-
-      if (!habit.history) habit.history = [];
-      const isAlreadyCompleted = habit.history.includes(targetDate);
-
-      let rewardResult = null;
-      if (!isAlreadyCompleted) {
-        habit.history.push(targetDate);
-        const durationMinutes = parseDurationMinutes(args.durationMinutes);
-        setHabitDurationForDate(habit, targetDate, durationMinutes);
-        const streakData = calculateHabitStreak(habit.history, new Date(), habit.bestStreak || 0);
-        habit.currentStreak = streakData.currentStreak;
-        habit.bestStreak = streakData.bestStreak;
-
-        const multiplier = Math.min(2.0, 1 + habit.currentStreak * 0.1);
-        const xp = Math.round((habit.xpReward || 30) * multiplier);
-        const coins = habit.coinReward || 8;
-        const consistency = 15;
-
-        const isToday = targetDate === todayStr;
-        const dateParts = targetDate.split('-');
-        const formattedDate = isToday ? 'Hoje' : `${dateParts[2]}/${dateParts[1]}`;
-
-        rewardResult = rewardPlayer({
-          xp,
-          coins,
-          consistency,
-          actionType: 'habit_complete',
-          entityId: habit.id,
-          title: `Ritual Concluído: ${habit.title} (${formattedDate})`,
-          details: {
-            category: habit.category || 'Pessoal',
-            date: targetDate,
-            streak: habit.currentStreak,
-            location: habit.location || null,
-            durationMinutes
-          }
-        });
-        if (isToday) {
-          db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'habit', habit.id);
-          markDecisionAccepted(db, { entityId: habit.id, kind: 'habit' });
-        }
-      } else {
-        habit.history = habit.history.filter(d => d !== targetDate);
-        clearHabitDurationForDate(habit, targetDate);
-        if (targetDate === todayStr) {
-          db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'habit', habit.id);
-        }
-        const streakData = calculateHabitStreak(habit.history, new Date(), habit.bestStreak || 0);
-        habit.currentStreak = streakData.currentStreak;
-        habit.bestStreak = streakData.bestStreak;
-
-        const xp = habit.xpReward || 30;
-        const coins = habit.coinReward || 8;
-        const consistency = 15;
-
-        rewardResult = revertPlayerReward({
-          xp,
-          coins,
-          consistency,
-          actionType: 'habit_complete',
-          entityId: habit.id
-        });
-      }
-
+      const result = domainToggleHabit(db, args);
+      if (result.error) return formatError(result.error);
       saveDb(db);
-      const weeklyStats = getHabitWeeklyStats(habit, new Date());
-
-      const dateParts = targetDate.split('-');
-      const formattedDate = targetDate === todayStr ? 'hoje' : `em ${dateParts[2]}/${dateParts[1]}`;
-
+      const todayStr = getSaoPauloDateStr();
+      const weeklyStats = getHabitWeeklyStats(result.habit, todayStr);
+      const dateParts = result.targetDate.split('-');
+      const formattedDate = result.targetDate === todayStr ? 'hoje' : `em ${dateParts[2]}/${dateParts[1]}`;
       return formatSuccess({
         habit: {
-          ...habit,
+          ...result.habit,
           weeklyStats,
-          completedToday: habit.history.includes(todayStr)
+          completedToday: result.doneToday
         },
-        targetDate,
-        action: !isAlreadyCompleted ? 'completed' : 'uncompleted',
-        rewardResult
-      }, !isAlreadyCompleted ? `🔥 Ritual '${habit.title}' marcado para ${formattedDate}! Sequência: ${habit.currentStreak} dias (+${habit.xpReward || 30} XP).` : `Ritual '${habit.title}' desmarcado para ${formattedDate} e recompensas estornadas.`);
+        targetDate: result.targetDate,
+        action: result.done ? 'completed' : 'uncompleted',
+        rewardResult: result.rewardResult
+      }, result.done
+        ? `🔥 Ritual '${result.habit.title}' marcado para ${formattedDate}! Sequência: ${result.habit.currentStreak} dias.`
+        : `Ritual '${result.habit.title}' desmarcado para ${formattedDate} e recompensas estornadas.`);
     }
   },
   {
@@ -1314,12 +1018,10 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const index = (db.habits || []).findIndex(h => h.id === args.id);
-      if (index === -1) return formatError(`Ritual '${args.id}' não encontrado.`);
-
-      const [removed] = db.habits.splice(index, 1);
+      const result = domainDeleteHabit(db, args.id);
+      if (result.error) return formatError(result.error);
       saveDb(db);
-      return formatSuccess(removed, `Ritual '${removed.title}' excluído.`);
+      return formatSuccess(result.removed, `Ritual '${result.removed.title}' excluído.`);
     }
   },
 
@@ -1768,6 +1470,7 @@ export const toolsDefinition = [
             mode: result.session.mode
           }
         });
+        if (rewardResult?.logEntry?.id) result.session.rewardLogId = rewardResult.logEntry.id;
         saveDb(db);
         return formatSuccess({
           mindMap: result.map,
@@ -1793,14 +1496,7 @@ export const toolsDefinition = [
       if (index === -1) return formatError(`Mapa mental '${args.id}' não encontrado.`);
       const [removed] = db.mindMaps.splice(index, 1);
       db.mindMapSessions.filter(s => s.mapId === removed.id).forEach((session) => {
-        revertPlayerReward({
-          xp: session.xpEarned || 0,
-          coins: session.coinsEarned || 0,
-          wisdom: (session.recalled || 0) * 2 + Math.min(session.reviewed || 0, 8),
-          focus: (session.reviewed || 0) + Math.floor((session.durationMinutes || 0) / 5),
-          actionType: 'mind_map_study',
-          entityId: session.id
-        });
+        revertMindMapSession(db, session);
       });
       db.mindMapSessions = db.mindMapSessions.filter(s => s.mapId !== removed.id);
       saveDb(db);
@@ -1962,6 +1658,13 @@ export const toolsDefinition = [
     schema: {
       subject: z.string().describe('Matéria / Disciplina (ex: Direito Administrativo, Raciocínio Lógico)'),
       topic: z.string().optional().describe('Tópico ou assunto específico'),
+      subjectId: z.string().optional().describe('ID da matéria no plano AGU (ex: constitucional)'),
+      topicId: z.string().optional().describe('ID do tópico no plano AGU'),
+      kind: z.string().optional().describe('Tipo do bloco AGU: questoes, erros, revisao, lei-seca, discursiva, simulado, teoria'),
+      blockKey: z.string().optional().describe('Chave do bloco AGU a creditar'),
+      category: z.string().optional().describe('Categoria (padrão: Estudos)'),
+      institution: z.string().optional().describe('Banca ou instituição'),
+      platform: z.string().optional().describe('Plataforma (Qconcursos, Tec...)'),
       totalQuestions: z.number().describe('Total de questões resolvidas'),
       correctAnswers: z.number().describe('Quantidade de acertos'),
       wrongAnswers: z.number().optional().describe('Quantidade de erros (se omitido, calcula total - acertos)'),
@@ -1972,68 +1675,15 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      if (!args.subject || !args.subject.trim()) return formatError('A matéria é obrigatória.');
-
-      const total = parseInt(args.totalQuestions, 10);
-      const correct = parseInt(args.correctAnswers, 10);
-      if (isNaN(total) || total <= 0) return formatError('Total de questões deve ser maior que 0.');
-      if (isNaN(correct) || correct < 0 || correct > total) return formatError('Acertos deve ser entre 0 e o total de questões.');
-
-      const wrong = args.wrongAnswers !== undefined ? parseInt(args.wrongAnswers, 10) : total - correct;
-      const duration = parseInt(args.durationMinutes, 10) || 30;
-
-      const accuracy = Math.round((correct / total) * 100);
-      const xp = correct * 10 + (total - correct) * 2;
-      const coins = Math.floor(correct * 1.5);
-      const wisdom = correct * 3;
-
-      const newEntry = {
-        id: uid('eq'),
-        subject: args.subject.trim(),
-        topic: (args.topic || '').trim(),
-        totalQuestions: total,
-        correctAnswers: correct,
-        wrongAnswers: wrong,
-        accuracyRate: accuracy,
-        durationMinutes: duration,
-        notes: (args.notes || '').trim(),
-        notebookUrl: (args.notebookUrl || '').trim(),
-        xpEarned: xp,
-        coinsEarned: coins,
-        wisdomEarned: wisdom,
-        date: args.date || getSaoPauloDateStr(),
-        timestamp: new Date().toISOString()
-      };
-
-      if (!db.examQuestions) db.examQuestions = [];
-      db.examQuestions.unshift(newEntry);
-      if (db.aguPlan) {
-        db.aguPlan = applyExamToPlan(
-          sanitizeAguPlan(db.aguPlan, newEntry.date),
-          newEntry,
-          newEntry.date,
-          db.examQuestions
-        );
-      }
-
-      const rewardResult = rewardPlayer({
-        xp,
-        coins,
-        wisdom,
-        actionType: 'exam_questions',
-        entityId: newEntry.id,
-        title: `Questões: ${newEntry.subject} (${correct}/${total} - ${accuracy}%)`,
-        details: { subject: newEntry.subject, correct, total, accuracy }
-      });
-
-      const linkedVictories = syncDailyVictoriesFromActivity(db, { syncStudy: true });
-
+      const result = domainLogExamQuestions(db, args);
+      if (result.error) return formatError(result.error);
       saveDb(db);
+      const entry = result.entry;
       return formatSuccess({
-        entry: newEntry,
-        rewardResult,
-        linkedVictories
-      }, `🎯 ${total} questões registradas em '${newEntry.subject}' com ${accuracy}% de acerto! (+${xp} XP, +${wisdom} Sabedoria).`);
+        entry,
+        rewardResult: result.rewardResult,
+        linkedVictories: result.linkedVictories
+      }, `🎯 ${entry.totalQuestions} questões registradas em '${entry.subject}' com ${entry.accuracyRate}% de acerto! (+${entry.xpEarned} XP).`);
     }
   },
   {
@@ -2044,22 +1694,10 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const index = (db.examQuestions || []).findIndex(q => q.id === args.id);
-      if (index === -1) return formatError(`Registro de questões '${args.id}' não encontrado.`);
-
-      const [removed] = db.examQuestions.splice(index, 1);
-      revertPlayerReward({
-        xp: removed.xpEarned || 0,
-        coins: removed.coinsEarned || 0,
-        wisdom: removed.wisdomEarned || 0,
-        actionType: 'exam_questions',
-        entityId: args.id
-      });
-
-      const linkedVictories = syncDailyVictoriesFromActivity(db, { syncStudy: true });
-
+      const result = domainDeleteExamQuestions(db, args.id);
+      if (result.error) return formatError(result.error);
       saveDb(db);
-      return formatSuccess({ removed, linkedVictories }, 'Registro de questões excluído e pontuação estornada.');
+      return formatSuccess({ removed: result.removed, linkedVictories: result.linkedVictories }, 'Registro de questões excluído e pontuação estornada.');
     }
   },
 
@@ -2086,21 +1724,16 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      if (!args.title || !args.title.trim()) return formatError('Título da recompensa é obrigatório.');
-
-      const newReward = {
-        id: uid('rew'),
-        title: args.title.trim(),
-        costCoins: parseInt(args.costCoins, 10) || 50,
-        icon: args.icon || 'Gift',
-        category: args.category || 'Lazer',
-        createdAt: new Date().toISOString()
-      };
-
-      if (!db.rewards) db.rewards = [];
-      db.rewards.unshift(newReward);
+      const result = domainCreateReward(db, {
+        title: args.title,
+        cost: args.costCoins,
+        costCoins: args.costCoins,
+        icon: args.icon,
+        category: args.category
+      });
+      if (result.error) return formatError(result.error);
       saveDb(db);
-      return formatSuccess(newReward, `Recompensa '${newReward.title}' criada por ${newReward.costCoins} moedas.`);
+      return formatSuccess(result.reward, `Recompensa '${result.reward.title}' criada por ${result.reward.cost} moedas.`);
     }
   },
   {
@@ -2136,30 +1769,13 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const reward = (db.rewards || []).find(r => r.id === args.id);
-      if (!reward) return formatError(`Recompensa '${args.id}' não encontrada.`);
-
-      const userCoins = db.userProfile?.coins ?? 0;
-      db.userProfile.coins = userCoins - (reward.costCoins ?? reward.cost ?? 0);
-
-      const redemption = {
-        id: uid('red'),
-        rewardId: reward.id,
-        title: reward.title,
-        costCoins: reward.costCoins,
-        icon: reward.icon,
-        notes: (args.notes || '').trim(),
-        timestamp: new Date().toISOString()
-      };
-
-      if (!db.rewardRedemptions) db.rewardRedemptions = [];
-      db.rewardRedemptions.unshift(redemption);
-
+      const result = domainRedeemReward(db, args);
+      if (result.error) return formatError(result.error);
       saveDb(db);
       return formatSuccess({
-        redemption,
+        redemption: result.redemption,
         remainingCoins: db.userProfile.coins
-      }, `🎁 Recompensa '${reward.title}' resgatada com sucesso! Saldo restante: 🪙 ${db.userProfile.coins} moedas.`);
+      }, `🎁 Recompensa '${result.reward.title}' resgatada com sucesso! Saldo restante: 🪙 ${db.userProfile.coins} moedas.`);
     }
   },
   {
@@ -2860,89 +2476,24 @@ export const toolsDefinition = [
     schema: {
       id: z.string().describe('ID da vitória'),
       completed: z.boolean().optional().describe('true = realizada, false = reabrir. Se omitido, alterna.'),
-      note: z.string().optional().describe('Anotação opcional ao concluir')
+      note: z.string().optional().describe('Anotação opcional ao concluir'),
+      durationMinutes: z.number().optional().describe('Tempo cronometrado em minutos (máx. 480). Limpa o cronômetro ao vivo.')
     },
     handler: async (args) => {
       const db = getDb();
-      const todayStr = getSaoPauloDateStr();
-      db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
-      db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
-      try {
-        const result = completeDailyVictory(db.dailyVictories, db.dailyVictoryBonuses, args.id, {
-          note: args.note,
-          completed: args.completed,
-          today: todayStr
-        });
-        db.dailyVictories = result.list;
-        db.dailyVictoryBonuses = result.bonuses;
-
-        let rewardResult = null;
-        let bonusRewardResult = null;
-        if (!result.stateUnchanged) {
-          if (result.willComplete) {
-            // Mesmo aceite do fluxo HTTP: a indicação do Oráculo precisa saber
-            // que a Vitória do Dia foi feita.
-            markDecisionAccepted(db, { entityId: result.victory.id, kind: 'victory' });
-            rewardResult = rewardPlayer({
-              xp: DAILY_VICTORY_REWARDS.xp,
-              coins: DAILY_VICTORY_REWARDS.coins,
-              willpower: DAILY_VICTORY_REWARDS.willpower,
-              actionType: 'daily_victory_complete',
-              entityId: result.victory.id,
-              title: result.victory.title,
-              details: {
-                category: result.victory.category,
-                date: result.victory.date,
-                note: result.victory.note || '',
-                durationMinutes: result.victory.durationMinutes || null
-              }
-            });
-            if (result.bonusAwardedNow) {
-              bonusRewardResult = rewardPlayer({
-                xp: DAILY_VICTORY_TRIPLE_BONUS.xp,
-                coins: DAILY_VICTORY_TRIPLE_BONUS.coins,
-                willpower: DAILY_VICTORY_TRIPLE_BONUS.willpower,
-                consistency: DAILY_VICTORY_TRIPLE_BONUS.consistency,
-                actionType: 'daily_victory_triple_bonus',
-                entityId: bonusEntityId(result.victory.date),
-                title: `Tríade de vitórias — ${result.victory.date}`,
-                details: { category: result.victory.category, date: result.victory.date, bonus: true }
-              });
-            }
-          } else {
-            rewardResult = revertPlayerReward({
-              xp: DAILY_VICTORY_REWARDS.xp,
-              coins: DAILY_VICTORY_REWARDS.coins,
-              willpower: DAILY_VICTORY_REWARDS.willpower,
-              actionType: 'daily_victory_complete',
-              entityId: result.victory.id
-            });
-            if (result.bonusRevertedNow) {
-              bonusRewardResult = revertPlayerReward({
-                xp: DAILY_VICTORY_TRIPLE_BONUS.xp,
-                coins: DAILY_VICTORY_TRIPLE_BONUS.coins,
-                willpower: DAILY_VICTORY_TRIPLE_BONUS.willpower,
-                consistency: DAILY_VICTORY_TRIPLE_BONUS.consistency,
-                actionType: 'daily_victory_triple_bonus',
-                entityId: bonusEntityId(result.victory.date)
-              });
-            }
-          }
-        }
-        saveDb(db);
-        const verb = result.willComplete ? 'conquistada' : 'reaberta';
-        const bonusMsg = result.bonusAwardedNow ? ' Tríade completa — bônus concedido!' : (result.bonusRevertedNow ? ' Bônus da tríade estornado.' : '');
-        return formatSuccess({
-          victory: result.victory,
-          willComplete: result.willComplete,
-          bonusAwardedNow: result.bonusAwardedNow,
-          bonusRevertedNow: result.bonusRevertedNow,
-          rewardResult,
-          bonusRewardResult
-        }, `Vitória '${result.victory.title}' ${verb}.${bonusMsg}`);
-      } catch (err) {
-        return formatError(err.message);
-      }
+      const result = completeDailyVictoryUseCase(db, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      const verb = result.willComplete ? 'conquistada' : 'reaberta';
+      const bonusMsg = result.bonusAwardedNow ? ' Tríade completa — bônus concedido!' : (result.bonusRevertedNow ? ' Bônus da tríade estornado.' : '');
+      return formatSuccess({
+        victory: result.victory,
+        willComplete: result.willComplete,
+        bonusAwardedNow: result.bonusAwardedNow,
+        bonusRevertedNow: result.bonusRevertedNow,
+        rewardResult: result.rewardResult,
+        bonusRewardResult: result.bonusRewardResult
+      }, `Vitória '${result.victory.title}' ${verb}.${bonusMsg}`);
     }
   },
   {
@@ -2983,6 +2534,189 @@ export const toolsDefinition = [
       } catch (err) {
         return formatError(err.message);
       }
+    }
+  },
+
+  // ==========================================
+  // Ferramentas que antes só existiam no HTTP
+  // ==========================================
+  {
+    name: 'update_reading_session',
+    description: 'Atualizar uma sessão de leitura (páginas, duração, notas, citações). Estorna o log antigo e concede a recompensa nova.',
+    schema: {
+      id: z.string().describe('ID da sessão de leitura'),
+      startPage: z.number().describe('Página inicial'),
+      endPage: z.number().describe('Página final'),
+      durationMinutes: z.number().optional().describe('Duração em minutos (máx. 480)'),
+      notes: z.string().optional().describe('Notas da sessão'),
+      quotes: z.array(z.object({
+        id: z.string().optional(),
+        quote: z.string(),
+        page: z.number().optional(),
+        note: z.string().optional()
+      })).optional().describe('Citações da sessão (substitui as anteriores desta sessão)')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = domainUpdateReadingSession(db, args.id, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess({ session: result.session, book: result.book, rewardResult: result.rewardResult }, 'Sessão de leitura atualizada.');
+    }
+  },
+  {
+    name: 'update_book_quote',
+    description: 'Atualizar o texto, a página ou a anotação de uma citação.',
+    schema: {
+      bookId: z.string().describe('ID do livro'),
+      quoteId: z.string().describe('ID da citação'),
+      quote: z.string().optional().describe('Novo texto'),
+      page: z.number().optional().describe('Nova página'),
+      note: z.string().optional().describe('Nova anotação')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = domainUpdateQuote(db, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.quote, 'Citação atualizada.');
+    }
+  },
+  {
+    name: 'update_exam_questions',
+    description: 'Atualizar um registro de questões. Se total ou acertos mudarem, estorna a recompensa antiga e concede a nova (fórmula HTTP).',
+    schema: {
+      id: z.string().describe('ID do registro'),
+      subject: z.string().optional(),
+      topic: z.string().optional(),
+      totalQuestions: z.number().optional(),
+      correctAnswers: z.number().optional(),
+      durationMinutes: z.number().optional(),
+      notes: z.string().optional(),
+      notebookUrl: z.string().optional(),
+      date: z.string().optional(),
+      category: z.string().optional(),
+      subjectId: z.string().optional().describe('ID da matéria AGU'),
+      topicId: z.string().optional().describe('ID do tópico AGU'),
+      kind: z.string().optional().describe('Tipo do bloco AGU'),
+      blockKey: z.string().optional().describe('Chave do bloco AGU')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = domainUpdateExamQuestions(db, args.id, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess({ examQuestion: result.examQuestion, rewardResult: result.rewardResult }, 'Registro de questões atualizado.');
+    }
+  },
+  {
+    name: 'delete_mind_map_session',
+    description: 'Excluir uma sessão de estudo de mapa mental e estornar as recompensas.',
+    schema: {
+      id: z.string().describe('ID da sessão de estudo')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
+      const result = domainDeleteMindMapSession(db, args.id);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.removed, 'Sessão de estudo excluída e recompensas estornadas.');
+    }
+  },
+  {
+    name: 'record_energy',
+    description: 'Registrar como o herói está agora e obter a próxima atividade sugerida pelo Oráculo.',
+    schema: {
+      text: z.string().describe('Como você está agora, em uma frase'),
+      location: locationEnum.optional().describe('Lugar atual'),
+      snoozedIds: z.array(z.string()).optional().describe('IDs adiados nesta sessão')
+    },
+    handler: async (args) => {
+      const text = String(args.text || '').trim();
+      if (!text) return formatError('Conte como você está agora.');
+      const db = getDb();
+      try {
+        const { suggestion, energyError } = await recordEnergyAndSuggest(db, text, {
+          location: args.location,
+          snoozedIds: args.snoozedIds || []
+        });
+        saveDb(db);
+        return formatSuccess({ ...suggestion, energyError: energyError || null }, suggestion.primary
+          ? `Próxima atividade: ${suggestion.primary.title}.`
+          : 'Energia registrada.');
+      } catch (err) {
+        return formatError(err.message || 'Não foi possível ler a energia.');
+      }
+    }
+  },
+  {
+    name: 'decline_next_action',
+    description: 'Recusar a indicação atual do Oráculo, guardar o motivo e pedir outra.',
+    schema: {
+      decisionId: z.string().describe('ID da indicação'),
+      reason: z.string().describe('Motivo da recusa'),
+      note: z.string().optional().describe('Nota, obrigatória se o motivo for other'),
+      location: locationEnum.optional(),
+      snoozedIds: z.array(z.string()).optional()
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const remembered = declineAndRemember(db, {
+        decisionId: args.decisionId,
+        reason: args.reason,
+        note: args.note
+      });
+      if (remembered.error) return formatError(remembered.error);
+      const excluded = [...new Set([...(args.snoozedIds || []), remembered.decision.entityId])];
+      const suggestion = await suggestNextAction(db, { location: args.location, snoozedIds: excluded });
+      saveDb(db);
+      return formatSuccess(suggestion, 'Indicação recusada. Outra foi escolhida.');
+    }
+  },
+  {
+    name: 'accept_next_action_dose',
+    description: 'Aceitar só a dose parcial da indicação do Oráculo e registrar o tempo cronometrado.',
+    schema: {
+      decisionId: z.string().describe('ID da indicação'),
+      durationMinutes: z.number().optional().describe('Minutos cronometrados (máx. 480)')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const accepted = acceptDoseOnly(db, args.decisionId);
+      if (accepted.error) return formatError(accepted.error);
+      const { decision } = accepted;
+      const now = new Date();
+      let trackedMinutes = 0;
+      try {
+        trackedMinutes = args.durationMinutes == null ? 0 : Math.min(480, Math.max(0, Math.round(Number(args.durationMinutes) || 0)));
+      } catch {
+        trackedMinutes = 0;
+      }
+      db.actionLogs.unshift({
+        id: uid('log'),
+        type: 'oracle_dose',
+        entityId: decision.entityId,
+        title: `Dose aceita: ${decision.dose.label} de ${decision.title}`,
+        xp: 0,
+        coins: 0,
+        details: {
+          kind: decision.kind,
+          dose: decision.dose.label,
+          doseAmount: decision.dose.amount,
+          doseUnit: decision.dose.unit,
+          fraction: decision.dose.fraction,
+          fullAmount: decision.quantity ? formatQuantity(decision.quantity.amount, decision.quantity.unit) : null,
+          trackedMinutes: trackedMinutes || null,
+          decisionId: decision.id
+        },
+        timestamp: now.toISOString(),
+        hour: getSaoPauloHour(now),
+        dayOfWeek: getSaoPauloDayOfWeek(now),
+        date: getSaoPauloDateStr(now)
+      });
+      saveDb(db);
+      return formatSuccess({ decision }, `Dose aceita: ${decision.dose.label}.`);
     }
   }
 ];

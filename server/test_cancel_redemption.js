@@ -54,7 +54,22 @@ async function testCancelRedemption() {
   const stateRes = await request('/api/state');
   if (stateRes.status !== 200) throw new Error(`Falha ao obter estado: ${stateRes.status}`);
 
-  const initialCoins = stateRes.data.userProfile.coins;
+  const profileCoins = stateRes.data.userProfile.coins;
+  // O resgate exige saldo. Ganha as moedas concluindo uma missão, sem atalho de perfil.
+  const questRes = await request('/api/quests', { method: 'POST' }, {
+    title: 'Missão para financiar o resgate de teste',
+    difficulty: 'epica'
+  });
+  if (questRes.status !== 200 || !questRes.data.quest) {
+    throw new Error(`Falha ao criar missão de saldo: ${JSON.stringify(questRes.data)}`);
+  }
+  const doneRes = await request(`/api/quests/${questRes.data.quest.id}/complete`, { method: 'POST' }, { completed: true });
+  if (doneRes.status !== 200) throw new Error(`Falha ao concluir missão de saldo: ${JSON.stringify(doneRes.data)}`);
+  const funded = await request('/api/state');
+  const initialCoins = funded.data.userProfile.coins;
+  if (initialCoins < profileCoins + 25) {
+    throw new Error(`Saldo insuficiente para o teste: ${initialCoins}`);
+  }
   console.log(`💰 Moedas iniciais do jogador: ${initialCoins}`);
 
   // 2. Create test reward (cost: 25 coins)

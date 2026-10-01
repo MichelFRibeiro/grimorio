@@ -105,6 +105,31 @@ import {
 } from '../src/utils/dailyVictories.js';
 import { syncDailyVictoriesFromActivity } from './dailyVictorySync.js';
 import {
+  completeQuest as domainCompleteQuest,
+  deleteQuest as domainDeleteQuest,
+  toggleHabit as domainToggleHabit,
+  deleteHabit as domainDeleteHabit,
+  logReadingSession as domainLogReadingSession,
+  updateReadingSession as domainUpdateReadingSession,
+  deleteReadingSession as domainDeleteReadingSession,
+  addQuote as domainAddQuote,
+  updateQuote as domainUpdateQuote,
+  deleteQuote as domainDeleteQuote,
+  deleteBook as domainDeleteBook,
+  logExamQuestions as domainLogExamQuestions,
+  updateExamQuestions as domainUpdateExamQuestions,
+  deleteExamQuestions as domainDeleteExamQuestions,
+  createProcess as domainCreateProcess,
+  stepProcess as domainStepProcess,
+  updateProcess as domainUpdateProcess,
+  deleteProcess as domainDeleteProcess,
+  createReward as domainCreateReward,
+  redeemReward as domainRedeemReward,
+  completeDailyVictoryUseCase,
+  deleteMindMapSession as domainDeleteMindMapSession,
+  revertMindMapSession
+} from './domain/activities.js';
+import {
   createMindMap,
   addMindMapNode,
   updateMindMapNode,
@@ -928,79 +953,35 @@ app.put('/api/quests/:id', (req, res) => {
 app.post('/api/quests/:id/complete', (req, res) => {
   try {
     const db = getDb();
-    const quest = db.quests.find(q => q.id === req.params.id);
-    if (!quest) return res.status(404).json({ error: 'Missão não encontrada' });
-
-    const willComplete = !quest.completed;
-    quest.completed = willComplete;
-    quest.completedAt = willComplete ? new Date().toISOString() : null;
-
-    let rewardResult = null;
-    if (willComplete) {
-      const durationMinutes = parseDurationMinutes(req.body?.durationMinutes);
-      quest.durationMinutes = durationMinutes || null;
-      // Award willpower and focus
-      const willpower = willpowerForDifficulty(quest.difficulty);
-      const focus = 10;
-      rewardResult = rewardPlayer({
-        xp: quest.xpReward,
-        coins: quest.coinReward,
-        willpower,
-        focus,
-        actionType: 'quest_complete',
-        entityId: quest.id,
-        title: quest.title,
-        details: {
-          category: quest.category,
-          priority: quest.priority,
-          difficulty: quest.difficulty,
-          location: quest.location || null,
-          durationMinutes
-        }
-      });
-      db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'quest', quest.id);
-    } else {
-      // Revert willpower, focus, xp and coins
-      quest.durationMinutes = null;
-      db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'quest', quest.id);
-      const willpower = willpowerForDifficulty(quest.difficulty);
-      const focus = 10;
-      rewardResult = revertPlayerReward({
-        xp: quest.xpReward,
-        coins: quest.coinReward,
-        willpower,
-        focus,
-        actionType: 'quest_complete',
-        entityId: quest.id
-      });
-    }
-
-    if (willComplete) markDecisionAccepted(db, { entityId: quest.id, kind: 'quest' });
-    const linkedVictories = syncDailyVictoriesFromActivity(db, {
-      questId: quest.id,
-      questCompleted: willComplete
+    // HTTP alterna quando o corpo não traz `completed` explícito.
+    const result = domainCompleteQuest(db, {
+      id: req.params.id,
+      completed: req.body?.completed,
+      durationMinutes: req.body?.durationMinutes
     });
-
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({
       success: true,
-      quest,
-      willComplete,
-      rewardResult,
-      linkedVictories,
+      quest: result.quest,
+      willComplete: result.willComplete,
+      stateUnchanged: result.stateUnchanged || false,
+      rewardResult: result.rewardResult,
+      linkedVictories: result.linkedVictories,
       analytics: computeAnalytics()
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
 app.delete('/api/quests/:id', (req, res) => {
   try {
     const db = getDb();
-    db.quests = db.quests.filter(q => q.id !== req.params.id);
+    const result = domainDeleteQuest(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
-    res.json({ success: true });
+    res.json({ success: true, rewardResult: result.rewardResult });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1073,326 +1054,64 @@ app.put('/api/books/:id', (req, res) => {
 app.post('/api/books/:id/reading-session', (req, res) => {
   try {
     const db = getDb();
-    const book = db.books.find(b => b.id === req.params.id);
-    if (!book) return res.status(404).json({ error: 'Livro não encontrado' });
-
-    const { startPage, endPage, durationMinutes, notes, quotes } = req.body;
-    // Página 0 é uma página válida (recomeçar o livro): `|| book.currentPage`
-    // tratava o zero como "não informado" e usava a página atual.
-    const parsedStartPage = parseInt(startPage, 10);
-    const sPage = Number.isFinite(parsedStartPage) ? parsedStartPage : (book.currentPage || 0);
-    const ePage = parseInt(endPage, 10);
-    const duration = parseInt(durationMinutes, 10) || 20;
-
-    if (ePage <= sPage) {
-      return res.status(400).json({ error: 'A página final deve ser maior que a página inicial.' });
-    }
-
-    const pagesRead = Math.min(book.totalPages, ePage) - sPage;
-    const newCurrentPage = Math.min(book.totalPages, ePage);
-    const finishedBook = newCurrentPage >= book.totalPages;
-
-    book.currentPage = newCurrentPage;
-    if (finishedBook) {
-      book.status = 'completed';
-      book.completedAt = new Date().toISOString();
-    }
-
-    // Process structured quotes
-    const parsedQuotes = Array.isArray(quotes) ? quotes.filter(q => q.quote && q.quote.trim()).map(q => ({
-      id: q.id || uid('quo'),
-      bookId: book.id,
-      bookTitle: book.title,
-      quote: q.quote.trim(),
-      page: parseInt(q.page, 10) || newCurrentPage,
-      note: (q.note || '').trim(),
-      createdAt: q.createdAt || new Date().toISOString()
-    })) : [];
-
-    // Ensure book.quotes exists and append new quotes
-    if (!book.quotes) book.quotes = [];
-    if (parsedQuotes.length > 0) {
-      book.quotes.unshift(...parsedQuotes);
-    }
-
-    // XP & Wisdom calculation: 2 XP per page + bonus for finishing + bonus for quotes collected
-    const basePageXp = pagesRead * 2;
-    const finishBonusXp = finishedBook ? 200 : 0;
-    const quoteBonusXp = parsedQuotes.length * 15;
-    const totalXp = basePageXp + finishBonusXp + quoteBonusXp;
-    const coins = Math.max(5, Math.floor(pagesRead / 3)) + (finishedBook ? 50 : 0) + parsedQuotes.length * 2;
-    const wisdom = pagesRead + (finishedBook ? 50 : 0) + parsedQuotes.length * 5;
-
-    const session = {
-      id: uid('rs'),
-      bookId: book.id,
-      bookTitle: book.title,
-      startPage: sPage,
-      endPage: newCurrentPage,
-      pagesRead,
-      durationMinutes: duration,
-      notes: notes || '',
-      quotes: parsedQuotes,
-      xpEarned: totalXp,
-      coinsEarned: coins,
-      wisdomEarned: wisdom,
-      timestamp: new Date().toISOString()
-    };
-
-    db.readingSessions.unshift(session);
-
-    const rewardResult = rewardPlayer({
-      xp: totalXp,
-      coins,
-      wisdom,
-      actionType: 'reading_session',
-      entityId: book.id,
-      title: `${book.title} (+${pagesRead} págs${parsedQuotes.length > 0 ? `, ${parsedQuotes.length} citação(ões)` : ''})`,
-      details: { category: 'Estudos', pagesRead, durationMinutes: duration, finishedBook, quotesCount: parsedQuotes.length }
+    const result = domainLogReadingSession(db, {
+      bookId: req.params.id,
+      startPage: req.body?.startPage,
+      endPage: req.body?.endPage,
+      durationMinutes: req.body?.durationMinutes,
+      notes: req.body?.notes,
+      quotes: req.body?.quotes,
+      date: req.body?.date
     });
-
-    const linkedVictories = syncDailyVictoriesFromActivity(db, { syncReading: true });
-
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({
       success: true,
-      book,
-      session,
-      rewardResult,
-      linkedVictories,
+      book: result.book,
+      session: result.session,
+      rewardResult: result.rewardResult,
+      linkedVictories: result.linkedVictories,
       analytics: computeAnalytics()
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
-// Edit reading session with delta score adjustment and book recalculation
+// Edit reading session: estorna o log exato e concede de novo.
 app.put('/api/reading-sessions/:id', (req, res) => {
   try {
     const db = getDb();
-    const session = db.readingSessions.find(s => s.id === req.params.id);
-    if (!session) return res.status(404).json({ error: 'Sessão de leitura não encontrada' });
-
-    const book = db.books.find(b => b.id === session.bookId);
-    if (!book) return res.status(404).json({ error: 'Livro associado não encontrado' });
-
-    const { startPage, endPage, durationMinutes, notes, quotes } = req.body;
-    const sPage = parseInt(startPage, 10);
-    const ePage = parseInt(endPage, 10);
-    const duration = parseInt(durationMinutes, 10) || session.durationMinutes || 20;
-
-    if (isNaN(sPage) || isNaN(ePage) || ePage <= sPage) {
-      return res.status(400).json({ error: 'A página final deve ser maior que a página inicial.' });
-    }
-
-    const oldPagesRead = session.pagesRead || 0;
-    const oldXp = session.xpEarned || 0;
-    const oldWisdom = session.wisdomEarned || 0;
-    const oldCoins = session.coinsEarned || (Math.max(5, Math.floor(oldPagesRead / 3)));
-
-    const newPagesRead = Math.min(book.totalPages, ePage) - sPage;
-    const newEndPage = Math.min(book.totalPages, ePage);
-    const isFinishedNow = newEndPage >= book.totalPages;
-
-    // Process new quotes
-    const parsedQuotes = Array.isArray(quotes) ? quotes.filter(q => q.quote && q.quote.trim()).map(q => ({
-      id: q.id || uid('quo'),
-      bookId: book.id,
-      bookTitle: book.title,
-      quote: q.quote.trim(),
-      page: parseInt(q.page, 10) || newEndPage,
-      note: (q.note || '').trim(),
-      createdAt: q.createdAt || session.timestamp || new Date().toISOString()
-    })) : (session.quotes || []);
-
-    // Update book.quotes with parsedQuotes
-    if (!book.quotes) book.quotes = [];
-    const oldQuoteIds = (session.quotes || []).map(q => q.id);
-    book.quotes = book.quotes.filter(q => !oldQuoteIds.includes(q.id));
-    if (parsedQuotes.length > 0) {
-      book.quotes.unshift(...parsedQuotes);
-    }
-
-    // New rewards calculation
-    const basePageXp = newPagesRead * 2;
-    const finishBonusXp = isFinishedNow ? 200 : 0;
-    const quoteBonusXp = parsedQuotes.length * 15;
-    const newTotalXp = basePageXp + finishBonusXp + quoteBonusXp;
-    const newCoins = Math.max(5, Math.floor(newPagesRead / 3)) + (isFinishedNow ? 50 : 0) + parsedQuotes.length * 2;
-    const newWisdom = newPagesRead + (isFinishedNow ? 50 : 0) + parsedQuotes.length * 5;
-
-    const deltaXp = newTotalXp - oldXp;
-    const deltaWisdom = newWisdom - oldWisdom;
-    const deltaCoins = newCoins - oldCoins;
-
-    // Apply delta to user profile
-    const profile = db.userProfile;
-    profile.stats.wisdom = Math.max(0, (profile.stats.wisdom || 0) + deltaWisdom);
-    profile.coins = (profile.coins ?? 0) + deltaCoins;
-    profile.xp += deltaXp;
-
-    // Handle level up / level down
-    while (profile.xp >= profile.xpToNextLevel) {
-      profile.xp -= profile.xpToNextLevel;
-      profile.level += 1;
-      profile.xpToNextLevel = getXpForLevel(profile.level);
-      profile.title = getTitleForLevel(profile.level);
-      profile.coins += profile.level * 15;
-    }
-    while (profile.xp < 0 && profile.level > 1) {
-      profile.level -= 1;
-      profile.xpToNextLevel = getXpForLevel(profile.level);
-      profile.xp += profile.xpToNextLevel;
-      profile.title = getTitleForLevel(profile.level);
-      profile.coins = (profile.coins ?? 0) - profile.level * 15;
-    }
-    if (profile.xp < 0) profile.xp = 0;
-
-    // Adjust Boss HP
-    const boss = db.bossRaid;
-    if (boss) {
-      const deltaDmg = Math.round(deltaXp * 0.8 + deltaCoins * 1.2);
-      if (deltaDmg > 0 && !boss.defeated) {
-        boss.currentHp = Math.max(0, boss.currentHp - deltaDmg);
-        if (boss.currentHp === 0) {
-          boss.defeated = true;
-          boss.defeatsCount = (boss.defeatsCount || 0) + 1;
-          profile.coins += boss.rewardCoins;
-          profile.xp += boss.rewardXp;
-        }
-      } else if (deltaDmg < 0) {
-        boss.currentHp = Math.min(boss.maxHp, boss.currentHp - deltaDmg);
-        if (boss.defeated && boss.currentHp > 0) {
-          boss.defeated = false;
-          boss.defeatsCount = Math.max(0, (boss.defeatsCount || 1) - 1);
-        }
-      }
-    }
-
-    // Update session object
-    session.startPage = sPage;
-    session.endPage = newEndPage;
-    session.pagesRead = newPagesRead;
-    session.durationMinutes = duration;
-    session.notes = notes !== undefined ? notes : session.notes;
-    session.quotes = parsedQuotes;
-    session.xpEarned = newTotalXp;
-    session.wisdomEarned = newWisdom;
-    session.coinsEarned = newCoins;
-
-    // Recalculate book's currentPage & status based on all its sessions
-    const bookSessions = db.readingSessions.filter(s => s.bookId === book.id);
-    const maxEnd = bookSessions.reduce((max, s) => Math.max(max, s.endPage || 0), 0);
-    book.currentPage = maxEnd;
-    if (book.currentPage >= book.totalPages) {
-      book.status = 'completed';
-      if (!book.completedAt) book.completedAt = new Date().toISOString();
-    } else {
-      book.status = 'reading';
-      book.completedAt = null;
-    }
-
-    // Update matching actionLog if found
-    const logIndex = db.actionLogs.findIndex(l => (l.entityId === book.id || l.entityId === session.id) && l.type === 'reading_session');
-    if (logIndex !== -1) {
-      db.actionLogs[logIndex].title = `${book.title} (+${newPagesRead} págs${parsedQuotes.length > 0 ? `, ${parsedQuotes.length} citação(ões)` : ''})`;
-      db.actionLogs[logIndex].xp = newTotalXp;
-      db.actionLogs[logIndex].coins = newCoins;
-      db.actionLogs[logIndex].details = { pagesRead: newPagesRead, durationMinutes: duration, finishedBook: isFinishedNow, quotesCount: parsedQuotes.length };
-    }
-
-    const linkedVictories = syncDailyVictoriesFromActivity(db, { syncReading: true });
-
+    const result = domainUpdateReadingSession(db, req.params.id, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({
       success: true,
-      book,
-      session,
-      userProfile: profile,
-      linkedVictories,
+      book: result.book,
+      session: result.session,
+      userProfile: result.userProfile,
+      rewardResult: result.rewardResult,
+      linkedVictories: result.linkedVictories,
       analytics: computeAnalytics()
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
-// Delete reading session with complete score rollback and book recalculation
 app.delete('/api/reading-sessions/:id', (req, res) => {
   try {
     const db = getDb();
-    const sessionIndex = db.readingSessions.findIndex(s => s.id === req.params.id);
-    if (sessionIndex === -1) return res.status(404).json({ error: 'Sessão de leitura não encontrada' });
-
-    const session = db.readingSessions[sessionIndex];
-    const book = db.books.find(b => b.id === session.bookId);
-
-    const xpToRevert = session.xpEarned || ((session.pagesRead || 0) * 2);
-    const wisdomToRevert = session.wisdomEarned || (session.pagesRead || 0);
-    const coinsToRevert = session.coinsEarned || (Math.max(5, Math.floor((session.pagesRead || 0) / 3)));
-
-    // Revert player rewards
-    const profile = db.userProfile;
-    profile.stats.wisdom = Math.max(0, (profile.stats.wisdom || 0) - wisdomToRevert);
-    profile.coins = (profile.coins ?? 0) - coinsToRevert;
-    profile.xp -= xpToRevert;
-
-    while (profile.xp < 0 && profile.level > 1) {
-      profile.level -= 1;
-      profile.xpToNextLevel = getXpForLevel(profile.level);
-      profile.xp += profile.xpToNextLevel;
-      profile.title = getTitleForLevel(profile.level);
-      profile.coins = (profile.coins ?? 0) - profile.level * 15;
-    }
-    if (profile.xp < 0) profile.xp = 0;
-
-    // Restore Boss HP
-    const boss = db.bossRaid;
-    if (boss) {
-      const totalDmg = Math.round(xpToRevert * 0.8 + coinsToRevert * 1.2);
-      boss.currentHp = Math.min(boss.maxHp, boss.currentHp + totalDmg);
-      if (boss.defeated && boss.currentHp > 0) {
-        boss.defeated = false;
-        boss.defeatsCount = Math.max(0, (boss.defeatsCount || 1) - 1);
-      }
-    }
-
-    // Remove matching action log
-    const logIndex = db.actionLogs.findIndex(l => (l.entityId === session.id || (book && l.entityId === book.id)) && l.type === 'reading_session');
-    if (logIndex !== -1) {
-      db.actionLogs.splice(logIndex, 1);
-    }
-
-    // Clean up quotes from book.quotes that belonged to this session
-    if (book && book.quotes && Array.isArray(session.quotes)) {
-      const sessionQuoteIds = session.quotes.map(q => q.id);
-      book.quotes = book.quotes.filter(q => !sessionQuoteIds.includes(q.id));
-    }
-
-    // Remove session from list
-    db.readingSessions.splice(sessionIndex, 1);
-
-    // Recalculate book's progress
-    if (book) {
-      const remainingSessions = db.readingSessions.filter(s => s.bookId === book.id);
-      const maxEnd = remainingSessions.reduce((max, s) => Math.max(max, s.endPage || 0), 0);
-      book.currentPage = maxEnd;
-      if (book.currentPage < book.totalPages) {
-        book.status = 'reading';
-        book.completedAt = null;
-      }
-    }
-
-    const linkedVictories = syncDailyVictoriesFromActivity(db, { syncReading: true });
-
+    const result = domainDeleteReadingSession(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({
       success: true,
-      book,
-      deletedSessionId: session.id,
-      userProfile: profile,
-      linkedVictories,
+      book: result.book,
+      deletedSessionId: result.deletedSessionId,
+      userProfile: result.userProfile,
+      rewardResult: result.rewardResult,
+      linkedVictories: result.linkedVictories,
       analytics: computeAnalytics()
     });
   } catch (err) {
@@ -1400,106 +1119,37 @@ app.delete('/api/reading-sessions/:id', (req, res) => {
   }
 });
 
-// Add a quote directly to a book
 app.post('/api/books/:id/quotes', (req, res) => {
   try {
     const db = getDb();
-    const book = db.books.find(b => b.id === req.params.id);
-    if (!book) return res.status(404).json({ error: 'Livro não encontrado' });
-
-    const { quote, page, note } = req.body;
-    if (!quote || !quote.trim()) {
-      return res.status(400).json({ error: 'O texto da citação é obrigatório.' });
-    }
-
-    if (!book.quotes) book.quotes = [];
-
-    const newQuote = {
-      id: uid('quo'),
-      bookId: book.id,
-      bookTitle: book.title,
-      quote: quote.trim(),
-      page: parseInt(page, 10) || book.currentPage || 1,
-      note: (note || '').trim(),
-      createdAt: new Date().toISOString()
-    };
-
-    book.quotes.unshift(newQuote);
-
-    // Reward for registering a standalone quote
-    const rewardResult = rewardPlayer({
-      xp: 20,
-      coins: 5,
-      wisdom: 10,
-      actionType: 'book_quote',
-      entityId: newQuote.id,
-      title: `Citação: ${book.title} (pág. ${newQuote.page})`,
-      details: { category: 'Estudos', quote: newQuote.quote.substring(0, 50) }
-    });
-
+    const result = domainAddQuote(db, { bookId: req.params.id, ...req.body });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
-    res.json({ success: true, quote: newQuote, book, rewardResult, analytics: computeAnalytics() });
+    res.json({ success: true, quote: result.quote, book: result.book, rewardResult: result.rewardResult, analytics: computeAnalytics() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Update a quote in a book
 app.put('/api/books/:id/quotes/:quoteId', (req, res) => {
   try {
     const db = getDb();
-    const book = db.books.find(b => b.id === req.params.id);
-    if (!book) return res.status(404).json({ error: 'Livro não encontrado' });
-
-    if (!book.quotes) book.quotes = [];
-    const quoteIndex = book.quotes.findIndex(q => q.id === req.params.quoteId);
-    if (quoteIndex === -1) return res.status(404).json({ error: 'Citação não encontrada' });
-
-    const { quote, page, note } = req.body;
-    if (quote !== undefined) book.quotes[quoteIndex].quote = quote.trim();
-    if (page !== undefined) book.quotes[quoteIndex].page = parseInt(page, 10) || 1;
-    if (note !== undefined) book.quotes[quoteIndex].note = note.trim();
-
-    // Also update in any reading sessions containing this quote
-    (db.readingSessions || []).forEach(s => {
-      if (Array.isArray(s.quotes)) {
-        s.quotes.forEach(sq => {
-          if (sq.id === req.params.quoteId) {
-            if (quote !== undefined) sq.quote = quote.trim();
-            if (page !== undefined) sq.page = parseInt(page, 10) || 1;
-            if (note !== undefined) sq.note = note.trim();
-          }
-        });
-      }
-    });
-
+    const result = domainUpdateQuote(db, { bookId: req.params.id, quoteId: req.params.quoteId, ...req.body });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
-    res.json({ success: true, quote: book.quotes[quoteIndex], book });
+    res.json({ success: true, quote: result.quote, book: result.book });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Delete a quote from a book
 app.delete('/api/books/:id/quotes/:quoteId', (req, res) => {
   try {
     const db = getDb();
-    const book = db.books.find(b => b.id === req.params.id);
-    if (!book) return res.status(404).json({ error: 'Livro não encontrado' });
-
-    if (book.quotes) {
-      book.quotes = book.quotes.filter(q => q.id !== req.params.quoteId);
-    }
-
-    // Also remove from any readingSessions quotes array
-    db.readingSessions.forEach(rs => {
-      if (rs.quotes) {
-        rs.quotes = rs.quotes.filter(q => q.id !== req.params.quoteId);
-      }
-    });
-
+    const result = domainDeleteQuote(db, { bookId: req.params.id, quoteId: req.params.quoteId });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
-    res.json({ success: true, book });
+    res.json({ success: true, book: result.book, rewardResult: result.rewardResult });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1508,8 +1158,8 @@ app.delete('/api/books/:id/quotes/:quoteId', (req, res) => {
 app.delete('/api/books/:id', (req, res) => {
   try {
     const db = getDb();
-    db.books = db.books.filter(b => b.id !== req.params.id);
-    db.readingSessions = db.readingSessions.filter(rs => rs.bookId !== req.params.id);
+    const result = domainDeleteBook(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({ success: true });
   } catch (err) {
@@ -1523,165 +1173,46 @@ app.delete('/api/books/:id', (req, res) => {
 app.post('/api/questions', (req, res) => {
   try {
     const db = getDb();
-    if (!db.examQuestions) db.examQuestions = [];
-
-    const { subject, topic, institution, totalQuestions, correctAnswers, durationMinutes, notes, notebookUrl, date, category, subjectId, topicId, kind, cycleNumber, blockKey, platform } = req.body;
-    const total = parseInt(totalQuestions, 10);
-    const correct = parseInt(correctAnswers, 10);
-    const duration = parseInt(durationMinutes, 10) || 0;
-
-    if (isNaN(total) || total <= 0) {
-      return res.status(400).json({ error: 'A quantidade de questões feitas deve ser maior que zero.' });
-    }
-    if (isNaN(correct) || correct < 0 || correct > total) {
-      return res.status(400).json({ error: 'A quantidade de acertos deve ser entre 0 e o total de questões feitas.' });
-    }
-
-    const wrong = total - correct;
-    const accuracyRate = Math.round((correct / total) * 1000) / 10;
-
-    const baseXp = total * 3;
-    const correctXp = correct * 4;
-    const accuracyBonusXp = accuracyRate === 100 ? 50 : accuracyRate >= 90 ? 30 : accuracyRate >= 80 ? 15 : 0;
-    const totalXp = baseXp + correctXp + accuracyBonusXp;
-
-    const coins = Math.max(2, Math.floor(correct / 2)) + (accuracyRate >= 80 ? 5 : 0) + (accuracyRate === 100 ? 10 : 0);
-
-    const now = new Date();
-    const entryDate = date || getSaoPauloDateStr(now);
-    const chosenCategory = (category && category.trim()) ? category.trim() : 'Estudos';
-
-    const newQuestionLog = {
-      id: uid('eq'),
-      category: chosenCategory,
-      subject: (subject || 'Geral').trim(),
-      topic: (topic || '').trim(),
-      subjectId: (subjectId || '').trim() || undefined,
-      topicId: (topicId || '').trim() || undefined,
-      kind: (kind || '').trim() || undefined,
-      cycleNumber: cycleNumber || undefined,
-      blockKey: (blockKey || '').trim() || undefined,
-      platform: (platform || '').trim() || undefined,
-      institution: (institution || '').trim(),
-      totalQuestions: total,
-      correctAnswers: correct,
-      wrongAnswers: wrong,
-      accuracyRate,
-      durationMinutes: duration,
-      notes: (notes || '').trim(),
-      notebookUrl: (notebookUrl || '').trim(),
-      xpEarned: totalXp,
-      coinsEarned: coins,
-      date: entryDate,
-      timestamp: now.toISOString()
-    };
-
-    db.examQuestions.unshift(newQuestionLog);
-    if (db.aguPlan) {
-      db.aguPlan = applyExamToPlan(
-        sanitizeAguPlan(db.aguPlan, entryDate),
-        newQuestionLog,
-        entryDate,
-        db.examQuestions
-      );
-    }
-
-    const rewardResult = rewardPlayer({
-      xp: totalXp,
-      coins,
-      focus: total * 2,
-      wisdom: correct * 2,
-      consistency: 10,
-      actionType: 'exam_questions',
-      entityId: newQuestionLog.id,
-      title: `${newQuestionLog.subject}: ${correct}/${total} acertos (${accuracyRate}%)`,
-      details: {
-        category: chosenCategory,
-        totalQuestions: total,
-        correctAnswers: correct,
-        accuracyRate,
-        subject: newQuestionLog.subject,
-        topic: newQuestionLog.topic,
-        institution: newQuestionLog.institution
-      }
-    });
-
-    const linkedVictories = syncDailyVictoriesFromActivity(db, { syncStudy: true });
-
+    const result = domainLogExamQuestions(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({
       success: true,
-      examQuestion: newQuestionLog,
-      rewardResult,
-      linkedVictories,
+      examQuestion: result.examQuestion,
+      rewardResult: result.rewardResult,
+      linkedVictories: result.linkedVictories,
       analytics: computeAnalytics()
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
 app.put('/api/questions/:id', (req, res) => {
   try {
     const db = getDb();
-    if (!db.examQuestions) db.examQuestions = [];
-
-    const index = db.examQuestions.findIndex(q => q.id === req.params.id);
-    if (index === -1) return res.status(404).json({ error: 'Registro de questões não encontrado' });
-
-    const existing = db.examQuestions[index];
-    const { subject, topic, institution, notes, notebookUrl, date, category, durationMinutes } = req.body;
-
-    if (category !== undefined && category.trim()) existing.category = category.trim();
-    if (subject !== undefined) existing.subject = subject.trim();
-    if (topic !== undefined) existing.topic = topic.trim();
-    if (institution !== undefined) existing.institution = institution.trim();
-    if (notes !== undefined) existing.notes = notes.trim();
-    if (notebookUrl !== undefined) existing.notebookUrl = notebookUrl.trim();
-    if (date !== undefined) existing.date = date;
-    if (durationMinutes !== undefined) existing.durationMinutes = parseDurationMinutes(durationMinutes);
-
-    if (db.actionLogs) {
-      const log = db.actionLogs.find(l => l.entityId === existing.id);
-      if (log && log.details) {
-        if (category !== undefined && category.trim()) log.details.category = category.trim();
-        if (subject !== undefined) log.details.subject = subject.trim();
-      }
-    }
-
-    const linkedVictories = syncDailyVictoriesFromActivity(db, { syncStudy: true });
-
+    const result = domainUpdateExamQuestions(db, req.params.id, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
-    res.json({ success: true, examQuestion: existing, linkedVictories, analytics: computeAnalytics() });
+    res.json({
+      success: true,
+      examQuestion: result.examQuestion,
+      rewardResult: result.rewardResult,
+      linkedVictories: result.linkedVictories,
+      analytics: computeAnalytics()
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
 app.delete('/api/questions/:id', (req, res) => {
   try {
     const db = getDb();
-    if (!db.examQuestions) db.examQuestions = [];
-
-    const questionLog = db.examQuestions.find(q => q.id === req.params.id);
-    if (!questionLog) return res.status(404).json({ error: 'Registro não encontrado' });
-
-    db.examQuestions = db.examQuestions.filter(q => q.id !== req.params.id);
-
-    const rewardResult = revertPlayerReward({
-      xp: questionLog.xpEarned || 0,
-      coins: questionLog.coinsEarned || 0,
-      focus: questionLog.totalQuestions * 2,
-      wisdom: questionLog.correctAnswers * 2,
-      consistency: 10,
-      actionType: 'exam_questions',
-      entityId: questionLog.id
-    });
-
-    const linkedVictories = syncDailyVictoriesFromActivity(db, { syncStudy: true });
-
+    const result = domainDeleteExamQuestions(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
-    res.json({ success: true, rewardResult, linkedVictories, analytics: computeAnalytics() });
+    res.json({ success: true, rewardResult: result.rewardResult, linkedVictories: result.linkedVictories, analytics: computeAnalytics() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1693,131 +1224,50 @@ app.delete('/api/questions/:id', (req, res) => {
 app.post('/api/processes', (req, res) => {
   try {
     const db = getDb();
-    const { title, category, unitName, totalUnits, xpPerUnit, coinsPerUnit, notes } = req.body;
-    if (!title || !totalUnits) return res.status(400).json({ error: 'Título e total de unidades são obrigatórios' });
-
-    const total = parseInt(totalUnits, 10);
-    const defaultCat = db.questCategories?.[0]?.name || 'Geral';
-    const newProcess = {
-      id: uid('p'),
-      title: title.trim(),
-      category: category || defaultCat,
-      unitName: unitName || 'unidades',
-      totalUnits: total,
-      completedUnits: 0,
-      xpPerUnit: parseInt(xpPerUnit, 10) || 20,
-      coinsPerUnit: parseInt(coinsPerUnit, 10) || 5,
-      notes: notes || '',
-      status: 'in_progress',
-      completedAt: null,
-      createdAt: new Date().toISOString()
-    };
-
-    db.processes.unshift(newProcess);
+    const result = domainCreateProcess(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
-    res.json({ success: true, process: newProcess });
+    res.json({ success: true, process: result.process });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
 app.post('/api/processes/:id/step', (req, res) => {
   try {
     const db = getDb();
-    const process = db.processes.find(p => p.id === req.params.id);
-    if (!process) return res.status(404).json({ error: 'Processo não encontrado' });
-
-    const { unitsAdded, stepNote, timestamp } = req.body;
-    const added = parseInt(unitsAdded, 10) || 1;
-    const previousUnits = process.completedUnits || 0;
-    const newCompleted = Math.min(process.totalUnits, previousUnits + added);
-    const actualUnitsAdded = newCompleted - previousUnits;
-
-    if (actualUnitsAdded <= 0) {
-      return res.status(400).json({ error: 'Processo já está totalmente concluído!' });
-    }
-
-    const stepTimestamp = timestamp || new Date().toISOString();
-
-    process.completedUnits = newCompleted;
-    const finished = newCompleted >= process.totalUnits;
-    if (finished) {
-      process.status = 'completed';
-      process.completedAt = stepTimestamp;
-    }
-
-    const xp = actualUnitsAdded * process.xpPerUnit + (finished ? 100 : 0);
-    const coins = actualUnitsAdded * process.coinsPerUnit + (finished ? 30 : 0);
-    const focus = actualUnitsAdded * 10;
-
-    const step = {
-      id: uid('ps'),
-      processId: process.id,
-      processTitle: process.title,
-      unitsAdded: actualUnitsAdded,
-      totalCompletedNow: newCompleted,
-      stepNote: stepNote || '',
-      timestamp: stepTimestamp,
-      createdAt: stepTimestamp,
-      xpEarned: xp
-    };
-
-    db.processSteps.unshift(step);
-
-    const defaultCat = db.questCategories?.[0]?.name || 'Geral';
-    const rewardResult = rewardPlayer({
-      xp,
-      coins,
-      focus,
-      actionType: 'process_step',
-      entityId: process.id,
-      title: `${process.title} (+${actualUnitsAdded} ${process.unitName})`,
-      details: { category: process.category || defaultCat, unitsAdded: actualUnitsAdded, finished },
-      timestamp: stepTimestamp
-    });
-
+    const result = domainStepProcess(db, req.params.id, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({
       success: true,
-      process,
-      step,
-      rewardResult,
+      process: result.process,
+      step: result.step,
+      rewardResult: result.rewardResult,
       analytics: computeAnalytics()
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
 app.put('/api/processes/:id', (req, res) => {
   try {
     const db = getDb();
-    const process = db.processes.find(p => p.id === req.params.id);
-    if (!process) return res.status(404).json({ error: 'Processo não encontrado' });
-
-    const { title, category, unitName, totalUnits, completedUnits, xpPerUnit, coinsPerUnit, notes, status } = req.body;
-    if (title !== undefined) process.title = title.trim();
-    if (category !== undefined) process.category = category;
-    if (unitName !== undefined) process.unitName = unitName;
-    if (totalUnits !== undefined) process.totalUnits = parseInt(totalUnits, 10);
-    if (completedUnits !== undefined) process.completedUnits = parseInt(completedUnits, 10);
-    if (xpPerUnit !== undefined) process.xpPerUnit = parseInt(xpPerUnit, 10);
-    if (coinsPerUnit !== undefined) process.coinsPerUnit = parseInt(coinsPerUnit, 10);
-    if (notes !== undefined) process.notes = notes;
-    if (status !== undefined) process.status = status;
-
+    const result = domainUpdateProcess(db, req.params.id, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
-    res.json({ success: true, process });
+    res.json({ success: true, process: result.process });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
 app.delete('/api/processes/:id', (req, res) => {
   try {
     const db = getDb();
-    db.processes = db.processes.filter(p => p.id !== req.params.id);
-    db.processSteps = db.processSteps.filter(ps => ps.processId !== req.params.id);
+    const result = domainDeleteProcess(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({ success: true });
   } catch (err) {
@@ -1905,97 +1355,32 @@ app.put('/api/habits/:id', (req, res) => {
 app.post('/api/habits/:id/toggle', (req, res) => {
   try {
     const db = getDb();
-    const habit = db.habits.find(h => h.id === req.params.id);
-    if (!habit) return res.status(404).json({ error: 'Hábito não encontrado' });
-
-    const todayStr = getSaoPauloDateStr();
-    let targetDate = req.body?.date;
-    if (!targetDate || typeof targetDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
-      targetDate = todayStr;
-    }
-
-    if (targetDate > todayStr) {
-      return res.status(400).json({ error: 'Não é permitido marcar hábitos em datas futuras.' });
-    }
-
-    if (!habit.history) habit.history = [];
-    const isAlreadyDone = habit.history.includes(targetDate);
-
-    let rewardResult = null;
-
-    if (isAlreadyDone) {
-      habit.history = habit.history.filter(d => d !== targetDate);
-      clearHabitDurationForDate(habit, targetDate);
-      const streakData = calculateHabitStreak(habit.history, new Date(), habit.bestStreak || 0);
-      habit.currentStreak = streakData.currentStreak;
-      habit.bestStreak = streakData.bestStreak;
-
-      rewardResult = revertPlayerReward({
-        xp: habit.xpReward || 30,
-        coins: habit.coinReward || 8,
-        consistency: 15,
-        actionType: 'habit_complete',
-        entityId: habit.id
-      });
-      if (targetDate === todayStr) {
-        db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'habit', habit.id);
-      }
-    } else {
-      habit.history.push(targetDate);
-      const durationMinutes = parseDurationMinutes(req.body?.durationMinutes);
-      setHabitDurationForDate(habit, targetDate, durationMinutes);
-      const streakData = calculateHabitStreak(habit.history, new Date(), habit.bestStreak || 0);
-      habit.currentStreak = streakData.currentStreak;
-      habit.bestStreak = streakData.bestStreak;
-
-      const multiplier = Math.min(2.0, 1 + habit.currentStreak * 0.1);
-      const xp = Math.round((habit.xpReward || 30) * multiplier);
-      const coins = habit.coinReward || 8;
-
-      const isToday = targetDate === todayStr;
-      const dateParts = targetDate.split('-');
-      const formattedDate = isToday ? 'Hoje' : `${dateParts[2]}/${dateParts[1]}`;
-
-      rewardResult = rewardPlayer({
-        xp,
-        coins,
-        consistency: 15,
-        actionType: 'habit_complete',
-        entityId: habit.id,
-        title: `${habit.title} (${formattedDate} - Sequência 🔥 ${habit.currentStreak})`,
-        details: {
-          category: habit.category || 'Pessoal',
-          streak: habit.currentStreak,
-          date: targetDate,
-          location: habit.location || null,
-          durationMinutes
-        }
-      });
-      if (isToday) {
-        db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'habit', habit.id);
-        markDecisionAccepted(db, { entityId: habit.id, kind: 'habit' });
-      }
-    }
-
+    const result = domainToggleHabit(db, {
+      id: req.params.id,
+      date: req.body?.date,
+      durationMinutes: req.body?.durationMinutes
+    });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({
       success: true,
-      habit,
-      targetDate,
-      done: !isAlreadyDone,
-      doneToday: habit.history.includes(todayStr),
-      rewardResult,
+      habit: result.habit,
+      targetDate: result.targetDate,
+      done: result.done,
+      doneToday: result.doneToday,
+      rewardResult: result.rewardResult,
       analytics: computeAnalytics()
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
 app.delete('/api/habits/:id', (req, res) => {
   try {
     const db = getDb();
-    db.habits = db.habits.filter(h => h.id !== req.params.id);
+    const result = domainDeleteHabit(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({ success: true });
   } catch (err) {
@@ -2009,27 +1394,12 @@ app.delete('/api/habits/:id', (req, res) => {
 app.post('/api/rewards', (req, res) => {
   try {
     const db = getDb();
-    const { title, description, cost, icon, category } = req.body;
-    if (!title || !cost) return res.status(400).json({ error: 'Título e custo em moedas são obrigatórios' });
-
-    const newReward = {
-      id: uid('r'),
-      title: title.trim(),
-      description: description || '',
-      cost: parseInt(cost, 10),
-      icon: icon || 'Gift',
-      category: category || 'custom',
-      timesRedeemed: 0,
-      isVirtual: false,
-      unlocked: true,
-      createdAt: new Date().toISOString()
-    };
-
-    db.rewards.unshift(newReward);
+    const result = domainCreateReward(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
-    res.json({ success: true, reward: newReward });
+    res.json({ success: true, reward: result.reward });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -2061,44 +1431,17 @@ app.post('/api/rewards/spend-money', (req, res) => {
 app.post('/api/rewards/:id/redeem', (req, res) => {
   try {
     const db = getDb();
-    const reward = db.rewards.find(r => r.id === req.params.id);
-    if (!reward) return res.status(404).json({ error: 'Recompensa não encontrada' });
-
-    db.userProfile.coins = (db.userProfile.coins ?? 0) - reward.cost;
-    reward.timesRedeemed = (reward.timesRedeemed || 0) + 1;
-
-    const redemption = {
-      id: uid('red'),
-      rewardId: reward.id,
-      rewardTitle: reward.title,
-      cost: reward.cost,
-      timestamp: new Date().toISOString()
-    };
-    db.rewardRedemptions.unshift(redemption);
-
-    db.actionLogs.unshift({
-      id: uid('log'),
-      type: 'reward_redeem',
-      entityId: reward.id,
-      title: `Resgatou: ${reward.title}`,
-      xp: 0,
-      coins: -reward.cost,
-      details: { cost: reward.cost },
-      timestamp: new Date().toISOString(),
-      hour: getSaoPauloHour(),
-      dayOfWeek: getSaoPauloDayOfWeek(),
-      date: getSaoPauloDateStr()
-    });
-
+    const result = domainRedeemReward(db, { id: req.params.id, notes: req.body?.notes });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({
       success: true,
-      reward,
-      userProfile: db.userProfile,
-      redemption
+      reward: result.reward,
+      userProfile: result.userProfile,
+      redemption: result.redemption
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -2844,82 +2187,13 @@ app.put('/api/daily-victories/:id', (req, res) => {
 app.post('/api/daily-victories/:id/complete', (req, res) => {
   try {
     const db = getDb();
-    const todayStr = getSaoPauloDateStr();
-    db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
-    db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
-
-    const result = completeDailyVictory(db.dailyVictories, db.dailyVictoryBonuses, req.params.id, {
+    const result = completeDailyVictoryUseCase(db, {
+      id: req.params.id,
       note: req.body?.note,
       completed: req.body?.completed,
-      durationMinutes: req.body?.durationMinutes,
-      today: todayStr
+      durationMinutes: req.body?.durationMinutes
     });
-
-    db.dailyVictories = result.list;
-    db.dailyVictoryBonuses = result.bonuses;
-
-    let rewardResult = null;
-    let bonusRewardResult = null;
-
-    if (!result.stateUnchanged) {
-      db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'victory', result.victory.id);
-      // A Vitória do Dia também responde à indicação do Oráculo: sem isto a
-      // decisão ficava pendente para sempre e o aprendizado nunca via o aceite.
-      if (result.willComplete) {
-        markDecisionAccepted(db, { entityId: result.victory.id, kind: 'victory' });
-      }
-      if (result.willComplete) {
-        rewardResult = rewardPlayer({
-          xp: DAILY_VICTORY_REWARDS.xp,
-          coins: DAILY_VICTORY_REWARDS.coins,
-          willpower: DAILY_VICTORY_REWARDS.willpower,
-          actionType: 'daily_victory_complete',
-          entityId: result.victory.id,
-          title: result.victory.title,
-          details: {
-            category: result.victory.category,
-            date: result.victory.date,
-            note: result.victory.note || '',
-            durationMinutes: result.victory.durationMinutes || null
-          }
-        });
-        if (result.bonusAwardedNow) {
-          bonusRewardResult = rewardPlayer({
-            xp: DAILY_VICTORY_TRIPLE_BONUS.xp,
-            coins: DAILY_VICTORY_TRIPLE_BONUS.coins,
-            willpower: DAILY_VICTORY_TRIPLE_BONUS.willpower,
-            consistency: DAILY_VICTORY_TRIPLE_BONUS.consistency,
-            actionType: 'daily_victory_triple_bonus',
-            entityId: bonusEntityId(result.victory.date),
-            title: `Tríade de vitórias — ${result.victory.date}`,
-            details: {
-              category: result.victory.category,
-              date: result.victory.date,
-              bonus: true
-            }
-          });
-        }
-      } else {
-        rewardResult = revertPlayerReward({
-          xp: DAILY_VICTORY_REWARDS.xp,
-          coins: DAILY_VICTORY_REWARDS.coins,
-          willpower: DAILY_VICTORY_REWARDS.willpower,
-          actionType: 'daily_victory_complete',
-          entityId: result.victory.id
-        });
-        if (result.bonusRevertedNow) {
-          bonusRewardResult = revertPlayerReward({
-            xp: DAILY_VICTORY_TRIPLE_BONUS.xp,
-            coins: DAILY_VICTORY_TRIPLE_BONUS.coins,
-            willpower: DAILY_VICTORY_TRIPLE_BONUS.willpower,
-            consistency: DAILY_VICTORY_TRIPLE_BONUS.consistency,
-            actionType: 'daily_victory_triple_bonus',
-            entityId: bonusEntityId(result.victory.date)
-          });
-        }
-      }
-    }
-
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({
       success: true,
@@ -2928,13 +2202,13 @@ app.post('/api/daily-victories/:id/complete', (req, res) => {
       stateUnchanged: result.stateUnchanged,
       bonusAwardedNow: result.bonusAwardedNow,
       bonusRevertedNow: result.bonusRevertedNow,
-      rewardResult,
-      bonusRewardResult,
-      todaySummary: summarizeDay(result.list, todayStr, result.bonuses),
+      rewardResult: result.rewardResult,
+      bonusRewardResult: result.bonusRewardResult,
+      todaySummary: summarizeDay(result.list, result.todayStr, result.bonuses),
       analytics: computeAnalytics()
     });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message });
   }
 });
 
@@ -3510,6 +2784,7 @@ app.post('/api/mind-maps/:id/study', (req, res) => {
       }
     });
 
+    if (rewardResult?.logEntry?.id) result.session.rewardLogId = rewardResult.logEntry.id;
     saveDb(db);
     res.json({
       success: true,
@@ -3533,14 +2808,7 @@ app.delete('/api/mind-maps/:id', (req, res) => {
     const [removed] = db.mindMaps.splice(index, 1);
     const relatedSessions = db.mindMapSessions.filter(s => s.mapId === removed.id);
     relatedSessions.forEach((session) => {
-      revertPlayerReward({
-        xp: session.xpEarned || 0,
-        coins: session.coinsEarned || 0,
-        wisdom: (session.recalled || 0) * 2 + Math.min(session.reviewed || 0, 8),
-        focus: (session.reviewed || 0) + Math.floor((session.durationMinutes || 0) / 5),
-        actionType: 'mind_map_study',
-        entityId: session.id
-      });
+      revertMindMapSession(db, session);
     });
     db.mindMapSessions = db.mindMapSessions.filter(s => s.mapId !== removed.id);
     saveDb(db);
@@ -3554,19 +2822,10 @@ app.delete('/api/mind-map-sessions/:id', (req, res) => {
   try {
     const db = getDb();
     db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
-    const index = db.mindMapSessions.findIndex(s => s.id === req.params.id);
-    if (index === -1) return res.status(404).json({ error: 'Sessão de estudo não encontrada.' });
-    const [removed] = db.mindMapSessions.splice(index, 1);
-    revertPlayerReward({
-      xp: removed.xpEarned || 0,
-      coins: removed.coinsEarned || 0,
-      wisdom: (removed.recalled || 0) * 2 + Math.min(removed.reviewed || 0, 8),
-      focus: (removed.reviewed || 0) + Math.floor((removed.durationMinutes || 0) / 5),
-      actionType: 'mind_map_study',
-      entityId: removed.id
-    });
+    const result = domainDeleteMindMapSession(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
-    res.json({ success: true, removed });
+    res.json({ success: true, removed: result.removed, rewardResult: result.rewardResult });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
