@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import './loadEnv.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createMcpServer } from './mcpServer.js';
 import { initDb } from './db.js';

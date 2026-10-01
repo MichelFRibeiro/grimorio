@@ -22,10 +22,51 @@ import { setStoredOpenRouterKey } from './jevClient.js';
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = process.env.GRIMORIO_DATA_DIR
-  ? path.resolve(process.env.GRIMORIO_DATA_DIR)
-  : path.join(__dirname, '..', 'data');
+
+/** Pasta data/ do projeto — testes nunca podem gravar aqui. */
+export const PROJECT_DATA_DIR = path.resolve(__dirname, '..', 'data');
+
+/**
+ * Em modo de teste (GRIMORIO_TEST=1) recusa Postgres e exige um
+ * GRIMORIO_DATA_DIR fora da pasta data/ do projeto. Assim nenhum
+ * script de teste alcança o Supabase nem o database.json real.
+ */
+export function assertSafeDataDir(dir) {
+  const resolved = path.resolve(dir);
+  if (process.env.GRIMORIO_TEST === '1') {
+    if (!process.env.GRIMORIO_DATA_DIR) {
+      throw new Error(
+        '[Grimório TEST] GRIMORIO_DATA_DIR não definido. ' +
+        'Importe server/testEnv.js antes de usar o banco, ou rode via npm test.'
+      );
+    }
+    if (resolved === PROJECT_DATA_DIR || resolved.startsWith(PROJECT_DATA_DIR + path.sep)) {
+      throw new Error(
+        `[Grimório TEST] GRIMORIO_DATA_DIR aponta para a pasta data/ do projeto (${resolved}). ` +
+        'Use um diretório temporário.'
+      );
+    }
+  }
+  return resolved;
+}
+
+function resolveDataDir() {
+  const fromEnv = process.env.GRIMORIO_DATA_DIR;
+  const dir = fromEnv ? path.resolve(fromEnv) : path.join(__dirname, '..', 'data');
+  return assertSafeDataDir(dir);
+}
+
+const DATA_DIR = resolveDataDir();
 const DB_FILE = path.join(DATA_DIR, 'database.json');
+const DB_BAK_FILE = path.join(DATA_DIR, 'database.json.bak');
+
+export function getDataDir() {
+  return DATA_DIR;
+}
+
+export function getDbFilePath() {
+  return DB_FILE;
+}
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -34,16 +75,43 @@ if (!fs.existsSync(DATA_DIR)) {
 
 let pool = null;
 
+function postgresSslOption(connectionString) {
+  // PGSSL_STRICT=1 exige certificado válido. Caso contrário, hosts remotos
+  // (Supabase pooler) seguem com rejectUnauthorized:false; localhost não usa SSL.
+  if (process.env.PGSSL_STRICT === '1') return undefined;
+  try {
+    const host = new URL(connectionString).hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return undefined;
+  } catch {
+    // connection string não-URL: mantém o comportamento remoto do Supabase
+  }
+  return { rejectUnauthorized: false };
+}
+
 export function getPool() {
   if (pool) return pool;
   const connectionString = process.env.DATABASE_URL;
+  if (process.env.GRIMORIO_TEST === '1' && connectionString) {
+    throw new Error(
+      '[Grimório TEST] DATABASE_URL está definida com GRIMORIO_TEST=1. ' +
+      'O modo de teste recusa criar um pool Postgres. Remova DATABASE_URL antes de rodar testes.'
+    );
+  }
   if (connectionString) {
+    const ssl = postgresSslOption(connectionString);
     pool = new Pool({
       connectionString,
-      ssl: { rejectUnauthorized: false }
+      ...(ssl ? { ssl } : {})
     });
   }
   return pool;
+}
+
+/** Só para testes: injeta um pool falso e descarta a fila de escrita. */
+export function __setPoolForTests(fakePool) {
+  pool = fakePool;
+  writeChain = Promise.resolve();
+  pendingWrite = null;
 }
 
 // XP needed for a given level
@@ -364,6 +432,110 @@ export function sanitizeDb(db) {
 // In-memory cache synced with disk and PostgreSQL
 let cachedDb = null;
 
+/**
+ * Fila de escrita no Postgres com coalescência: se já há uma escrita em
+ * voo, agenda no máximo mais uma com o snapshot mais recente. O snapshot
+ * é serializado no momento do enfileiramento, então mutações posteriores
+ * não vazam para uma escrita já agendada.
+ */
+let writeChain = Promise.resolve();
+let pendingWrite = null;
+let lastWriteError = null;
+
+const UPSERT_SQL = `
+  INSERT INTO grimorio_store (key, data, updated_at)
+  VALUES ('main', $1, NOW())
+  ON CONFLICT (key) DO UPDATE
+  SET data = $1, updated_at = NOW();
+`;
+
+function enqueuePostgresWrite(snapshotJson) {
+  const p = getPool();
+  if (!p) return;
+  if (pendingWrite) {
+    pendingWrite.snapshotJson = snapshotJson;
+    return;
+  }
+  pendingWrite = { snapshotJson };
+  writeChain = writeChain.then(() => drainPostgresWrites(p)).catch((err) => {
+    lastWriteError = err;
+    console.error('❌ [Grimório DB] Erro ao persistir dados no PostgreSQL:', err.message);
+  });
+}
+
+async function drainPostgresWrites(p) {
+  while (pendingWrite) {
+    const job = pendingWrite;
+    pendingWrite = null;
+    try {
+      await p.query(UPSERT_SQL, [JSON.parse(job.snapshotJson)]);
+      lastWriteError = null;
+    } catch (err) {
+      lastWriteError = err;
+      console.error('❌ [Grimório DB] Erro ao persistir dados no PostgreSQL:', err.message);
+      throw err;
+    }
+  }
+}
+
+/** Resolve quando a fila de escrita do Postgres esvazia. Rejeita se a última escrita falhou. */
+export function flushDb() {
+  const p = getPool();
+  if (!p) return Promise.resolve();
+  return writeChain.then(() => {
+    if (lastWriteError) {
+      const err = lastWriteError;
+      return Promise.reject(err);
+    }
+  });
+}
+
+/**
+ * Escrita atômica no modo arquivo: grava um temporário e renomeia.
+ * A versão anterior boa vira database.json.bak.
+ */
+export function writeDbFileAtomic(filePath, contents) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const tmp = path.join(dir, `.database.${process.pid}.${Date.now()}.tmp`);
+  fs.writeFileSync(tmp, contents, 'utf-8');
+  if (fs.existsSync(filePath)) {
+    try {
+      fs.copyFileSync(filePath, filePath + '.bak');
+    } catch (err) {
+      console.warn('[Grimório DB] Não foi possível atualizar o .bak:', err.message);
+    }
+  }
+  fs.renameSync(tmp, filePath);
+}
+
+function loadFileDb() {
+  if (!fs.existsSync(DB_FILE)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+  } catch (err) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const corruptPath = path.join(DATA_DIR, `database.corrupt-${stamp}.json`);
+    try {
+      fs.renameSync(DB_FILE, corruptPath);
+      console.error(`❌ [Grimório DB] database.json corrompido foi preservado em ${path.basename(corruptPath)}: ${err.message}`);
+    } catch (renameErr) {
+      console.error('❌ [Grimório DB] database.json corrompido e não pôde ser renomeado:', renameErr.message);
+    }
+    if (fs.existsSync(DB_BAK_FILE)) {
+      try {
+        const bak = JSON.parse(fs.readFileSync(DB_BAK_FILE, 'utf-8'));
+        console.warn('⚠️ [Grimório DB] Recuperado a partir de database.json.bak.');
+        return bak;
+      } catch (bakErr) {
+        console.error('❌ [Grimório DB] database.json.bak também está corrompido:', bakErr.message);
+      }
+    }
+    console.error('❌ [Grimório DB] Sem backup utilizável. Iniciando com o banco padrão vazio. Os dados corrompidos NÃO foram sobrescritos.');
+    return null;
+  }
+}
+
 export async function initDb() {
   const p = getPool();
   if (p) {
@@ -386,24 +558,11 @@ export async function initDb() {
       }
 
       // 3. If empty in PostgreSQL, migrate from local database.json or defaults
-      let initialData = null;
-      if (fs.existsSync(DB_FILE)) {
-        try {
-          const raw = fs.readFileSync(DB_FILE, 'utf-8');
-          initialData = JSON.parse(raw);
-        } catch (e) {
-          console.warn('Erro ao ler database.json para migração inicial:', e.message);
-        }
-      }
+      let initialData = loadFileDb();
       if (!initialData) initialData = defaultDatabase();
       initialData = sanitizeDb(initialData);
 
-      await p.query(`
-        INSERT INTO grimorio_store (key, data, updated_at)
-        VALUES ('main', $1, NOW())
-        ON CONFLICT (key) DO UPDATE
-        SET data = $1, updated_at = NOW();
-      `, [initialData]);
+      await p.query(UPSERT_SQL, [initialData]);
 
       cachedDb = initialData;
       console.log('🔮 [Grimório DB] PostgreSQL (Supabase) inicializado com sucesso e dados migrados!');
@@ -421,15 +580,10 @@ export async function initDb() {
 export function getDb() {
   if (cachedDb) return cachedDb;
 
-  if (fs.existsSync(DB_FILE)) {
-    try {
-      const raw = fs.readFileSync(DB_FILE, 'utf-8');
-      cachedDb = JSON.parse(raw);
-      cachedDb = sanitizeDb(cachedDb);
-      return cachedDb;
-    } catch (err) {
-      console.error('Error loading database file, initializing defaults:', err);
-    }
+  const loaded = loadFileDb();
+  if (loaded) {
+    cachedDb = sanitizeDb(loaded);
+    return cachedDb;
   }
 
   cachedDb = defaultDatabase();
@@ -439,30 +593,31 @@ export function getDb() {
 
 export function saveDb(data) {
   cachedDb = sanitizeDb(data);
+  const snapshotJson = JSON.stringify(cachedDb);
 
-  // 1. Save local backup file
+  // 1. Save local file atomically (also the backup when Postgres is primary)
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(cachedDb, null, 2), 'utf-8');
+    writeDbFileAtomic(DB_FILE, JSON.stringify(cachedDb, null, 2));
   } catch (err) {
     console.error('Error saving local database backup:', err);
   }
 
-  // 2. Save to Postgres if available
-  const p = getPool();
-  if (p) {
-    p.query(`
-      INSERT INTO grimorio_store (key, data, updated_at)
-      VALUES ('main', $1, NOW())
-      ON CONFLICT (key) DO UPDATE
-      SET data = $1, updated_at = NOW();
-    `, [cachedDb]).catch(err => {
-      console.error('❌ [Grimório DB] Erro ao persistir dados no PostgreSQL:', err.message);
-    });
+  // 2. Save to Postgres if available (queued, coalesced, snapshotted)
+  if (getPool()) {
+    enqueuePostgresWrite(snapshotJson);
   }
 }
 
+/** Só para testes: descarta o cache em memória para forçar releitura do disco. */
+export function __resetDbCacheForTests() {
+  cachedDb = null;
+  writeChain = Promise.resolve();
+  pendingWrite = null;
+  lastWriteError = null;
+}
+
 // Find or create user on login
-export function findOrCreateUser({ email, name, picture, googleId }) {
+export function findOrCreateUser({ email, name, picture, googleId, provider }) {
   const db = getDb();
   if (!db.users) db.users = [];
 
@@ -475,6 +630,7 @@ export function findOrCreateUser({ email, name, picture, googleId }) {
       name: name || 'Aventureiro',
       picture: picture || '',
       googleId: googleId || null,
+      provider: provider || (googleId ? 'google' : 'local'),
       createdAt: new Date().toISOString(),
       lastLogin: new Date().toISOString()
     };
@@ -484,6 +640,7 @@ export function findOrCreateUser({ email, name, picture, googleId }) {
     if (name) user.name = name;
     if (picture) user.picture = picture;
     if (googleId) user.googleId = googleId;
+    if (provider) user.provider = provider;
   }
 
   // Sync user profile data if it matches current active profile or set it
