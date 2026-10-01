@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Shield, Sparkles, LogIn, Swords, BookOpen, Flame, HelpCircle, Check, ArrowRight } from 'lucide-react';
 
-export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleClientId }) {
+export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleClientId, guestEnabled = true, emailLoginEnabled = true }) {
   const googleBtnRef = useRef(null);
   const [emailInput, setEmailInput] = useState('');
   const [nameInput, setNameInput] = useState('');
@@ -170,7 +170,7 @@ export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleCli
         <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           {googleClientId ? (
             <div ref={googleBtnRef} style={{ minHeight: '44px', display: 'flex', justifyContent: 'center' }} />
-          ) : (
+          ) : emailLoginEnabled ? (
             <button
               onClick={() => {
                 // Prompt user or execute simulated Google login if no client ID set
@@ -208,17 +208,23 @@ export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleCli
               </svg>
               <span>Entrar com o Google</span>
             </button>
+          ) : (
+            <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: 0 }}>
+              Entre com a conta Google do dono do Grimório.
+            </p>
           )}
         </div>
 
-        {/* Divider */}
+        {(guestEnabled || emailLoginEnabled) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '20px 0', color: '#64748b', fontSize: '0.8rem' }}>
           <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
           <span>ou</span>
           <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
         </div>
+        )}
 
         {/* Quick Guest Login Button */}
+        {guestEnabled && (
         <button
           onClick={handleGuestSubmit}
           disabled={loading}
@@ -246,9 +252,10 @@ export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleCli
           <Sparkles size={18} />
           <span>Entrar no Grimório (Acesso Rápido)</span>
         </button>
+        )}
 
         {/* Direct Email Form Toggle */}
-        {!showEmailForm ? (
+        {emailLoginEnabled && (!showEmailForm ? (
           <button
             onClick={() => setShowEmailForm(true)}
             style={{
@@ -327,7 +334,7 @@ export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleCli
               Confirmar Login
             </button>
           </form>
-        )}
+        ))}
 
         {/* Footer Info / Production Help */}
         <div style={{ marginTop: '28px', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
@@ -396,7 +403,7 @@ export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleCli
                 </li>
               </ol>
               <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '4px' }}>
-                💡 Enquanto isso, o botão de acesso rápido e login por e-mail continuam 100% funcionais!
+                💡 Em produção, defina também OWNER_EMAILS com o e-mail do dono. O acesso rápido só aparece fora de produção.
               </p>
             </div>
 

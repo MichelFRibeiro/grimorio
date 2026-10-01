@@ -34,6 +34,8 @@ export function App() {
     isAuthenticated,
     loadingAuth,
     googleClientId,
+    guestEnabled,
+    emailLoginEnabled,
     loginWithGoogle,
     loginWithEmail,
     loginAsGuest,
@@ -159,6 +161,8 @@ export function App() {
         onGuestLogin={loginAsGuest}
         onEmailLogin={loginWithEmail}
         googleClientId={googleClientId}
+        guestEnabled={guestEnabled}
+        emailLoginEnabled={emailLoginEnabled}
       />
     );
   }

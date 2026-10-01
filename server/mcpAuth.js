@@ -43,6 +43,25 @@ export function regenerateMcpToken() {
   return db.mcpToken;
 }
 
+/** Comparação em tempo constante. Comprimentos diferentes nunca vazam pelo tempo da comparação. */
+export function tokensEqual(provided, expected) {
+  if (!provided || !expected || typeof provided !== 'string' || typeof expected !== 'string') return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) {
+    crypto.timingSafeEqual(a, a);
+    return false;
+  }
+  return crypto.timingSafeEqual(a, b);
+}
+
+/** Mascara um token para logs (nunca imprime o segredo inteiro). */
+export function maskToken(token) {
+  if (!token || typeof token !== 'string') return '';
+  if (token.length <= 8) return '***';
+  return `${token.slice(0, 4)}…${token.slice(-2)}`;
+}
+
 /**
  * Verify whether a provided token is valid
  * Accepts:
@@ -55,16 +74,16 @@ export function verifyMcpToken(token) {
   if (!cleanToken) return false;
 
   // 1. Check environment variable
-  if (process.env.MCP_BEARER_TOKEN && cleanToken === process.env.MCP_BEARER_TOKEN.trim()) {
+  if (process.env.MCP_BEARER_TOKEN && tokensEqual(cleanToken, process.env.MCP_BEARER_TOKEN.trim())) {
     return { valid: true, type: 'env_token' };
   }
-  if (process.env.MCP_API_KEY && cleanToken === process.env.MCP_API_KEY.trim()) {
+  if (process.env.MCP_API_KEY && tokensEqual(cleanToken, process.env.MCP_API_KEY.trim())) {
     return { valid: true, type: 'env_api_key' };
   }
 
   // 2. Check DB stored token
   const db = getDb();
-  if (db.mcpToken && cleanToken === db.mcpToken) {
+  if (db.mcpToken && tokensEqual(cleanToken, db.mcpToken)) {
     return { valid: true, type: 'database_token' };
   }
 

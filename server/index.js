@@ -1,9 +1,10 @@
+import './loadEnv.js';
 import fs from 'fs';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, saveDb, initDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG, applyCategoryRename } from './db.js';
+import { getDb, saveDb, initDb, getPool, flushDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG, applyCategoryRename } from './db.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
 import { suggestNextAction, previewNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly } from './oracleSuggest.js';
@@ -24,9 +25,21 @@ import {
   verifyGoogleToken,
   createSession,
   destroySession,
-  getGoogleClientId,
-  authMiddleware
+  authMiddleware,
+  getAuthConfig,
+  isGuestLoginEnabled,
+  isEmailLoginEnabled,
+  assertOwnerEmail,
+  warnIfGoogleClientIdMissing
 } from './auth.js';
+import {
+  isAllowedAudioFile,
+  corsOriginDelegate,
+  stripBackupSecrets,
+  importBackup,
+  persistenceFlushMiddleware,
+  genericErrorHandler
+} from './httpGuards.js';
 import { initKeepAlive } from './keepAlive.js';
 import {
   getSaoPauloDateStr,
@@ -124,32 +137,12 @@ import { sanitizeMindMapImageUrl } from '../src/utils/mindMapIcons.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Automatically load .env file if present
-const envPath = path.join(__dirname, '..', '.env');
-if (fs.existsSync(envPath)) {
-  try {
-    const envContent = fs.readFileSync(envPath, 'utf8');
-    envContent.split('\n').forEach(line => {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
-        const idx = trimmed.indexOf('=');
-        const key = trimmed.substring(0, idx).trim();
-        const val = trimmed.substring(idx + 1).trim();
-        if (!process.env[key]) {
-          process.env[key] = val;
-        }
-      }
-    });
-  } catch (e) {
-    console.warn('Não foi possível ler o arquivo .env:', e.message);
-  }
-}
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+app.use(cors({ origin: corsOriginDelegate }));
 app.use(express.json({ limit: '10mb' }));
+app.use(persistenceFlushMiddleware);
 app.use(authMiddleware);
 
 // Serve built frontend if dist exists
@@ -189,12 +182,12 @@ function getFocusAudioPath() {
     path.resolve(__dirname, '../../../../az-vault', FOCUS_AUDIO_REL)
   ].filter(Boolean);
 
-  return candidates.find(filePath => fs.existsSync(filePath)) || BUNDLED_FOCUS_AUDIO;
+  return candidates.find(filePath => isAllowedAudioFile(filePath)) || null;
 }
 
 function streamFocusAudio(req, res) {
   const filePath = getFocusAudioPath();
-  if (!fs.existsSync(filePath)) {
+  if (!filePath) {
     return res.status(404).json({
       error: 'Áudio de foco não encontrado (data/audio/focus_mp3.mp3 ou az-vault/audios/focus/focus_mp3.mp3).'
     });
@@ -243,7 +236,7 @@ function streamFocusAudio(req, res) {
 
 app.get('/api/focus/track', (req, res) => {
   const filePath = getFocusAudioPath();
-  if (!fs.existsSync(filePath)) {
+  if (!filePath) {
     return res.status(404).json({
       error: 'Áudio de foco não encontrado (data/audio/focus_mp3.mp3 ou az-vault/audios/focus/focus_mp3.mp3).'
     });
@@ -331,9 +324,7 @@ app.get(['/api/mcp', '/mcp'], mcpAuthMiddleware, (req, res) => {
 // 0. AUTHENTICATION & SESSIONS
 // ==========================================
 app.get('/api/auth/config', (req, res) => {
-  res.json({
-    googleClientId: getGoogleClientId() || ''
-  });
+  res.json(getAuthConfig());
 });
 
 app.post('/api/auth/google', async (req, res) => {
@@ -344,7 +335,8 @@ app.post('/api/auth/google', async (req, res) => {
     }
 
     const verified = await verifyGoogleToken(credential);
-    const user = findOrCreateUser(verified);
+    assertOwnerEmail(verified.email);
+    const user = findOrCreateUser({ ...verified, provider: 'google' });
     const session = createSession(user);
     const db = getDb();
 
@@ -361,6 +353,9 @@ app.post('/api/auth/google', async (req, res) => {
 });
 
 app.post('/api/auth/login', (req, res) => {
+  if (!isEmailLoginEnabled()) {
+    return res.status(403).json({ error: 'O login por e-mail está desativado. Entre com a conta Google do dono.' });
+  }
   try {
     const { email, name } = req.body;
     const user = findOrCreateUser({
@@ -382,6 +377,9 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 app.post('/api/auth/guest', (req, res) => {
+  if (!isGuestLoginEnabled()) {
+    return res.status(403).json({ error: 'O acesso de convidado está desativado. Entre com a conta Google do dono.' });
+  }
   try {
     const db = getDb();
     const user = findOrCreateUser({
@@ -2223,12 +2221,13 @@ app.post('/api/boss/reset', (req, res) => {
 // ==========================================
 app.get('/api/backup/export', (req, res) => {
   try {
-    const db = getDb();
+    const db = stripBackupSecrets(getDb());
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename=grimorio-backup-${getSaoPauloDateStr()}.json`);
     res.send(JSON.stringify(db, null, 2));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao exportar backup:', err);
+    res.status(500).json({ error: 'Não foi possível exportar o backup.' });
   }
 });
 
@@ -3589,18 +3588,26 @@ app.post('/api/agu-plan/reset', (req, res) => {
   }
 });
 
-app.post('/api/backup/import', (req, res) => {
+app.post('/api/backup/import', async (req, res) => {
   try {
     const data = req.body;
     if (!data || !data.userProfile || !data.quests) {
       return res.status(400).json({ error: 'Arquivo de backup inválido.' });
     }
-    saveDb(data);
-    res.json({ success: true, message: 'Dados restaurados com sucesso!' });
+    const { snapshot } = await importBackup(data, getPool());
+    res.json({ success: true, message: 'Dados restaurados com sucesso!', snapshot });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao importar backup:', err);
+    const status = err.status && err.status >= 400 && err.status < 600 ? err.status : 500;
+    res.status(status).json({
+      error: status === 400 ? err.message : 'Não foi possível restaurar o backup.'
+    });
   }
 });
+
+// Só a API: o fallback do SPA abaixo responde HTML e não deve virar JSON.
+app.use('/api', genericErrorHandler);
+app.use('/mcp', genericErrorHandler);
 
 // Fallback for SPA routing
 app.get('*', (req, res) => {
@@ -3612,15 +3619,27 @@ app.get('*', (req, res) => {
   });
 });
 
-initDb().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🗡️ [Grimório de Missões] Servidor iniciado com sucesso em http://localhost:${PORT}`);
-    initKeepAlive();
+export function createApp() {
+  return app;
+}
+
+export function start(port = PORT) {
+  warnIfGoogleClientIdMissing();
+  return initDb().then(() => {
+    return app.listen(port, () => {
+      console.log(`🗡️ [Grimório de Missões] Servidor iniciado com sucesso em http://localhost:${port}`);
+      initKeepAlive();
+    });
+  }).catch(err => {
+    console.error('Erro na inicialização do DB:', err);
+    return app.listen(port, () => {
+      console.log(`🗡️ [Grimório de Missões] Servidor iniciado com fallback local em http://localhost:${port}`);
+      initKeepAlive();
+    });
   });
-}).catch(err => {
-  console.error('Erro na inicialização do DB:', err);
-  app.listen(PORT, () => {
-    console.log(`🗡️ [Grimório de Missões] Servidor iniciado com fallback local em http://localhost:${PORT}`);
-    initKeepAlive();
-  });
-});
+}
+
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  start();
+}

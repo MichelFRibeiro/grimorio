@@ -11,6 +11,8 @@ export function AuthProvider({ children }) {
   const [userProfile, setUserProfile] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [googleClientId, setGoogleClientId] = useState('');
+  const [guestEnabled, setGuestEnabled] = useState(true);
+  const [emailLoginEnabled, setEmailLoginEnabled] = useState(true);
 
   // Fetch server configuration (e.g. Google Client ID)
   useEffect(() => {
@@ -20,6 +22,8 @@ export function AuthProvider({ children }) {
         if (data.googleClientId) {
           setGoogleClientId(data.googleClientId);
         }
+        if (typeof data.guestEnabled === 'boolean') setGuestEnabled(data.guestEnabled);
+        if (typeof data.emailLoginEnabled === 'boolean') setEmailLoginEnabled(data.emailLoginEnabled);
       })
       .catch(err => console.warn('Could not fetch auth config:', err));
   }, []);
@@ -160,6 +164,8 @@ export function AuthProvider({ children }) {
         isAuthenticated: !!token && !!user,
         loadingAuth,
         googleClientId,
+        guestEnabled,
+        emailLoginEnabled,
         loginWithGoogle,
         loginWithEmail,
         loginAsGuest,
