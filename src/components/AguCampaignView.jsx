@@ -138,6 +138,7 @@ function StudyTimeCard({ studyTime, liveMinutes = 0 }) {
 export function AguCampaignView({
   aguPlan,
   examQuestions,
+  mindMapSessions = [],
   onStartPlan,
   onToggleBlock,
   onSetBlockDuration,
@@ -168,9 +169,15 @@ export function AguCampaignView({
   const [screen, setScreen] = useState('hoje');
   const todayBlockKeys = (summary.today?.blocks || []).map((block) => block.key);
   const liveMinutes = useLiveAguMinutes(todayBlockKeys);
+  // Mesmas fontes do gráfico, do App e da sincronização do servidor: a faixa
+  // mostrada e o número gravado na vitória planejada não podem divergir.
+  // O tempo em andamento (liveMinutes) fica fora da média — entra só no ponto
+  // de hoje —, senão a meta subiria enquanto o herói estuda.
   const homeostasisVictory = useMemo(
-    () => buildAguHomeostasisStudyVictory(aguPlan, examQuestions || [], todayStr),
-    [aguPlan, examQuestions, todayStr]
+    () => buildAguHomeostasisStudyVictory(aguPlan, examQuestions || [], todayStr, {
+      mindMapSessions: mindMapSessions || []
+    }),
+    [aguPlan, examQuestions, todayStr, mindMapSessions]
   );
 
   const consumeBlockTimer = (blockKey) => consumeActivityTimerMinutes('agu', blockKey);
@@ -381,6 +388,7 @@ export function AguCampaignView({
         examQuestions={examQuestions}
         todayStr={todayStr}
         liveMinutes={liveMinutes}
+        mindMapSessions={mindMapSessions}
         actions={(
           <PlanHomeostasisVictoryButton
             victory={homeostasisVictory}

@@ -29,16 +29,17 @@ export function AguStudyLoadChart({
   examQuestions,
   todayStr,
   liveMinutes = 0,
+  mindMapSessions = [],
   days = HOMEOSTASIS_WINDOW_DAYS,
   actions = null
 }) {
-  const series = useMemo(() => {
-    const extra = liveMinutes > 0 && todayStr ? { [todayStr]: liveMinutes } : {};
-    return getAguStudyLoadSeries(aguPlan, examQuestions || [], todayStr, {
-      days,
-      extraMinutesByDate: extra
-    });
-  }, [aguPlan, examQuestions, todayStr, liveMinutes, days]);
+  // O tempo em andamento entra no ponto de hoje, não na média da faixa: assim
+  // o número do gráfico é o mesmo da vitória planejada.
+  const series = useMemo(() => getAguStudyLoadSeries(aguPlan, examQuestions || [], todayStr, {
+    days,
+    liveMinutesToday: liveMinutes,
+    mindMapSessions: mindMapSessions || []
+  }), [aguPlan, examQuestions, todayStr, liveMinutes, mindMapSessions, days]);
 
   return (
     <HomeostasisLoadChart

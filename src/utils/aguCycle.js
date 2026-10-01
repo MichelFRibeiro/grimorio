@@ -176,7 +176,7 @@ export function getAguStudyLoadSeries(plan, examQuestions = [], todayStr, option
     minutesByDate: byDate,
     todayStr,
     days: options.days || AGU_STUDY_LOAD_WINDOW_DAYS,
-    extraMinutesByDate: options.extraMinutesByDate,
+    liveMinutesToday: options.liveMinutesToday,
     floorMinutes: options.floorMinutes ?? HOMEOSTASIS_FLOOR_MINUTES.study
   });
 }

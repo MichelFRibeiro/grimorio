@@ -30,13 +30,11 @@ export function ReadingLoadChart({
   days = HOMEOSTASIS_WINDOW_DAYS,
   actions = null
 }) {
-  const series = useMemo(() => {
-    const extra = liveMinutes > 0 && todayStr ? { [todayStr]: liveMinutes } : {};
-    return getReadingLoadSeries(readingSessions || [], todayStr, {
-      days,
-      extraMinutesByDate: extra
-    });
-  }, [readingSessions, todayStr, liveMinutes, days]);
+  // O tempo de leitura em andamento entra no ponto de hoje, não na faixa.
+  const series = useMemo(() => getReadingLoadSeries(readingSessions || [], todayStr, {
+    days,
+    liveMinutesToday: liveMinutes
+  }), [readingSessions, todayStr, liveMinutes, days]);
 
   return (
     <HomeostasisLoadChart

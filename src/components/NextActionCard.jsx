@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Compass, CheckCircle2, Clock, MapPin, Sparkles, Flame, Scroll, RefreshCw, ChevronDown, ChevronUp, Trophy } from 'lucide-react';
+import { Compass, CheckCircle2, Clock, MapPin, Sparkles, Flame, Scroll, RefreshCw, ChevronDown, ChevronUp, Trophy, Timer } from 'lucide-react';
 import { LOCATIONS, getLocationMeta } from '../utils/locations';
 import { PriorityBadge } from './ActivityScaleFields';
 import { ActivityTimerBox } from './ActivityTimerBox';
@@ -231,7 +231,7 @@ export function NextActionCard({
   const locMeta = getLocationMeta(activeLocation, catalog);
   const kindEmoji = { habit: '🔥', victory: '🏆' };
   const collapsedHint = primary
-    ? `${kindEmoji[primary.kind] || '📜'} ${primary.title}`
+    ? `${kindEmoji[primary.kind] || '📜'} ${primary.title}${primary.dose?.reduced ? ` · Agora: ${primary.dose.label}` : ''}`
     : (nextAction?.emptyReason || 'Nada pendente neste lugar e neste horário.');
 
   return (
@@ -804,14 +804,32 @@ function PrimaryRow({
             )}
             {item.priority && <PriorityBadge priority={item.priority} compact />}
           </div>
+          {/* O título diz O QUE fazer; a dose diz POR QUANTO TEMPO começar.
+              Antes a dose substituía o título e o cartão mostrava só
+              "Agora: 10 min", sem dizer a que se referia. */}
           <h4 style={{ fontSize: '1.08rem', fontWeight: 800, color: '#2a2118', margin: '0 0 4px 0' }}>
-            {item.suggestionLabel || item.title}
+            {item.title}
           </h4>
           {item.dose?.reduced && (
-            <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '0 0 4px 0' }}>
-              {item.dose.fraction === 'start'
-                ? `Comece por ${item.dose.label}; a tarefa segue sendo ${item.title}.`
-                : `A tarefa continua sendo ${item.title}${item.quantity?.label ? ` (${item.quantity.label})` : ''}.`}
+            <p
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '0.84rem',
+                fontWeight: 800,
+                color: '#6d28d9',
+                background: 'rgba(109, 40, 217, 0.08)',
+                border: '1px solid rgba(109, 40, 217, 0.22)',
+                borderRadius: '999px',
+                padding: '3px 10px',
+                margin: '0 0 6px 0'
+              }}
+            >
+              <Timer size={13} />
+              Agora: {item.dose.label}
+              {item.quantity?.label ? ` de ${item.quantity.label}` : ''}
+              {item.dose.fraction === 'start' ? ' (dose de partida)' : ''}
             </p>
           )}
           {item.nextSubtask?.title && (

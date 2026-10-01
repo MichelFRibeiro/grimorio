@@ -365,7 +365,7 @@ async function run() {
   });
   assert(partida.primary?.dose?.fraction === 'start', 'tarefa sem quantitativo recebe dose de partida, não fica sem dose');
   assert(partida.primary?.dose?.amount === 15, 'a dose de partida usa os minutos escolhidos pelo Jev');
-  assert(partida.primary?.suggestionLabel === 'Agora: 15 min', 'o cartão anuncia a dose de partida no título');
+  assert(partida.primary?.suggestionLabel === 'Agora: 15 min', 'a resposta anuncia a dose de partida (o cartão mostra o título + a dose)');
   assert(partida.primary?.quantity === null, 'dose de partida não inventa quantitativo para a tarefa');
   assert(partida.trace.some(entry => entry.step === 'dose'), 'o passo "Dose sugerida" aparece no processo');
   assert(partidaDb.oracleDecisions[0]?.dose?.label === '15 min', 'a decisão guarda a dose de partida');

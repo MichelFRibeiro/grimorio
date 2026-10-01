@@ -49,20 +49,27 @@ export function classifyLoadMinutes(minutes, band = {}) {
 
 /**
  * Série diária de minutos, com faixa de homeostase = média da janela ±20%.
- * A média sai só dos dias com sessão: dia vazio é falta de dado, não ritmo,
- * e conta apenas como subcarga. O piso absoluto impede a faixa de murchar.
- * Recalcula a cada dia a partir do que realmente aconteceu.
+ * A média sai só dos dias com sessão registrada: dia vazio é falta de dado,
+ * não ritmo, e conta apenas como subcarga. O piso absoluto impede a faixa de
+ * murchar. Recalcula a cada dia a partir do que realmente aconteceu.
+ *
+ * `liveMinutesToday` é o tempo EM ANDAMENTO (cronômetro rodando): entra só no
+ * ponto de hoje, nunca na média. Antes ele empurrava a faixa para cima
+ * enquanto o herói estudava — o gráfico mostrava "faixa 45 min–1h07" e a
+ * vitória planejada dizia "no mínimo 30 min" — e transformava a meta em alvo
+ * móvel: quanto mais se estudava, mais alta ficava.
  */
 export function buildDailyLoadSeries({
   minutesByDate = {},
   todayStr,
   days = HOMEOSTASIS_WINDOW_DAYS,
-  extraMinutesByDate = {},
+  liveMinutesToday = 0,
   floorMinutes = 0
 } = {}) {
   const today = todayStr || getSaoPauloDateStr();
   const windowDays = Math.max(1, Number(days) || HOMEOSTASIS_WINDOW_DAYS);
   const start = addDaysToDateStr(today, -(windowDays - 1));
+  const liveToday = Math.max(0, roundLoadMinutes(liveMinutesToday));
 
   const rawPoints = [];
   let activeMinutes = 0;
@@ -70,17 +77,20 @@ export function buildDailyLoadSeries({
 
   for (let i = 0; i < windowDays; i += 1) {
     const dateStr = addDaysToDateStr(start, i);
-    const minutes = roundLoadMinutes(
-      (minutesByDate[dateStr] || 0) + parseDurationMinutes(extraMinutesByDate[dateStr])
-    );
-    if (minutes > 0) {
-      activeMinutes += minutes;
+    const isToday = dateStr === today;
+    const loggedMinutes = roundLoadMinutes(minutesByDate[dateStr] || 0);
+    const liveMinutes = isToday ? liveToday : 0;
+    const minutes = loggedMinutes + liveMinutes;
+    if (loggedMinutes > 0) {
+      activeMinutes += loggedMinutes;
       activeDays += 1;
     }
     rawPoints.push({
       dateStr,
       minutes,
-      isToday: dateStr === today
+      loggedMinutes,
+      liveMinutes,
+      isToday
     });
   }
 
@@ -134,7 +144,7 @@ export function getReadingLoadSeries(readingSessions = [], todayStr, options = {
     minutesByDate: byDate,
     todayStr,
     days: options.days,
-    extraMinutesByDate: options.extraMinutesByDate,
+    liveMinutesToday: options.liveMinutesToday,
     floorMinutes: options.floorMinutes ?? HOMEOSTASIS_FLOOR_MINUTES.reading
   });
 }

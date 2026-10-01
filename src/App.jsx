@@ -495,6 +495,7 @@ export function App() {
           <AguCampaignView
             aguPlan={aguPlan}
             examQuestions={examQuestions}
+            mindMapSessions={mindMapSessions}
             onStartPlan={startAguPlan}
             onToggleBlock={toggleAguBlock}
             onSetBlockDuration={setAguBlockDuration}
