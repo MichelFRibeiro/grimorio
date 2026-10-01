@@ -74,6 +74,13 @@ export function NextActionCard({
 
   const handleDo = (item) => {
     if (!item) return;
+    if (item.kind === 'plan_day') {
+      if (onOpenTab) onOpenTab('today');
+      window.setTimeout(() => {
+        document.getElementById('planejar-o-dia')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 40);
+      return;
+    }
     if (item.kind === 'habit' && onToggleHabit) {
       const durationMinutes = confirmLongDuration(peekActivityTimerMinutes('habit', item.id));
       if (durationMinutes == null) return;
@@ -276,7 +283,7 @@ export function NextActionCard({
   const handleOpen = (item) => {
     if (!item) return;
     if (playClick) playClick();
-    const tabByKind = { quest: 'quests', habit: 'habits', agu: 'agu', mindmap: 'maps', reading: 'books' };
+    const tabByKind = { quest: 'quests', habit: 'habits', agu: 'agu', mindmap: 'maps', reading: 'books', plan_day: 'today' };
     const tab = item.openTab || tabByKind[item.kind];
     if (tab && onOpenTab) {
       onOpenTab(tab);
@@ -286,6 +293,11 @@ export function NextActionCard({
     if (item.kind === 'quest' && onOpenQuests) onOpenQuests();
     if (item.kind === 'victory') {
       document.getElementById('vitorias-do-dia')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    if (item.kind === 'plan_day') {
+      window.setTimeout(() => {
+        document.getElementById('planejar-o-dia')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 40);
     }
   };
 
@@ -855,8 +867,11 @@ function PrimaryRow({
 }) {
   const isHabit = item.kind === 'habit';
   const isVictory = item.kind === 'victory';
-  const isNavigable = item.kind === 'agu' || item.kind === 'mindmap' || item.kind === 'reading';
-  const kindLabel = isVictory
+  const isPlan = item.kind === 'plan_day';
+  const isNavigable = isPlan || item.kind === 'agu' || item.kind === 'mindmap' || item.kind === 'reading';
+  const kindLabel = isPlan
+    ? 'Planejar'
+    : isVictory
     ? 'Vitória do dia'
     : isHabit
       ? 'Ritual'
@@ -872,7 +887,9 @@ function PrimaryRow({
   // Com dose na tela, o segundo botão é o caminho "fiz tudo": o rótulo precisa
   // deixar claro o que ele conclui (e não prometer "inteiro" quando ele só
   // avança um passo da missão).
-  const fullActionLabel = isNavigable
+  const fullActionLabel = isPlan
+    ? 'Planejar o dia'
+    : isNavigable
     ? 'Abrir'
     : isVictory
     ? 'Concluir vitória'

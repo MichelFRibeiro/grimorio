@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { useGameData } from './hooks/useGameData';
 import { LoginView } from './components/LoginView';
@@ -15,17 +15,20 @@ import { OracleAnalytics } from './components/OracleAnalytics';
 import { NextActionCard } from './components/NextActionCard';
 import { LevelUpModal } from './components/LevelUpModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale, Headphones, Network } from 'lucide-react';
+import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun } from 'lucide-react';
+import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
+import { getHabitDueStatus } from './utils/habitFrequency';
+import { getHabitWeeklyStats } from './utils/timeUtils';
 import { MindMapsView } from './components/MindMapsView';
 import { AguCampaignView } from './components/AguCampaignView';
 import { FocusChamberView, FocusMiniPlayer } from './components/FocusPlayer';
 import { useFocusPlayer } from './hooks/useFocusPlayer';
-import { getSaoPauloDateStr } from './utils/timeUtils';
+import { getSaoPauloDateStr, addDaysToDateStr } from './utils/timeUtils';
 import { summarizePlan, getAguStudyLoadSeries } from './utils/aguCycle';
 import { getReadingLoadSeries } from './utils/homeostasis';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState(null);
+  const [activeTab, setActiveTab] = useState('today');
   const focusPlayer = useFocusPlayer();
 
   const {
@@ -104,6 +107,11 @@ export function App() {
     advanceAguCycle,
     logAguProduct,
     updateAguPlan,
+    closeDay,
+    fetchEveningReview,
+    fetchWeeklyReview,
+    saveWeeklyPlan,
+    toggleWeeklyFocus,
     addDailyVictory,
     updateDailyVictory,
     completeDailyVictory,
@@ -129,6 +137,14 @@ export function App() {
     deleteMindMapCategory,
     deleteMindMapImage
   } = useGameData();
+
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [eveningOpen, setEveningOpen] = useState(false);
+  const [eveningReview, setEveningReview] = useState(null);
+  const [weeklyOpen, setWeeklyOpen] = useState(false);
+  const [weeklyReview, setWeeklyReview] = useState(null);
+  const [lastQuestCategory, setLastQuestCategory] = useState('');
 
   const todayStr = getSaoPauloDateStr();
   const homeostasisFloors = useMemo(() => ({
@@ -211,11 +227,78 @@ export function App() {
     locations,
     dailyVictories,
     dailyVictoryBonuses,
+    today,
     mindMaps,
     mindMapSessions,
     mindMapCategories,
     mindMapImages
   } = data || {};
+
+  const habitsDueCount = (habits || []).filter((habit) => {
+    const due = getHabitDueStatus(habit, getHabitWeeklyStats(habit), new Date(), todayStr);
+    return due.due && !due.completedToday;
+  }).length;
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const tag = event.target?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || event.target?.isContentEditable;
+      if (event.key === 'Escape') {
+        setCaptureOpen(false);
+        setHelpOpen(false);
+        setEveningOpen(false);
+        setWeeklyOpen(false);
+        return;
+      }
+      if (typing) return;
+      if (event.key === 'n') {
+        event.preventDefault();
+        setCaptureOpen(true);
+      } else if (event.key === 'h') {
+        setActiveTab('today');
+      } else if (event.key === '?') {
+        setHelpOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const openEvening = async () => {
+    playClick();
+    const review = await fetchEveningReview();
+    setEveningReview(review);
+    setEveningOpen(true);
+  };
+
+  const openWeekly = async () => {
+    playClick();
+    const review = await fetchWeeklyReview();
+    setWeeklyReview(review);
+    setWeeklyOpen(true);
+  };
+
+  const handleInsightAction = async (action) => {
+    if (!action) return;
+    if (action.type === 'plan_victory') {
+      setActiveTab('today');
+      window.setTimeout(() => {
+        document.getElementById('planejar-o-dia')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          || document.getElementById('vitorias-do-dia')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+      return;
+    }
+    if (action.type === 'reschedule') {
+      const dueDate = addDaysToDateStr(getSaoPauloDateStr(), 1);
+      if (action.payload?.ids?.length) await rescheduleQuests(action.payload.ids, dueDate);
+      setActiveTab('quests');
+      return;
+    }
+    if (action.type === 'open_tab' && action.payload?.tab) {
+      setActiveTab(action.payload.tab === 'today' ? 'today' : action.payload.tab);
+    }
+  };
 
   const pendingQuestsCount = (quests || []).filter(q => !q.completed).length;
   const todayQuestionsCount = (examQuestions || []).filter(q => {
@@ -230,12 +313,13 @@ export function App() {
     ?? (mindMaps || []).reduce((acc, m) => acc + (m.stats?.dueBranches || 0), 0);
 
   const tabs = [
+    { id: 'today', label: 'Hoje', icon: Sun },
     { id: 'quests', label: 'Missões', icon: Scroll, badge: pendingQuestsCount },
     { id: 'questions', label: 'Questões', icon: Target, badge: todayQuestionsCount },
     { id: 'books', label: 'Biblioteca', icon: BookOpen, badge: activeBooksCount },
     { id: 'maps', label: 'Mapas', icon: Network, badge: dueMindMapsCount },
     { id: 'processes', label: 'Processos', icon: Layers, badge: activeProcessesCount },
-    { id: 'habits', label: 'Rituais', icon: Flame, badge: habits?.length },
+    { id: 'habits', label: 'Rituais', icon: Flame, badge: habitsDueCount },
     { id: 'focus', label: 'Foco', icon: Headphones },
     { id: 'rewards', label: 'Taverna', icon: Gift },
     { id: 'agu', label: 'AGU', icon: Scale, badge: aguTodayRemaining },
@@ -274,32 +358,6 @@ export function App() {
       {/* Boss Raid Banner */}
       <BossRaid boss={bossRaid} onResetBoss={resetBoss} />
 
-      <NextActionCard
-        nextAction={nextAction}
-        locations={locations}
-        currentLocation={userProfile?.currentLocation || nextAction?.context?.location}
-        onChangeLocation={setCurrentLocation}
-        onCompleteQuest={completeQuest}
-        onUpdateQuest={updateQuest}
-        onToggleHabit={toggleHabit}
-        onCompleteVictory={completeDailyVictory}
-        quests={quests}
-        onOpenQuests={() => setActiveTab('quests')}
-        onOpenHabits={() => setActiveTab('habits')}
-        onOpenTab={(tab) => setActiveTab(tab)}
-        onBreakdownQuest={breakDownQuest}
-        onRescheduleQuests={rescheduleQuests}
-        onRefresh={refreshNextAction}
-        onSubmitEnergy={submitOracleEnergy}
-        onSkipEnergy={skipOracleEnergy}
-        oracleMemory={data?.oracleMemory}
-        openRouter={data?.openRouter}
-        onSaveOpenRouterKey={saveOpenRouterKey}
-        onDeclineSuggestion={declineOracleSuggestion}
-        onAcceptDose={acceptOracleDose}
-        playClick={playClick}
-      />
-
       {/* Navigation Tab Bar */}
       <nav className="glass-panel app-nav">
         {tabs.map(tab => {
@@ -311,7 +369,7 @@ export function App() {
               key={tab.id}
               onClick={() => {
                 playClick();
-                setActiveTab(prev => (prev === tab.id ? null : tab.id));
+                setActiveTab(prev => (tab.id === 'today' ? 'today' : (prev === tab.id ? 'today' : tab.id)));
               }}
               aria-pressed={isActive}
               title={isActive ? `Recolher ${tab.label}` : `Abrir ${tab.label}`}
@@ -362,6 +420,52 @@ export function App() {
 
       {/* Main Tab Views */}
       <main>
+        {(activeTab === 'today' || activeTab == null) && (
+          <>
+          <NextActionCard
+            nextAction={nextAction}
+            locations={locations}
+            currentLocation={userProfile?.currentLocation || nextAction?.context?.location}
+            onChangeLocation={setCurrentLocation}
+            onCompleteQuest={completeQuest}
+            onUpdateQuest={updateQuest}
+            onToggleHabit={toggleHabit}
+            onCompleteVictory={completeDailyVictory}
+            quests={quests}
+            onOpenQuests={() => setActiveTab('quests')}
+            onOpenHabits={() => setActiveTab('habits')}
+            onOpenTab={(tab) => setActiveTab(tab)}
+            onBreakdownQuest={breakDownQuest}
+            onRescheduleQuests={rescheduleQuests}
+            onRefresh={refreshNextAction}
+            onSubmitEnergy={submitOracleEnergy}
+            onSkipEnergy={skipOracleEnergy}
+            oracleMemory={data?.oracleMemory}
+            openRouter={data?.openRouter}
+            onSaveOpenRouterKey={saveOpenRouterKey}
+            onDeclineSuggestion={declineOracleSuggestion}
+            onAcceptDose={acceptOracleDose}
+            playClick={playClick}
+          />
+          <TodayView
+            today={today}
+            dailyVictories={dailyVictories}
+            questCategories={questCategories}
+            onCompleteVictory={completeDailyVictory}
+            onToggleHabit={toggleHabit}
+            onCompleteQuest={completeQuest}
+            onAddVictory={addDailyVictory}
+            onRescheduleQuests={rescheduleQuests}
+            onOpenTab={setActiveTab}
+            onCloseDay={closeDay}
+            onOpenEvening={openEvening}
+            onOpenWeekly={openWeekly}
+            onToggleFocus={(id, done) => toggleWeeklyFocus(id, done, today?.weekKey)}
+            playClick={playClick}
+          />
+          </>
+        )}
+
         {activeTab === 'quests' && (
           <QuestsView
             quests={quests}
@@ -506,14 +610,7 @@ export function App() {
             analytics={analytics}
             actionLogs={actionLogs}
             onRefresh={refresh}
-            onInsightAction={(action) => {
-              if (!action) return;
-              if (action.type === 'plan_victory') {
-                document.getElementById('vitorias-do-dia')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                return;
-              }
-              if (action.payload?.tab) setActiveTab(action.payload.tab);
-            }}
+            onInsightAction={handleInsightAction}
           />
         )}
       </main>
@@ -523,6 +620,56 @@ export function App() {
 
       {/* Floating XP & Coins Notification Toasts */}
       <FloatingToasts toasts={rewardPopups} />
+
+      <button
+        type="button"
+        className="quick-capture-fab"
+        aria-label="Nova missão"
+        title="Nova missão (n)"
+        onClick={() => {
+          playClick();
+          setCaptureOpen(true);
+        }}
+      >
+        +
+      </button>
+
+      <QuickCapture
+        open={captureOpen}
+        categories={(questCategories || []).map((item) => (typeof item === 'string' ? item : item.name))}
+        lastCategory={lastQuestCategory}
+        onClose={() => setCaptureOpen(false)}
+        onCreate={async (quest) => {
+          setLastQuestCategory(quest.category);
+          await addQuest(quest);
+        }}
+      />
+      <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <EveningReviewModal
+        open={eveningOpen}
+        review={eveningReview}
+        onClose={() => setEveningOpen(false)}
+        onCloseDay={closeDay}
+        onReschedule={async (ids) => {
+          const tomorrow = addDaysToDateStr(getSaoPauloDateStr(), 1);
+          await rescheduleQuests(ids, tomorrow);
+          setEveningReview(await fetchEveningReview());
+        }}
+        onPlanTomorrow={async (item) => {
+          const tomorrow = addDaysToDateStr(getSaoPauloDateStr(), 1);
+          await addDailyVictory({ title: item.title, category: item.category, date: tomorrow, questId: item.questId });
+          setEveningReview(await fetchEveningReview());
+        }}
+        playClick={playClick}
+      />
+      <WeeklyReviewModal
+        open={weeklyOpen}
+        review={weeklyReview}
+        categories={(questCategories || []).map((item) => (typeof item === 'string' ? item : item.name))}
+        onClose={() => setWeeklyOpen(false)}
+        onSavePlan={saveWeeklyPlan}
+        playClick={playClick}
+      />
 
       {activeTab !== 'focus' && (
         <FocusMiniPlayer

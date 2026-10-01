@@ -1752,6 +1752,279 @@ img, video, canvas {
   }
 }
 
+.today-board {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.today-hero,
+.today-section-head,
+.today-hero-actions,
+.today-row-actions,
+.today-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.today-hero,
+.today-section-head {
+  justify-content: space-between;
+}
+
+.today-hero h2,
+.today-section h3,
+.today-now h3,
+.today-plan h3 {
+  margin: 0;
+  color: #f8fafc;
+}
+
+.today-kicker {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fbbf24;
+  font-weight: 800;
+}
+
+.today-meta,
+.today-empty {
+  margin: 4px 0 0;
+  color: #94a3b8;
+  font-size: 0.84rem;
+}
+
+.today-now,
+.today-plan,
+.today-section {
+  padding: 14px 16px;
+}
+
+.today-now h3 {
+  font-size: 1.15rem;
+}
+
+.today-now p {
+  margin: 6px 0 0;
+  color: #cbd5e1;
+}
+
+.today-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.today-section h3 {
+  font-size: 0.92rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.today-count {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.today-line,
+.today-line-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+  color: #e2e8f0;
+  font-size: 0.88rem;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.today-line span {
+  flex: 1;
+  min-width: 0;
+}
+
+.today-line em,
+.today-line .is-late {
+  font-style: normal;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.today-line .is-late {
+  color: #fb7185;
+  font-weight: 800;
+}
+
+.today-line .is-done {
+  text-decoration: line-through;
+  color: #64748b;
+}
+
+.today-inline-input,
+.today-field input,
+.today-line select {
+  flex: 1;
+  min-width: 0;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: #f8fafc;
+  border-radius: 8px;
+  padding: 7px 8px;
+}
+
+.today-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0 8px;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+}
+
+.today-solid,
+.today-ghost,
+.today-link,
+.today-chips button,
+.today-banner {
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.today-solid {
+  border: 0;
+  background: #f59e0b;
+  color: #111827;
+  padding: 8px 14px;
+}
+
+.today-ghost,
+.today-chips button,
+.today-banner {
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.08);
+  color: #fbbf24;
+  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.today-chips button.is-on {
+  background: #fbbf24;
+  color: #111827;
+}
+
+.today-link,
+.today-check {
+  border: 0;
+  background: transparent;
+  color: #fbbf24;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+}
+
+.today-error {
+  color: #fb7185;
+  font-size: 0.8rem;
+  margin: 8px 0 0;
+}
+
+.today-banner {
+  width: 100%;
+  justify-content: center;
+  padding: 12px;
+}
+
+.today-modal,
+.today-capture {
+  max-width: 560px;
+  margin: 8vh auto;
+  padding: 18px;
+}
+
+.today-modal h4 {
+  margin: 14px 0 0;
+  font-size: 0.82rem;
+  color: #fbbf24;
+}
+
+.today-stats,
+.today-rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+  color: #cbd5e1;
+  font-size: 0.84rem;
+  padding: 0;
+  list-style: none;
+}
+
+.today-stats {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.today-stats span {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+
+.quick-capture-fab {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 40;
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  border: 0;
+  background: #f59e0b;
+  color: #111827;
+  font-size: 1.6rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.app-shell.has-focus-mini .quick-capture-fab {
+  bottom: 84px;
+}
+
+kbd {
+  font-family: inherit;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 6px;
+  padding: 0 6px;
+  color: #fbbf24;
+}
+
+@media (max-width: 640px) {
+  .today-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .today-hero {
+    align-items: flex-start;
+  }
+}
+
 @media (max-width: 768px) {
   .mindmap-canvas {
     min-height: 420px;

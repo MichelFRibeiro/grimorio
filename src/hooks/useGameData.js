@@ -985,6 +985,83 @@ export function useGameData() {
     await mutate('/api/agu-plan/realign');
   };
 
+  const fetchToday = useCallback(async () => {
+    try {
+      const res = await fetch('/api/today', { headers: getAuthHeaders() });
+      if (!res.ok) return null;
+      const json = await res.json();
+      setData((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev, today: json.today };
+        dataRef.current = next;
+        return next;
+      });
+      return json.today;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const closeDay = async ({ note, mood } = {}) => {
+    const json = await mutate('/api/daily-reviews', {
+      body: { note, mood },
+      refreshOnSuccess: false,
+      toastOnError: false
+    });
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível fechar o dia.' };
+    if (json.rewardResult) handleRewardResponse(json.rewardResult, 'Dia fechado');
+    fetchState();
+    return { ok: true, review: json.review };
+  };
+
+  const fetchEveningReview = async () => {
+    try {
+      const res = await fetch('/api/daily-reviews', { headers: getAuthHeaders() });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.evening || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchWeeklyReview = async (weekKey) => {
+    try {
+      const query = weekKey ? `?weekKey=${encodeURIComponent(weekKey)}` : '';
+      const res = await fetch(`/api/weekly-review${query}`, { headers: getAuthHeaders() });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.review || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const saveWeeklyPlan = async ({ weekKey, focuses, note } = {}) => {
+    const json = await mutate('/api/weekly-plans', {
+      body: { weekKey, focuses, note },
+      refreshOnSuccess: false,
+      toastOnError: false
+    });
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível gravar o plano.' };
+    fetchState();
+    return { ok: true, plan: json.plan };
+  };
+
+  const toggleWeeklyFocus = async (focusId, done, weekKey) => {
+    const json = await mutate('/api/weekly-plans/focus', {
+      body: { focusId, done, weekKey },
+      refreshOnSuccess: false,
+      toastOnError: false
+    });
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível atualizar o foco.' };
+    if (!json.stateUnchanged && json.rewardResult?.logEntry) {
+      handleRewardResponse(json.rewardResult, 'Foco da semana');
+    }
+    fetchState();
+    return { ok: true };
+  };
+
   const addDailyVictory = async (victoryData) => {
     playClick();
     const result = await mutate('/api/daily-victories', { body: victoryData, refreshOnSuccess: false });
@@ -1112,6 +1189,12 @@ export function useGameData() {
     resetAguPlan,
     advanceAguCycle,
     logAguProduct,
+    fetchToday,
+    closeDay,
+    fetchEveningReview,
+    fetchWeeklyReview,
+    saveWeeklyPlan,
+    toggleWeeklyFocus,
     addDailyVictory,
     updateDailyVictory,
     completeDailyVictory,

@@ -275,3 +275,62 @@ input::placeholder,
 textarea::placeholder {
   color: #b3a28d;
 }
+
+.today-hero h2,
+.today-section h3,
+.today-now h3,
+.today-plan h3,
+.today-line,
+.today-line-btn {
+  color: var(--cat-ink);
+}
+
+.today-kicker,
+.today-count,
+.today-link,
+.today-check,
+.today-modal h4,
+kbd {
+  color: var(--cat-stamp);
+}
+
+.today-meta,
+.today-empty,
+.today-now p,
+.today-line em,
+.today-stats,
+.today-rank-list,
+.today-field {
+  color: var(--cat-ink-soft);
+}
+
+.today-count {
+  background: rgba(194, 65, 12, 0.1);
+}
+
+.today-inline-input,
+.today-field input,
+.today-line select {
+  background: #fffdf8;
+  border-color: var(--cat-rule);
+  color: var(--cat-ink);
+}
+
+.today-solid,
+.quick-capture-fab,
+.today-chips button.is-on {
+  background: var(--cat-stamp);
+  color: #fffdf8;
+}
+
+.today-ghost,
+.today-chips button,
+.today-banner {
+  border-color: rgba(194, 65, 12, 0.35);
+  background: rgba(194, 65, 12, 0.08);
+  color: var(--cat-stamp);
+}
+
+.today-stats span {
+  background: rgba(61, 46, 31, 0.05);
+}
