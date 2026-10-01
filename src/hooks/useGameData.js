@@ -23,6 +23,7 @@ export function useGameData() {
   const dataRef = useRef(null);
   const fetchGenRef = useRef(0);
   const failCountRef = useRef(0);
+  const toastTimersRef = useRef(new Set());
   const [retryNonce, setRetryNonce] = useState(0);
 
   const {
@@ -206,14 +207,55 @@ export function useGameData() {
     return () => clearTimeout(timer);
   }, [error, retryNonce, fetchState]);
 
-  // Trigger floating reward popup
-  const showRewardToast = useCallback((xp, coins, text) => {
+  // Trigger floating reward popup. Timers are cleared on unmount.
+  const showRewardToast = useCallback((xp, coins, text, variant) => {
     const id = Date.now() + Math.random();
-    setRewardPopups(prev => [...prev, { id, xp, coins, text }]);
-    setTimeout(() => {
+    setRewardPopups(prev => [...prev, { id, xp, coins, text, variant }]);
+    const timer = setTimeout(() => {
+      toastTimersRef.current.delete(timer);
       setRewardPopups(prev => prev.filter(p => p.id !== id));
     }, 2500);
+    toastTimersRef.current.add(timer);
   }, []);
+
+  const showErrorToast = useCallback((text) => {
+    showRewardToast(0, 0, text || 'Não foi possível concluir.', 'error');
+  }, [showRewardToast]);
+
+  useEffect(() => () => {
+    toastTimersRef.current.forEach((timer) => clearTimeout(timer));
+    toastTimersRef.current.clear();
+  }, []);
+
+  /**
+   * Escrita HTTP. Em !res.ok mostra o {error} do servidor e devolve null.
+   * Não usa fetchWithRetry: escrita repetida não é idempotente.
+   */
+  const mutate = useCallback(async (path, options = {}) => {
+    const { method = 'POST', body, refreshOnSuccess = true, toastOnError = true } = options;
+    try {
+      const res = await fetch(path, {
+        method,
+        headers: getAuthHeaders(),
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {})
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        const message = errJson.error || 'Não foi possível concluir.';
+        if (toastOnError) showErrorToast(message);
+        // toastOnError: null para o chamador (o toast já saiu).
+        // toastOnError false: o chamador lê .error e monta a própria resposta.
+        return toastOnError ? null : { __error: true, error: message, status: res.status };
+      }
+      const result = await res.json().catch(() => ({}));
+      if (refreshOnSuccess) fetchState();
+      return result;
+    } catch (err) {
+      const message = connectionErrorMessage(err) || 'Sem conexão com o Grimório.';
+      if (toastOnError) showErrorToast(message);
+      return toastOnError ? null : { __error: true, error: message };
+    }
+  }, [fetchState, showErrorToast]);
 
   // Handle generic reward response from API
   const handleRewardResponse = useCallback((rewardResult, fallbackText = 'Atividade Concluída!') => {
@@ -239,13 +281,15 @@ export function useGameData() {
     }
 
     if (bossDefeatedNow) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        toastTimersRef.current.delete(timer);
         confetti({
           particleCount: 150,
           spread: 100,
           origin: { y: 0.5 }
         });
       }, 500);
+      toastTimersRef.current.add(timer);
     }
   }, [playLevelUp, playSuccess, showRewardToast]);
 
@@ -268,522 +312,261 @@ export function useGameData() {
   // 1. Quests Actions
   const addQuest = async (questData) => {
     playClick();
-    const res = await fetch('/api/quests', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(questData)
-    });
-    if (res.ok) fetchState();
+    await mutate('/api/quests', { body: questData });
   };
 
   const updateQuest = async (id, questData) => {
     playClick();
-    const res = await fetch(`/api/quests/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(questData)
-    });
-    if (res.ok) fetchState();
+    await mutate(`/api/quests/${id}`, { method: 'PUT', body: questData });
   };
 
   const completeQuest = async (id, extra = {}) => {
     playClick();
-    const res = await fetch(`/api/quests/${id}/complete`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(extra || {})
-    });
-    if (res.ok) {
-      const result = await res.json();
-      if (result.willComplete) {
-        if (result.rewardResult) {
-          handleRewardResponse(result.rewardResult, `Missão Cumprida: ${result.quest.title}`);
-          confetti({
-            particleCount: 40,
-            spread: 60,
-            origin: { y: 0.7 }
-          });
-        }
-      } else {
-        // Uncompleted / Reopened
-        showRewardToast(
-          -result.quest.xpReward,
-          -result.quest.coinReward,
-          `Missão reaberta: ${result.quest.title} (estorno aplicado)`
-        );
+    const result = await mutate(`/api/quests/${id}/complete`, { body: extra || {}, refreshOnSuccess: false });
+    if (!result) return;
+    if (result.willComplete) {
+      if (result.rewardResult) {
+        handleRewardResponse(result.rewardResult, `Missão Cumprida: ${result.quest.title}`);
+        confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 } });
       }
-      handleLinkedVictories(result.linkedVictories);
-      fetchState();
+    } else {
+      showRewardToast(
+        -(result.rewardResult?.revertedXp ?? result.quest.xpReward),
+        -(result.rewardResult?.revertedCoins ?? result.quest.coinReward),
+        `Missão reaberta: ${result.quest.title} (estorno aplicado)`
+      );
     }
+    handleLinkedVictories(result.linkedVictories);
+    fetchState();
   };
 
   const deleteQuest = async (id) => {
     playClick();
-    const res = await fetch(`/api/quests/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) fetchState();
+    await mutate(`/api/quests/${id}`, { method: 'DELETE' });
   };
 
-  // 1.5. Quest Categories CRUD
   const addQuestCategory = async (categoryData) => {
     playClick();
-    const res = await fetch('/api/quest-categories', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(categoryData)
-    });
-    if (res.ok) {
-      fetchState();
-    } else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao criar categoria.');
-    }
+    await mutate('/api/quest-categories', { body: categoryData });
   };
 
   const updateQuestCategory = async (id, categoryData) => {
     playClick();
-    const res = await fetch(`/api/quest-categories/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(categoryData)
-    });
-    if (res.ok) {
-      fetchState();
-    } else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao atualizar categoria.');
-    }
+    await mutate(`/api/quest-categories/${id}`, { method: 'PUT', body: categoryData });
   };
 
   const deleteQuestCategory = async (id) => {
     playClick();
-    const res = await fetch(`/api/quest-categories/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      fetchState();
-    } else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao excluir categoria.');
-    }
+    await mutate(`/api/quest-categories/${id}`, { method: 'DELETE' });
   };
 
-  // 2. Books Actions
   const addBook = async (bookData) => {
     playClick();
-    const res = await fetch('/api/books', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(bookData)
-    });
-    if (res.ok) fetchState();
+    await mutate('/api/books', { body: bookData });
   };
 
   const updateBook = async (id, bookData) => {
     playClick();
-    const res = await fetch(`/api/books/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(bookData)
-    });
-    if (res.ok) fetchState();
+    await mutate(`/api/books/${id}`, { method: 'PUT', body: bookData });
   };
 
   const logReadingSession = async (bookId, sessionData) => {
     playClick();
-    const res = await fetch(`/api/books/${bookId}/reading-session`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(sessionData)
-    });
-    if (res.ok) {
-      const result = await res.json();
-      handleRewardResponse(result.rewardResult, `Leitura: +${result.session.pagesRead} páginas!`);
-      handleLinkedVictories(result.linkedVictories);
-      confetti({
-        particleCount: 50,
-        spread: 60,
-        origin: { y: 0.7 }
-      });
-      fetchState();
-    }
+    const result = await mutate(`/api/books/${bookId}/reading-session`, { body: sessionData, refreshOnSuccess: false });
+    if (!result) return;
+    handleRewardResponse(result.rewardResult, `Leitura: +${result.session.pagesRead} páginas!`);
+    handleLinkedVictories(result.linkedVictories);
+    confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
+    fetchState();
   };
 
   const updateReadingSession = async (sessionId, sessionData) => {
     playClick();
-    const res = await fetch(`/api/reading-sessions/${sessionId}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(sessionData)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      handleLinkedVictories(result.linkedVictories);
-      fetchState();
-    } else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao atualizar sessão de leitura.');
-    }
+    const result = await mutate(`/api/reading-sessions/${sessionId}`, { method: 'PUT', body: sessionData, refreshOnSuccess: false });
+    if (!result) return;
+    handleLinkedVictories(result.linkedVictories);
+    fetchState();
   };
 
   const deleteReadingSession = async (sessionId) => {
     playClick();
-    const res = await fetch(`/api/reading-sessions/${sessionId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      handleLinkedVictories(result.linkedVictories);
-      fetchState();
-    } else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao excluir sessão de leitura.');
-    }
+    const result = await mutate(`/api/reading-sessions/${sessionId}`, { method: 'DELETE', refreshOnSuccess: false });
+    if (!result) return;
+    handleLinkedVictories(result.linkedVictories);
+    fetchState();
   };
 
   const deleteBook = async (id) => {
     playClick();
-    const res = await fetch(`/api/books/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) fetchState();
+    await mutate(`/api/books/${id}`, { method: 'DELETE' });
   };
 
   const addBookQuote = async (bookId, quoteData) => {
     playClick();
-    const res = await fetch(`/api/books/${bookId}/quotes`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(quoteData)
-    });
-    if (res.ok) {
-      const result = await res.json();
-      if (result.rewardResult) {
-        handleRewardResponse(result.rewardResult, `Citação salva no tomo!`);
-      }
-      fetchState();
-    }
+    const result = await mutate(`/api/books/${bookId}/quotes`, { body: quoteData, refreshOnSuccess: false });
+    if (!result) return;
+    if (result.rewardResult) handleRewardResponse(result.rewardResult, 'Citação salva no tomo!');
+    fetchState();
   };
 
   const updateBookQuote = async (bookId, quoteId, quoteData) => {
     playClick();
-    const res = await fetch(`/api/books/${bookId}/quotes/${quoteId}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(quoteData)
-    });
-    if (res.ok) fetchState();
+    await mutate(`/api/books/${bookId}/quotes/${quoteId}`, { method: 'PUT', body: quoteData });
   };
 
   const deleteBookQuote = async (bookId, quoteId) => {
     playClick();
-    const res = await fetch(`/api/books/${bookId}/quotes/${quoteId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) fetchState();
+    await mutate(`/api/books/${bookId}/quotes/${quoteId}`, { method: 'DELETE' });
   };
 
-  // 2.5. Exam Questions Actions
   const addExamQuestions = async (questionData) => {
     playBossHit();
-    const res = await fetch('/api/questions', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(questionData)
-    });
-    if (res.ok) {
-      const result = await res.json();
-      if (result.rewardResult) {
-        handleRewardResponse(result.rewardResult, `Treino: ${result.examQuestion.correctAnswers}/${result.examQuestion.totalQuestions} acertos (${result.examQuestion.accuracyRate}%)!`);
-        confetti({
-          particleCount: result.examQuestion.accuracyRate >= 80 ? 70 : 40,
-          spread: 70,
-          origin: { y: 0.65 }
-        });
-      }
-      handleLinkedVictories(result.linkedVictories);
-      fetchState();
-    } else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao registrar questões.');
+    const result = await mutate('/api/questions', { body: questionData, refreshOnSuccess: false });
+    if (!result) return;
+    if (result.rewardResult) {
+      handleRewardResponse(result.rewardResult, `Treino: ${result.examQuestion.correctAnswers}/${result.examQuestion.totalQuestions} acertos (${result.examQuestion.accuracyRate}%)!`);
+      confetti({
+        particleCount: result.examQuestion.accuracyRate >= 80 ? 70 : 40,
+        spread: 70,
+        origin: { y: 0.65 }
+      });
     }
+    handleLinkedVictories(result.linkedVictories);
+    fetchState();
   };
 
   const updateExamQuestions = async (id, questionData) => {
     playClick();
-    const res = await fetch(`/api/questions/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(questionData)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      handleLinkedVictories(result.linkedVictories);
-      fetchState();
-    }
+    const result = await mutate(`/api/questions/${id}`, { method: 'PUT', body: questionData, refreshOnSuccess: false });
+    if (!result) return;
+    if (result.rewardResult) handleRewardResponse(result.rewardResult, 'Questões atualizadas.');
+    handleLinkedVictories(result.linkedVictories);
+    fetchState();
   };
 
   const deleteExamQuestions = async (id) => {
     playClick();
-    const res = await fetch(`/api/questions/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      handleLinkedVictories(result.linkedVictories);
-      fetchState();
-    }
+    const result = await mutate(`/api/questions/${id}`, { method: 'DELETE', refreshOnSuccess: false });
+    if (!result) return;
+    handleLinkedVictories(result.linkedVictories);
+    fetchState();
   };
 
   const addMindMap = async (mapData) => {
     playClick();
-    const res = await fetch('/api/mind-maps', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(mapData)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return result.mindMap || null;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao criar o mapa mental.');
-    throw new Error(errJson.error || 'Erro ao criar o mapa mental.');
-  };
+    const result = await mutate('/api/mind-maps', { method: 'POST', body: mapData, refreshOnSuccess: false });
+    if (!result) throw new Error('Erro ao criar o mapa mental.');
+    applyMindMapPayload(result);
+    return result.mindMap || null;};
 
   const updateMindMap = async (id, mapData) => {
     playClick();
-    const res = await fetch(`/api/mind-maps/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(mapData)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return true;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao atualizar o mapa mental.');
-    return false;
+    const result = await mutate(`/api/mind-maps/${id}`, { method: 'PUT', body: mapData, refreshOnSuccess: false });
+    if (!result) return false;
+    applyMindMapPayload(result);
+    return true;
   };
 
   const addMindMapNode = async (mapId, nodeData) => {
     playClick();
-    const res = await fetch(`/api/mind-maps/${mapId}/nodes`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(nodeData)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return true;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao adicionar ramo.');
-    return false;
+    const result = await mutate(`/api/mind-maps/${mapId}/nodes`, { method: 'POST', body: nodeData, refreshOnSuccess: false });
+    if (!result) return false;
+    applyMindMapPayload(result);
+    return true;
   };
 
   const updateMindMapNode = async (mapId, nodeId, nodeData) => {
-    const res = await fetch(`/api/mind-maps/${mapId}/nodes/${nodeId}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(nodeData)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return true;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao atualizar o ramo.');
-    return false;
+    const result = await mutate(`/api/mind-maps/${mapId}/nodes/${nodeId}`, { method: 'PUT', body: nodeData, refreshOnSuccess: false });
+    if (!result) return false;
+    applyMindMapPayload(result);
+    return true;
   };
 
   const updateMindMapNodes = async (mapId, nodeIds, nodeData) => {
     const ids = Array.isArray(nodeIds) ? nodeIds.filter(Boolean) : [];
     if (!ids.length) return false;
     if (ids.length === 1) return updateMindMapNode(mapId, ids[0], nodeData);
-    const res = await fetch(`/api/mind-maps/${mapId}/nodes`, {
+    const result = await mutate(`/api/mind-maps/${mapId}/nodes`, {
       method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ nodeIds: ids, ...(nodeData || {}) })
+      body: { nodeIds: ids, ...(nodeData || {}) },
+      refreshOnSuccess: false
     });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return true;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao atualizar os ramos.');
-    return false;
+    if (!result) return false;
+    applyMindMapPayload(result);
+    return true;
   };
 
   const deleteMindMapNode = async (mapId, nodeId) => {
     playClick();
-    const res = await fetch(`/api/mind-maps/${mapId}/nodes/${nodeId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return true;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao excluir o ramo.');
-    return false;
+    const result = await mutate(`/api/mind-maps/${mapId}/nodes/${nodeId}`, { method: 'DELETE', refreshOnSuccess: false });
+    if (!result) return false;
+    applyMindMapPayload(result);
+    return true;
   };
 
   const addMindMapCrossLink = async (mapId, linkData) => {
     playClick();
-    const res = await fetch(`/api/mind-maps/${mapId}/links`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(linkData)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return result.mindMap || null;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao criar a ligação.');
-    throw new Error(errJson.error || 'Erro ao criar a ligação.');
-  };
+    const result = await mutate(`/api/mind-maps/${mapId}/links`, { method: 'POST', body: linkData, refreshOnSuccess: false });
+    if (!result) throw new Error('Erro ao criar a ligação.');
+    applyMindMapPayload(result);
+    return result.mindMap || null;};
 
   const updateMindMapCrossLink = async (mapId, linkId, linkData) => {
-    const res = await fetch(`/api/mind-maps/${mapId}/links/${linkId}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(linkData)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return true;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao atualizar a ligação.');
-    return false;
+    const result = await mutate(`/api/mind-maps/${mapId}/links/${linkId}`, { method: 'PUT', body: linkData, refreshOnSuccess: false });
+    if (!result) return false;
+    applyMindMapPayload(result);
+    return true;
   };
 
   const deleteMindMapCrossLink = async (mapId, linkId) => {
     playClick();
-    const res = await fetch(`/api/mind-maps/${mapId}/links/${linkId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return true;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao excluir a ligação.');
-    return false;
+    const result = await mutate(`/api/mind-maps/${mapId}/links/${linkId}`, { method: 'DELETE', refreshOnSuccess: false });
+    if (!result) return false;
+    applyMindMapPayload(result);
+    return true;
   };
 
   const addMindMapBrace = async (mapId, braceData) => {
     playClick();
-    const res = await fetch(`/api/mind-maps/${mapId}/braces`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(braceData)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return result.mindMap || null;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao criar a chave.');
-    throw new Error(errJson.error || 'Erro ao criar a chave.');
-  };
+    const result = await mutate(`/api/mind-maps/${mapId}/braces`, { method: 'POST', body: braceData, refreshOnSuccess: false });
+    if (!result) throw new Error('Erro ao criar a chave.');
+    applyMindMapPayload(result);
+    return result.mindMap || null;};
 
   const updateMindMapBrace = async (mapId, braceId, braceData) => {
-    const res = await fetch(`/api/mind-maps/${mapId}/braces/${braceId}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(braceData)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return true;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao atualizar a chave.');
-    return false;
+    const result = await mutate(`/api/mind-maps/${mapId}/braces/${braceId}`, { method: 'PUT', body: braceData, refreshOnSuccess: false });
+    if (!result) return false;
+    applyMindMapPayload(result);
+    return true;
   };
 
   const addBraceLabelNode = async (mapId, braceId, braceData = {}) => {
     playClick();
-    const res = await fetch(`/api/mind-maps/${mapId}/braces/${braceId}/label-node`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(braceData)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return result.mindMap || null;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao criar o ramo do rótulo.');
-    throw new Error(errJson.error || 'Erro ao criar o ramo do rótulo.');
-  };
+    const result = await mutate(`/api/mind-maps/${mapId}/braces/${braceId}/label-node`, { method: 'POST', body: braceData, refreshOnSuccess: false });
+    if (!result) throw new Error('Erro ao criar o ramo do rótulo.');
+    applyMindMapPayload(result);
+    return result.mindMap || null;};
 
   const deleteMindMapBrace = async (mapId, braceId) => {
     playClick();
-    const res = await fetch(`/api/mind-maps/${mapId}/braces/${braceId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return true;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao excluir a chave.');
-    return false;
+    const result = await mutate(`/api/mind-maps/${mapId}/braces/${braceId}`, { method: 'DELETE', refreshOnSuccess: false });
+    if (!result) return false;
+    applyMindMapPayload(result);
+    return true;
   };
 
   const layoutMindMap = async (mapId) => {
     playClick();
-    const res = await fetch(`/api/mind-maps/${mapId}/layout`, {
-      method: 'POST',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapPayload(result);
-      return true;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao organizar o mapa.');
-    return false;
+    const result = await mutate(`/api/mind-maps/${mapId}/layout`, { method: 'POST', refreshOnSuccess: false });
+    if (!result) return false;
+    applyMindMapPayload(result);
+    return true;
   };
 
   const studyMindMap = async (mapId, sessionData) => {
     playClick();
-    const res = await fetch(`/api/mind-maps/${mapId}/study`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(sessionData)
-    });
-    if (res.ok) {
-      const result = await res.json();
+    const result = await mutate(`/api/mind-maps/${mapId}/study`, { body: sessionData, refreshOnSuccess: false });
+    if (result) {
       if (result.rewardResult) {
         handleRewardResponse(
           result.rewardResult,
@@ -808,19 +591,13 @@ export function useGameData() {
       }
       return result;
     }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao registrar o estudo do mapa.');
-    throw new Error(errJson.error || 'Erro ao registrar o estudo do mapa.');
+    throw new Error('Erro ao registrar o estudo do mapa.');
   };
 
   const deleteMindMap = async (id) => {
     playClick();
-    const res = await fetch(`/api/mind-maps/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
+    const result = await mutate(`/api/mind-maps/${id}`, { method: 'DELETE', refreshOnSuccess: false });
+    if (result) {
       setData((prev) => {
         if (!prev) return prev;
         const next = {
@@ -834,54 +611,29 @@ export function useGameData() {
       });
       return true;
     }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao excluir o mapa mental.');
     return false;
   };
 
   const addMindMapCategory = async (categoryData) => {
     playClick();
-    const res = await fetch('/api/mind-map-categories', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(categoryData)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapCategories(result);
-      return true;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao criar o assunto.');
-    throw new Error(errJson.error || 'Erro ao criar o assunto.');
+    const result = await mutate('/api/mind-map-categories', { method: 'POST', body: categoryData, refreshOnSuccess: false });
+    if (!result) throw new Error('Erro ao criar o assunto.');
+    applyMindMapCategories(result);
+    return true;
   };
 
   const updateMindMapCategory = async (id, categoryData) => {
     playClick();
-    const res = await fetch(`/api/mind-map-categories/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(categoryData)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapCategories(result);
-      return true;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao atualizar o assunto.');
-    return false;
+    const result = await mutate(`/api/mind-map-categories/${id}`, { method: 'PUT', body: categoryData, refreshOnSuccess: false });
+    if (!result) return false;
+    applyMindMapCategories(result);
+    return true;
   };
 
   const deleteMindMapImage = async (url) => {
     playClick();
-    const res = await fetch('/api/mind-map-images', {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ url })
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
+    const result = await mutate('/api/mind-map-images', { method: 'DELETE', body: { url }, refreshOnSuccess: false });
+    if (result) {
       setData((prev) => {
         if (!prev) return prev;
         const next = { ...prev };
@@ -892,35 +644,21 @@ export function useGameData() {
       });
       return true;
     }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao excluir a imagem.');
     return false;
   };
 
   const deleteMindMapCategory = async (id) => {
     playClick();
-    const res = await fetch(`/api/mind-map-categories/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      applyMindMapCategories(result);
-      return true;
-    }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao excluir o assunto.');
-    return false;
+    const result = await mutate(`/api/mind-map-categories/${id}`, { method: 'DELETE', refreshOnSuccess: false });
+    if (!result) return false;
+    applyMindMapCategories(result);
+    return true;
   };
 
   const deleteMindMapSession = async (id) => {
     playClick();
-    const res = await fetch(`/api/mind-map-sessions/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
+    const result = await mutate(`/api/mind-map-sessions/${id}`, { method: 'DELETE', refreshOnSuccess: false });
+    if (result) {
       setData((prev) => {
         if (!prev) return prev;
         const next = {
@@ -933,68 +671,41 @@ export function useGameData() {
       });
       return true;
     }
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao excluir a sessão de estudo.');
     return false;
   };
 
   // 3. Process Actions
   const addProcess = async (processData) => {
     playClick();
-    const res = await fetch('/api/processes', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(processData)
-    });
-    if (res.ok) fetchState();
+    await mutate('/api/processes', { method: 'POST', body: processData });
   };
 
   const stepProcess = async (processId, stepData) => {
     playBossHit();
-    const res = await fetch(`/api/processes/${processId}/step`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(stepData)
-    });
-    if (res.ok) {
-      const result = await res.json();
-      handleRewardResponse(result.rewardResult, `Processo: +${result.step.unitsAdded} ${result.process.unitName}!`);
-      fetchState();
-    }
+    const result = await mutate(`/api/processes/${processId}/step`, { body: stepData, refreshOnSuccess: false });
+    if (!result) return;
+    handleRewardResponse(result.rewardResult, `Processo: +${result.step.unitsAdded} ${result.process.unitName}!`);
+    fetchState();
   };
 
   const deleteProcess = async (id) => {
     playClick();
-    const res = await fetch(`/api/processes/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) fetchState();
+    await mutate(`/api/processes/${id}`, { method: 'DELETE' });
   };
 
   // 4. Habit Actions
   const addHabit = async (habitData) => {
     playClick();
-    const res = await fetch('/api/habits', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(habitData)
-    });
-    if (res.ok) fetchState();
+    await mutate('/api/habits', { method: 'POST', body: habitData });
   };
 
   const toggleHabit = async (id, date = null, extra = {}) => {
     playClick();
-    const res = await fetch(`/api/habits/${id}/toggle`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        ...(date ? { date } : {}),
-        ...(extra || {})
-      })
+    const result = await mutate(`/api/habits/${id}/toggle`, {
+      body: { ...(date ? { date } : {}), ...(extra || {}) },
+      refreshOnSuccess: false
     });
-    if (res.ok) {
-      const result = await res.json();
+    if (result) {
       if (result.done && result.rewardResult) {
         const targetDate = result.targetDate;
         const dateParts = targetDate ? targetDate.split('-') : [];
@@ -1016,123 +727,65 @@ export function useGameData() {
 
   const updateHabit = async (id, habitData) => {
     playClick();
-    const res = await fetch(`/api/habits/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(habitData)
-    });
-    if (res.ok) fetchState();
+    await mutate(`/api/habits/${id}`, { method: 'PUT', body: habitData });
   };
 
   const deleteHabit = async (id) => {
     playClick();
-    const res = await fetch(`/api/habits/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) fetchState();
+    await mutate(`/api/habits/${id}`, { method: 'DELETE' });
   };
 
   // 5. Rewards Actions
   const addReward = async (rewardData) => {
     playClick();
-    const res = await fetch('/api/rewards', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(rewardData)
-    });
-    if (res.ok) fetchState();
+    await mutate('/api/rewards', { method: 'POST', body: rewardData });
   };
 
   const spendMoney = async ({ amountBrl, item, notes } = {}) => {
     playCoin();
-    const res = await fetch('/api/rewards/spend-money', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ amountBrl, item, notes })
+    const result = await mutate('/api/rewards/spend-money', {
+      body: { amountBrl, item, notes },
+      refreshOnSuccess: false
     });
-    if (res.ok) {
-      const result = await res.json();
-      const spent = result.redemption || {};
-      showRewardToast(
-        0,
-        -(spent.cost || 0),
-        `Gastou ${formatBrl(spent.amountBrl)} com ${spent.rewardTitle}!`
-      );
-      fetchState();
-      return { success: true, result };
-    }
-
-    const errJson = await res.json().catch(() => ({}));
-    showRewardToast(0, 0, errJson.error || 'Erro ao registrar gasto.');
-    return { success: false, error: errJson.error };
+    if (!result) return { success: false };
+    const spent = result.redemption || {};
+    showRewardToast(0, -(spent.cost || 0), `Gastou ${formatBrl(spent.amountBrl)} com ${spent.rewardTitle}!`);
+    fetchState();
+    return { success: true, result };
   };
 
   const redeemReward = async (id) => {
     playCoin();
-    const res = await fetch(`/api/rewards/${id}/redeem`, {
-      method: 'POST',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      const result = await res.json();
-      showRewardToast(0, -result.redemption.cost, `Resgatado: ${result.reward.title}!`);
-      confetti({
-        particleCount: 70,
-        spread: 70,
-        origin: { y: 0.6 }
-      });
-      fetchState();
-    } else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao resgatar recompensa.');
-    }
+    const result = await mutate(`/api/rewards/${id}/redeem`, { refreshOnSuccess: false });
+    if (!result) return;
+    showRewardToast(0, -(result.redemption.cost ?? result.redemption.costCoins ?? 0), `Resgatado: ${result.reward.title}!`);
+    confetti({ particleCount: 70, spread: 70, origin: { y: 0.6 } });
+    fetchState();
   };
 
   const cancelRewardRedemption = async (redemptionId) => {
     playCoin();
-    const res = await fetch(`/api/rewards/redemptions/${redemptionId}/cancel`, {
-      method: 'POST',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      const result = await res.json();
-      showRewardToast(0, result.refundedCoins, `Resgate cancelado (+${result.refundedCoins} moedas devolvidas)!`);
-      fetchState();
-    } else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao cancelar resgate.');
-    }
+    const result = await mutate(`/api/rewards/redemptions/${redemptionId}/cancel`, { refreshOnSuccess: false });
+    if (!result) return;
+    showRewardToast(0, result.refundedCoins, `Resgate cancelado (+${result.refundedCoins} moedas devolvidas)!`);
+    fetchState();
   };
 
   const deleteReward = async (id) => {
     playClick();
-    const res = await fetch(`/api/rewards/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) fetchState();
+    await mutate(`/api/rewards/${id}`, { method: 'DELETE' });
   };
 
   // 6. Boss Actions
   const resetBoss = async () => {
     playClick();
-    const res = await fetch('/api/boss/reset', {
-      method: 'POST',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) fetchState();
+    await mutate('/api/boss/reset');
   };
 
   const setCurrentLocation = async (location, manual = true) => {
     playClick();
-    const res = await fetch('/api/next-action/location', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ location, manual })
-    });
-    if (res.ok) {
-      const json = await res.json();
+    const json = await mutate('/api/next-action/location', { body: { location, manual }, refreshOnSuccess: false });
+    if (json) {
       setData(prev => {
         if (!prev) return prev;
         const { success, userProfile, locations, ...nextAction } = json;
@@ -1163,13 +816,12 @@ export function useGameData() {
     // A consulta ao Jev é POST: um GET que grava decisão era disparado por
     // qualquer recarga da tela e poluía a memória do Oráculo.
     if (consult) {
-      const res = await fetch('/api/next-action/consult', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ location, snoozedIds })
+      const json = await mutate('/api/next-action/consult', {
+        body: { location, snoozedIds },
+        refreshOnSuccess: false,
+        toastOnError: false
       });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) return { ok: false, error: json.error || 'Não foi possível consultar o Oráculo.' };
+      if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível consultar o Oráculo.' };
       applyNextAction(json);
       return { ok: true };
     }
@@ -1189,25 +841,24 @@ export function useGameData() {
   };
 
   const saveOpenRouterKey = async (apiKey) => {
-    const res = await fetch('/api/integrations/openrouter', {
+    const json = await mutate('/api/integrations/openrouter', {
       method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ apiKey })
+      body: { apiKey },
+      refreshOnSuccess: false,
+      toastOnError: false
     });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: json.error || 'Não foi possível guardar a chave.' };
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível guardar a chave.' };
     setData(prev => prev ? { ...prev, openRouter: json.openRouter } : prev);
     return { ok: true, openRouter: json.openRouter };
   };
 
   const submitOracleEnergy = async ({ text, location, snoozedIds } = {}) => {
-    const res = await fetch('/api/next-action/energy', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ text, location, snoozedIds })
+    const json = await mutate('/api/next-action/energy', {
+      body: { text, location, snoozedIds },
+      refreshOnSuccess: false,
+      toastOnError: false
     });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: json.error || 'Não foi possível ler a energia.' };
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível ler a energia.' };
     applyNextAction(json);
     return { ok: true, energyError: json.energyError || null, energy: json.energy || null };
   };
@@ -1215,128 +866,76 @@ export function useGameData() {
   // Pular a energia vale por uma janela no servidor: sem isso a pergunta
   // voltava na próxima atualização da tela.
   const skipOracleEnergy = async ({ location, snoozedIds } = {}) => {
-    const res = await fetch('/api/next-action/skip-energy', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ location, snoozedIds })
+    const json = await mutate('/api/next-action/skip-energy', {
+      body: { location, snoozedIds },
+      refreshOnSuccess: false,
+      toastOnError: false
     });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: json.error || 'Não foi possível indicar agora.' };
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível indicar agora.' };
     applyNextAction(json);
     return { ok: true };
   };
 
   const declineOracleSuggestion = async ({ decisionId, reason, note, location, snoozedIds } = {}) => {
-    const res = await fetch('/api/next-action/decline', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ decisionId, reason, note, location, snoozedIds })
+    const json = await mutate('/api/next-action/decline', {
+      body: { decisionId, reason, note, location, snoozedIds },
+      refreshOnSuccess: false,
+      toastOnError: false
     });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: json.error || 'Não foi possível registrar a recusa.' };
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível registrar a recusa.' };
     applyNextAction(json);
     return { ok: true };
   };
 
   const acceptOracleDose = async (decisionId, extra = {}) => {
-    const res = await fetch('/api/next-action/accept-dose', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ decisionId, ...(extra || {}) })
+    const json = await mutate('/api/next-action/accept-dose', {
+      body: { decisionId, ...(extra || {}) },
+      refreshOnSuccess: false,
+      toastOnError: false
     });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: json.error || 'Não foi possível registrar a dose.' };
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível registrar a dose.' };
     return { ok: true, decision: json.decision };
   };
 
   // 7. Profile Actions
   const startAguPlan = async () => {
     playClick();
-    const res = await fetch('/api/agu-plan/start', {
-      method: 'POST',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) fetchState();
-    else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao iniciar a campanha AGU.');
-    }
+    await mutate('/api/agu-plan/start');
   };
 
   const advanceAguCycle = async () => {
     playClick();
-    const res = await fetch('/api/agu-plan/advance', {
-      method: 'POST',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) fetchState();
-    else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao gerar o próximo ciclo AGU.');
-    }
+    await mutate('/api/agu-plan/advance');
   };
 
   const logAguProduct = async (key, note) => {
     playClick();
-    const res = await fetch('/api/agu-plan/log-product', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ key, note })
-    });
-    if (res.ok) fetchState();
-    else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao lançar o produto discursivo.');
-    }
+    await mutate('/api/agu-plan/log-product', { body: { key, note } });
   };
 
   const updateAguPlan = async (planPatch) => {
     playClick();
-    const res = await fetch('/api/agu-plan', {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ plan: planPatch })
-    });
-    if (res.ok) fetchState();
-    else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao atualizar o plano AGU.');
-    }
+    await mutate('/api/agu-plan', { method: 'PUT', body: { plan: planPatch } });
   };
 
   const toggleAguBlock = async (key, extra = {}) => {
     playClick();
-    const res = await fetch('/api/agu-plan/toggle-block', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ key, ...extra })
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      handleLinkedVictories(result.linkedVictories);
-      fetchState();
-    } else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao marcar o bloco do ciclo.');
-    }
+    const result = await mutate('/api/agu-plan/toggle-block', { body: { key, ...extra }, refreshOnSuccess: false });
+    if (!result) return;
+    handleLinkedVictories(result.linkedVictories);
+    fetchState();
   };
 
   const setAguBlockDuration = async (key, durationMinutes, options = {}) => {
     playClick();
     const mode = options.mode === 'add' ? 'add' : 'set';
-    const res = await fetch('/api/agu-plan/block-duration', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ key, durationMinutes, mode })
+    const result = await mutate('/api/agu-plan/block-duration', {
+      body: { key, durationMinutes, mode },
+      refreshOnSuccess: false
     });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      handleLinkedVictories(result.linkedVictories);
-      fetchState();
-    } else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao salvar o tempo do bloco.');
-    }
+    if (!result) return;
+    handleLinkedVictories(result.linkedVictories);
+    fetchState();
   };
 
   const addAguBlockDuration = async (key, durationMinutes) => {
@@ -1345,94 +944,45 @@ export function useGameData() {
 
   const updateAguBlock = async (payload) => {
     playClick();
-    const res = await fetch('/api/agu-plan/block', {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(payload)
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      handleLinkedVictories(result.linkedVictories);
-      fetchState();
-    } else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao editar o bloco.');
-    }
+    const result = await mutate('/api/agu-plan/block', { method: 'PUT', body: payload, refreshOnSuccess: false });
+    if (!result) return;
+    handleLinkedVictories(result.linkedVictories);
+    fetchState();
   };
 
   const deleteAguBlock = async (key) => {
     playClick();
-    const res = await fetch('/api/agu-plan/block/delete', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ key })
-    });
-    if (res.ok) {
-      const result = await res.json().catch(() => ({}));
-      handleLinkedVictories(result.linkedVictories);
-      fetchState();
-    } else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao excluir o bloco.');
-    }
+    const result = await mutate('/api/agu-plan/block/delete', { body: { key }, refreshOnSuccess: false });
+    if (!result) return;
+    handleLinkedVictories(result.linkedVictories);
+    fetchState();
   };
 
   const realignAguCycle = async () => {
     playClick();
-    const res = await fetch('/api/agu-plan/realign', {
-      method: 'POST',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) fetchState();
-    else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao realinhar o ciclo AGU.');
-    }
+    await mutate('/api/agu-plan/realign');
   };
 
   const addNinetyDayGoal = async (goalData) => {
     playClick();
-    const res = await fetch('/api/ninety-day-goals', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(goalData)
-    });
-    if (res.ok) {
-      fetchState();
-      return { success: true };
-    }
-    const errJson = await res.json().catch(() => ({}));
-    const error = errJson.error || 'Erro ao criar a meta de 90 dias.';
-    showRewardToast(0, 0, error);
-    throw new Error(error);
+    const result = await mutate('/api/ninety-day-goals', { body: goalData, refreshOnSuccess: false });
+    if (!result) throw new Error('Erro ao criar a meta de 90 dias.');
+    fetchState();
+    return { success: true };
   };
 
   const updateNinetyDayGoal = async (id, goalData) => {
     playClick();
-    const res = await fetch(`/api/ninety-day-goals/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(goalData)
-    });
-    if (res.ok) {
-      fetchState();
-      return { success: true };
-    }
-    const errJson = await res.json().catch(() => ({}));
-    const error = errJson.error || 'Erro ao atualizar a meta de 90 dias.';
-    showRewardToast(0, 0, error);
-    throw new Error(error);
+    const result = await mutate(`/api/ninety-day-goals/${id}`, { method: 'PUT', body: goalData, refreshOnSuccess: false });
+    if (!result) throw new Error('Erro ao atualizar a meta de 90 dias.');
+    fetchState();
+    return { success: true };
   };
 
   const logNinetyDayGoalProgress = async (id, progressData) => {
     playClick();
-    const res = await fetch(`/api/ninety-day-goals/${id}/progress`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(progressData)
-    });
-    if (res.ok) {
-      const result = await res.json();
+    const result = await mutate(`/api/ninety-day-goals/${id}/progress`, { body: progressData, refreshOnSuccess: false });
+    if (result) {
       if (result.rewardResult) {
         const just = result.justCompleted || {};
         const label = just.goal
@@ -1452,71 +1002,37 @@ export function useGameData() {
       fetchState();
       return { success: true, result };
     }
-    const errJson = await res.json().catch(() => ({}));
-    const error = errJson.error || 'Erro ao registrar o avanço.';
-    showRewardToast(0, 0, error);
-    throw new Error(error);
+    throw new Error('Erro ao registrar o avanço.');
   };
 
   const deleteNinetyDayGoalLog = async (goalId, logId) => {
     playClick();
-    const res = await fetch(`/api/ninety-day-goals/${goalId}/logs/${logId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      fetchState();
-      return { success: true };
-    }
-    const errJson = await res.json().catch(() => ({}));
-    const error = errJson.error || 'Erro ao estornar o avanço.';
-    showRewardToast(0, 0, error);
-    throw new Error(error);
+    const result = await mutate(`/api/ninety-day-goals/${goalId}/logs/${logId}`, { method: 'DELETE', refreshOnSuccess: false });
+    if (!result) throw new Error('Erro ao estornar o avanço.');
+    fetchState();
+    return { success: true };
   };
 
   const addDailyVictory = async (victoryData) => {
     playClick();
-    const res = await fetch('/api/daily-victories', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(victoryData)
-    });
-    if (res.ok) {
-      fetchState();
-      return { success: true };
-    }
-    const errJson = await res.json().catch(() => ({}));
-    const error = errJson.error || 'Erro ao cadastrar a vitória planejada.';
-    showRewardToast(0, 0, error);
-    throw new Error(error);
+    const result = await mutate('/api/daily-victories', { body: victoryData, refreshOnSuccess: false });
+    if (!result) throw new Error('Erro ao cadastrar a vitória planejada.');
+    fetchState();
+    return { success: true };
   };
 
   const updateDailyVictory = async (id, victoryData) => {
     playClick();
-    const res = await fetch(`/api/daily-victories/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(victoryData)
-    });
-    if (res.ok) {
-      fetchState();
-      return { success: true };
-    }
-    const errJson = await res.json().catch(() => ({}));
-    const error = errJson.error || 'Erro ao atualizar a vitória planejada.';
-    showRewardToast(0, 0, error);
-    throw new Error(error);
+    const result = await mutate(`/api/daily-victories/${id}`, { method: 'PUT', body: victoryData, refreshOnSuccess: false });
+    if (!result) throw new Error('Erro ao atualizar a vitória planejada.');
+    fetchState();
+    return { success: true };
   };
 
   const completeDailyVictory = async (id, extra = {}) => {
     playClick();
-    const res = await fetch(`/api/daily-victories/${id}/complete`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(extra || {})
-    });
-    if (res.ok) {
-      const result = await res.json();
+    const result = await mutate(`/api/daily-victories/${id}/complete`, { body: extra || {}, refreshOnSuccess: false });
+    if (result) {
       if (!result.stateUnchanged) {
         if (result.willComplete) {
           if (result.rewardResult) {
@@ -1539,65 +1055,33 @@ export function useGameData() {
       fetchState();
       return { success: true, result };
     }
-    const errJson = await res.json().catch(() => ({}));
-    const error = errJson.error || 'Erro ao registrar a vitória.';
-    showRewardToast(0, 0, error);
-    throw new Error(error);
+    throw new Error('Erro ao registrar a vitória.');
   };
 
   const deleteDailyVictory = async (id) => {
     playClick();
-    const res = await fetch(`/api/daily-victories/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      fetchState();
-      return { success: true };
-    }
-    const errJson = await res.json().catch(() => ({}));
-    const error = errJson.error || 'Erro ao excluir a vitória planejada.';
-    showRewardToast(0, 0, error);
-    throw new Error(error);
+    const result = await mutate(`/api/daily-victories/${id}`, { method: 'DELETE', refreshOnSuccess: false });
+    if (!result) throw new Error('Erro ao excluir a vitória planejada.');
+    fetchState();
+    return { success: true };
   };
 
   const deleteNinetyDayGoal = async (id) => {
     playClick();
-    const res = await fetch(`/api/ninety-day-goals/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      fetchState();
-      return { success: true };
-    }
-    const errJson = await res.json().catch(() => ({}));
-    const error = errJson.error || 'Erro ao excluir a meta de 90 dias.';
-    showRewardToast(0, 0, error);
-    throw new Error(error);
+    const result = await mutate(`/api/ninety-day-goals/${id}`, { method: 'DELETE', refreshOnSuccess: false });
+    if (!result) throw new Error('Erro ao excluir a meta de 90 dias.');
+    fetchState();
+    return { success: true };
   };
 
   const resetAguPlan = async () => {
     playClick();
-    const res = await fetch('/api/agu-plan/reset', {
-      method: 'POST',
-      headers: getAuthHeaders()
-    });
-    if (res.ok) fetchState();
-    else {
-      const errJson = await res.json().catch(() => ({}));
-      showRewardToast(0, 0, errJson.error || 'Erro ao reiniciar a campanha AGU.');
-    }
+    await mutate('/api/agu-plan/reset');
   };
 
   const updateProfile = async (profileData) => {
     playClick();
-    const res = await fetch('/api/profile', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(profileData)
-    });
-    if (res.ok) fetchState();
+    await mutate('/api/profile', { method: 'POST', body: profileData });
   };
 
   return {

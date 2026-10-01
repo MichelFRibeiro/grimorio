@@ -5,6 +5,29 @@
 
 export const LIVE_TIMER_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
+/** Teto de uma entrada: 8 horas. Acima de 3 horas a interface pede confirmação. */
+export const MAX_DURATION_MINUTES = 480;
+export const DURATION_CONFIRM_MINUTES = 180;
+
+export function capDurationMinutes(minutes) {
+  const n = parseDurationMinutes(minutes);
+  if (n <= 0) return 0;
+  return Math.min(MAX_DURATION_MINUTES, n);
+}
+
+/**
+ * Se o cronômetro passou de 3h, pergunta se o herói ficou mesmo esse tempo.
+ * Confirmar envia o valor (já limitado a 8h); cancelar devolve null para o
+ * chamador não submeter.
+ */
+export function confirmLongDuration(minutes) {
+  const capped = capDurationMinutes(minutes);
+  if (capped <= DURATION_CONFIRM_MINUTES) return capped;
+  if (typeof window === 'undefined' || typeof window.confirm !== 'function') return capped;
+  const ok = window.confirm(`Você ficou ${formatDurationLabel(capped)} nisso? Confirmar envia esse tempo; cancelar deixa você ajustar.`);
+  return ok ? capped : null;
+}
+
 export function parseDurationMinutes(value) {
   if (value == null || value === '') return 0;
   const n = typeof value === 'number' ? value : parseInt(value, 10);
@@ -15,7 +38,7 @@ export function parseDurationMinutes(value) {
 export function secondsToDurationMinutes(seconds) {
   const s = Math.max(0, Number(seconds) || 0);
   if (s <= 0) return 0;
-  return Math.max(1, Math.round(s / 60));
+  return Math.min(MAX_DURATION_MINUTES, Math.max(1, Math.round(s / 60)));
 }
 
 export function formatDurationLabel(minutes) {

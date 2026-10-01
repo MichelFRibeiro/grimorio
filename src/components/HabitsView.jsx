@@ -30,8 +30,8 @@ import { getSaoPauloDateStr, getHabitWeeklyStats, getCurrentWeekDays, addDaysToD
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, inferDifficultyFromRewards, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
 import { getFrequencyLabel, getHabitDueStatus, getHabitPeriodStatus, getHabitWeekDays, isPeriodFrequency, padMonthDay, WEEKDAY_OPTIONS } from '../utils/habitFrequency';
-import { formatDurationLabel, getHabitDurationForDate, sumDurationMap } from '../utils/activityDuration';
-import { consumeActivityTimerMinutes } from '../utils/liveActivityTimers';
+import { formatDurationLabel, getHabitDurationForDate, sumDurationMap, confirmLongDuration } from '../utils/activityDuration';
+import { consumeActivityTimerMinutes, peekActivityTimerMinutes } from '../utils/liveActivityTimers';
 
 const HIDE_SETTLED_STORAGE_KEY = 'grimorio_hide_settled_habits';
 const MONTH_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
@@ -315,7 +315,9 @@ export function HabitsView({
     const extra = {};
     if (isToday) {
       if (!alreadyDone) {
-        const durationMinutes = consumeActivityTimerMinutes('habit', habitId);
+        const durationMinutes = confirmLongDuration(peekActivityTimerMinutes('habit', habitId));
+        if (durationMinutes == null) return;
+        consumeActivityTimerMinutes('habit', habitId);
         if (durationMinutes > 0) extra.durationMinutes = durationMinutes;
       } else {
         consumeActivityTimerMinutes('habit', habitId);

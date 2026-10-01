@@ -36,6 +36,7 @@ import { ConfirmModal } from './ConfirmModal';
 import { MindMapIcon, MindMapMediaPicker, MindMapThumb, collectUsedMindMapImages } from './MindMapMedia';
 import { useStopwatch, formatTimer } from '../hooks/useStopwatch';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
+import { confirmLongDuration, secondsToDurationMinutes } from '../utils/activityDuration';
 import {
   MIND_MAP_NODE_COLORS,
   childrenOf,
@@ -1933,9 +1934,11 @@ export function MindMapsView({
 
   const finishStudy = async (reviews = studyReviews) => {
     if (!liveMap || !reviews.length) return;
+    const durationMinutes = confirmLongDuration(Math.max(1, secondsToDurationMinutes(stopwatch.seconds || 0)));
+    if (durationMinutes == null) return;
     await onStudyMap(liveMap.id, {
       reviews,
-      durationMinutes: Math.max(1, Math.round((stopwatch.seconds || 0) / 60)),
+      durationMinutes,
       mode: studyMode,
       date: todayStr
     });

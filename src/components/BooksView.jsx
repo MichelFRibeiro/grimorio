@@ -35,6 +35,7 @@ import {
   clearLiveReadingSession
 } from '../utils/liveReadingSession';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
+import { confirmLongDuration, secondsToDurationMinutes } from '../utils/activityDuration';
 import { ReadingLoadChart } from './ReadingLoadChart';
 import { PlanHomeostasisVictoryButton } from './PlanHomeostasisVictoryButton';
 import { buildReadingHomeostasisVictory } from '../utils/homeostasis';
@@ -387,7 +388,8 @@ export function BooksView({
       return;
     }
 
-    const durationMinutes = Math.max(1, Math.round(getElapsedSeconds() / 60));
+    const durationMinutes = confirmLongDuration(Math.max(1, secondsToDurationMinutes(getElapsedSeconds())));
+    if (durationMinutes == null) return;
 
     // If user typed a quote in input but forgot to click "+ Adicionar", include it automatically
     let finalQuotes = [...sessionQuotes];

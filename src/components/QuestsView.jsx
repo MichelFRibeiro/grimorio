@@ -27,8 +27,8 @@ import { ActivityTimerBox } from './ActivityTimerBox';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, getPriorityMeta, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
-import { formatDurationLabel } from '../utils/activityDuration';
-import { consumeActivityTimerMinutes } from '../utils/liveActivityTimers';
+import { formatDurationLabel, confirmLongDuration } from '../utils/activityDuration';
+import { consumeActivityTimerMinutes, peekActivityTimerMinutes } from '../utils/liveActivityTimers';
 import { canPlanQuestAsDailyVictory, MAX_DAILY_VICTORIES } from '../utils/dailyVictories';
 
 export function QuestsView({
@@ -289,7 +289,9 @@ export function QuestsView({
         }
       });
     } else {
-      const durationMinutes = consumeActivityTimerMinutes('quest', quest.id);
+      const durationMinutes = confirmLongDuration(peekActivityTimerMinutes('quest', quest.id));
+      if (durationMinutes == null) return;
+      consumeActivityTimerMinutes('quest', quest.id);
       onCompleteQuest(quest.id, durationMinutes > 0 ? { durationMinutes } : {});
     }
   };

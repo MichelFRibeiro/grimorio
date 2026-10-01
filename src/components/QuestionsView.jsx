@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
+import { confirmLongDuration } from '../utils/activityDuration';
 import { useStopwatch, formatTimer } from '../hooks/useStopwatch';
 
 const URL_IN_TEXT = /https?:\/\/[^\s]+/i;
@@ -204,7 +205,8 @@ export function QuestionsView({
     e.preventDefault();
     const total = parseInt(totalQuestions, 10);
     const correct = parseInt(correctAnswers, 10);
-    const duration = parseInt(durationMinutes, 10) || 0;
+    const duration = confirmLongDuration(parseInt(durationMinutes, 10) || 0);
+    if (duration == null) return;
 
     if (isNaN(total) || total <= 0) {
       showAlert('Quantidade Inválida', 'A quantidade de questões feitas deve ser maior que zero.');

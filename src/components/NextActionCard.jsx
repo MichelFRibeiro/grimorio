@@ -3,7 +3,8 @@ import { Compass, CheckCircle2, Clock, MapPin, Sparkles, Flame, Scroll, RefreshC
 import { LOCATIONS, getLocationMeta } from '../utils/locations';
 import { PriorityBadge } from './ActivityScaleFields';
 import { ActivityTimerBox } from './ActivityTimerBox';
-import { consumeActivityTimerMinutes } from '../utils/liveActivityTimers';
+import { consumeActivityTimerMinutes, peekActivityTimerMinutes } from '../utils/liveActivityTimers';
+import { confirmLongDuration } from '../utils/activityDuration';
 
 export function NextActionCard({
   nextAction,
@@ -67,12 +68,16 @@ export function NextActionCard({
   const handleDo = (item) => {
     if (!item) return;
     if (item.kind === 'habit' && onToggleHabit) {
-      const durationMinutes = consumeActivityTimerMinutes('habit', item.id);
+      const durationMinutes = confirmLongDuration(peekActivityTimerMinutes('habit', item.id));
+      if (durationMinutes == null) return;
+      consumeActivityTimerMinutes('habit', item.id);
       onToggleHabit(item.id, null, durationMinutes > 0 ? { durationMinutes } : {});
       return;
     }
     if (item.kind === 'victory' && onCompleteVictory) {
-      const durationMinutes = consumeActivityTimerMinutes('victory', item.id);
+      const durationMinutes = confirmLongDuration(peekActivityTimerMinutes('victory', item.id));
+      if (durationMinutes == null) return;
+      consumeActivityTimerMinutes('victory', item.id);
       onCompleteVictory(item.id, durationMinutes > 0 ? { durationMinutes } : {});
       return;
     }
@@ -88,7 +93,9 @@ export function NextActionCard({
         }
       }
       if (onCompleteQuest) {
-        const durationMinutes = consumeActivityTimerMinutes('quest', item.id);
+        const durationMinutes = confirmLongDuration(peekActivityTimerMinutes('quest', item.id));
+        if (durationMinutes == null) return;
+        consumeActivityTimerMinutes('quest', item.id);
         onCompleteQuest(item.id, durationMinutes > 0 ? { durationMinutes } : {});
       }
     }

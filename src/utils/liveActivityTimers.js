@@ -249,10 +249,15 @@ export function resetActivityTimer(kind, id) {
   return emptySnap();
 }
 
-export function consumeActivityTimerMinutes(kind, id) {
+export function peekActivityTimerMinutes(kind, id) {
   const snap = getActivityTimerSnapshot(kind, id);
-  resetActivityTimer(kind, id);
   return secondsToDurationMinutes(snap.seconds);
+}
+
+export function consumeActivityTimerMinutes(kind, id) {
+  const minutes = peekActivityTimerMinutes(kind, id);
+  resetActivityTimer(kind, id);
+  return minutes;
 }
 
 export function resetAllActivityTimers() {

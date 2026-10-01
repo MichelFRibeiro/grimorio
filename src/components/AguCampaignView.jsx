@@ -25,8 +25,8 @@ import {
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityTimerBox } from './ActivityTimerBox';
-import { consumeActivityTimerMinutes, getActivityTimerSnapshot, subscribeActivityTimers } from '../utils/liveActivityTimers';
-import { elapsedMsFrom, formatStudyDuration, parseDurationMinutes } from '../utils/activityDuration';
+import { consumeActivityTimerMinutes, peekActivityTimerMinutes, getActivityTimerSnapshot, subscribeActivityTimers } from '../utils/liveActivityTimers';
+import { elapsedMsFrom, formatStudyDuration, parseDurationMinutes, confirmLongDuration } from '../utils/activityDuration';
 import {
   AGU_BLOCK_MINUTES,
   AGU_BLOCK_QUESTION_TARGET,
@@ -212,7 +212,8 @@ export function AguCampaignView({
       return;
     }
     const minutes = parseInt(logMinutes, 10);
-    const durationMinutes = Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
+    const durationMinutes = confirmLongDuration(Number.isFinite(minutes) && minutes > 0 ? minutes : 0);
+    if (durationMinutes == null) return;
     if (total === 0 && durationMinutes <= 0) {
       setLogError('Bloco só de teoria: informe o tempo estudado, ou lance as questões feitas.');
       return;
@@ -248,7 +249,9 @@ export function AguCampaignView({
   const handleToggleBlock = (block) => {
     const extra = {};
     if (!block.markedDone) {
-      const durationMinutes = consumeBlockTimer(block.key);
+      const durationMinutes = confirmLongDuration(peekActivityTimerMinutes('agu', block.key));
+      if (durationMinutes == null) return;
+      consumeBlockTimer(block.key);
       if (durationMinutes > 0) extra.durationMinutes = durationMinutes;
     }
     onToggleBlock(block.key, extra);

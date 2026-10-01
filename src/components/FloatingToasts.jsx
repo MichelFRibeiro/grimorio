@@ -13,8 +13,10 @@ export function FloatingToasts({ toasts }) {
           style={{
             padding: '12px 18px',
             background: 'rgba(19, 23, 34, 0.95)',
-            border: '1px solid rgba(245, 158, 11, 0.4)',
-            boxShadow: '0 10px 25px rgba(0,0,0,0.6), 0 0 15px rgba(245, 158, 11, 0.2)',
+            border: t.variant === 'error' ? '1px solid rgba(244, 63, 94, 0.55)' : '1px solid rgba(245, 158, 11, 0.4)',
+            boxShadow: t.variant === 'error'
+              ? '0 10px 25px rgba(0,0,0,0.6), 0 0 15px rgba(244, 63, 94, 0.25)'
+              : '0 10px 25px rgba(0,0,0,0.6), 0 0 15px rgba(245, 158, 11, 0.2)',
             borderRadius: '12px',
             display: 'flex',
             alignItems: 'center',
@@ -34,7 +36,7 @@ export function FloatingToasts({ toasts }) {
               </span>
             )}
           </div>
-          <span style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: 600 }}>
+          <span style={{ color: t.variant === 'error' ? '#fda4af' : '#94a3b8', fontSize: '0.85rem', fontWeight: 600 }}>
             {t.text}
           </span>
         </div>
