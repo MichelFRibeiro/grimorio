@@ -20,6 +20,7 @@ import { daysBetween, formatDayMonth } from './nextAction.js';
 import { interpretQuantity, localEnergyFromText } from './oracleJev.js';
 import {
   declineAndRemember,
+  acceptDoseOnly,
   previewNextAction,
   recordEnergyAndSuggest,
   suggestNextAction
@@ -318,6 +319,135 @@ async function run() {
   assert(quantityCalls === 0, 'quantidade já conhecida não gasta chamada ao Jev');
   assert(reuse.trace.some(entry => entry.step === 'quantity' && entry.cached), 'o processo mostra que a quantidade foi reaproveitada');
   assert(reuse.primary?.dose?.amount === 3 && reuse.primary?.dose?.reduced, 'a dose reduz 5 etapas pela metade sem sair da unidade');
+
+  // --------------------------------------------- dose de partida (sem número)
+  const aberta = {
+    id: 'q-limpar',
+    title: 'Limpar PAT',
+    description: '',
+    category: 'INSS',
+    priority: 'importante',
+    location: 'office',
+    completed: false
+  };
+
+  const questComQuantidade = {
+    id: 'q-pabs',
+    title: 'Analisar 5 PABs',
+    description: '',
+    category: 'INSS',
+    priority: 'importante',
+    location: 'office',
+    completed: false
+  };
+
+  const semQuantidade = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    if (body.questions.most_likely_now) return choiceFetch('q-limpar', { 'q-limpar': 0.9 })();
+    if (body.questions.has_quantity) {
+      return fakeFetch({
+        answers: {
+          has_quantity: { type: 'noul', noul: 0.1 },
+          unit: { type: 'choice', choice: 'none', confidence: 0.8, probabilities: { none: 0.8 } },
+          magnitude: { type: 'choice', choice: 'none', confidence: 0.8, probabilities: { none: 0.8 } }
+        }
+      })();
+    }
+    if (body.questions.start_minutes) {
+      return fakeFetch({ answers: { start_minutes: { type: 'choice', choice: 'fifteen', confidence: 0.85, probabilities: { fifteen: 0.85 } } } })();
+    }
+    return fakeFetch({ answers: {} })();
+  };
+
+  const partidaDb = baseDb({ quests: [aberta] });
+  const partida = await suggestNextAction(partidaDb, { location: 'office', energyReading: energyReading(2) }, {
+    fetchImpl: semQuantidade
+  });
+  assert(partida.primary?.dose?.fraction === 'start', 'tarefa sem quantitativo recebe dose de partida, não fica sem dose');
+  assert(partida.primary?.dose?.amount === 15, 'a dose de partida usa os minutos escolhidos pelo Jev');
+  assert(partida.primary?.suggestionLabel === 'Agora: 15 min', 'o cartão anuncia a dose de partida no título');
+  assert(partida.primary?.quantity === null, 'dose de partida não inventa quantitativo para a tarefa');
+  assert(partida.trace.some(entry => entry.step === 'dose'), 'o passo "Dose sugerida" aparece no processo');
+  assert(partidaDb.oracleDecisions[0]?.dose?.label === '15 min', 'a decisão guarda a dose de partida');
+
+  const aceitePartida = acceptDoseOnly(partidaDb, partida.primary.decisionId);
+  assert(aceitePartida.decision?.outcome === 'accepted', 'aceitar a dose de partida não falha por falta de quantitativo');
+
+  // Sem resposta utilizável do Jev, a faixa de energia garante a dose.
+  const faixaDb = baseDb({ quests: [aberta] });
+  const faixa = await suggestNextAction(faixaDb, { location: 'office', energyReading: energyReading(2) }, {
+    fetchImpl: async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.questions.most_likely_now) return choiceFetch('q-limpar', { 'q-limpar': 0.9 })();
+      if (body.questions.has_quantity) {
+        return fakeFetch({ answers: { has_quantity: { type: 'noul', noul: 0.1 }, unit: { type: 'choice', choice: 'none', confidence: 0.8, probabilities: { none: 0.8 } }, magnitude: { type: 'choice', choice: 'none', confidence: 0.8, probabilities: { none: 0.8 } } } })();
+      }
+      return fakeFetch({ answers: {} })();
+    }
+  });
+  assert(faixa.primary?.dose?.amount === 5 && faixa.primary?.dose?.source === 'local', 'energia 1-2 sem resposta do Jev cai na dose de partida de 5 min');
+
+  // Jev fora do ar: a dose de partida continua saindo do motor local.
+  const offlineDb = baseDb({ quests: [aberta] });
+  const offline = await suggestNextAction(offlineDb, { location: 'office', energyReading: energyReading(3) }, {
+    fetchImpl: async () => { throw new Error('sem rede'); }
+  });
+  assert(offline.primary?.dose?.amount === 10, 'com o Jev fora do ar, a dose de partida sai da faixa de energia');
+  assert(offline.source === 'heuristic' && offline.primary?.suggestionLabel === 'Agora: 10 min', 'a indicação local também traz a dose');
+
+  // Sem chave do OpenRouter, a dose de partida continua aparecendo.
+  const noKeyDb = baseDb({ quests: [aberta] });
+  const savedKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = '';
+  try {
+    const semChave = await suggestNextAction(noKeyDb, { location: 'office', energyReading: energyReading(5) });
+    assert(semChave.primary?.dose?.amount === 15, 'sem chave do OpenRouter, a dose de partida ainda é sugerida');
+  } finally {
+    process.env.OPENROUTER_API_KEY = savedKey;
+  }
+
+  // A abstenção do Jev não pode tirar a dose: é quando ela mais importa.
+  const abstencaoDoseDb = baseDb({ quests: [aberta] });
+  const abstencaoDose = await suggestNextAction(abstencaoDoseDb, { location: 'office', energyReading: energyReading(2) }, {
+    fetchImpl: async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.questions.most_likely_now) return choiceFetch('none', { none: 0.9 })();
+      if (body.questions.has_quantity) {
+        return fakeFetch({ answers: { has_quantity: { type: 'noul', noul: 0.1 }, unit: { type: 'choice', choice: 'none', confidence: 0.8, probabilities: { none: 0.8 } }, magnitude: { type: 'choice', choice: 'none', confidence: 0.8, probabilities: { none: 0.8 } } } })();
+      }
+      return fakeFetch({ answers: { start_minutes: { type: 'choice', choice: 'five', confidence: 0.8, probabilities: { five: 0.8 } } } })();
+    }
+  });
+  assert(abstencaoDose.abstained === true && abstencaoDose.primary?.dose?.amount === 5, 'abstenção do Jev com energia baixa ainda oferece dose');
+
+  // Falha na etapa da dose não pode derrubar a escolha do Jev.
+  const falhaDoseDb = baseDb({ quests: [questComQuantidade] });
+  const falhaDose = await suggestNextAction(falhaDoseDb, { location: 'office', energyReading: energyReading(2) }, {
+    fetchImpl: async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.questions.dose) return fakeFetch({ error: { message: 'falha na dose' } }, 500)();
+      if (body.questions.has_quantity) {
+        return fakeFetch({
+          answers: {
+            has_quantity: { type: 'noul', noul: 0.9 },
+            unit: { type: 'choice', choice: 'items', confidence: 0.9, probabilities: { items: 0.9 } },
+            magnitude: { type: 'choice', choice: 'five', confidence: 0.9, probabilities: { five: 0.9 } }
+          }
+        })();
+      }
+      return choiceFetch('q-pabs', { 'q-pabs': 0.9 })();
+    }
+  });
+  assert(falhaDose.source === 'jev' && falhaDose.jevError === null, 'falha só da dose não derruba a escolha do Jev');
+  assert(falhaDose.primary?.id === 'q-pabs', 'a atividade escolhida pelo Jev é preservada quando a dose falha');
+  assert(falhaDose.primary?.quantity?.label === '5 itens', 'a quantidade lida é preservada quando a dose falha');
+
+  // Energia alta continua sem dose.
+  const altaDb = baseDb({ quests: [aberta] });
+  const alta = await suggestNextAction(altaDb, { location: 'office', energyReading: energyReading(8) }, {
+    fetchImpl: choiceFetch('q-limpar', { 'q-limpar': 0.9 })
+  });
+  assert(!alta.primary?.dose, 'com energia alta não se oferece dose');
 
   // ------------------------------------------- quantidade só quando é útil
   let altoQuantityCalls = 0;

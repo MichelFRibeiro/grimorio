@@ -14,6 +14,19 @@ export const MAX_ORACLE_DECISIONS = 400;
 export const MAX_QUANTITY_READS = 300;
 export const QUANTITY_MISS_TTL_MS = 15 * 60 * 1000;
 export const DOSE_ENERGY_MAX = 6;
+
+/**
+ * Dose de partida (em minutos) para tarefa sem quantitativo declarado.
+ *
+ * Sem isto a dose só existia para tarefas com número no título ("5 PABs") ou
+ * com duração estimada — ou seja, quase nunca. Uma tarefa aberta ("Limpar
+ * PAT") também aceita fragmento: um tempo de partida honesto.
+ */
+export const START_MINUTES_BY_BAND = {
+  '0-2': 5,
+  '3-4': 10,
+  '5-6': 15
+};
 export const DECISION_KINDS = ['quest', 'habit', 'victory'];
 export const DECISION_OUTCOMES = ['pending', 'accepted', 'declined', 'expired', 'superseded'];
 
@@ -118,6 +131,25 @@ export function clampEnergy(raw) {
 export function energyFromJevScore(raw) {
   // 5,68 é a nota. O inteiro mais próximo é 6. Não se soma 1.
   return clampEnergy(raw);
+}
+
+/**
+ * Converte a resposta do Jev em nível de energia (1-10).
+ *
+ * Quando a pergunta `score` recebe uma lista de critérios, o Jev devolve o
+ * **índice 0-based** da lista (a resposta traz `legend` com as chaves 0..9) e
+ * não a nota. Sem isto, "exausto" (índice 0, critério "1 — exhausted") era
+ * gravado como energia 0 e todo nível saía um degrau abaixo — inclusive a
+ * faixa da dose e o corte de DOSE_ENERGY_MAX.
+ */
+export function energyFromJevAnswer(answer) {
+  const raw = asNumber(answer?.score);
+  if (raw == null) return null;
+  const keys = answer?.legend && typeof answer.legend === 'object'
+    ? Object.keys(answer.legend).map(Number).filter(Number.isFinite)
+    : [];
+  const zeroBased = keys.length > 0 && Math.min(...keys) === 0;
+  return clampEnergy(Math.round(raw) + (zeroBased ? 1 : 0));
 }
 
 export function roundEnergyScore(raw) {
@@ -464,6 +496,27 @@ export function nearestAmountId(value) {
 
 export const MAX_QUANTITY_AMOUNT = 999;
 
+/** Minutos de partida sugeridos para a energia atual. */
+export function startMinutesForEnergy(score) {
+  return START_MINUTES_BY_BAND[energyBand(score)] ?? 10;
+}
+
+/**
+ * Dose de partida para tarefa sem quantidade: um tempo, não uma fração.
+ * `fraction: 'start'` distingue esta dose da dose fracionária da quantidade.
+ */
+export function startDoseForEnergy(score, { source = 'local' } = {}) {
+  const amount = startMinutesForEnergy(score);
+  return {
+    amount,
+    unit: 'minutes',
+    fraction: 'start',
+    reduced: true,
+    label: formatQuantity(amount, 'minutes'),
+    source
+  };
+}
+
 /**
  * Combina unidade e magnitude em uma quantidade.
  *
@@ -605,8 +658,10 @@ export function markDecisionAccepted(db, { entityId, kind, at = new Date() } = {
 export function acceptPartialDose(db, decisionId, at = new Date()) {
   const decision = findOracleDecision(db, decisionId);
   if (!decision || decision.outcome !== 'pending') return null;
-  if (!decision.dose?.amount || !decision.quantity?.amount) return null;
-  if (decision.dose.amount >= decision.quantity.amount) return null;
+  if (!decision.dose?.amount) return null;
+  // Dose de tempo (tarefa sem quantitativo) não tem total para comparar:
+  // exigir `quantity` aqui fazia o aceite da dose falhar com 404.
+  if (decision.quantity?.amount && decision.dose.amount >= decision.quantity.amount) return null;
   decision.outcome = 'accepted';
   decision.resolvedAt = at.toISOString();
   return decision;

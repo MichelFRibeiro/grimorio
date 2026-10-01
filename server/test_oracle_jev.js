@@ -64,6 +64,31 @@ async function run() {
   });
   assert(reported.score === 6, 'score 5,68 vira 6, o inteiro mais próximo');
 
+  // Resposta REAL do Jev: quando a pergunta recebe a lista de critérios, o
+  // score é o índice 0-based da lista (a resposta traz `legend` com 0..9).
+  const legend = {
+    0: '1 — exhausted, unable to start',
+    4: '5 — mixed, neither spent nor fresh',
+    9: '10 — at peak, ready for the hardest available task'
+  };
+  const exausto = await interpretEnergy('estou exausto', {
+    fetchImpl: fakeFetch({ answers: { energy: { type: 'score', score: 0.01, legend, confidence: 1 } } })
+  });
+  assert(exausto.score === 1, 'índice 0 do Jev vira energia 1 (não 0)');
+  const misto = await interpretEnergy('mais ou menos', {
+    fetchImpl: fakeFetch({ answers: { energy: { type: 'score', score: 4, legend, confidence: 1 } } })
+  });
+  assert(misto.score === 5, 'índice 4 do Jev ("5 — mixed") vira energia 5');
+  const pico = await interpretEnergy('estou ótimo', {
+    fetchImpl: fakeFetch({ answers: { energy: { type: 'score', score: 8.82, legend, confidence: 0.93 } } })
+  });
+  assert(pico.score === 10, 'índice 9 do Jev ("10 — at peak") vira energia 10');
+
+  const semLegenda = await interpretEnergy('sem legenda', {
+    fetchImpl: fakeFetch({ answers: { energy: { type: 'score', score: 2.26, confidence: 0.9 } } })
+  });
+  assert(semLegenda.score === 2, 'resposta sem legenda continua sendo lida como nota');
+
   const db = baseDb();
   db.oracleEnergyReadings.unshift({
     id: 'en-1',

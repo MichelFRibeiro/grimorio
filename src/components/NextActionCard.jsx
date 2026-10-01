@@ -809,8 +809,9 @@ function PrimaryRow({
           </h4>
           {item.dose?.reduced && (
             <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '0 0 4px 0' }}>
-              A tarefa continua sendo {item.title}
-              {item.quantity?.label ? ` (${item.quantity.label})` : ''}.
+              {item.dose.fraction === 'start'
+                ? `Comece por ${item.dose.label}; a tarefa segue sendo ${item.title}.`
+                : `A tarefa continua sendo ${item.title}${item.quantity?.label ? ` (${item.quantity.label})` : ''}.`}
             </p>
           )}
           {item.nextSubtask?.title && (

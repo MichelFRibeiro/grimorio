@@ -19,12 +19,14 @@ import {
   saveEnergyReading,
   saveOracleDecision,
   saveQuantityRead,
+  startDoseForEnergy,
   formatQuantity
 } from './oracleMemory.js';
 import {
   buildChoiceState,
   chooseActivity,
   chooseDose,
+  chooseStartDose,
   interpretEnergy,
   interpretQuantity,
   learningForPrompt,
@@ -179,6 +181,64 @@ async function resolveQuantity(db, item, options, trace) {
   }) || interpreted;
 }
 
+/**
+ * A leitura de quantidade não pode derrubar a indicação inteira: sem ela
+ * ainda há a dose de partida (tempo).
+ */
+async function resolveQuantitySafely(db, item, options, trace) {
+  try {
+    return await resolveQuantity(db, item, options, trace);
+  } catch (err) {
+    trace.push({
+      step: 'quantity',
+      at: new Date().toISOString(),
+      ok: false,
+      error: err?.message || 'Falha ao ler a quantidade',
+      note: 'Sem quantidade declarada: a dose será um tempo de partida.'
+    });
+    return null;
+  }
+}
+
+/**
+ * Com quantidade declarada, o Jev escolhe a fração. Sem quantidade, o Jev
+ * escolhe um tempo de partida — e a faixa de energia garante a dose se ele
+ * não responder. Em nenhum caso a tarefa original é alterada.
+ */
+async function resolveDoseSafely({ db, item, quantity, energy, options, trace }) {
+  const learning = learningForPrompt(db);
+  if (quantity?.hasQuantity) {
+    try {
+      const dosed = await chooseDose({ item, quantity, energy, learning }, options);
+      return dosed.dose?.reduced ? dosed.dose : null;
+    } catch (err) {
+      trace.push({
+        step: 'dose',
+        at: new Date().toISOString(),
+        ok: false,
+        error: err?.message || 'Falha ao sugerir a dose',
+        note: 'A indicação segue sem dose reduzida; a tarefa continua inteira.'
+      });
+      return null;
+    }
+  }
+  try {
+    const dosed = await chooseStartDose({ item, energy, learning }, options);
+    return dosed.dose || startDoseForEnergy(energy.score);
+  } catch (err) {
+    const fallback = startDoseForEnergy(energy.score);
+    trace.push({
+      step: 'dose',
+      at: new Date().toISOString(),
+      ok: false,
+      error: err?.message || 'Falha ao sugerir a dose',
+      note: `Dose de partida pela faixa de energia: ${fallback.label}.`,
+      response: fallback
+    });
+    return fallback;
+  }
+}
+
 function persistDecision(db, {
   context,
   item,
@@ -291,10 +351,16 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
   // tela não volta a perguntar dentro da janela do "pular".
   if (!energy || options.skipJev || !hasOpenRouterApiKey()) {
     const item = withDescription(pool[0], db);
+    // Com energia conhecida e baixa, a dose de partida sai do próprio motor
+    // local: sem chave do OpenRouter o herói não fica sem o fragmento.
+    const localDose = energy && energy.score <= DOSE_ENERGY_MAX
+      ? startDoseForEnergy(energy.score)
+      : null;
     const decision = persistDecision(db, {
       context: heuristic.context,
       item,
       energy,
+      dose: localDose,
       source: 'heuristic'
     });
     trace.push({
@@ -307,7 +373,7 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
         : (!hasOpenRouterApiKey()
           ? 'Sem chave do OpenRouter. A indicação veio do motor local.'
           : 'Consulta ao Jev desligada nesta rodada. A indicação veio do motor local.'),
-      response: { chosenId: item.id, title: item.title }
+      response: { chosenId: item.id, title: item.title, dose: localDose?.label || null }
     });
     return {
       ...base,
@@ -315,6 +381,8 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
       trace: publicTrace(trace),
       primary: publicPrimary(item, {
         decisionId: decision?.id,
+        dose: localDose,
+        suggestionLabel: localDose ? `Agora: ${localDose.label}` : null,
         reason: heuristicReason({ energy, skipped }) || localReason(item)
       })
     };
@@ -334,23 +402,32 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
     const item = withDescription(chosen || pool[0], db);
     const wantsDose = energy.score <= DOSE_ENERGY_MAX;
 
-    // Com abstenção não há dose a oferecer: nada é consultado.
-    // Com energia alta a dose não existe e o cartão nunca mostra a
-    // quantidade, então a chamada ao Jev seria desperdício — só o campo
-    // estimatedMinutes (gratuito) continua sendo lido.
+    if (abstained) {
+      trace.push({
+        step: 'choice',
+        at: new Date().toISOString(),
+        note: 'O Jev respondeu "none": nada parece realista agora. A indicação abaixo é do histórico local, com dose de partida.',
+        response: { choice: 'none', probabilities: picked.probabilities }
+      });
+    }
+
+    // A dose NÃO depende da abstenção: com energia baixa o fragmento é
+    // justamente o que é realista, e é quando o Jev mais tende a dizer "none".
+    // Cada etapa falha sozinha: um erro na dose não pode derrubar a escolha.
     let quantity = null;
     let dose = null;
-    if (!abstained && (wantsDose || item.estimatedMinutes > 0)) {
-      quantity = await resolveQuantity(db, item, traced, trace);
+    if (wantsDose || item.estimatedMinutes > 0) {
+      quantity = await resolveQuantitySafely(db, item, traced, trace);
     }
-    if (!abstained && wantsDose && quantity?.hasQuantity) {
-      const dosed = await chooseDose({
+    if (wantsDose) {
+      dose = await resolveDoseSafely({
+        db,
         item,
         quantity,
         energy,
-        learning: learningForPrompt(db)
-      }, traced);
-      dose = dosed.dose;
+        options: traced,
+        trace
+      });
     }
 
     const decision = persistDecision(db, {
@@ -364,15 +441,6 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
       confidence: abstained ? null : picked.confidence,
       abstained
     });
-
-    if (abstained) {
-      trace.push({
-        step: 'choice',
-        at: new Date().toISOString(),
-        note: 'O Jev respondeu "none": nada parece realista agora. A sugestão abaixo é do histórico local, para não deixar o herói sem caminho.',
-        response: { choice: 'none', probabilities: picked.probabilities }
-      });
-    }
 
     const suggestionLabel = dose?.reduced ? `Agora: ${dose.label}` : null;
     return {
@@ -404,10 +472,15 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
       note: 'A indicação caiu no motor local.'
     });
     const item = withDescription(pool[0], db);
+    // Queda do Jev não pode tirar o fragmento de quem está sem energia.
+    const localDose = energy && energy.score <= DOSE_ENERGY_MAX
+      ? startDoseForEnergy(energy.score)
+      : null;
     const decision = persistDecision(db, {
       context: heuristic.context,
       item,
       energy,
+      dose: localDose,
       source: 'heuristic'
     });
     return {
@@ -417,6 +490,8 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
       jevError: err.code || 'JEV_ERROR',
       primary: publicPrimary(item, {
         decisionId: decision?.id,
+        dose: localDose,
+        suggestionLabel: localDose ? `Agora: ${localDose.label}` : null,
         reason: localReason(item)
       })
     };

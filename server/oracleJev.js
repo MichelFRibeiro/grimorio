@@ -5,6 +5,7 @@
 
 import { callJevDecisions } from './jevClient.js';
 import {
+  AMOUNT_BY_ID,
   AMOUNT_LADDER,
   DOSE_FRACTIONS,
   QUANTITY_UNITS,
@@ -16,7 +17,8 @@ import {
   explicitAmount,
   formatQuantity,
   nearestAmountId,
-  energyFromJevScore
+  startMinutesForEnergy,
+  energyFromJevAnswer
 } from './oracleMemory.js';
 
 const ENERGY_LEVELS = [
@@ -162,7 +164,7 @@ export async function interpretEnergy(text, options = {}) {
     throw error;
   }
   return {
-    score: energyFromJevScore(answer.score),
+    score: energyFromJevAnswer(answer),
     rawScore: answer.score,
     confidence: answer.confidence ?? null,
     usage: result.usage || null
@@ -354,8 +356,56 @@ export async function chooseDose({ item, quantity, energy, learning }, options =
   };
 }
 
-export function recentActionCards(logs, limit = 8) {
-  const relevant = new Set([
+export const START_MINUTE_IDS = ['five', 'ten', 'fifteen', 'twenty', 'thirty'];
+
+/**
+ * Dose de partida para tarefa SEM quantidade declarada ("Limpar PAT").
+ * O Jev escolhe um tempo de partida; sem resposta utilizável, a faixa de
+ * energia decide — a dose não pode depender de o modelo estar de bom humor.
+ */
+export async function chooseStartDose({ item, energy, learning }, options = {}) {
+  const result = await callJevDecisions({
+    state: {
+      energy: energy?.score ?? null,
+      energyBand: energy ? energyBand(energy.score) : null,
+      energyText: energy?.text || null,
+      task: item?.title || '',
+      learning: learning || null,
+      note: 'This task states no amount. The original task must stay unchanged: the dose is only how long to start with now. A small honest start beats a heroic plan.'
+    },
+    questions: {
+      start_minutes: {
+        type: 'choice',
+        instructions: 'How many minutes is a realistic start for this task at this energy right now?',
+        criteria: {
+          five: 'About 5 minutes. The bare minimum start.',
+          ten: 'About 10 minutes.',
+          fifteen: 'About 15 minutes.',
+          twenty: 'About 20 minutes.',
+          thirty: 'About 30 minutes or more.'
+        }
+      }
+    }
+  }, { ...options, step: 'dose' });
+  const answer = choiceAnswer(result, 'start_minutes');
+  const chosen = START_MINUTE_IDS.includes(answer?.choice) ? answer.choice : null;
+  const amount = chosen ? AMOUNT_BY_ID[chosen] : startMinutesForEnergy(energy?.score);
+  return {
+    fraction: 'start',
+    dose: {
+      amount,
+      unit: 'minutes',
+      fraction: 'start',
+      reduced: true,
+      label: formatQuantity(amount, 'minutes'),
+      source: chosen ? 'jev' : 'local'
+    },
+    confidence: answer?.confidence ?? null,
+    usage: result.usage || null
+  };
+}
+
+export function recentActionCards(logs, limit = 8) {  const relevant = new Set([
     'quest_complete',
     'habit_complete',
     'reading_session',
