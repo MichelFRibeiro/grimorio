@@ -426,6 +426,56 @@ export function sanitizeDb(db) {
   applyLocationDefaults(db);
   (db.quests || []).forEach((quest) => migrateActivityScale(quest));
   (db.habits || []).forEach((habit) => migrateActivityScale(habit));
+  migrateCanonicalSchemas(db);
+  return db;
+}
+
+/**
+ * Migrações idempotentes de schema. Não reescreve XP/moedas já concedidos.
+ * Processos: schema canônico HTTP (totalUnits/completedUnits/unitName/xpPerUnit/status in_progress).
+ * Recompensas: campo canônico `cost` (costCoins legado é lido e copiado).
+ */
+export function migrateCanonicalSchemas(db) {
+  if (!db) return db;
+
+  (db.processes || []).forEach((process) => {
+    if (!process || typeof process !== 'object') return;
+    if (process.totalUnits == null && process.totalSteps != null) {
+      process.totalUnits = process.totalSteps;
+    }
+    if (process.completedUnits == null && process.currentStep != null) {
+      process.completedUnits = process.currentStep;
+    }
+    if (!process.unitName && process.stepUnit) {
+      process.unitName = process.stepUnit;
+    }
+    if (process.xpPerUnit == null || !Number.isFinite(Number(process.xpPerUnit))) {
+      process.xpPerUnit = 15;
+    }
+    if (process.coinsPerUnit == null || !Number.isFinite(Number(process.coinsPerUnit))) {
+      process.coinsPerUnit = 3;
+    }
+    if (process.status === 'active') process.status = 'in_progress';
+    if (process.status !== 'completed' && process.status !== 'in_progress') {
+      const done = (process.completedUnits || 0) >= (process.totalUnits || 0) && (process.totalUnits || 0) > 0;
+      process.status = done ? 'completed' : 'in_progress';
+    }
+    // Espelha os aliases MCP para leitores antigos, sem ser a fonte da verdade.
+    process.totalSteps = process.totalUnits;
+    process.currentStep = process.completedUnits;
+    process.stepUnit = process.unitName;
+  });
+
+  (db.rewards || []).forEach((reward) => {
+    if (!reward || typeof reward !== 'object') return;
+    if (reward.cost == null && reward.costCoins != null) {
+      reward.cost = reward.costCoins;
+    }
+    if (reward.costCoins == null && reward.cost != null) {
+      reward.costCoins = reward.cost;
+    }
+  });
+
   return db;
 }
 
@@ -656,79 +706,246 @@ export function findOrCreateUser({ email, name, picture, googleId, provider }) {
   return user;
 }
 
-// Reward player helper: handles XP, leveling, coins, stats, boss damage and action logging
-export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpower = 0, consistency = 0, actionType, entityId, title, details = {}, timestamp }) {
-  const db = getDb();
-  const profile = db.userProfile;
-  const now = timestamp ? new Date(timestamp) : new Date();
+const STAT_KEYS = ['wisdom', 'focus', 'willpower', 'consistency'];
 
-  // Add stats
-  profile.stats.wisdom = (profile.stats.wisdom || 0) + wisdom;
-  profile.stats.focus = (profile.stats.focus || 0) + focus;
-  profile.stats.willpower = (profile.stats.willpower || 0) + willpower;
-  profile.stats.consistency = (profile.stats.consistency || 0) + consistency;
+/** Número finito ou fallback. Nunca deixa NaN/Infinity entrar no perfil. */
+export function finiteOr(value, fallback = 0) {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
 
-  // Add coins
-  profile.coins = (profile.coins ?? 0) + coins;
+function ensureStats(profile) {
+  if (!profile.stats || typeof profile.stats !== 'object') profile.stats = {};
+  for (const key of STAT_KEYS) {
+    profile.stats[key] = Math.max(0, finiteOr(profile.stats[key], 0));
+  }
+}
 
-  // Add XP and handle level-ups
-  profile.xp = (profile.xp || 0) + xp;
-  let leveledUp = false;
-  let oldLevel = profile.level;
+function addStat(profile, key, delta) {
+  profile.stats[key] = Math.max(0, finiteOr(profile.stats[key], 0) + finiteOr(delta, 0));
+}
 
-  while (profile.xp >= profile.xpToNextLevel) {
+/**
+ * Aplica XP e processa level-ups. Cada nível sobe registra {level, coins}
+ * com bônus = novoNível * 15. Retorna os level-ups desta aplicação.
+ */
+export function applyXpAndLevelUps(profile, xpAmount) {
+  const levelUps = [];
+  profile.xp = finiteOr(profile.xp, 0) + finiteOr(xpAmount, 0);
+  profile.level = Math.max(1, finiteOr(profile.level, 1));
+  profile.xpToNextLevel = Math.max(1, finiteOr(profile.xpToNextLevel, getXpForLevel(profile.level)));
+  let guard = 0;
+  while (profile.xp >= profile.xpToNextLevel && guard < 500) {
     profile.xp -= profile.xpToNextLevel;
     profile.level += 1;
     profile.xpToNextLevel = getXpForLevel(profile.level);
     profile.title = getTitleForLevel(profile.level);
-    profile.coins += profile.level * 15; // Level up coin bonus
-    leveledUp = true;
+    const bonus = profile.level * 15;
+    profile.coins = finiteOr(profile.coins, 0) + bonus;
+    levelUps.push({ level: profile.level, coins: bonus });
+    guard += 1;
   }
+  return levelUps;
+}
 
-  // Damage Weekly Boss
+/**
+ * Desfaz level-ups usando os bônus gravados (simétrico com a subida).
+ * Logs legados sem levelUps caem na fórmula newLevel*15 após o decremento.
+ */
+export function applyLevelDowns(profile, levelUps, { chargeCoins = true } = {}) {
+  const recorded = Array.isArray(levelUps) ? levelUps.slice().reverse() : [];
+  profile.xp = finiteOr(profile.xp, 0);
+  profile.level = Math.max(1, finiteOr(profile.level, 1));
+  let guard = 0;
+  while (profile.xp < 0 && profile.level > 1 && guard < 500) {
+    profile.level -= 1;
+    profile.xpToNextLevel = getXpForLevel(profile.level);
+    profile.xp += profile.xpToNextLevel;
+    profile.title = getTitleForLevel(profile.level);
+    if (chargeCoins) {
+      const match = recorded.find(entry => entry && entry.level === profile.level + 1);
+      const bonus = match ? finiteOr(match.coins, (profile.level + 1) * 15) : (profile.level + 1) * 15;
+      profile.coins = finiteOr(profile.coins, 0) - bonus;
+    }
+    guard += 1;
+  }
+  if (profile.xp < 0) profile.xp = 0;
+}
+
+function hasRecordedDeltas(log) {
+  return !!(log && log.applied && typeof log.applied === 'object');
+}
+
+function legacyApplied(log, fallback = {}) {
+  const xp = finiteOr(log?.xp, finiteOr(fallback.xp, 0));
+  const coins = finiteOr(log?.coins, finiteOr(fallback.coins, 0));
+  return {
+    xp,
+    coins,
+    wisdom: finiteOr(fallback.wisdom, 0),
+    focus: finiteOr(fallback.focus, 0),
+    willpower: finiteOr(fallback.willpower, 0),
+    consistency: finiteOr(fallback.consistency, 0),
+    bossDamage: Math.round(xp * 0.8 + coins * 1.2),
+    bossDefeated: !!(log?.details?.bossDefeated),
+    bossId: log?.details?.bossId || null,
+    bossRewardXp: 0,
+    bossRewardCoins: 0,
+    levelUps: []
+  };
+}
+
+function resolveApplied(log, fallback = {}) {
+  if (hasRecordedDeltas(log)) {
+    const applied = log.applied;
+    return {
+      xp: finiteOr(applied.xp, 0),
+      coins: finiteOr(applied.coins, 0),
+      wisdom: finiteOr(applied.wisdom, 0),
+      focus: finiteOr(applied.focus, 0),
+      willpower: finiteOr(applied.willpower, 0),
+      consistency: finiteOr(applied.consistency, 0),
+      bossDamage: finiteOr(applied.bossDamage, 0),
+      bossDefeated: !!applied.bossDefeated,
+      bossId: applied.bossId || null,
+      bossRewardXp: finiteOr(applied.bossRewardXp, 0),
+      bossRewardCoins: finiteOr(applied.bossRewardCoins, 0),
+      levelUps: Array.isArray(applied.levelUps) ? applied.levelUps : []
+    };
+  }
+  return legacyApplied(log, fallback);
+}
+
+/**
+ * Localiza o melhor log para estorno.
+ * Preferência: logId explícito; senão entityId+type+date; senão o mais recente
+ * (entityId+type). `date` também casa com details.date (hábitos retroativos).
+ */
+export function findRewardLog(db, { logId, entityId, actionType, date } = {}) {
+  const logs = db?.actionLogs || [];
+  if (logId) {
+    return logs.find(l => l.id === logId) || null;
+  }
+  if (!actionType) return null;
+  const candidates = logs.filter(l => {
+    if (l.type !== actionType) return false;
+    if (entityId != null && entityId !== '' && l.entityId !== entityId) return false;
+    return true;
+  });
+  if (!candidates.length) return null;
+  if (date) {
+    const dated = candidates.find(l => l.date === date || l.details?.date === date);
+    if (dated) return dated;
+  }
+  return candidates[0];
+}
+
+// Reward player helper: handles XP, leveling, coins, stats, boss damage and action logging.
+// O timestamp do cliente só data o log (lançamento retroativo). A sequência do herói
+// usa sempre a data de São Paulo do servidor — um relógio do cliente não a move.
+export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpower = 0, consistency = 0, actionType, entityId, title, details = {}, timestamp, logDate }) {
+  const db = getDb();
+  const profile = db.userProfile;
+  if (!profile.stats) profile.stats = { wisdom: 0, focus: 0, willpower: 0, consistency: 0 };
+  ensureStats(profile);
+
+  const serverNow = new Date();
+  const safeXp = finiteOr(xp, 0);
+  const safeCoins = finiteOr(coins, 0);
+  const safeWisdom = finiteOr(wisdom, 0);
+  const safeFocus = finiteOr(focus, 0);
+  const safeWillpower = finiteOr(willpower, 0);
+  const safeConsistency = finiteOr(consistency, 0);
+
+  addStat(profile, 'wisdom', safeWisdom);
+  addStat(profile, 'focus', safeFocus);
+  addStat(profile, 'willpower', safeWillpower);
+  addStat(profile, 'consistency', safeConsistency);
+
+  profile.coins = finiteOr(profile.coins, 0) + safeCoins;
+
+  const oldLevel = profile.level;
+  const levelUps = applyXpAndLevelUps(profile, safeXp);
+
   const boss = db.bossRaid;
   let bossDefeatedNow = false;
+  let bossDamage = 0;
+  let bossRewardXp = 0;
+  let bossRewardCoins = 0;
+  let bossId = boss?.id || null;
   if (boss && !boss.defeated) {
-    const totalDmg = Math.round(xp * 0.8 + coins * 1.2);
-    boss.currentHp = Math.max(0, boss.currentHp - totalDmg);
+    bossDamage = Math.round(safeXp * 0.8 + safeCoins * 1.2);
+    boss.currentHp = Math.max(0, finiteOr(boss.currentHp, boss.maxHp || 0) - bossDamage);
     if (boss.currentHp === 0) {
       boss.defeated = true;
-      boss.defeatsCount = (boss.defeatsCount || 0) + 1;
+      boss.defeatsCount = finiteOr(boss.defeatsCount, 0) + 1;
       bossDefeatedNow = true;
-      profile.coins += boss.rewardCoins;
-      profile.xp += boss.rewardXp;
+      bossRewardCoins = finiteOr(boss.rewardCoins, 0);
+      bossRewardXp = finiteOr(boss.rewardXp, 0);
+      profile.coins = finiteOr(profile.coins, 0) + bossRewardCoins;
+      // XP do chefe também passa pelo laço de level-up (antes ficava acima de xpToNextLevel).
+      levelUps.push(...applyXpAndLevelUps(profile, bossRewardXp));
     }
   }
 
-  // Check Daily Streak
-  const todayStr = getSaoPauloDateStr(now);
-  if (profile.lastActiveDate !== todayStr) {
-    const yesterday = getYesterdaySaoPauloDateStr(now);
+  // Sequência do herói: somente a data do servidor.
+  const streakDate = getSaoPauloDateStr(serverNow);
+  if (profile.lastActiveDate !== streakDate) {
+    const yesterday = getYesterdaySaoPauloDateStr(serverNow);
     if (profile.lastActiveDate === yesterday) {
-      profile.streak = (profile.streak || 0) + 1;
+      profile.streak = finiteOr(profile.streak, 0) + 1;
     } else {
       profile.streak = 1;
     }
-    profile.lastActiveDate = todayStr;
+    profile.lastActiveDate = streakDate;
   }
 
-  // Record in master action logs
+  // Data do log pode ser retroativa (timestamp/logDate do cliente), sem mexer na sequência.
+  let logMoment = serverNow;
+  if (logDate && /^\d{4}-\d{2}-\d{2}$/.test(String(logDate))) {
+    logMoment = new Date(`${logDate}T15:00:00.000Z`);
+  } else if (timestamp) {
+    const parsed = new Date(timestamp);
+    if (!Number.isNaN(parsed.getTime())) logMoment = parsed;
+  }
+  const logDateStr = getSaoPauloDateStr(logMoment);
+
+  const applied = {
+    xp: safeXp,
+    coins: safeCoins,
+    wisdom: safeWisdom,
+    focus: safeFocus,
+    willpower: safeWillpower,
+    consistency: safeConsistency,
+    bossDamage,
+    bossDefeated: bossDefeatedNow,
+    bossId,
+    bossRewardXp,
+    bossRewardCoins,
+    levelUps
+  };
+
   const logEntry = {
-    id: 'log-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+    id: 'log-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
     type: actionType,
     entityId: entityId || '',
     title: title || '',
-    xp,
-    coins,
-    details: { ...(details || {}), bossDefeated: bossDefeatedNow },
-    timestamp: now.toISOString(),
-    hour: getSaoPauloHour(now),
-    dayOfWeek: getSaoPauloDayOfWeek(now),
-    date: todayStr
+    xp: safeXp,
+    coins: safeCoins,
+    wisdom: safeWisdom,
+    focus: safeFocus,
+    willpower: safeWillpower,
+    consistency: safeConsistency,
+    applied,
+    details: { ...(details || {}), bossDefeated: bossDefeatedNow, bossId },
+    timestamp: logMoment.toISOString(),
+    hour: getSaoPauloHour(logMoment),
+    dayOfWeek: getSaoPauloDayOfWeek(logMoment),
+    date: logDateStr
   };
+  if (!db.actionLogs) db.actionLogs = [];
   db.actionLogs.unshift(logEntry);
 
-  // Keep logs at a reasonable limit (e.g. 5000)
   if (db.actionLogs.length > 5000) {
     db.actionLogs = db.actionLogs.slice(0, 5000);
   }
@@ -738,83 +955,128 @@ export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpow
   return {
     profile,
     boss,
-    leveledUp,
+    leveledUp: levelUps.length > 0,
     oldLevel,
     newLevel: profile.level,
     bossDefeatedNow,
-    logEntry
+    logEntry,
+    levelUps
   };
 }
 
-// Revert player reward helper: removes points, coins, stats, restores boss HP and removes action log entry
-export function revertPlayerReward({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpower = 0, consistency = 0, actionType, entityId }) {
-  const db = getDb();
-  const profile = db.userProfile;
+/**
+ * Estorna exatamente os deltas gravados em `applied` e remove o log.
+ * Se este log derrotou o chefe e o chefe atual ainda é o mesmo, reabre o chefe
+ * e devolve as recompensas de derrota. Moedas podem ficar negativas (dívida de
+ * estorno); atributos e XP nunca ficam NaN e atributos têm piso 0.
+ */
+export function revertLog(db, logId, { save = true } = {}) {
+  const target = db || getDb();
+  const profile = target.userProfile;
+  ensureStats(profile);
+  if (!target.actionLogs) target.actionLogs = [];
 
-  // Find and remove matching action log entry (the most recent one for this entity and type)
-  const logIndex = db.actionLogs.findIndex(l => l.entityId === entityId && l.type === actionType);
-  let actualXp = xp;
-  let actualCoins = coins;
-  let actionDefeatedBoss = false;
+  const logIndex = target.actionLogs.findIndex(l => l.id === logId);
+  if (logIndex === -1) {
+    return { profile, boss: target.bossRaid, reverted: false, missing: true };
+  }
+  const removedLog = target.actionLogs[logIndex];
+  const applied = resolveApplied(removedLog);
+  target.actionLogs.splice(logIndex, 1);
 
-  if (logIndex !== -1) {
-    const removedLog = db.actionLogs[logIndex];
-    if (removedLog.xp !== undefined) actualXp = removedLog.xp;
-    if (removedLog.coins !== undefined) actualCoins = removedLog.coins;
-    if (removedLog.details?.bossDefeated) actionDefeatedBoss = true;
-    db.actionLogs.splice(logIndex, 1);
+  addStat(profile, 'wisdom', -applied.wisdom);
+  addStat(profile, 'focus', -applied.focus);
+  addStat(profile, 'willpower', -applied.willpower);
+  addStat(profile, 'consistency', -applied.consistency);
+
+  profile.coins = finiteOr(profile.coins, 0) - applied.coins;
+  profile.xp = finiteOr(profile.xp, 0) - applied.xp;
+  applyLevelDowns(profile, applied.levelUps);
+
+  const boss = target.bossRaid;
+  if (boss && applied.bossDamage) {
+    boss.currentHp = Math.min(
+      finiteOr(boss.maxHp, boss.currentHp || 0),
+      finiteOr(boss.currentHp, 0) + applied.bossDamage
+    );
+  }
+  const sameBoss = !applied.bossId || !boss?.id || applied.bossId === boss.id;
+  if (boss && applied.bossDefeated && sameBoss && boss.currentHp > 0) {
+    boss.defeated = false;
+    boss.defeatsCount = Math.max(0, finiteOr(boss.defeatsCount, 1) - 1);
+    profile.coins = finiteOr(profile.coins, 0) - applied.bossRewardCoins;
+    profile.xp = finiteOr(profile.xp, 0) - applied.bossRewardXp;
+    // O XP do chefe já passou pelo mesmo loop de level-up, e o bônus de cada
+    // nível está em applied.levelUps — já estornado acima. Aqui só desce o
+    // nível se o XP ficar negativo, sem cobrar o bônus de novo.
+    applyLevelDowns(profile, applied.levelUps, { chargeCoins: false });
   }
 
-  // Deduct stats safely
-  profile.stats.wisdom = Math.max(0, (profile.stats.wisdom || 0) - wisdom);
-  profile.stats.focus = Math.max(0, (profile.stats.focus || 0) - focus);
-  profile.stats.willpower = Math.max(0, (profile.stats.willpower || 0) - willpower);
-  profile.stats.consistency = Math.max(0, (profile.stats.consistency || 0) - consistency);
-
-  profile.coins = (profile.coins ?? 0) - actualCoins;
-
-  // Deduct XP and step down levels if needed
-  profile.xp = (profile.xp || 0) - actualXp;
-  while (profile.xp < 0 && profile.level > 1) {
-    profile.level -= 1;
-    profile.xpToNextLevel = getXpForLevel(profile.level);
-    profile.xp += profile.xpToNextLevel;
-    profile.title = getTitleForLevel(profile.level);
-    profile.coins = (profile.coins ?? 0) - profile.level * 15;
-  }
-  if (profile.xp < 0) {
-    profile.xp = 0;
-  }
-
-  // Restore Boss HP and revert boss rewards only if this specific action defeated it
-  const boss = db.bossRaid;
-  if (boss) {
-    const totalDmg = Math.round(actualXp * 0.8 + actualCoins * 1.2);
-    boss.currentHp = Math.min(boss.maxHp, boss.currentHp + totalDmg);
-    if (actionDefeatedBoss && boss.currentHp > 0) {
-      boss.defeated = false;
-      boss.defeatsCount = Math.max(0, (boss.defeatsCount || 1) - 1);
-      profile.coins = (profile.coins ?? 0) - boss.rewardCoins;
-      profile.xp -= boss.rewardXp;
-      while (profile.xp < 0 && profile.level > 1) {
-        profile.level -= 1;
-        profile.xpToNextLevel = getXpForLevel(profile.level);
-        profile.xp += profile.xpToNextLevel;
-        profile.title = getTitleForLevel(profile.level);
-        profile.coins = (profile.coins ?? 0) - profile.level * 15;
-      }
-      if (profile.xp < 0) {
-        profile.xp = 0;
-      }
-    }
-  }
-
-  saveDb(db);
+  if (save) saveDb(target);
 
   return {
     profile,
     boss,
-    revertedXp: actualXp,
-    revertedCoins: actualCoins
+    reverted: true,
+    missing: false,
+    revertedXp: applied.xp,
+    revertedCoins: applied.coins,
+    log: removedLog
+  };
+}
+
+/**
+ * Wrapper compatível. Prefere logId; senão entityId+type+date; senão o mais
+ * recente. Logs legados sem `applied` usam os valores do argumento para
+ * atributos e xp/coins gravados no log (ou os do argumento, se o log sumiu).
+ */
+export function revertPlayerReward({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpower = 0, consistency = 0, actionType, entityId, logId, date } = {}) {
+  const db = getDb();
+  const log = findRewardLog(db, { logId, entityId, actionType, date });
+
+  if (log && hasRecordedDeltas(log)) {
+    const result = revertLog(db, log.id);
+    return {
+      profile: result.profile,
+      boss: result.boss,
+      revertedXp: result.revertedXp,
+      revertedCoins: result.revertedCoins,
+      log: result.log
+    };
+  }
+
+  if (log) {
+    // Legado: estorna o que o log registrou de xp/moedas e os atributos
+    // informados pelo chamador (o log antigo não os gravava).
+    const applied = legacyApplied(log, { xp, coins, wisdom, focus, willpower, consistency });
+    log.applied = applied;
+    const result = revertLog(db, log.id);
+    return {
+      profile: result.profile,
+      boss: result.boss,
+      revertedXp: result.revertedXp,
+      revertedCoins: result.revertedCoins,
+      log: result.log
+    };
+  }
+
+  // Log podado (teto de 5000) ou nunca existiu: estorna só o que o chamador sabe.
+  const profile = db.userProfile;
+  ensureStats(profile);
+  const applied = legacyApplied(null, { xp, coins, wisdom, focus, willpower, consistency });
+  addStat(profile, 'wisdom', -applied.wisdom);
+  addStat(profile, 'focus', -applied.focus);
+  addStat(profile, 'willpower', -applied.willpower);
+  addStat(profile, 'consistency', -applied.consistency);
+  profile.coins = finiteOr(profile.coins, 0) - applied.coins;
+  profile.xp = finiteOr(profile.xp, 0) - applied.xp;
+  applyLevelDowns(profile, []);
+  saveDb(db);
+  return {
+    profile,
+    boss: db.bossRaid,
+    revertedXp: applied.xp,
+    revertedCoins: applied.coins,
+    missing: true
   };
 }
