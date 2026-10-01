@@ -13,7 +13,6 @@ import { migrateActivityScale } from '../src/utils/activityScale.js';
 import { sanitizeLiveActivityTimers } from '../src/utils/activityDuration.js';
 import { createDefaultAguPlan } from '../src/data/aguCurriculum.js';
 import { sanitizeAguPlan, ensureCurrentCycle } from '../src/utils/aguCycle.js';
-import { sanitizeNinetyDayGoals } from '../src/utils/ninetyDayGoals.js';
 import { sanitizeDailyVictories, sanitizeDailyVictoryBonuses } from '../src/utils/dailyVictories.js';
 import { sanitizeMindMaps, sanitizeMindMapSessions, sanitizeMindMapCategories, sanitizeMindMapImageLibrary, mergeMindMapImageLibrary } from '../src/utils/mindMaps.js';
 import { ensureOracleMemory } from './oracleMemory.js';
@@ -381,7 +380,8 @@ export function sanitizeDb(db) {
   if (!db.userProfile) db.userProfile = defaultDatabase().userProfile;
   db.liveActivityTimers = sanitizeLiveActivityTimers(db.liveActivityTimers);
   const todayStr = getSaoPauloDateStr();
-  db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
+  // Metas de 90 dias saíram da interface, mas o histórico permanece no banco.
+  if (!Array.isArray(db.ninetyDayGoals)) db.ninetyDayGoals = [];
   db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
   db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
   db.mindMaps = sanitizeMindMaps(db.mindMaps);

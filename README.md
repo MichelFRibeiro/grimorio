@@ -72,13 +72,6 @@ O script irá:
 - Registro de anotações específicas em cada processo ou caso analisado.
 - Barra de progresso com marco de 100%.
 
-### 🏔️ Metas de 90 Dias
-- Até **3 metas simultâneas** para o horizonte de 90 dias.
-- Interpretação automática do enunciado (ex: *“Quero perder 9 quilos”*, *“Quero estudar 180 horas”*).
-- Quebra em **3 meses (30 dias)**, **6 quinzenas (15 dias)** e **12 semanas (7 dias)**.
-- Registrar um avanço recompila semana → quinzena → mês → meta de 90 dias.
-- Estorno de avanço também desfaz a compilação e as recompensas.
-
 ### 🔥 Rituais Diários (Hábitos & Streaks)
 - Hábitos diários com contador de sequência (chamas 🔥).
 - Multiplicador progressivo de XP (até 2.0x de bônus) para dias consecutivos.
@@ -193,13 +186,10 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 - `get_study_analytics`: Métricas consolidadas de leitura e questões.
 - `get_category_rankings`: Rankings e tiers de maestria por categoria.
 
-#### 12. 🏔️ Metas de 90 Dias (`ninetyDayGoals`)
-- `list_ninety_day_goals`, `get_ninety_day_goal`, `preview_ninety_day_goal`.
-- `create_ninety_day_goal`: interpreta o enunciado e gera submetas de 30/15/7 dias (máx. 3 ativas).
-- `update_ninety_day_goal`, `log_ninety_day_goal_progress` (compila nos ciclos maiores), `delete_ninety_day_goal_log`, `delete_ninety_day_goal`.
-
-#### 13. 🧭 Próxima Atividade (contexto de lugar e horário)
-- `get_next_action`: Indica a próxima Vitória do Dia, missão ou ritual considerando lugar (`anywhere`, `office`, `home`, `gym`), janela de horário, prazos, prioridade e histórico. Com energia recente e chave do OpenRouter, o Jev escolhe; sem isso, responde o motor local (`source: "heuristic"`).
+#### 12. 🧭 Próxima Atividade (contexto de lugar e horário)
+- `get_next_action`: Indica a próxima Vitória do Dia, missão, ritual, bloco AGU, revisão de mapa ou livro parado, considerando lugar (`anywhere`, `office`, `home`, `gym`), janela de horário, prazos, prioridade, recusas recentes e histórico. Com energia recente e chave do OpenRouter, o Jev escolhe; sem isso, responde o motor local (`source: "heuristic"`).
+- `break_down_quest`: acrescenta subtarefas a uma missão procrastinada (`steps`).
+- `reschedule_quests`: remarca um lote de missões (`ids`, `dueDate`).
 - `set_current_location`: Define o lugar atual do herói usado pelo Oráculo.
 
 ---
