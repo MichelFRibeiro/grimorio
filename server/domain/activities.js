@@ -15,7 +15,7 @@ import { willpowerForDifficulty } from '../../src/utils/activityScale.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, clearLiveActivityTimer } from '../../src/utils/activityDuration.js';
 import { sanitizeAguPlan, applyExamToPlan } from '../../src/utils/aguCycle.js';
 import { syncDailyVictoriesFromActivity } from '../dailyVictorySync.js';
-import { markDecisionAccepted } from '../oracleMemory.js';
+import { markDecisionAccepted, markDecisionCompleted } from '../oracleMemory.js';
 import {
   DAILY_VICTORY_REWARDS,
   DAILY_VICTORY_TRIPLE_BONUS,
@@ -84,7 +84,7 @@ function attachLog(entity, rewardResult, field = 'rewardLogId') {
 // Missões
 // ---------------------------------------------------------------------------
 
-export function completeQuest(db, { id, completed, durationMinutes: rawDuration } = {}) {
+export function completeQuest(db, { id, completed, durationMinutes: rawDuration, decisionId } = {}) {
   const quest = (db.quests || []).find(q => q.id === id);
   if (!quest) return fail('Missão não encontrada', 404);
 
@@ -125,7 +125,8 @@ export function completeQuest(db, { id, completed, durationMinutes: rawDuration 
     });
     attachLog(quest, rewardResult);
     db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'quest', quest.id);
-    markDecisionAccepted(db, { entityId: quest.id, kind: 'quest' });
+    markDecisionAccepted(db, { decisionId, entityId: quest.id, kind: 'quest' });
+    markDecisionCompleted(db, { decisionId, entityId: quest.id, kind: 'quest', completionKind: 'entity' });
   } else {
     quest.durationMinutes = null;
     delete quest.rewardLogId;
@@ -144,6 +145,53 @@ export function completeQuest(db, { id, completed, durationMinutes: rawDuration 
   });
 
   return { quest, willComplete, rewardResult, linkedVictories };
+}
+
+const MAX_BREAKDOWN_STEPS = 8;
+
+/** Quebra rápida: acrescenta subtarefas sem apagar as que já existem. */
+export function breakDownQuest(db, id, steps) {
+  const quest = (db.quests || []).find(q => q.id === id);
+  if (!quest) return fail('Missão não encontrada', 404);
+  const incoming = (Array.isArray(steps) ? steps : [])
+    .map(step => (typeof step === 'string' ? step : step?.title))
+    .map(title => String(title || '').trim())
+    .filter(Boolean)
+    .slice(0, MAX_BREAKDOWN_STEPS);
+  if (incoming.length < 2) return fail('Informe ao menos 2 passos.');
+  if (!Array.isArray(quest.subtasks)) quest.subtasks = [];
+  const existing = new Set(quest.subtasks.map(st => String(st.title || '').trim().toLowerCase()));
+  const added = [];
+  incoming.forEach(title => {
+    if (existing.has(title.toLowerCase())) return;
+    const subtask = { id: uid('st'), title, completed: false };
+    quest.subtasks.push(subtask);
+    added.push(subtask);
+    existing.add(title.toLowerCase());
+  });
+  if (!added.length) return fail('Esses passos já existem na missão.');
+  return { quest, added };
+}
+
+export function rescheduleQuests(db, { ids, dueDate } = {}) {
+  const wanted = new Set((Array.isArray(ids) ? ids : []).filter(Boolean));
+  if (!wanted.size) return fail('Informe ao menos uma missão.');
+  let date = null;
+  if (dueDate) {
+    try {
+      date = dateOnly(dueDate);
+    } catch (err) {
+      return asError(err);
+    }
+  }
+  const updated = [];
+  (db.quests || []).forEach(quest => {
+    if (!wanted.has(quest.id) || quest.completed) return;
+    quest.dueDate = date;
+    updated.push({ id: quest.id, title: quest.title, dueDate: quest.dueDate });
+  });
+  if (!updated.length) return fail('Nenhuma missão pendente encontrada.', 404);
+  return { updated, dueDate: date };
 }
 
 export function deleteQuest(db, id) {
@@ -168,7 +216,7 @@ export function deleteQuest(db, id) {
 // Hábitos
 // ---------------------------------------------------------------------------
 
-export function toggleHabit(db, { id, date, durationMinutes: rawDuration } = {}) {
+export function toggleHabit(db, { id, date, durationMinutes: rawDuration, decisionId } = {}) {
   const habit = (db.habits || []).find(h => h.id === id);
   if (!habit) return fail('Hábito não encontrado', 404);
 
@@ -245,7 +293,8 @@ export function toggleHabit(db, { id, date, durationMinutes: rawDuration } = {})
     if (rewardResult?.logEntry?.id) habit.rewardLogs[targetDate] = rewardResult.logEntry.id;
     if (isToday) {
       db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'habit', habit.id);
-      markDecisionAccepted(db, { entityId: habit.id, kind: 'habit' });
+      markDecisionAccepted(db, { decisionId, entityId: habit.id, kind: 'habit' });
+      markDecisionCompleted(db, { decisionId, entityId: habit.id, kind: 'habit', completionKind: 'entity' });
     }
   }
 
@@ -328,7 +377,7 @@ function recalcBookProgress(db, book) {
   }
 }
 
-export function logReadingSession(db, { bookId, startPage, endPage, durationMinutes: rawDuration, notes, quotes, date } = {}) {
+export function logReadingSession(db, { bookId, startPage, endPage, durationMinutes: rawDuration, notes, quotes, date, decisionId } = {}) {
   const book = (db.books || []).find(b => b.id === bookId);
   if (!book) return fail('Livro não encontrado', 404);
 
@@ -372,6 +421,7 @@ export function logReadingSession(db, { bookId, startPage, endPage, durationMinu
   };
   if (!db.readingSessions) db.readingSessions = [];
   db.readingSessions.unshift(session);
+  markDecisionCompleted(db, { decisionId, entityId: book.id, kind: 'reading', completionKind: 'session' });
 
   if (pages.finishedBook) {
     book.status = 'completed';
@@ -1131,7 +1181,7 @@ export function redeemReward(db, { id, notes } = {}) {
 // Vitória do dia
 // ---------------------------------------------------------------------------
 
-export function completeDailyVictoryUseCase(db, { id, completed, note, durationMinutes: rawDuration } = {}) {
+export function completeDailyVictoryUseCase(db, { id, completed, note, durationMinutes: rawDuration, decisionId } = {}) {
   const todayStr = getSaoPauloDateStr();
   db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
   db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
@@ -1155,7 +1205,8 @@ export function completeDailyVictoryUseCase(db, { id, completed, note, durationM
   if (!result.stateUnchanged) {
     db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, 'victory', result.victory.id);
     if (result.willComplete) {
-      markDecisionAccepted(db, { entityId: result.victory.id, kind: 'victory' });
+      markDecisionAccepted(db, { decisionId, entityId: result.victory.id, kind: 'victory' });
+      markDecisionCompleted(db, { decisionId, entityId: result.victory.id, kind: 'victory', completionKind: 'entity' });
       rewardResult = grant({
         xp: DAILY_VICTORY_REWARDS.xp,
         coins: DAILY_VICTORY_REWARDS.coins,

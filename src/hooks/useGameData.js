@@ -876,6 +876,28 @@ export function useGameData() {
     return { ok: true };
   };
 
+  const breakDownQuest = async (id, steps) => {
+    const json = await mutate(`/api/quests/${id}/breakdown`, {
+      body: { steps },
+      refreshOnSuccess: false,
+      toastOnError: false
+    });
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível quebrar a missão.' };
+    fetchState();
+    return { ok: true, quest: json.quest };
+  };
+
+  const rescheduleQuests = async (ids, dueDate) => {
+    const json = await mutate('/api/quests/reschedule', {
+      body: { ids, dueDate },
+      refreshOnSuccess: false,
+      toastOnError: false
+    });
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível remarcar.' };
+    fetchState();
+    return { ok: true, updated: json.updated };
+  };
+
   const declineOracleSuggestion = async ({ decisionId, reason, note, location, snoozedIds } = {}) => {
     const json = await mutate('/api/next-action/decline', {
       body: { decisionId, reason, note, location, snoozedIds },
@@ -963,56 +985,6 @@ export function useGameData() {
     await mutate('/api/agu-plan/realign');
   };
 
-  const addNinetyDayGoal = async (goalData) => {
-    playClick();
-    const result = await mutate('/api/ninety-day-goals', { body: goalData, refreshOnSuccess: false });
-    if (!result) throw new Error('Erro ao criar a meta de 90 dias.');
-    fetchState();
-    return { success: true };
-  };
-
-  const updateNinetyDayGoal = async (id, goalData) => {
-    playClick();
-    const result = await mutate(`/api/ninety-day-goals/${id}`, { method: 'PUT', body: goalData, refreshOnSuccess: false });
-    if (!result) throw new Error('Erro ao atualizar a meta de 90 dias.');
-    fetchState();
-    return { success: true };
-  };
-
-  const logNinetyDayGoalProgress = async (id, progressData) => {
-    playClick();
-    const result = await mutate(`/api/ninety-day-goals/${id}/progress`, { body: progressData, refreshOnSuccess: false });
-    if (result) {
-      if (result.rewardResult) {
-        const just = result.justCompleted || {};
-        const label = just.goal
-          ? 'Meta de 90 dias conquistada!'
-          : just.month
-            ? 'Mês da meta fechado!'
-            : just.fortnight
-              ? 'Quinzena da meta fechada!'
-              : just.week
-                ? 'Semana da meta fechada!'
-                : 'Avanço na meta de 90 dias!';
-        handleRewardResponse(result.rewardResult, label);
-        if (just.goal) {
-          confetti({ particleCount: 110, spread: 80, origin: { y: 0.6 } });
-        }
-      }
-      fetchState();
-      return { success: true, result };
-    }
-    throw new Error('Erro ao registrar o avanço.');
-  };
-
-  const deleteNinetyDayGoalLog = async (goalId, logId) => {
-    playClick();
-    const result = await mutate(`/api/ninety-day-goals/${goalId}/logs/${logId}`, { method: 'DELETE', refreshOnSuccess: false });
-    if (!result) throw new Error('Erro ao estornar o avanço.');
-    fetchState();
-    return { success: true };
-  };
-
   const addDailyVictory = async (victoryData) => {
     playClick();
     const result = await mutate('/api/daily-victories', { body: victoryData, refreshOnSuccess: false });
@@ -1062,14 +1034,6 @@ export function useGameData() {
     playClick();
     const result = await mutate(`/api/daily-victories/${id}`, { method: 'DELETE', refreshOnSuccess: false });
     if (!result) throw new Error('Erro ao excluir a vitória planejada.');
-    fetchState();
-    return { success: true };
-  };
-
-  const deleteNinetyDayGoal = async (id) => {
-    playClick();
-    const result = await mutate(`/api/ninety-day-goals/${id}`, { method: 'DELETE', refreshOnSuccess: false });
-    if (!result) throw new Error('Erro ao excluir a meta de 90 dias.');
     fetchState();
     return { success: true };
   };
@@ -1134,6 +1098,8 @@ export function useGameData() {
     skipOracleEnergy,
     saveOpenRouterKey,
     declineOracleSuggestion,
+    breakDownQuest,
+    rescheduleQuests,
     acceptOracleDose,
     startAguPlan,
     updateAguPlan,
@@ -1146,11 +1112,6 @@ export function useGameData() {
     resetAguPlan,
     advanceAguCycle,
     logAguProduct,
-    addNinetyDayGoal,
-    updateNinetyDayGoal,
-    logNinetyDayGoalProgress,
-    deleteNinetyDayGoalLog,
-    deleteNinetyDayGoal,
     addDailyVictory,
     updateDailyVictory,
     completeDailyVictory,

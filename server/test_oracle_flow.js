@@ -27,6 +27,8 @@ import {
   suggestNextAction
 } from './oracleSuggest.js';
 import { getSaoPauloDateStr, getSaoPauloHour } from './timeUtils.js';
+import { startTestServer } from './testEnv.js';
+import http from 'http';
 
 function assert(condition, message) {
   if (!condition) {
@@ -131,7 +133,7 @@ async function run() {
   const queda = await recordEnergyAndSuggest(quedaDb, 'cansado, mas consigo algo curto', { location: 'office' }, {
     fetchImpl: async () => { throw Object.assign(new Error('sem rede'), { code: 'ENETUNREACH' }); }
   });
-  assert(queda.reading?.score === 3, 'falha do Jev usa a estimativa local de energia (pessimista)');
+  assert(queda.reading?.score === 4, 'falha do Jev usa a média ponderada local, não o mínimo');
   assert(queda.reading?.source === 'local', 'a leitura de emergência fica marcada como local');
   assert(queda.suggestion.primary?.id === 'q-peticao', 'mesmo sem o Jev, o herói recebe uma indicação');
   assert(queda.suggestion.needsEnergy === false, 'a leitura de emergência libera o cartão para indicar');
@@ -143,7 +145,8 @@ async function run() {
   const semPista = await recordEnergyAndSuggest(vazioDb, 'vamos ver no que dá', { location: 'office' }, {
     fetchImpl: async () => { throw new Error('sem rede'); }
   });
-  assert(semPista.reading?.score === 5, 'sem pista no texto, a energia de emergência é neutra');
+  assert(semPista.reading == null, 'sem pista no texto, a energia não é inventada');
+  assert(semPista.suggestion.needsEnergy === true, 'sem pista, o cartão continua pedindo a energia');
 
   // ------------------------------------------------------------- abstenção
   const abstencaoDb = baseDb();
@@ -372,7 +375,7 @@ async function run() {
   assert(partidaDb.oracleDecisions[0]?.dose?.label === '15 min', 'a decisão guarda a dose de partida');
 
   const aceitePartida = acceptDoseOnly(partidaDb, partida.primary.decisionId);
-  assert(aceitePartida.decision?.outcome === 'accepted', 'aceitar a dose de partida não falha por falta de quantitativo');
+  assert(aceitePartida.decision?.outcome === 'completed', 'aceitar a dose de partida fecha o ciclo, mesmo sem quantitativo');
 
   // Sem resposta utilizável do Jev, a faixa de energia garante a dose.
   const faixaDb = baseDb({ quests: [aberta] });
@@ -463,9 +466,11 @@ async function run() {
   assert(altoQuantityCalls === 0, 'com energia alta, não se consulta quantidade que ninguém vai usar');
 
   // ------------------------------------------------------------- utilidades
-  assert(localEnergyFromText('exausto, não consigo nada') === 1, 'texto de esgotamento vira energia 1');
+  assert(localEnergyFromText('exausto') === 1, 'exaustão pura vira energia 1');
+  assert(localEnergyFromText('exausto, não consigo nada') <= 2, 'esgotamento com segunda pista continua no chão');
   assert(localEnergyFromText('animado e disposto') === 7, 'texto positivo vira energia 7');
   assert(localEnergyFromText('qualquer coisa') === null, 'texto sem pista não inventa energia');
+  assert(localEnergyFromText('não estou cansado') >= 6, 'negação de cansaço não vira energia baixa');
 
   assert(daysBetween('2026-09-30', '2026-10-02T12:00:00Z') === 2, 'prazo em ISO é lido como data civil');
   assert(daysBetween('2026-09-30', 'amanhã') === null, 'prazo ilegível não vira NaN');
@@ -476,6 +481,76 @@ async function run() {
   assert(stats.counts.declined === 1 && stats.counts.pending === 1, 'o retrato da memória conta os desfechos');
   assert(stats.answered === 1 && stats.acceptanceRate === 0, 'a taxa de aceite usa apenas o que foi respondido');
   assert(Array.isArray(stats.recent) && stats.recent.length > 0, 'o retrato da memória lista as últimas decisões');
+
+  const server = await startTestServer();
+  const request = (pathName, body) => new Promise((resolve, reject) => {
+    const req = http.request({
+      hostname: '127.0.0.1',
+      port: server.port,
+      path: pathName,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, data: JSON.parse(data) }); }
+        catch { resolve({ status: res.statusCode, raw: data }); }
+      });
+    });
+    req.on('error', reject);
+    if (body) req.write(JSON.stringify(body));
+    req.end();
+  });
+  try {
+    const guest = await request('/api/auth/guest', {});
+    const authReq = (pathName, body) => new Promise((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: server.port,
+        path: pathName,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${guest.data.token}`
+        }
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => { data += chunk; });
+        res.on('end', () => resolve({ status: res.statusCode, data: JSON.parse(data) }));
+      });
+      req.on('error', reject);
+      req.write(JSON.stringify(body || {}));
+      req.end();
+    });
+    const created = await authReq('/api/quests', { title: 'Fechar o ciclo', priority: 'importante' });
+    assert(created.status === 200, 'a rota cria a missão do ciclo');
+    const seeded = await authReq('/api/next-action/consult', { location: 'anywhere' });
+    const decisionId = seeded.data.primary?.decisionId;
+    assert(decisionId, 'a consulta grava uma decisão');
+    const done = await authReq(`/api/quests/${created.data.quest.id}/complete`, { completed: true, decisionId });
+    assert(done.status === 200, 'concluir pela rota HTTP aceita o decisionId');
+    const memory = await new Promise((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: server.port,
+        path: '/api/state',
+        method: 'GET',
+        headers: { Authorization: `Bearer ${guest.data.token}` }
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => { data += chunk; });
+        res.on('end', () => resolve(JSON.parse(data)));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+    const stored = (memory.oracleDecisions || []).find(item => item.id === decisionId);
+    assert(stored?.outcome === 'completed', `a conclusão sobrevive ao save (${stored?.outcome})`);
+    assert(stored?.outcomeAt, 'a conclusão grava outcomeAt');
+  } finally {
+    server.stop();
+  }
 
   console.log('\n✨ Fluxo do Oráculo consistente.');
 }

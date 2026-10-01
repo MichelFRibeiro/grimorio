@@ -27,8 +27,25 @@ export const START_MINUTES_BY_BAND = {
   '3-4': 10,
   '5-6': 15
 };
-export const DECISION_KINDS = ['quest', 'habit', 'victory'];
-export const DECISION_OUTCOMES = ['pending', 'accepted', 'declined', 'expired', 'superseded'];
+export const DECISION_KINDS = ['quest', 'habit', 'victory', 'agu', 'mindmap', 'reading'];
+// pending → accepted (começou) → completed (entidade/dose cumprida)
+//        ↘ declined | expired | superseded | abandoned
+export const DECISION_OUTCOMES = [
+  'pending',
+  'accepted',
+  'completed',
+  'declined',
+  'expired',
+  'superseded',
+  'abandoned'
+];
+export const OPEN_DECISION_OUTCOMES = ['pending', 'accepted'];
+export const STATS_HALF_LIFE_DAYS = 28;
+export const QUANTITY_HIT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const QUANTITY_CACHE_CONFIDENCE_MIN = 0.55;
+export const SNOOZE_TTL_MS = 2 * 60 * 60 * 1000;
+export const MAX_ORACLE_SNOOZES = 200;
+const COMPLETION_WINDOW_MS = 36 * 60 * 60 * 1000;
 
 export const DECLINE_REASONS = [
   { id: 'tired', label: 'Estou cansado' },
@@ -201,16 +218,31 @@ export function sanitizeQuantityRead(raw) {
   };
 }
 
+function sanitizeDose(raw) {
+  if (!raw || !raw.amount) return null;
+  return {
+    amount: asNumber(raw.amount),
+    unit: QUANTITY_UNITS.includes(raw.unit) ? raw.unit : 'items',
+    fraction: raw.fraction || null,
+    label: clip(raw.label, 80)
+  };
+}
+
 export function sanitizeOracleDecision(raw) {
   if (!raw || typeof raw !== 'object') return null;
   if (!raw.id || !raw.entityId) return null;
   const outcome = DECISION_OUTCOMES.includes(raw.outcome) ? raw.outcome : 'pending';
+  const createdAt = raw.createdAt || new Date().toISOString();
   return {
     id: String(raw.id),
-    createdAt: raw.createdAt || new Date().toISOString(),
+    createdAt,
+    suggestedAt: raw.suggestedAt || createdAt,
     date: raw.date || null,
     hour: Number.isInteger(raw.hour) ? raw.hour : null,
     dayOfWeek: Number.isInteger(raw.dayOfWeek) ? raw.dayOfWeek : null,
+    weekday: Number.isInteger(raw.weekday)
+      ? raw.weekday
+      : (Number.isInteger(raw.dayOfWeek) ? raw.dayOfWeek : null),
     location: raw.location || null,
     entityId: String(raw.entityId),
     // 'victory' precisa sobreviver: sem isso a decisão da Vitória do Dia era
@@ -220,16 +252,12 @@ export function sanitizeOracleDecision(raw) {
     category: raw.category || null,
     energyReadingId: raw.energyReadingId || null,
     energyScore: raw.energyScore == null ? null : clampEnergy(raw.energyScore),
+    energyBand: raw.energyBand || (raw.energyScore == null ? null : energyBand(raw.energyScore)),
     quantity: raw.quantity && raw.quantity.amount ? {
       amount: asNumber(raw.quantity.amount),
       unit: QUANTITY_UNITS.includes(raw.quantity.unit) ? raw.quantity.unit : 'items'
     } : null,
-    dose: raw.dose && raw.dose.amount ? {
-      amount: asNumber(raw.dose.amount),
-      unit: QUANTITY_UNITS.includes(raw.dose.unit) ? raw.dose.unit : 'items',
-      fraction: raw.dose.fraction || null,
-      label: clip(raw.dose.label, 80)
-    } : null,
+    dose: sanitizeDose(raw.dose),
     source: raw.source === 'jev' ? 'jev' : 'heuristic',
     probability: asNumber(raw.probability),
     confidence: asNumber(raw.confidence),
@@ -237,7 +265,26 @@ export function sanitizeOracleDecision(raw) {
     outcome,
     declineReason: DECLINE_IDS.has(raw.declineReason) ? raw.declineReason : null,
     declineNote: clip(raw.declineNote, 240),
-    resolvedAt: raw.resolvedAt || null
+    resolvedAt: raw.resolvedAt || null,
+    acceptedAt: raw.acceptedAt || null,
+    outcomeAt: raw.outcomeAt || null,
+    completionKind: raw.completionKind || null
+  };
+}
+
+export function sanitizeOracleSnooze(raw, now = new Date()) {
+  if (!raw || typeof raw !== 'object') return null;
+  const entityId = clip(raw.entityId, 80);
+  const expiresAt = raw.expiresAt;
+  if (!entityId || !expiresAt) return null;
+  const expiry = new Date(expiresAt).getTime();
+  const reference = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  if (!Number.isFinite(expiry) || expiry <= reference) return null;
+  return {
+    entityId,
+    expiresAt,
+    location: raw.location || null,
+    createdAt: raw.createdAt || new Date(reference).toISOString()
   };
 }
 
@@ -252,10 +299,11 @@ function sanitizeEnergySkip(raw) {
   };
 }
 
-export function ensureOracleMemory(db) {
+export function ensureOracleMemory(db, now = new Date()) {
   if (!db.oracleEnergyReadings) db.oracleEnergyReadings = [];
   if (!db.oracleDecisions) db.oracleDecisions = [];
   if (!db.oracleQuantityReads) db.oracleQuantityReads = [];
+  if (!db.oracleSnoozes) db.oracleSnoozes = [];
   db.oracleEnergyReadings = db.oracleEnergyReadings
     .map(sanitizeEnergyReading)
     .filter(Boolean)
@@ -268,8 +316,12 @@ export function ensureOracleMemory(db) {
     .map(sanitizeQuantityRead)
     .filter(Boolean)
     .slice(0, MAX_QUANTITY_READS);
+  db.oracleSnoozes = db.oracleSnoozes
+    .map(item => sanitizeOracleSnooze(item, now))
+    .filter(Boolean)
+    .slice(0, MAX_ORACLE_SNOOZES);
   db.oracleEnergySkip = sanitizeEnergySkip(db.oracleEnergySkip);
-  expireStaleDecisions(db);
+  expireStaleDecisions(db, now);
   return db;
 }
 
@@ -360,22 +412,64 @@ export function findQuantityRead(db, entityId, sourceText, now = new Date()) {
   return read;
 }
 
-/** Leitura já confirmada e ainda válida para o mesmo texto da tarefa. */
-export function findQuantityHit(db, entityId, sourceText) {
-  const read = findQuantityRead(db, entityId, sourceText);
-  return read?.hasQuantity ? read : null;
+/**
+ * Acertos de quantidade valem 7 dias. Confiança baixa não entra no cache:
+ * uma leitura incerta não pode travar a próxima consulta.
+ */
+export function findQuantityHit(db, entityId, sourceText, now = new Date()) {
+  ensureOracleMemory(db);
+  const wanted = clip(sourceText, 400);
+  const read = db.oracleQuantityReads.find(item => (
+    item.entityId === entityId && item.sourceText === wanted && item.hasQuantity
+  )) || null;
+  if (!read) return null;
+  if ((read.confidence ?? 1) < QUANTITY_CACHE_CONFIDENCE_MIN) return null;
+  const age = now.getTime() - new Date(read.readAt).getTime();
+  if (!Number.isFinite(age) || age < 0 || age > QUANTITY_HIT_TTL_MS) return null;
+  return read;
 }
 
 export function saveQuantityRead(db, reading) {
   ensureOracleMemory(db);
   const clean = sanitizeQuantityRead(reading);
   if (!clean) return null;
+  // Confiança baixa não vira memória: a próxima consulta pergunta de novo.
+  if (clean.hasQuantity && (clean.confidence ?? 1) < QUANTITY_CACHE_CONFIDENCE_MIN) {
+    return clean;
+  }
   db.oracleQuantityReads = db.oracleQuantityReads.filter(read => !(
     read.entityId === clean.entityId && read.sourceText === clean.sourceText
   ));
   db.oracleQuantityReads.unshift(clean);
   db.oracleQuantityReads = db.oracleQuantityReads.slice(0, MAX_QUANTITY_READS);
   return clean;
+}
+
+/**
+ * Adiar no servidor. O parâmetro snoozedIds do cliente continua valendo
+ * para a sessão; isto sobrevive a um refresh.
+ */
+export function snoozeEntity(db, entityId, { location = null, ttlMs = SNOOZE_TTL_MS, now = new Date() } = {}) {
+  ensureOracleMemory(db, now);
+  const id = clip(entityId, 80);
+  if (!id) return null;
+  const reference = now instanceof Date ? now : new Date(now);
+  const snooze = sanitizeOracleSnooze({
+    entityId: id,
+    location,
+    createdAt: reference.toISOString(),
+    expiresAt: new Date(reference.getTime() + ttlMs).toISOString()
+  }, new Date(reference.getTime() - 1));
+  if (!snooze) return null;
+  db.oracleSnoozes = db.oracleSnoozes.filter(item => item.entityId !== id);
+  db.oracleSnoozes.unshift(snooze);
+  db.oracleSnoozes = db.oracleSnoozes.slice(0, MAX_ORACLE_SNOOZES);
+  return snooze;
+}
+
+export function activeSnoozedIds(db, now = new Date()) {
+  ensureOracleMemory(db, now);
+  return db.oracleSnoozes.map(item => item.entityId);
 }
 
 export function saveOracleDecision(db, decision) {
@@ -576,7 +670,9 @@ export function applyDose(quantity, fractionId) {
 
 export function buildLearningSummary(db, { limit = 12 } = {}) {
   ensureOracleMemory(db);
-  const settled = db.oracleDecisions.filter(item => item.outcome === 'accepted' || item.outcome === 'declined');
+  const settled = db.oracleDecisions.filter(item => (
+    item.outcome === 'accepted' || item.outcome === 'completed' || item.outcome === 'declined'
+  ));
   const recent = settled.slice(0, limit).map(item => ({
     energy: item.energyScore,
     band: item.energyScore == null ? null : energyBand(item.energyScore),
@@ -595,8 +691,9 @@ export function buildLearningSummary(db, { limit = 12 } = {}) {
     if (item.energyScore == null) return;
     const band = energyBand(item.energyScore);
     if (!byBand[band]) byBand[band] = { accepted: 0, declined: 0, acceptedDoses: [], declinedDoses: [] };
-    byBand[band][item.outcome] += 1;
-    const bucket = item.outcome === 'accepted' ? byBand[band].acceptedDoses : byBand[band].declinedDoses;
+    const bucketName = item.outcome === 'declined' ? 'declined' : 'accepted';
+    byBand[band][bucketName] += 1;
+    const bucket = bucketName === 'accepted' ? byBand[band].acceptedDoses : byBand[band].declinedDoses;
     if (item.dose?.label && bucket.length < 4) bucket.push(`${item.title}: ${item.dose.label}`);
   });
 
@@ -609,16 +706,16 @@ export function buildLearningSummary(db, { limit = 12 } = {}) {
  */
 export function oracleMemoryStats(db, { limit = 20 } = {}) {
   ensureOracleMemory(db);
-  const counts = { accepted: 0, declined: 0, pending: 0, expired: 0, superseded: 0 };
+  const counts = { accepted: 0, completed: 0, declined: 0, pending: 0, expired: 0, superseded: 0, abandoned: 0 };
   db.oracleDecisions.forEach(item => {
     counts[item.outcome] = (counts[item.outcome] || 0) + 1;
   });
-  const answered = counts.accepted + counts.declined;
+  const answered = counts.accepted + counts.completed + counts.declined;
   const reading = db.oracleEnergyReadings[0] || null;
   return {
     counts,
     answered,
-    acceptanceRate: answered ? Math.round((counts.accepted / answered) * 100) : null,
+    acceptanceRate: answered ? Math.round(((counts.accepted + counts.completed) / answered) * 100) : null,
     energyReadings: db.oracleEnergyReadings.length,
     lastEnergy: reading ? {
       score: reading.score,
@@ -639,20 +736,92 @@ export function oracleMemoryStats(db, { limit = 20 } = {}) {
   };
 }
 
-export function markDecisionAccepted(db, { entityId, kind, at = new Date() } = {}) {
-  ensureOracleMemory(db);
+function decisionAge(item, at) {
+  return at.getTime() - new Date(item.suggestedAt || item.createdAt).getTime();
+}
+
+/**
+ * Aceite: o herói começou. decisionId vence; sem ele, casa a entidade
+ * pendente dentro da janela. Aceitar uma não abandona as outras pendentes
+ * da mesma entidade — só a concluída fecha o ciclo.
+ */
+export function markDecisionAccepted(db, { decisionId, entityId, kind, at = new Date() } = {}) {
+  ensureOracleMemory(db, at);
+  const when = at instanceof Date ? at : new Date(at);
+  if (decisionId) {
+    const byId = findOracleDecision(db, decisionId);
+    if (!byId || byId.outcome !== 'pending') return byId && byId.outcome === 'accepted' ? byId : null;
+    byId.outcome = 'accepted';
+    byId.acceptedAt = when.toISOString();
+    byId.resolvedAt = byId.acceptedAt;
+    return byId;
+  }
   if (!entityId) return null;
-  const pending = db.oracleDecisions.find(item => (
-    item.outcome === 'pending'
-    && item.entityId === entityId
-    && (!kind || item.kind === kind)
-    && (at.getTime() - new Date(item.createdAt).getTime()) <= ACCEPT_WINDOW_MS
-    && (at.getTime() - new Date(item.createdAt).getTime()) >= 0
-  ));
+  const pending = db.oracleDecisions.find(item => {
+    if (item.outcome !== 'pending') return false;
+    if (item.entityId !== entityId) return false;
+    if (kind && item.kind !== kind) return false;
+    const age = decisionAge(item, when);
+    return age >= 0 && age <= ACCEPT_WINDOW_MS;
+  });
   if (!pending) return null;
   pending.outcome = 'accepted';
-  pending.resolvedAt = at.toISOString();
+  pending.acceptedAt = when.toISOString();
+  pending.resolvedAt = pending.acceptedAt;
   return pending;
+}
+
+/**
+ * Conclusão: a entidade foi de fato feita, ou a dose foi cumprida.
+ * decisionId liga direto. Sem ele, a aceita recente da entidade vira
+ * concluída; se só houver pendente na janela, ela percorre accepted → completed.
+ */
+export function markDecisionCompleted(db, {
+  decisionId,
+  entityId,
+  kind,
+  at = new Date(),
+  completionKind = 'entity',
+  windowMs = COMPLETION_WINDOW_MS
+} = {}) {
+  ensureOracleMemory(db, at);
+  const when = at instanceof Date ? at : new Date(at);
+  let target = null;
+  if (decisionId) {
+    target = findOracleDecision(db, decisionId);
+    if (!target || !OPEN_DECISION_OUTCOMES.includes(target.outcome)) return null;
+  } else if (entityId) {
+    target = db.oracleDecisions.find(item => {
+      if (item.outcome !== 'accepted') return false;
+      if (item.entityId !== entityId) return false;
+      if (kind && item.kind !== kind) return false;
+      const age = decisionAge(item, when);
+      return age >= 0 && age <= windowMs;
+    }) || db.oracleDecisions.find(item => {
+      if (item.outcome !== 'pending') return false;
+      if (item.entityId !== entityId) return false;
+      if (kind && item.kind !== kind) return false;
+      const age = decisionAge(item, when);
+      return age >= 0 && age <= windowMs;
+    });
+  }
+  if (!target) return null;
+  if (!target.acceptedAt) target.acceptedAt = when.toISOString();
+  target.outcome = 'completed';
+  target.outcomeAt = when.toISOString();
+  target.resolvedAt = target.outcomeAt;
+  target.completionKind = completionKind;
+  return target;
+}
+
+export function markDecisionAbandoned(db, { decisionId, at = new Date() } = {}) {
+  const decision = findOracleDecision(db, decisionId);
+  if (!decision || !OPEN_DECISION_OUTCOMES.includes(decision.outcome)) return null;
+  const when = at instanceof Date ? at : new Date(at);
+  decision.outcome = 'abandoned';
+  decision.outcomeAt = when.toISOString();
+  decision.resolvedAt = decision.outcomeAt;
+  return decision;
 }
 
 export function acceptPartialDose(db, decisionId, at = new Date()) {
@@ -662,9 +831,109 @@ export function acceptPartialDose(db, decisionId, at = new Date()) {
   // Dose de tempo (tarefa sem quantitativo) não tem total para comparar:
   // exigir `quantity` aqui fazia o aceite da dose falhar com 404.
   if (decision.quantity?.amount && decision.dose.amount >= decision.quantity.amount) return null;
-  decision.outcome = 'accepted';
-  decision.resolvedAt = at.toISOString();
+  const when = at instanceof Date ? at : new Date(at);
+  // A dose cumprida fecha o ciclo: accepted não basta, senão a estatística
+  // trata como "começou e não terminou".
+  decision.outcome = 'completed';
+  decision.acceptedAt = when.toISOString();
+  decision.outcomeAt = decision.acceptedAt;
+  decision.resolvedAt = decision.acceptedAt;
+  decision.completionKind = 'dose';
   return decision;
+}
+
+function decayWeight(ageMs, halfLifeDays = STATS_HALF_LIFE_DAYS) {
+  if (!Number.isFinite(ageMs) || ageMs < 0) return 0;
+  const halfLifeMs = halfLifeDays * 86400000;
+  return Math.pow(0.5, ageMs / halfLifeMs);
+}
+
+function bumpWeighted(bucket, key, weight, success) {
+  if (key == null || key === '') return;
+  if (!bucket[key]) bucket[key] = { weight: 0, success: 0, samples: 0 };
+  bucket[key].weight += weight;
+  bucket[key].success += success ? weight : 0;
+  bucket[key].samples += 1;
+}
+
+function rateOf(entry) {
+  if (!entry || entry.weight <= 0) return null;
+  return Math.round((entry.success / entry.weight) * 1000) / 1000;
+}
+
+/**
+ * Taxa de sucesso (completed / responded) com meia-vida de 28 dias.
+ * Recusa, expiração, abandono e substituição contam como fracasso.
+ * Aceite ainda aberto não entra: o ciclo não fechou.
+ */
+export function computeOracleStats(db, now = new Date()) {
+  ensureOracleMemory(db, now);
+  const reference = now instanceof Date ? now : new Date(now);
+  const byHour = {};
+  const byWeekday = {};
+  const byEnergyBand = {};
+  const byKind = {};
+  const byCategory = {};
+  const declineReasons = {};
+  const postponeByEntity = {};
+  let responded = 0;
+  let completed = 0;
+
+  (db.oracleDecisions || []).forEach(item => {
+    const at = new Date(item.suggestedAt || item.createdAt).getTime();
+    const weight = decayWeight(reference.getTime() - at);
+    if (weight <= 0) return;
+    const entityId = item.entityId;
+    const postponed = item.outcome === 'declined'
+      || item.outcome === 'expired'
+      || item.outcome === 'superseded'
+      || item.outcome === 'abandoned';
+    if (postponed) {
+      postponeByEntity[entityId] = (postponeByEntity[entityId] || 0) + 1;
+    }
+    if (item.outcome === 'declined' && item.declineReason) {
+      if (!declineReasons[item.declineReason]) {
+        declineReasons[item.declineReason] = { count: 0, byEntity: {} };
+      }
+      declineReasons[item.declineReason].count += 1;
+      const byEntity = declineReasons[item.declineReason].byEntity;
+      byEntity[entityId] = (byEntity[entityId] || 0) + 1;
+    }
+    if (item.outcome === 'pending' || item.outcome === 'accepted') return;
+    responded += 1;
+    const success = item.outcome === 'completed';
+    if (success) completed += 1;
+    bumpWeighted(byHour, item.hour, weight, success);
+    bumpWeighted(byWeekday, item.weekday ?? item.dayOfWeek, weight, success);
+    bumpWeighted(byEnergyBand, item.energyBand, weight, success);
+    bumpWeighted(byKind, item.kind, weight, success);
+    bumpWeighted(byCategory, item.category, weight, success);
+  });
+
+  const rates = (bucket) => Object.fromEntries(
+    Object.entries(bucket).map(([key, entry]) => [key, { ...entry, rate: rateOf(entry) }])
+  );
+
+  return {
+    halfLifeDays: STATS_HALF_LIFE_DAYS,
+    responded,
+    completed,
+    successRate: responded ? Math.round((completed / responded) * 1000) / 1000 : null,
+    byHour: rates(byHour),
+    byWeekday: rates(byWeekday),
+    byEnergyBand: rates(byEnergyBand),
+    byKind: rates(byKind),
+    byCategory: rates(byCategory),
+    declineReasons,
+    postponeByEntity
+  };
+}
+
+/** Termo de score bounded pelo sucesso histórico naquela hora (−4..+4). */
+export function hourSuccessTerm(stats, hour) {
+  const entry = stats?.byHour?.[hour];
+  if (!entry || entry.samples < 3 || entry.rate == null) return 0;
+  return Math.max(-4, Math.min(4, Math.round((entry.rate - 0.5) * 8)));
 }
 
 export { uid as oracleUid };

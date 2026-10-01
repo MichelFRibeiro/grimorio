@@ -51,7 +51,7 @@ ChartJS.register(
   LineElement
 );
 
-export function OracleAnalytics({ analytics, actionLogs, onRefresh }) {
+export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAction }) {
   const fileInputRef = useRef(null);
   const [selectedHorizon, setSelectedHorizon] = useState('total'); // 'day' | 'week' | 'month' | 'year' | 'total'
   const [rankingTab, setRankingTab] = useState('categories'); // 'categories' | 'tiers'
@@ -973,6 +973,25 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh }) {
               <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.5 }}>
                 {ins.description}
               </p>
+              {ins.action && onInsightAction && (
+                <button
+                  type="button"
+                  onClick={() => onInsightAction(ins.action)}
+                  style={{
+                    marginTop: '10px',
+                    padding: '6px 12px',
+                    borderRadius: '999px',
+                    border: '1px solid rgba(251, 191, 36, 0.45)',
+                    background: 'rgba(251, 191, 36, 0.12)',
+                    color: '#fbbf24',
+                    fontWeight: 800,
+                    fontSize: '0.75rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {ins.action.type === 'reschedule' ? 'Remarcar' : ins.action.type === 'plan_victory' ? 'Planejar vitória' : 'Abrir'}
+                </button>
+              )}
             </div>
           ))}
         </div>

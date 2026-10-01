@@ -1,5 +1,5 @@
 import './testEnv.js';
-import { computeNextAction } from './nextAction.js';
+import { computeNextAction, urgencyScore } from './nextAction.js';
 import { isNowInTimeWindow, locationMatches, sanitizeTimeWindow, guessCurrentLocation } from './locations.js';
 
 function assert(condition, message) {
@@ -587,6 +587,121 @@ function runTests() {
     dailyVictories: [{ ...victoryToday, completed: true }]
   }), { location: 'home', now: nowHomeSat });
   assert(victoryDone.primary?.id === 'q-galinheiro', 'Com a vitória concluída, a missão atrasada volta a liderar');
+
+  const oneDay = urgencyScore({ dueDate: '2026-08-28' }, '2026-08-29');
+  const fortyDays = urgencyScore({ dueDate: '2026-07-20' }, '2026-08-29');
+  assert(oneDay.score === 38 && fortyDays.score > oneDay.score, `atraso de 40 dias pesa mais que 1 dia (${oneDay.score} vs ${fortyDays.score})`);
+  assert(fortyDays.score <= 60, 'o bônus de idade do atraso tem teto');
+  assert(fortyDays.label === 'Atrasada há 40 dias', 'o motivo mostra a idade do atraso');
+
+  const declineDb = baseDb({
+    quests: [overdueHome, garden],
+    oracleDecisions: [{
+      id: 'od-gal',
+      entityId: 'q-galinheiro',
+      kind: 'quest',
+      outcome: 'declined',
+      declineReason: 'wrong_place',
+      location: 'home',
+      createdAt: new Date(nowHomeSat.getTime() - 30 * 60 * 1000).toISOString(),
+      outcomeAt: new Date(nowHomeSat.getTime() - 30 * 60 * 1000).toISOString()
+    }]
+  });
+  const excluded = computeNextAction(declineDb, { location: 'home', now: nowHomeSat });
+  assert(excluded.primary?.id !== 'q-galinheiro', 'wrong_place exclui a entidade naquele lugar por 4h');
+
+  const tiredDb = baseDb({
+    quests: [overdueHome],
+    oracleDecisions: [{
+      id: 'od-tired',
+      entityId: 'q-galinheiro',
+      kind: 'quest',
+      outcome: 'declined',
+      declineReason: 'tired',
+      createdAt: new Date(nowHomeSat.getTime() - 60 * 60 * 1000).toISOString(),
+      outcomeAt: new Date(nowHomeSat.getTime() - 60 * 60 * 1000).toISOString()
+    }]
+  });
+  const tired = computeNextAction(tiredDb, { location: 'home', now: nowHomeSat });
+  assert(tired.primary?.preferSmallDose === true, 'recusa por cansaço pede dose pequena');
+
+  const staleQuest = {
+    id: 'q-parada',
+    title: 'DENÚNCIAS',
+    category: 'Trabalho',
+    priority: 'critico',
+    dueDate: '2026-08-01',
+    completed: false,
+    location: 'home',
+    createdAt: '2026-07-01T10:00:00.000Z',
+    subtasks: []
+  };
+  const flagged = computeNextAction(baseDb({ quests: [staleQuest] }), { location: 'home', now: nowHomeSat });
+  assert(flagged.primary?.procrastination?.flagged === true, 'missão crítica atrasada há mais de 7 dias é marcada');
+  assert(flagged.primary?.firstStep?.mode === 'starter', 'sem subtarefa, a indicação vira primeiro passo de 5 min');
+  assert((flagged.triage?.items || []).some(item => item.id === 'q-parada'), 'crítica atrasada há 7+ dias abre a triagem');
+
+  const habitBehind = {
+    id: 'h-atras',
+    title: 'Ritual atrasado',
+    category: 'Saúde',
+    frequency: 'daily',
+    location: 'home',
+    history: [],
+    currentStreak: 0,
+    createdAt: '2026-08-01T10:00:00.000Z'
+  };
+  const criticalFirst = computeNextAction(baseDb({
+    quests: [staleQuest],
+    habits: [habitBehind]
+  }), { location: 'home', now: nowHomeSat });
+  assert(criticalFirst.primary?.id === 'q-parada', 'crítica atrasada há 3+ dias vem antes do ritual');
+
+  const aguDb = baseDb({
+    quests: [],
+    aguPlan: {
+      startedAt: '2026-08-01',
+      currentCycle: {
+        days: [{
+          dateStr: '2026-08-29',
+          blocks: [{ key: '2026-08-29|constitucional|questoes', subjectId: 'constitucional', kind: 'questoes', topicName: 'Controle' }]
+        }]
+      }
+    }
+  });
+  const agu = computeNextAction(aguDb, { location: 'home', now: nowHomeSat });
+  assert(agu.primary?.kind === 'agu', `bloco AGU de hoje entra como candidato (foi ${agu.primary?.kind})`);
+  assert(agu.primary?.category === 'Estudos', 'bloco AGU usa a categoria Estudos');
+
+  const mapDb = baseDb({
+    quests: [],
+    mindMaps: [{
+      id: 'map-1',
+      title: 'Controle de constitucionalidade',
+      nodes: [
+        { id: 'n-root', label: 'Controle', parentId: null },
+        { id: 'n-a', label: 'Difuso', parentId: 'n-root', dueDate: '2026-08-01' }
+      ]
+    }]
+  });
+  const map = computeNextAction(mapDb, { location: 'home', now: nowHomeSat });
+  assert(map.primary?.kind === 'mindmap', 'mapa com ramos vencidos entra como candidato');
+
+  const bookDb = baseDb({
+    quests: [],
+    books: [{ id: 'b-1', title: 'Manual', status: 'reading', currentPage: 12, totalPages: 300, createdAt: '2026-08-01T10:00:00.000Z' }],
+    readingSessions: [{ bookId: 'b-1', date: '2026-08-18', pagesRead: 2 }]
+  });
+  const book = computeNextAction(bookDb, { location: 'home', now: nowHomeSat });
+  assert(book.primary?.kind === 'reading', 'livro sem sessão há 7+ dias entra como candidato');
+  assert((book.primary?.reason || '').includes('parado'), 'o motivo diz que o livro está parado');
+
+  const snoozedDb = baseDb({
+    quests: [overdueHome, garden],
+    oracleSnoozes: [{ entityId: 'q-galinheiro', expiresAt: new Date(nowHomeSat.getTime() + 60 * 60 * 1000).toISOString() }]
+  });
+  const serverSnooze = computeNextAction(snoozedDb, { location: 'home', now: nowHomeSat });
+  assert(serverSnooze.primary?.id !== 'q-galinheiro', 'snooze do servidor tira a entidade da fila');
 
   console.log('\n🏆 Todos os testes do motor de Próxima Atividade passaram.');
 }

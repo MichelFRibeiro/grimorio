@@ -10,6 +10,8 @@ import {
   DECLINE_REASONS,
   DOSE_ENERGY_MAX,
   acceptPartialDose,
+  activeSnoozedIds,
+  energyBand,
   ensureOracleMemory,
   findOracleDecision,
   findQuantityHit,
@@ -19,6 +21,7 @@ import {
   saveEnergyReading,
   saveOracleDecision,
   saveQuantityRead,
+  snoozeEntity,
   startDoseForEnergy,
   formatQuantity
 } from './oracleMemory.js';
@@ -68,10 +71,16 @@ function withDescription(item, db) {
     ? (db.habits || []).find(habit => habit.id === item.id)
     : item.kind === 'victory'
       ? (db.dailyVictories || []).find(victory => victory.id === item.id)
-      : (db.quests || []).find(quest => quest.id === item.id);
+      : item.kind === 'reading'
+        ? (db.books || []).find(book => book.id === item.id)
+        : item.kind === 'mindmap'
+          ? (db.mindMaps || []).find(map => map.id === item.id)
+          : item.kind === 'agu'
+            ? null
+            : (db.quests || []).find(quest => quest.id === item.id);
   return {
     ...item,
-    description: source?.description || '',
+    description: source?.description || item.description || '',
     estimatedMinutes: source?.estimatedMinutes || item.estimatedMinutes || null
   };
 }
@@ -116,7 +125,10 @@ function heuristicReason({ energy, skipped }) {
 export function previewNextAction(db, options = {}) {
   ensureOracleMemory(db);
   const now = resolveNow(options);
-  const heuristic = computeNextAction(db, options);
+  const heuristic = computeNextAction(db, {
+    ...options,
+    snoozedIds: [...new Set([...(options.snoozedIds || []), ...activeSnoozedIds(db, now)])]
+  });
   const energy = options.energyReading || latestEnergyReading(db, now);
   const skipped = !energy && isEnergySkipped(db, now);
   const pool = eligiblePool(heuristic);
@@ -253,9 +265,11 @@ function persistDecision(db, {
   return saveOracleDecision(db, {
     id: oracleUid('od'),
     createdAt: new Date().toISOString(),
+    suggestedAt: new Date().toISOString(),
     date: context?.date || null,
     hour: context?.hour ?? null,
     dayOfWeek: context?.dayOfWeek ?? null,
+    weekday: context?.dayOfWeek ?? null,
     location: context?.location || null,
     entityId: item.id,
     kind: item.kind,
@@ -263,6 +277,7 @@ function persistDecision(db, {
     category: item.category || null,
     energyReadingId: energy?.id || null,
     energyScore: energy?.score ?? null,
+    energyBand: energy?.score == null ? null : energyBand(energy.score),
     quantity: quantity?.hasQuantity ? { amount: quantity.amount, unit: quantity.unit } : null,
     dose: dose ? {
       amount: dose.amount,
@@ -278,6 +293,28 @@ function persistDecision(db, {
   });
 }
 
+const TRACE_SECRET = /sk-or-|bearer\s+|api[_-]?key|authorization/i;
+
+function scrubTraceValue(value, depth = 0) {
+  if (value == null || depth > 6) return value ?? null;
+  if (typeof value === 'string') {
+    if (TRACE_SECRET.test(value)) return '[omitido]';
+    return value.length > 500 ? `${value.slice(0, 500)}…` : value;
+  }
+  if (Array.isArray(value)) return value.slice(0, 20).map(item => scrubTraceValue(item, depth + 1));
+  if (typeof value === 'object') {
+    const out = {};
+    Object.entries(value).forEach(([key, item]) => {
+      if (TRACE_SECRET.test(key)) return;
+      // O texto cru da energia não volta para o navegador.
+      if (key === 'text' || key === 'answer' || key === 'energyText') return;
+      out[key] = scrubTraceValue(item, depth + 1);
+    });
+    return out;
+  }
+  return value;
+}
+
 function publicTrace(trace) {
   return (trace || []).map(entry => ({
     step: entry.step,
@@ -287,8 +324,8 @@ function publicTrace(trace) {
     ok: entry.ok !== false,
     status: entry.status || null,
     error: entry.error || null,
-    request: entry.request || null,
-    response: entry.response || null
+    request: scrubTraceValue(entry.request),
+    response: scrubTraceValue(entry.response)
   }));
 }
 
@@ -313,7 +350,10 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
   const now = resolveNow(options);
   const trace = [];
   const traced = { ...jevOptions, trace };
-  const heuristic = computeNextAction(db, options);
+  const heuristic = computeNextAction(db, {
+    ...options,
+    snoozedIds: [...new Set([...(options.snoozedIds || []), ...activeSnoozedIds(db, now)])]
+  });
   const pool = eligiblePool(heuristic);
   const energy = options.energyReading || latestEnergyReading(db, now);
   const skipped = !energy && isEnergySkipped(db, now);
@@ -518,8 +558,9 @@ export async function recordEnergyAndSuggest(db, text, options = {}, jevOptions 
   }
 
   const localScore = localEnergyFromText(text);
-  const score = reading?.score ?? localScore ?? NEUTRAL_ENERGY_SCORE;
-  const saved = saveEnergyReading(db, {
+  // Sem pista no texto a energia fica nula: forçar 5 empurrava uma dose.
+  const score = reading?.score ?? localScore ?? null;
+  const saved = score == null ? null : saveEnergyReading(db, {
     text,
     score,
     rawScore: reading?.rawScore ?? score,
@@ -538,8 +579,8 @@ export async function recordEnergyAndSuggest(db, text, options = {}, jevOptions 
       ok: false,
       error: readingError?.message || 'Jev não devolveu a energia',
       note: localScore != null
-        ? `Leitura local de emergência: energia ${score}/10 (subestimada de propósito).`
-        : `Sem pista no texto: energia neutra ${score}/10.`
+        ? `Leitura local de emergência: energia ${score}/10.`
+        : 'Sem pista no texto: energia não registrada. A dose não é forçada.'
     });
   }
 
@@ -555,6 +596,12 @@ export async function recordEnergyAndSuggest(db, text, options = {}, jevOptions 
   };
 }
 
+export function snoozeAndRemember(db, { entityId, location, ttlMs } = {}) {
+  const snooze = snoozeEntity(db, entityId, { location, ttlMs });
+  if (!snooze) return { error: 'Não há o que adiar.', status: 400 };
+  return { snooze };
+}
+
 export function declineAndRemember(db, { decisionId, reason, note }) {
   const decision = findOracleDecision(db, decisionId);
   if (!decision) return { error: 'Indicação não encontrada.', status: 404 };
@@ -568,10 +615,12 @@ export function declineAndRemember(db, { decisionId, reason, note }) {
   if (reason === 'other' && !String(note || '').trim()) {
     return { error: 'Escreva o motivo.', status: 400 };
   }
+  const now = new Date().toISOString();
   decision.outcome = 'declined';
   decision.declineReason = reason;
   decision.declineNote = String(note || '').trim().slice(0, 240);
-  decision.resolvedAt = new Date().toISOString();
+  decision.resolvedAt = now;
+  decision.outcomeAt = now;
   return { decision };
 }
 

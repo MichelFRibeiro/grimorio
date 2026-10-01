@@ -7,10 +7,11 @@ import { fileURLToPath } from 'url';
 import { getDb, saveDb, initDb, getPool, flushDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG, applyCategoryRename } from './db.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
-import { suggestNextAction, previewNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly } from './oracleSuggest.js';
+import { suggestNextAction, previewNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly, snoozeAndRemember } from './oracleSuggest.js';
 import { openRouterKeyStatus, setStoredOpenRouterKey } from './jevClient.js';
 import {
   markDecisionAccepted,
+  markDecisionCompleted,
   markEnergySkip,
   oracleMemoryStats,
   formatQuantity
@@ -77,18 +78,6 @@ import {
 } from '../src/utils/aguCycle.js';
 import { collectStudyBlocks } from '../src/utils/aguStudyEngine.js';
 import {
-  MAX_ACTIVE_NINETY_DAY_GOALS,
-  countOccupiedNinetyDayGoalSlots,
-  createNinetyDayGoal,
-  deleteNinetyDayGoalLog,
-  describeCycleBreakdown,
-  enrichNinetyDayGoal,
-  logNinetyDayGoalProgress,
-  previewNinetyDayGoal,
-  sanitizeNinetyDayGoals,
-  updateNinetyDayGoal
-} from '../src/utils/ninetyDayGoals.js';
-import {
   MAX_DAILY_VICTORIES,
   EXTENDED_MAX_DAILY_VICTORIES,
   DAILY_VICTORY_REWARDS,
@@ -107,6 +96,8 @@ import { syncDailyVictoriesFromActivity } from './dailyVictorySync.js';
 import {
   completeQuest as domainCompleteQuest,
   deleteQuest as domainDeleteQuest,
+  breakDownQuest as domainBreakDownQuest,
+  rescheduleQuests as domainRescheduleQuests,
   toggleHabit as domainToggleHabit,
   deleteHabit as domainDeleteHabit,
   logReadingSession as domainLogReadingSession,
@@ -462,7 +453,6 @@ app.get('/api/state', (req, res) => {
   try {
     const db = getDb();
     const todayStr = getSaoPauloDateStr();
-    db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
     db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
     db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
     db.mindMaps = sanitizeMindMaps(db.mindMaps);
@@ -672,6 +662,22 @@ app.post('/api/next-action/skip-energy', async (req, res) => {
       ...result,
       locations: LOCATIONS
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/next-action/snooze', (req, res) => {
+  try {
+    const db = getDb();
+    const entityId = req.body?.entityId || req.body?.id;
+    const remembered = snoozeAndRemember(db, {
+      entityId,
+      location: req.body?.location
+    });
+    if (remembered.error) return res.status(remembered.status).json({ error: remembered.error });
+    saveDb(db);
+    res.json({ success: true, snooze: remembered.snooze });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -957,7 +963,8 @@ app.post('/api/quests/:id/complete', (req, res) => {
     const result = domainCompleteQuest(db, {
       id: req.params.id,
       completed: req.body?.completed,
-      durationMinutes: req.body?.durationMinutes
+      durationMinutes: req.body?.durationMinutes,
+      decisionId: req.body?.decisionId
     });
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
@@ -972,6 +979,33 @@ app.post('/api/quests/:id/complete', (req, res) => {
     });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.post('/api/quests/reschedule', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainRescheduleQuests(db, {
+      ids: req.body?.ids,
+      dueDate: req.body?.dueDate
+    });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/quests/:id/breakdown', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainBreakDownQuest(db, req.params.id, req.body?.steps);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, quest: result.quest, added: result.added });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1061,7 +1095,8 @@ app.post('/api/books/:id/reading-session', (req, res) => {
       durationMinutes: req.body?.durationMinutes,
       notes: req.body?.notes,
       quotes: req.body?.quotes,
-      date: req.body?.date
+      date: req.body?.date,
+      decisionId: req.body?.decisionId
     });
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
@@ -1358,7 +1393,8 @@ app.post('/api/habits/:id/toggle', (req, res) => {
     const result = domainToggleHabit(db, {
       id: req.params.id,
       date: req.body?.date,
-      durationMinutes: req.body?.durationMinutes
+      durationMinutes: req.body?.durationMinutes,
+      decisionId: req.body?.decisionId
     });
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
@@ -1706,6 +1742,14 @@ app.post('/api/agu-plan/toggle-block', (req, res) => {
     const todayStr = getSaoPauloDateStr();
     db.aguPlan = toggleCompletedBlock(sanitizeAguPlan(db.aguPlan, todayStr), key);
     db.aguPlan = addBlockDuration(db.aguPlan, key, durationMinutes);
+    if (db.aguPlan?.completedBlocks?.[key]) {
+      markDecisionCompleted(db, {
+        decisionId: req.body?.decisionId,
+        entityId: `agu:${key}`,
+        kind: 'agu',
+        completionKind: 'block'
+      });
+    }
     const linkedVictories = syncDailyVictoriesFromActivity(db, { today: todayStr, syncStudy: true });
     saveDb(db);
     res.json({
@@ -1913,208 +1957,6 @@ app.post('/api/agu-plan/block-duration', (req, res) => {
   }
 });
 
-app.post('/api/ninety-day-goals/preview', (req, res) => {
-  try {
-    const todayStr = getSaoPauloDateStr();
-    const preview = previewNinetyDayGoal(req.body || {}, todayStr);
-    if (!preview.valid) {
-      return res.status(400).json({ error: preview.error || 'Não foi possível interpretar a meta.' });
-    }
-    res.json({
-      success: true,
-      preview,
-      breakdown: describeCycleBreakdown({
-        unit: preview.unit,
-        unitLabel: preview.unitLabel,
-        cycles: preview.cycles
-      })
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/ninety-day-goals', (req, res) => {
-  try {
-    const db = getDb();
-    const todayStr = getSaoPauloDateStr();
-    const goals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr).map(g => enrichNinetyDayGoal(g, todayStr));
-    res.json({
-      success: true,
-      goals,
-      occupiedSlots: countOccupiedNinetyDayGoalSlots(goals),
-      maxActive: MAX_ACTIVE_NINETY_DAY_GOALS
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/ninety-day-goals', (req, res) => {
-  try {
-    const db = getDb();
-    const todayStr = getSaoPauloDateStr();
-    db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
-    const occupied = countOccupiedNinetyDayGoalSlots(db.ninetyDayGoals);
-    if (occupied >= MAX_ACTIVE_NINETY_DAY_GOALS) {
-      return res.status(400).json({
-        error: `Você já tem ${MAX_ACTIVE_NINETY_DAY_GOALS} metas de 90 dias em andamento. Conclua, archive ou exclua uma delas para cadastrar outra.`
-      });
-    }
-
-    const defaultCat = db.questCategories?.[0]?.name || 'Pessoal';
-    const goal = createNinetyDayGoal({
-      title: req.body?.title,
-      description: req.body?.description,
-      category: req.body?.category || defaultCat,
-      icon: req.body?.icon,
-      targetAmount: req.body?.targetAmount,
-      unit: req.body?.unit,
-      unitLabel: req.body?.unitLabel,
-      direction: req.body?.direction,
-      startDate: req.body?.startDate
-    }, { today: todayStr });
-
-    db.ninetyDayGoals.unshift(goal);
-    saveDb(db);
-    res.json({
-      success: true,
-      goal,
-      occupiedSlots: countOccupiedNinetyDayGoalSlots(db.ninetyDayGoals),
-      breakdown: describeCycleBreakdown(goal)
-    });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.get('/api/ninety-day-goals/:id', (req, res) => {
-  try {
-    const db = getDb();
-    const todayStr = getSaoPauloDateStr();
-    const goal = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr).find(g => g.id === req.params.id);
-    if (!goal) return res.status(404).json({ error: 'Meta de 90 dias não encontrada.' });
-    res.json({ success: true, goal: enrichNinetyDayGoal(goal, todayStr), breakdown: describeCycleBreakdown(goal) });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.put('/api/ninety-day-goals/:id', (req, res) => {
-  try {
-    const db = getDb();
-    const todayStr = getSaoPauloDateStr();
-    db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
-    const index = db.ninetyDayGoals.findIndex(g => g.id === req.params.id);
-    if (index === -1) return res.status(404).json({ error: 'Meta de 90 dias não encontrada.' });
-    const updated = updateNinetyDayGoal(db.ninetyDayGoals[index], req.body || {}, todayStr);
-    db.ninetyDayGoals[index] = updated;
-    saveDb(db);
-    res.json({ success: true, goal: updated, breakdown: describeCycleBreakdown(updated) });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/ninety-day-goals/:id/progress', (req, res) => {
-  try {
-    const db = getDb();
-    const todayStr = getSaoPauloDateStr();
-    db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
-    const index = db.ninetyDayGoals.findIndex(g => g.id === req.params.id);
-    if (index === -1) return res.status(404).json({ error: 'Meta de 90 dias não encontrada.' });
-
-    const result = logNinetyDayGoalProgress(db.ninetyDayGoals[index], {
-      amount: req.body?.amount,
-      date: req.body?.date,
-      note: req.body?.note,
-      timestamp: req.body?.timestamp
-    }, todayStr);
-
-    db.ninetyDayGoals[index] = result.goal;
-
-    const defaultCat = db.questCategories?.[0]?.name || 'Pessoal';
-    const rewardResult = rewardPlayer({
-      xp: result.rewards.xp,
-      coins: result.rewards.coins,
-      willpower: result.rewards.willpower,
-      actionType: 'ninety_day_goal_progress',
-      entityId: result.log.id,
-      title: `${result.goal.title} (+${result.log.amount} ${result.goal.unitLabel || result.goal.unit || ''})`.trim(),
-      details: {
-        category: result.goal.category || defaultCat,
-        goalId: result.goal.id,
-        amount: result.log.amount,
-        justCompleted: result.justCompleted
-      },
-      timestamp: result.log.timestamp
-    });
-
-    saveDb(db);
-    res.json({
-      success: true,
-      goal: result.goal,
-      log: result.log,
-      justCompleted: result.justCompleted,
-      rewards: result.rewards,
-      rewardResult,
-      analytics: computeAnalytics()
-    });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.delete('/api/ninety-day-goals/:id/logs/:logId', (req, res) => {
-  try {
-    const db = getDb();
-    const todayStr = getSaoPauloDateStr();
-    db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
-    const index = db.ninetyDayGoals.findIndex(g => g.id === req.params.id);
-    if (index === -1) return res.status(404).json({ error: 'Meta de 90 dias não encontrada.' });
-
-    const result = deleteNinetyDayGoalLog(db.ninetyDayGoals[index], req.params.logId, todayStr);
-    db.ninetyDayGoals[index] = result.goal;
-
-    revertPlayerReward({
-      xp: result.removed.xpEarned || 0,
-      coins: result.removed.coinsEarned || 0,
-      willpower: result.removed.willpowerEarned || 0,
-      actionType: 'ninety_day_goal_progress',
-      entityId: result.removed.id
-    });
-
-    saveDb(db);
-    res.json({ success: true, goal: result.goal, removed: result.removed });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.delete('/api/ninety-day-goals/:id', (req, res) => {
-  try {
-    const db = getDb();
-    const todayStr = getSaoPauloDateStr();
-    db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
-    const index = db.ninetyDayGoals.findIndex(g => g.id === req.params.id);
-    if (index === -1) return res.status(404).json({ error: 'Meta de 90 dias não encontrada.' });
-    const [removed] = db.ninetyDayGoals.splice(index, 1);
-    (removed.logs || []).forEach((log) => {
-      revertPlayerReward({
-        xp: log.xpEarned || 0,
-        coins: log.coinsEarned || 0,
-        willpower: log.willpowerEarned || 0,
-        actionType: 'ninety_day_goal_progress',
-        entityId: log.id
-      });
-    });
-    saveDb(db);
-    res.json({ success: true, removed });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ==========================================
 // VITÓRIAS PLANEJADAS PARA O DIA
 // ==========================================
@@ -2191,7 +2033,8 @@ app.post('/api/daily-victories/:id/complete', (req, res) => {
       id: req.params.id,
       note: req.body?.note,
       completed: req.body?.completed,
-      durationMinutes: req.body?.durationMinutes
+      durationMinutes: req.body?.durationMinutes,
+      decisionId: req.body?.decisionId
     });
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
@@ -2785,6 +2628,12 @@ app.post('/api/mind-maps/:id/study', (req, res) => {
     });
 
     if (rewardResult?.logEntry?.id) result.session.rewardLogId = rewardResult.logEntry.id;
+    markDecisionCompleted(db, {
+      decisionId: req.body?.decisionId,
+      entityId: result.map.id,
+      kind: 'mindmap',
+      completionKind: 'study'
+    });
     saveDb(db);
     res.json({
       success: true,

@@ -15,8 +15,7 @@ import { OracleAnalytics } from './components/OracleAnalytics';
 import { NextActionCard } from './components/NextActionCard';
 import { LevelUpModal } from './components/LevelUpModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale, Headphones, Mountain, Network } from 'lucide-react';
-import { NinetyDayGoalsView } from './components/NinetyDayGoalsView';
+import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale, Headphones, Network } from 'lucide-react';
 import { MindMapsView } from './components/MindMapsView';
 import { AguCampaignView } from './components/AguCampaignView';
 import { FocusChamberView, FocusMiniPlayer } from './components/FocusPlayer';
@@ -91,6 +90,8 @@ export function App() {
     skipOracleEnergy,
     saveOpenRouterKey,
     declineOracleSuggestion,
+    breakDownQuest,
+    rescheduleQuests,
     acceptOracleDose,
     startAguPlan,
     toggleAguBlock,
@@ -103,11 +104,6 @@ export function App() {
     advanceAguCycle,
     logAguProduct,
     updateAguPlan,
-    addNinetyDayGoal,
-    updateNinetyDayGoal,
-    logNinetyDayGoalProgress,
-    deleteNinetyDayGoalLog,
-    deleteNinetyDayGoal,
     addDailyVictory,
     updateDailyVictory,
     completeDailyVictory,
@@ -213,7 +209,6 @@ export function App() {
     analytics,
     nextAction,
     locations,
-    ninetyDayGoals,
     dailyVictories,
     dailyVictoryBonuses,
     mindMaps,
@@ -231,7 +226,6 @@ export function App() {
   const activeProcessesCount = (processes || []).filter(p => p.status === 'in_progress').length;
   const aguToday = summarizePlan(aguPlan, examQuestions || [], todayStr).today;
   const aguTodayRemaining = Math.max(0, (aguToday.totalBlocks || 0) - (aguToday.doneCount || 0));
-  const activeNinetyDayGoalsCount = (ninetyDayGoals || []).filter(g => g.status === 'active' || g.status === 'expired').length;
   const dueMindMapsCount = analytics?.summary?.mindMapBranchesDue
     ?? (mindMaps || []).reduce((acc, m) => acc + (m.stats?.dueBranches || 0), 0);
 
@@ -242,7 +236,6 @@ export function App() {
     { id: 'maps', label: 'Mapas', icon: Network, badge: dueMindMapsCount },
     { id: 'processes', label: 'Processos', icon: Layers, badge: activeProcessesCount },
     { id: 'habits', label: 'Rituais', icon: Flame, badge: habits?.length },
-    { id: 'goals', label: '90 Dias', icon: Mountain, badge: activeNinetyDayGoalsCount },
     { id: 'focus', label: 'Foco', icon: Headphones },
     { id: 'rewards', label: 'Taverna', icon: Gift },
     { id: 'agu', label: 'AGU', icon: Scale, badge: aguTodayRemaining },
@@ -293,6 +286,9 @@ export function App() {
         quests={quests}
         onOpenQuests={() => setActiveTab('quests')}
         onOpenHabits={() => setActiveTab('habits')}
+        onOpenTab={(tab) => setActiveTab(tab)}
+        onBreakdownQuest={breakDownQuest}
+        onRescheduleQuests={rescheduleQuests}
         onRefresh={refreshNextAction}
         onSubmitEnergy={submitOracleEnergy}
         onSkipEnergy={skipOracleEnergy}
@@ -466,18 +462,6 @@ export function App() {
           />
         )}
 
-        {activeTab === 'goals' && (
-          <NinetyDayGoalsView
-            goals={ninetyDayGoals}
-            questCategories={questCategories}
-            onAddGoal={addNinetyDayGoal}
-            onUpdateGoal={updateNinetyDayGoal}
-            onLogProgress={logNinetyDayGoalProgress}
-            onDeleteLog={deleteNinetyDayGoalLog}
-            onDeleteGoal={deleteNinetyDayGoal}
-          />
-        )}
-
         {activeTab === 'focus' && (
           <FocusChamberView player={focusPlayer} playClick={playClick} />
         )}
@@ -522,6 +506,14 @@ export function App() {
             analytics={analytics}
             actionLogs={actionLogs}
             onRefresh={refresh}
+            onInsightAction={(action) => {
+              if (!action) return;
+              if (action.type === 'plan_victory') {
+                document.getElementById('vitorias-do-dia')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
+              }
+              if (action.payload?.tab) setActiveTab(action.payload.tab);
+            }}
           />
         )}
       </main>

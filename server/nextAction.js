@@ -27,8 +27,14 @@ import {
   DEFAULT_PRIORITY,
   getPriorityMeta,
   isPriorityKey,
+  normalizePriority,
+  PRIORITY_KEYS,
   PRIORITY_META
 } from '../src/utils/activityScale.js';
+import { summarizePlan } from '../src/utils/aguCycle.js';
+import { getAguSubject } from '../src/data/aguCurriculum.js';
+import { computeMapStats } from '../src/utils/mindMaps.js';
+import { computeOracleStats, hourSuccessTerm } from './oracleMemory.js';
 
 const LEGACY_PRIORITY_MAP = {
   epica: 'critico',
@@ -48,6 +54,15 @@ function priorityBand(priority) {
 }
 const HIST_MIN_SAMPLES = 5;
 const WINDOW_GRACE_MINUTES = 15;
+const DECLINE_MEMORY_MS = 7 * 24 * 60 * 60 * 1000;
+const WRONG_PLACE_MS = 4 * 60 * 60 * 1000;
+const NOT_PRIORITY_MS = 24 * 60 * 60 * 1000;
+const STALL_DAYS = 7;
+const PROCRASTINATION_DECLINES = 3;
+const OVERDUE_TRIAGE_MIN = 3;
+const CRITICAL_TRIAGE_DAYS = 7;
+const CRITICAL_BOOST_DAYS = 3;
+export const STARTER_DOSE_MINUTES = 5;
 const RELEVANT_LOG_TYPES = new Set(['quest_complete', 'habit_complete']);
 const HOUR_FIT_MAX = 8;
 const DAY_FIT_MAX = 4;
@@ -178,10 +193,14 @@ function urgencyScore(quest, todayStr, nowMinutes) {
   if (delta == null) return { score: 8, label: null, overdue: false, dueToday: false, dueSoon: false };
 
   if (delta < 0) {
+    const daysOverdue = Math.abs(delta);
+    // 1 dia e 40 dias não podem valer o mesmo: a idade do atraso pesa.
+    const ageBonus = Math.min(25, Math.round(3 * Math.sqrt(daysOverdue)));
     return {
-      score: 35,
-      label: `Atrasada desde ${formatDayMonth(quest.dueDate)}`,
+      score: 35 + ageBonus,
+      label: `Atrasada há ${daysOverdue} dia${daysOverdue === 1 ? '' : 's'}`,
       overdue: true,
+      daysOverdue,
       dueToday: false,
       dueSoon: false
     };
@@ -284,6 +303,77 @@ function ritualRiskScore(habit, weeklyStats, now, todayStr, extra) {
   return { score: 5, label: `Faltam ${remainingNeeded}x nesta semana` };
 }
 
+function stepPriorityDown(priority) {
+  const key = normalizePriority(priority);
+  const index = PRIORITY_KEYS.indexOf(key);
+  if (index <= 0) return key;
+  return PRIORITY_KEYS[index - 1];
+}
+
+/**
+ * Memória de recusa por entidade. wrong_place exclui naquele lugar por 4h;
+ * no_time/tired pedem dose pequena; not_priority desce um degrau por 24h;
+ * 3+ recusas/expirações em 7 dias marcam procrastinação.
+ */
+export function buildDeclineMemory(decisions, { now = new Date(), location = null } = {}) {
+  const reference = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  const byEntity = {};
+  (decisions || []).forEach(item => {
+    if (!item?.entityId) return;
+    const at = new Date(item.outcomeAt || item.resolvedAt || item.createdAt).getTime();
+    if (!Number.isFinite(at)) return;
+    const age = reference - at;
+    if (age < 0 || age > DECLINE_MEMORY_MS) return;
+    const postponed = item.outcome === 'declined' || item.outcome === 'expired' || item.outcome === 'superseded';
+    if (!postponed) return;
+    if (!byEntity[item.entityId]) {
+      byEntity[item.entityId] = {
+        declines: 0,
+        preferSmallDose: false,
+        priorityStepDown: false,
+        excludedLocation: null
+      };
+    }
+    const memory = byEntity[item.entityId];
+    memory.declines += 1;
+    if (item.outcome === 'declined' && age <= WRONG_PLACE_MS && item.declineReason === 'wrong_place') {
+      memory.excludedLocation = item.location || null;
+    }
+    if (item.outcome === 'declined' && (item.declineReason === 'no_time' || item.declineReason === 'tired')) {
+      memory.preferSmallDose = true;
+    }
+    if (item.outcome === 'declined' && item.declineReason === 'not_priority' && age <= NOT_PRIORITY_MS) {
+      memory.priorityStepDown = true;
+    }
+  });
+  return { byEntity, location };
+}
+
+function procrastinationOf(kind, item, todayStr, memory, urgency) {
+  const reasons = [];
+  const declines = memory?.declines || 0;
+  if (declines >= PROCRASTINATION_DECLINES) reasons.push(`${declines} recusas ou expirações em 7 dias`);
+  const daysOverdue = urgency?.daysOverdue || 0;
+  if (kind === 'quest' && daysOverdue >= STALL_DAYS) reasons.push(`Atrasada há ${daysOverdue} dias`);
+  if (kind === 'quest') {
+    const created = (item.createdAt || '').slice(0, 10);
+    const age = created ? daysBetween(created, todayStr) : null;
+    const subtasks = Array.isArray(item.subtasks) ? item.subtasks : [];
+    const progress = subtasks.some(st => st && st.completed);
+    if (age != null && age >= 14 && subtasks.length > 0 && !progress && !item.completed) {
+      reasons.push('Pendente há 14 dias ou mais, sem subtarefa concluída');
+    } else if (age != null && age >= 14 && subtasks.length === 0 && !item.dueDate) {
+      reasons.push('Pendente há 14 dias ou mais, sem ser quebrada em passos');
+    }
+  }
+  return {
+    flagged: reasons.length > 0,
+    reasons,
+    postponeCount: declines,
+    daysOverdue
+  };
+}
+
 function freshnessScore(item, todayStr, kind) {
   const created = (item.createdAt || '').slice(0, 10);
   if (!created) return kind === 'quest' ? 2 : 1;
@@ -326,9 +416,31 @@ function scoreCandidate({
   dayOfWeek,
   hist,
   extra,
-  weeklyStats
+  weeklyStats,
+  declineMemory,
+  oracleStats
 }) {
   const reasons = [];
+  const memory = declineMemory?.byEntity?.[item.id] || null;
+
+  if (kind === 'agu' || kind === 'mindmap' || kind === 'reading') {
+    const base = kind === 'reading' ? 6 : (kind === 'mindmap' ? 11 : 16);
+    if (item.reason) reasons.push(item.reason);
+    return {
+      score: base,
+      reasons: reasons.slice(0, 3),
+      urgency: { score: base, label: item.reason || null, overdue: false, dueToday: kind !== 'reading', dueSoon: false },
+      urgencyClass: 0,
+      hourFit: 0.5,
+      dayFit: 0.5,
+      histSource: 'plan',
+      nextSubtask: null,
+      procrastination: { flagged: false, reasons: [], postponeCount: 0, daysOverdue: 0 },
+      firstStep: null,
+      preferSmallDose: false,
+      effectivePriority: kind === 'reading' ? 'opcional' : 'bom_fazer'
+    };
+  }
 
   // A vitória do dia não disputa ponto com ninguém: ela é o plano do dia.
   if (kind === 'victory') {
@@ -345,7 +457,11 @@ function scoreCandidate({
       hourFit: 1,
       dayFit: 1,
       histSource: 'plan',
-      nextSubtask: null
+      nextSubtask: null,
+      procrastination: { flagged: false, reasons: [], postponeCount: 0, daysOverdue: 0 },
+      firstStep: null,
+      preferSmallDose: false,
+      effectivePriority: 'critico'
     };
   }
 
@@ -353,7 +469,8 @@ function scoreCandidate({
     ? urgencyScore(item, todayStr, nowMinutes)
     : { score: 8, label: extra ? 'Extra da semana' : null, overdue: false, dueToday: false, dueSoon: false };
 
-  const priorityKey = resolvePriorityKey(item);
+  let priorityKey = resolvePriorityKey(item);
+  if (memory?.priorityStepDown) priorityKey = stepPriorityDown(priorityKey);
   const priorityMeta = getPriorityMeta(priorityKey);
   const priorityPts = priorityMeta.score;
 
@@ -368,8 +485,14 @@ function scoreCandidate({
     : { score: 0, label: null };
 
   const freshPts = freshnessScore(item, todayStr, kind);
+  const hourSuccessPts = hourSuccessTerm(oracleStats, hour);
+  const declinePenalty = memory ? Math.min(18, 6 * memory.declines) : 0;
 
-  if (urgency.label) reasons.push(urgency.label);
+  if (urgency.label && (kind !== 'quest' || !urgency.overdue || priorityKey === 'critico' || priorityKey === 'importante')) {
+    reasons.push(urgency.label);
+  } else if (urgency.label && urgency.overdue) {
+    reasons.push(urgency.label);
+  }
   if (priorityKey === 'critico') reasons.push('Prioridade crítica');
   else if (priorityKey === 'importante' && !urgency.overdue) reasons.push('Prioridade importante');
   else if (priorityKey === 'dispensavel') reasons.push('Prioridade dispensável');
@@ -388,12 +511,30 @@ function scoreCandidate({
     reasons.push('Dentro do seu pico de produtividade');
   }
 
+  const procrastination = procrastinationOf(kind, item, todayStr, memory, urgency);
   const nextSubtask = kind === 'quest' ? nextOpenSubtask(item) : null;
-  if (nextSubtask?.title) {
+  let firstStep = null;
+  if (procrastination.flagged && kind === 'quest') {
+    if (nextSubtask?.title) {
+      firstStep = { mode: 'subtask', subtaskId: nextSubtask.id, title: nextSubtask.title, minutes: STARTER_DOSE_MINUTES };
+      reasons.unshift(`Primeiro passo: ${nextSubtask.title}`);
+    } else {
+      firstStep = {
+        mode: 'starter',
+        title: 'Quebre em 3 passos',
+        minutes: STARTER_DOSE_MINUTES,
+        suggestion: 'Quebre em 3 passos e faça só o primeiro, por 5 minutos.'
+      };
+      reasons.unshift('Procrastinando: quebre em 3 passos');
+    }
+  } else if (nextSubtask?.title) {
     reasons.push(`Próximo passo: ${nextSubtask.title}`);
   }
+  if (memory?.preferSmallDose && !firstStep) {
+    reasons.push('Recusou por tempo ou cansaço: comece pequeno');
+  }
 
-  const score = urgency.score + priorityPts + hourPts + dayPts + risk.score + freshPts;
+  const score = urgency.score + priorityPts + hourPts + dayPts + risk.score + freshPts + hourSuccessPts - declinePenalty;
   // Dentro da mesma faixa de prioridade, prazos concretos não perdem para pico horário.
   const urgencyClass = urgency.overdue ? 3 : urgency.dueToday ? 2 : (urgency.dueSoon ? 1 : 0);
 
@@ -405,7 +546,12 @@ function scoreCandidate({
     hourFit,
     dayFit,
     histSource: histograms.source,
-    nextSubtask: nextSubtask ? { id: nextSubtask.id, title: nextSubtask.title } : null
+    nextSubtask: nextSubtask ? { id: nextSubtask.id, title: nextSubtask.title } : null,
+    procrastination,
+    firstStep,
+    preferSmallDose: !!memory?.preferSmallDose,
+    effectivePriority: priorityKey,
+    declinePenalty
   };
 }
 
@@ -420,8 +566,11 @@ function serializeCandidate(kind, item, scoring, extra, weeklyStats, completedTo
     locationLabel: loc.label,
     locationEmoji: loc.emoji,
     timeWindow: item.timeWindow || null,
-    priority: resolvePriorityKey(item),
+    priority: scoring.effectivePriority || resolvePriorityKey(item),
     dueDate: kind === 'quest' ? (item.dueDate || null) : null,
+    estimatedMinutes: item.estimatedMinutes || null,
+    openTab: item.openTab || null,
+    blockKey: item.blockKey || null,
     dueTime: kind === 'quest' ? (item.dueTime || null) : null,
     score: scoring.score,
     urgencyClass: scoring.urgencyClass || 0,
@@ -432,6 +581,10 @@ function serializeCandidate(kind, item, scoring, extra, weeklyStats, completedTo
       ? 'Vitória planejada para hoje'
       : (kind === 'habit' ? 'Ritual pendente agora' : 'Missão pendente agora')),
     nextSubtask: scoring.nextSubtask,
+    procrastination: scoring.procrastination || { flagged: false, reasons: [], postponeCount: 0, daysOverdue: 0 },
+    firstStep: scoring.firstStep || null,
+    preferSmallDose: !!scoring.preferSmallDose,
+    daysOverdue: scoring.urgency?.daysOverdue || 0,
     extra: !!extra,
     frequency: kind === 'habit' ? (item.frequency || 'daily') : null,
     currentStreak: kind === 'habit' ? (item.currentStreak || 0) : null,
@@ -467,11 +620,22 @@ function comparePriorityRank(a, b) {
   return bP - aP;
 }
 
+function isCriticalOverdueBoost(item) {
+  return item?.kind === 'quest'
+    && item.priority === 'critico'
+    && (item.daysOverdue || 0) >= CRITICAL_BOOST_DAYS;
+}
+
 function compareCandidates(a, b) {
   // Vitória planejada para hoje vem antes de missão e ritual.
   const aVictory = a.kind === 'victory' ? 1 : 0;
   const bVictory = b.kind === 'victory' ? 1 : 0;
   if (bVictory !== aVictory) return bVictory - aVictory;
+
+  // Crítica atrasada há 3+ dias vem logo depois das vitórias, acima do ritual.
+  const aBoost = isCriticalOverdueBoost(a) ? 1 : 0;
+  const bBoost = isCriticalOverdueBoost(b) ? 1 : 0;
+  if (bBoost !== aBoost) return bBoost - aBoost;
 
   // Faixa alta (Importante/Crítico) sempre vence Dispensável/Opcional/Bom fazer.
   const aBand = priorityBand(a.priority);
@@ -499,6 +663,120 @@ function compareCandidates(a, b) {
   const bStreak = b.currentStreak || 0;
   if (bStreak !== aStreak) return bStreak - aStreak;
   return (a.id || '').localeCompare(b.id || '');
+}
+
+function buildTriage(candidates) {
+  const overdue = candidates.filter(item => item.kind === 'quest' && item.overdue);
+  const criticalOld = overdue.some(item => item.priority === 'critico' && (item.daysOverdue || 0) >= CRITICAL_TRIAGE_DAYS);
+  if (overdue.length <= OVERDUE_TRIAGE_MIN && !criticalOld) return null;
+  const items = overdue
+    .slice()
+    .sort((a, b) => {
+      const priority = comparePriorityRank(a, b);
+      if (priority) return priority;
+      return (b.daysOverdue || 0) - (a.daysOverdue || 0);
+    })
+    .slice(0, 8)
+    .map(item => ({
+      id: item.id,
+      title: item.title,
+      priority: item.priority,
+      dueDate: item.dueDate,
+      daysOverdue: item.daysOverdue || 0,
+      category: item.category
+    }));
+  return {
+    items,
+    suggestion: 'Faça 1 hoje e remarque o resto.'
+  };
+}
+
+function aguCandidate(db, todayStr) {
+  const plan = db.aguPlan;
+  if (!plan?.startedAt) return null;
+  let summary;
+  try {
+    summary = summarizePlan(plan, db.examQuestions || [], todayStr);
+  } catch {
+    return null;
+  }
+  const block = (summary?.today?.blocks || []).find(item => item && !item.done);
+  if (!block) return null;
+  const subject = block.subject?.name || getAguSubject(block.subjectId)?.name || block.subjectId;
+  const kindLabel = block.kindMeta?.label || block.kind || 'bloco';
+  return {
+    id: `agu:${block.key}`,
+    title: `${subject}: ${kindLabel}`,
+    description: block.topicName || '',
+    category: 'Estudos',
+    location: 'anywhere',
+    priority: 'bom_fazer',
+    reason: 'Bloco AGU de hoje',
+    estimatedMinutes: block.targetMinutes || summary.blockMinutes || 30,
+    blockKey: block.key,
+    subjectId: block.subjectId,
+    topicId: block.topicId || null,
+    openTab: 'agu'
+  };
+}
+
+function mindMapCandidate(db, todayStr) {
+  let best = null;
+  let bestDue = 0;
+  (db.mindMaps || []).forEach(map => {
+    if (!map) return;
+    const stats = computeMapStats(map, { today: todayStr });
+    if ((stats.dueBranches || 0) > bestDue) {
+      best = map;
+      bestDue = stats.dueBranches;
+    }
+  });
+  if (!best || bestDue <= 0) return null;
+  return {
+    id: best.id,
+    title: best.title,
+    description: best.description || '',
+    category: 'Estudos',
+    location: 'anywhere',
+    priority: 'bom_fazer',
+    reason: `${bestDue} ramo${bestDue === 1 ? '' : 's'} vencido${bestDue === 1 ? '' : 's'}`,
+    estimatedMinutes: 10,
+    dueBranches: bestDue,
+    openTab: 'maps'
+  };
+}
+
+function stalledBookCandidate(db, todayStr) {
+  const sessions = db.readingSessions || [];
+  let best = null;
+  let bestDays = 0;
+  (db.books || []).forEach(book => {
+    if (!book || book.status !== 'reading') return;
+    const own = sessions.filter(session => session.bookId === book.id);
+    const last = own.reduce((max, session) => {
+      const date = (session.date || session.timestamp || '').slice(0, 10);
+      return date > max ? date : max;
+    }, (book.updatedAt || book.createdAt || '').slice(0, 10));
+    const stalled = last ? daysBetween(last, todayStr) : STALL_DAYS;
+    if (stalled == null || stalled < STALL_DAYS) return;
+    if (stalled > bestDays) {
+      best = book;
+      bestDays = stalled;
+    }
+  });
+  if (!best) return null;
+  return {
+    id: best.id,
+    title: best.title,
+    description: best.author || '',
+    category: best.category || 'Estudos',
+    location: 'anywhere',
+    priority: 'opcional',
+    reason: `Livro parado há ${bestDays} dias — leia 10 min`,
+    estimatedMinutes: 10,
+    stalledDays: bestDays,
+    openTab: 'books'
+  };
 }
 
 function countDeferred(eligibleWrongPlace) {
@@ -536,10 +814,15 @@ export function computeNextAction(db, options = {}) {
   const nowMinutes = hour * 60 + minute;
   const dayOfWeek = getSaoPauloDayOfWeek(now);
   const snoozed = new Set((options.snoozedIds || []).filter(Boolean));
+  (db.oracleSnoozes || []).forEach(item => {
+    if (!item?.entityId || !item.expiresAt) return;
+    if (new Date(item.expiresAt).getTime() > now.getTime()) snoozed.add(item.entityId);
+  });
   const categories = db.questCategories || [];
-
   const ctx = resolveContextLocation(db, options, now);
   const location = ctx.location;
+  const declineMemory = buildDeclineMemory(db.oracleDecisions, { now, location });
+  const oracleStats = options.oracleStats || computeOracleStats(db, now);
   const locMeta = getLocationMeta(location);
   const hist = buildHistoryIndexes(db.actionLogs || []);
 
@@ -556,6 +839,8 @@ export function computeNextAction(db, options = {}) {
 
   const consider = (kind, item, extra, weeklyStats, completedToday, order = 0) => {
     if (snoozed.has(item.id)) return;
+    const memory = declineMemory.byEntity[item.id];
+    if (memory?.excludedLocation && memory.excludedLocation === location && location !== 'anywhere') return;
     const scoring = scoreCandidate({
       kind,
       item,
@@ -566,7 +851,9 @@ export function computeNextAction(db, options = {}) {
       dayOfWeek,
       hist,
       extra,
-      weeklyStats
+      weeklyStats,
+      declineMemory,
+      oracleStats
     });
     const serialized = serializeCandidate(kind, item, scoring, extra, weeklyStats, completedToday);
     // A ordem de cadastro desempata as vitórias do dia entre si.
@@ -635,6 +922,17 @@ export function computeNextAction(db, options = {}) {
     consider('habit', item, due.extra, weeklyStats, due.completedToday);
   });
 
+  const studyCandidates = [
+    ['agu', aguCandidate(db, todayStr)],
+    ['mindmap', mindMapCandidate(db, todayStr)],
+    ['reading', stalledBookCandidate(db, todayStr)]
+  ];
+  studyCandidates.forEach(([kind, item]) => {
+    if (!item) return;
+    if (!locationMatches(item.location || 'anywhere', location)) return;
+    consider(kind, item, false, null, false);
+  });
+
   main.sort(compareCandidates);
   extras.sort(compareCandidates);
 
@@ -695,6 +993,7 @@ export function computeNextAction(db, options = {}) {
     deferredByLocation,
     deferredByTime,
     emptyReason,
+    triage: buildTriage(main),
     counts: {
       eligible: main.length,
       extras: extras.length,
@@ -704,4 +1003,4 @@ export function computeNextAction(db, options = {}) {
   };
 }
 
-export { daysBetween, formatDayMonth };
+export { daysBetween, formatDayMonth, urgencyScore, buildTriage };

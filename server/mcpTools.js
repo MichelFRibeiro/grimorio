@@ -5,7 +5,7 @@ import { formatBrl } from '../src/utils/coinExchange.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings } from './rankings.js';
 import { suggestNextAction, previewNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly } from './oracleSuggest.js';
-import { markDecisionAccepted } from './oracleMemory.js';
+import { markDecisionAccepted, markDecisionCompleted } from './oracleMemory.js';
 import {
   summarizePlan,
   startAguPlan,
@@ -39,18 +39,6 @@ import {
 } from './timeUtils.js';
 import { applyHabitFrequency } from '../src/utils/habitFrequency.js';
 import {
-  MAX_ACTIVE_NINETY_DAY_GOALS,
-  countOccupiedNinetyDayGoalSlots,
-  createNinetyDayGoal,
-  deleteNinetyDayGoalLog,
-  describeCycleBreakdown,
-  enrichNinetyDayGoal,
-  logNinetyDayGoalProgress,
-  previewNinetyDayGoal,
-  sanitizeNinetyDayGoals,
-  updateNinetyDayGoal
-} from '../src/utils/ninetyDayGoals.js';
-import {
   MAX_DAILY_VICTORIES,
   EXTENDED_MAX_DAILY_VICTORIES,
   DAILY_VICTORY_REWARDS,
@@ -68,6 +56,8 @@ import {
 import { syncDailyVictoriesFromActivity } from './dailyVictorySync.js';
 import {
   completeQuest as domainCompleteQuest,
+  breakDownQuest as domainBreakDownQuest,
+  rescheduleQuests as domainRescheduleQuests,
   deleteQuest as domainDeleteQuest,
   toggleHabit as domainToggleHabit,
   deleteHabit as domainDeleteHabit,
@@ -337,14 +327,16 @@ export const toolsDefinition = [
     schema: {
       id: z.string().describe('ID da missão'),
       completed: z.boolean().optional().describe('Definir explicitamente como concluída (true) ou pendente (false). Se omitido, alterna o estado atual.'),
-      durationMinutes: z.number().optional().describe('Tempo cronometrado da missão em minutos (igual às sessões de leitura e baterias de questões)')
+      durationMinutes: z.number().optional().describe('Tempo cronometrado da missão em minutos (igual às sessões de leitura e baterias de questões)'),
+      decisionId: z.string().optional().describe('ID da indicação do Oráculo, se a conclusão veio dela')
     },
     handler: async (args) => {
       const db = getDb();
       const result = domainCompleteQuest(db, {
         id: args.id,
         completed: args.completed,
-        durationMinutes: args.durationMinutes
+        durationMinutes: args.durationMinutes,
+        decisionId: args.decisionId
       });
       if (result.error) return formatError(result.error);
       if (result.stateUnchanged) {
@@ -357,6 +349,36 @@ export const toolsDefinition = [
         rewardResult: result.rewardResult,
         linkedVictories: result.linkedVictories
       }, result.willComplete ? `🎉 Missão '${result.quest.title}' concluída! Recompensas concedidas.` : `Missão '${result.quest.title}' desmarcada e recompensas estornadas.`);
+    }
+  },
+  {
+    name: 'break_down_quest',
+    description: 'Quebrar uma missão em passos curtos. Acrescenta subtarefas sem apagar as existentes. Use quando a missão está procrastinada.',
+    schema: {
+      id: z.string().describe('ID da missão'),
+      steps: z.array(z.string()).describe('Passos, do primeiro ao último (2 a 8)')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = domainBreakDownQuest(db, args.id, args.steps);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess({ quest: result.quest, added: result.added }, `Missão quebrada em ${result.added.length} passo(s).`);
+    }
+  },
+  {
+    name: 'reschedule_quests',
+    description: 'Remarcar um lote de missões para outra data. Use na triagem de atrasadas: faça 1 hoje e remarque o resto.',
+    schema: {
+      ids: z.array(z.string()).describe('IDs das missões a remarcar'),
+      dueDate: z.string().nullable().optional().describe('Nova data YYYY-MM-DD, ou null para tirar o prazo')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = domainRescheduleQuests(db, { ids: args.ids, dueDate: args.dueDate });
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result, `${result.updated.length} missão(ões) remarcada(s).`);
     }
   },
   {
@@ -662,7 +684,8 @@ export const toolsDefinition = [
         page: z.number().optional().describe('Número da página'),
         note: z.string().optional().describe('Reflexão pessoal')
       })).optional().describe('Citações coletadas durante esta sessão'),
-      date: z.string().optional().describe('Data da sessão YYYY-MM-DD')
+      date: z.string().optional().describe('Data da sessão YYYY-MM-DD'),
+      decisionId: z.string().optional().describe('ID da indicação do Oráculo')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1434,7 +1457,8 @@ export const toolsDefinition = [
         quality: z.number().describe('0 esqueci, 1 difícil, 2 bom, 3 fácil')
       })).describe('Avaliações dos ramos'),
       durationMinutes: z.number().optional().describe('Duração da sessão em minutos'),
-      mode: z.enum(['branches', 'cards', 'fill']).optional().describe('Modo de estudo: ramos, cartões ou preencher mapa')
+      mode: z.enum(['branches', 'cards', 'fill']).optional().describe('Modo de estudo: ramos, cartões ou preencher mapa'),
+      decisionId: z.string().optional().describe('ID da indicação do Oráculo')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1451,6 +1475,7 @@ export const toolsDefinition = [
         });
         db.mindMaps[index] = result.map;
         db.mindMapSessions.unshift(result.session);
+        markDecisionCompleted(db, { decisionId: args.decisionId, entityId: result.map.id, kind: 'mindmap', completionKind: 'study' });
         const rewardResult = rewardPlayer({
           xp: result.rewards.xp,
           coins: result.rewards.coins,
@@ -2131,251 +2156,13 @@ export const toolsDefinition = [
       const key = args.key || match?.key || `${dateStr}|${args.subjectId}|${kind}`;
       db.aguPlan = toggleCompletedBlock(plan, key);
       db.aguPlan = addBlockDuration(db.aguPlan, key, args.durationMinutes);
+      if (db.aguPlan?.completedBlocks?.[key]) {
+        markDecisionCompleted(db, { decisionId: args.decisionId, entityId: `agu:${key}`, kind: 'agu', completionKind: 'block' });
+      }
       const linkedVictories = syncDailyVictoriesFromActivity(db, { today: todayStr, syncStudy: true });
       saveDb(db);
       const next = summarizePlan(db.aguPlan, db.examQuestions || [], todayStr);
       return formatSuccess({ key, plan: db.aguPlan, today: next.today, linkedVictories }, `Bloco ${key} alternado.`);
-    }
-  },
-  // ==========================================
-  // METAS DE 90 DIAS
-  // ==========================================
-  {
-    name: 'list_ninety_day_goals',
-    description: 'Listar as Metas de 90 dias do herói (máximo de 3 ativas). Inclui progresso, ritmo e ciclos de 30/15/7 dias.',
-    schema: {
-      status: z.enum(['active', 'completed', 'expired', 'archived', 'all']).optional().describe('Filtrar por status (padrão: all)')
-    },
-    handler: async (args) => {
-      const db = getDb();
-      const todayStr = getSaoPauloDateStr();
-      let goals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr).map(g => enrichNinetyDayGoal(g, todayStr));
-      if (args.status && args.status !== 'all') {
-        goals = goals.filter(g => g.status === args.status);
-      }
-      return formatSuccess({
-        total: goals.length,
-        occupiedSlots: countOccupiedNinetyDayGoalSlots(sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr)),
-        maxActive: MAX_ACTIVE_NINETY_DAY_GOALS,
-        goals
-      }, `${goals.length} meta(s) de 90 dias.`);
-    }
-  },
-  {
-    name: 'get_ninety_day_goal',
-    description: 'Obter detalhes de uma Meta de 90 dias, incluindo submetas de mês, quinzena e semana e o histórico de avanços.',
-    schema: {
-      id: z.string().describe('ID da meta de 90 dias')
-    },
-    handler: async (args) => {
-      const db = getDb();
-      const todayStr = getSaoPauloDateStr();
-      const goal = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr)
-        .map(g => enrichNinetyDayGoal(g, todayStr))
-        .find(g => g.id === args.id);
-      if (!goal) return formatError(`Meta de 90 dias '${args.id}' não encontrada.`);
-      return formatSuccess({ goal, breakdown: describeCycleBreakdown(goal) }, 'Meta de 90 dias encontrada.');
-    }
-  },
-  {
-    name: 'preview_ninety_day_goal',
-    description: 'Interpretar um enunciado de meta (ex: "Quero perder 9 quilos") e mostrar a quebra automática em ciclos de 30, 15 e 7 dias, sem cadastrar.',
-    schema: {
-      title: z.string().describe('Enunciado da meta (ex: Quero perder 9 quilos, Quero estudar 180 horas)'),
-      targetAmount: z.number().optional().describe('Valor numérico da meta, se o título não contiver número'),
-      unit: z.string().optional().describe('Unidade (kg, horas, páginas...)'),
-      startDate: z.string().optional().describe('Início YYYY-MM-DD (padrão: hoje)')
-    },
-    handler: async (args) => {
-      const todayStr = getSaoPauloDateStr();
-      const preview = previewNinetyDayGoal(args, todayStr);
-      if (!preview.valid) return formatError(preview.error || 'Não foi possível interpretar a meta.');
-      return formatSuccess({
-        preview,
-        breakdown: describeCycleBreakdown({
-          unit: preview.unit,
-          unitLabel: preview.unitLabel,
-          cycles: preview.cycles
-        })
-      }, `Quebra: ${preview.monthTarget} /mês · ${preview.fortnightTarget} /quinzena · ${preview.weekTarget} /semana.`);
-    }
-  },
-  {
-    name: 'create_ninety_day_goal',
-    description: 'Cadastrar uma Meta de 90 dias (máximo de 3 ativas). O sistema interpreta o enunciado e gera automaticamente as submetas de 30, 15 e 7 dias.',
-    schema: {
-      title: z.string().describe('Enunciado da meta (ex: Quero perder 9 quilos)'),
-      description: z.string().optional().describe('Contexto adicional'),
-      category: z.string().optional().describe('Categoria (ex: Saúde, Estudos, Pessoal)'),
-      targetAmount: z.number().optional().describe('Valor numérico se o título não tiver número'),
-      unit: z.string().optional().describe('Unidade (kg, horas, páginas...)'),
-      unitLabel: z.string().optional().describe('Rótulo da unidade para exibição'),
-      direction: z.enum(['accumulate', 'reduce']).optional().describe('accumulate = somar progresso; reduce = perder/quitar'),
-      startDate: z.string().optional().describe('Início YYYY-MM-DD (padrão: hoje)'),
-      icon: z.string().optional().describe('Ícone Lucide (ex: Mountain, Flame, BookOpen)')
-    },
-    handler: async (args) => {
-      const db = getDb();
-      const todayStr = getSaoPauloDateStr();
-      db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
-      if (countOccupiedNinetyDayGoalSlots(db.ninetyDayGoals) >= MAX_ACTIVE_NINETY_DAY_GOALS) {
-        return formatError(`Você já tem ${MAX_ACTIVE_NINETY_DAY_GOALS} metas de 90 dias em andamento. Conclua, archive ou exclua uma delas para cadastrar outra.`);
-      }
-      try {
-        const defaultCat = db.questCategories?.[0]?.name || 'Pessoal';
-        const goal = createNinetyDayGoal({
-          ...args,
-          category: args.category || defaultCat
-        }, { today: todayStr });
-        db.ninetyDayGoals.unshift(goal);
-        saveDb(db);
-        return formatSuccess({
-          goal,
-          breakdown: describeCycleBreakdown(goal),
-          occupiedSlots: countOccupiedNinetyDayGoalSlots(db.ninetyDayGoals)
-        }, `Meta de 90 dias criada: ${goal.title}.`);
-      } catch (err) {
-        return formatError(err.message);
-      }
-    }
-  },
-  {
-    name: 'update_ninety_day_goal',
-    description: 'Atualizar título, valor, categoria ou arquivar uma Meta de 90 dias. Alterar a data de início só é permitido sem avanços registrados.',
-    schema: {
-      id: z.string().describe('ID da meta'),
-      title: z.string().optional(),
-      description: z.string().optional(),
-      category: z.string().optional(),
-      targetAmount: z.number().optional(),
-      unit: z.string().optional(),
-      unitLabel: z.string().optional(),
-      direction: z.enum(['accumulate', 'reduce']).optional(),
-      startDate: z.string().optional(),
-      status: z.enum(['active', 'archived']).optional().describe('Use archived para liberar o slot sem excluir o histórico'),
-      icon: z.string().optional()
-    },
-    handler: async (args) => {
-      const db = getDb();
-      const todayStr = getSaoPauloDateStr();
-      db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
-      const index = db.ninetyDayGoals.findIndex(g => g.id === args.id);
-      if (index === -1) return formatError(`Meta de 90 dias '${args.id}' não encontrada.`);
-      try {
-        const updated = updateNinetyDayGoal(db.ninetyDayGoals[index], args, todayStr);
-        db.ninetyDayGoals[index] = updated;
-        saveDb(db);
-        return formatSuccess({ goal: updated, breakdown: describeCycleBreakdown(updated) }, 'Meta de 90 dias atualizada.');
-      } catch (err) {
-        return formatError(err.message);
-      }
-    }
-  },
-  {
-    name: 'log_ninety_day_goal_progress',
-    description: 'Registrar avanço em uma Meta de 90 dias. O valor é compilado automaticamente na semana, quinzena, mês e na meta de 90 dias. Concede XP, moedas e Vontade.',
-    schema: {
-      id: z.string().describe('ID da meta de 90 dias'),
-      amount: z.number().describe('Quanto avançou agora (ex: 0.75 para 750g, 2 para 2 horas)'),
-      date: z.string().optional().describe('Data YYYY-MM-DD (padrão: hoje). Precisa estar na janela de 90 dias.'),
-      note: z.string().optional().describe('Anotação do avanço')
-    },
-    handler: async (args) => {
-      const db = getDb();
-      const todayStr = getSaoPauloDateStr();
-      db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
-      const index = db.ninetyDayGoals.findIndex(g => g.id === args.id);
-      if (index === -1) return formatError(`Meta de 90 dias '${args.id}' não encontrada.`);
-      try {
-        const result = logNinetyDayGoalProgress(db.ninetyDayGoals[index], {
-          amount: args.amount,
-          date: args.date,
-          note: args.note
-        }, todayStr);
-        db.ninetyDayGoals[index] = result.goal;
-        const defaultCat = db.questCategories?.[0]?.name || 'Pessoal';
-        const rewardResult = rewardPlayer({
-          xp: result.rewards.xp,
-          coins: result.rewards.coins,
-          willpower: result.rewards.willpower,
-          actionType: 'ninety_day_goal_progress',
-          entityId: result.log.id,
-          title: `${result.goal.title} (+${result.log.amount} ${result.goal.unitLabel || result.goal.unit || ''})`.trim(),
-          details: {
-            category: result.goal.category || defaultCat,
-            goalId: result.goal.id,
-            amount: result.log.amount,
-            justCompleted: result.justCompleted
-          },
-          timestamp: result.log.timestamp
-        });
-        saveDb(db);
-        return formatSuccess({
-          goal: result.goal,
-          log: result.log,
-          justCompleted: result.justCompleted,
-          rewards: result.rewards,
-          rewardResult
-        }, `Avanço registrado: +${result.log.amount} ${result.goal.unitLabel || ''}.`);
-      } catch (err) {
-        return formatError(err.message);
-      }
-    }
-  },
-  {
-    name: 'delete_ninety_day_goal_log',
-    description: 'Excluir um avanço de Meta de 90 dias, recompilando semana/quinzena/mês/90 dias e estornando recompensas.',
-    schema: {
-      id: z.string().describe('ID da meta'),
-      logId: z.string().describe('ID do registro de avanço')
-    },
-    handler: async (args) => {
-      const db = getDb();
-      const todayStr = getSaoPauloDateStr();
-      db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
-      const index = db.ninetyDayGoals.findIndex(g => g.id === args.id);
-      if (index === -1) return formatError(`Meta de 90 dias '${args.id}' não encontrada.`);
-      try {
-        const result = deleteNinetyDayGoalLog(db.ninetyDayGoals[index], args.logId, todayStr);
-        db.ninetyDayGoals[index] = result.goal;
-        revertPlayerReward({
-          xp: result.removed.xpEarned || 0,
-          coins: result.removed.coinsEarned || 0,
-          willpower: result.removed.willpowerEarned || 0,
-          actionType: 'ninety_day_goal_progress',
-          entityId: result.removed.id
-        });
-        saveDb(db);
-        return formatSuccess({ goal: result.goal, removed: result.removed }, 'Avanço estornado e ciclos recompilados.');
-      } catch (err) {
-        return formatError(err.message);
-      }
-    }
-  },
-  {
-    name: 'delete_ninety_day_goal',
-    description: 'Excluir uma Meta de 90 dias e estornar todas as recompensas dos avanços registrados.',
-    schema: {
-      id: z.string().describe('ID da meta a ser excluída')
-    },
-    handler: async (args) => {
-      const db = getDb();
-      const todayStr = getSaoPauloDateStr();
-      db.ninetyDayGoals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr);
-      const index = db.ninetyDayGoals.findIndex(g => g.id === args.id);
-      if (index === -1) return formatError(`Meta de 90 dias '${args.id}' não encontrada.`);
-      const [removed] = db.ninetyDayGoals.splice(index, 1);
-      (removed.logs || []).forEach((log) => {
-        revertPlayerReward({
-          xp: log.xpEarned || 0,
-          coins: log.coinsEarned || 0,
-          willpower: log.willpowerEarned || 0,
-          actionType: 'ninety_day_goal_progress',
-          entityId: log.id
-        });
-      });
-      saveDb(db);
-      return formatSuccess({ removed }, 'Meta de 90 dias excluída e recompensas estornadas.');
     }
   },
   // ==========================================
@@ -2743,7 +2530,6 @@ export const resourcesDefinition = [
             books: (db.books || []).length,
             processes: (db.processes || []).length,
             habits: (db.habits || []).length,
-            ninetyDayGoals: (db.ninetyDayGoals || []).length,
             dailyVictories: (db.dailyVictories || []).length,
             mindMaps: (db.mindMaps || []).length
           }
@@ -2837,22 +2623,6 @@ export const resourcesDefinition = [
         uri: 'grimorio://processes',
         mimeType: 'application/json',
         text: JSON.stringify(db.processes || [], null, 2)
-      };
-    }
-  },
-  {
-    uri: 'grimorio://ninety-day-goals',
-    name: 'Metas de 90 Dias',
-    description: 'Metas de 90 dias com submetas de 30, 15 e 7 dias e histórico de avanços',
-    mimeType: 'application/json',
-    handler: async () => {
-      const db = getDb();
-      const todayStr = getSaoPauloDateStr();
-      const goals = sanitizeNinetyDayGoals(db.ninetyDayGoals, todayStr).map(g => enrichNinetyDayGoal(g, todayStr));
-      return {
-        uri: 'grimorio://ninety-day-goals',
-        mimeType: 'application/json',
-        text: JSON.stringify(goals, null, 2)
       };
     }
   },

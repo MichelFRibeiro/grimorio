@@ -17,6 +17,9 @@ export function NextActionCard({
   onCompleteVictory,
   onOpenQuests,
   onOpenHabits,
+  onOpenTab,
+  onBreakdownQuest,
+  onRescheduleQuests,
   onRefresh,
   onSubmitEnergy,
   onSkipEnergy,
@@ -40,6 +43,10 @@ export function NextActionCard({
   const [showTrace, setShowTrace] = useState(false);
   const [showMemory, setShowMemory] = useState(false);
   const [refreshError, setRefreshError] = useState('');
+  const [breakingDown, setBreakingDown] = useState(false);
+  const [stepsText, setStepsText] = useState('');
+  const [triageDate, setTriageDate] = useState('');
+  const [triageMessage, setTriageMessage] = useState('');
   const [askingWhy, setAskingWhy] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [declineNote, setDeclineNote] = useState('');
@@ -82,6 +89,10 @@ export function NextActionCard({
       return;
     }
     if (item.kind === 'quest') {
+      if (item.firstStep?.mode === 'starter') {
+        setBreakingDown(true);
+        return;
+      }
       if (item.nextSubtask?.id && onUpdateQuest) {
         const quest = (quests || []).find(q => q.id === item.id);
         if (quest) {
@@ -99,6 +110,39 @@ export function NextActionCard({
         onCompleteQuest(item.id, durationMinutes > 0 ? { durationMinutes } : {});
       }
     }
+  };
+
+  const handleBreakdown = async () => {
+    const steps = stepsText.split('\n').map(line => line.trim()).filter(Boolean);
+    if (steps.length < 2) {
+      setRefreshError('Escreva ao menos 2 passos, um por linha.');
+      return;
+    }
+    if (!primary?.id || !onBreakdownQuest) return;
+    setRefreshing(true);
+    const result = await onBreakdownQuest(primary.id, steps);
+    setRefreshing(false);
+    if (!result?.ok) {
+      setRefreshError(result?.error || 'Não foi possível quebrar a missão.');
+      return;
+    }
+    setBreakingDown(false);
+    setStepsText('');
+    if (onRefresh) onRefresh({ location: activeLocation, snoozedIds });
+  };
+
+  const handleReschedule = async (ids) => {
+    if (!onRescheduleQuests || !triageDate) {
+      setTriageMessage('Escolha a nova data.');
+      return;
+    }
+    const result = await onRescheduleQuests(ids, triageDate);
+    if (!result?.ok) {
+      setTriageMessage(result?.error || 'Não foi possível remarcar.');
+      return;
+    }
+    setTriageMessage('Remarcadas. A de hoje continua na fila.');
+    if (onRefresh) onRefresh({ location: activeLocation, snoozedIds });
   };
 
   const handleSnooze = (item) => {
@@ -232,6 +276,12 @@ export function NextActionCard({
   const handleOpen = (item) => {
     if (!item) return;
     if (playClick) playClick();
+    const tabByKind = { quest: 'quests', habit: 'habits', agu: 'agu', mindmap: 'maps', reading: 'books' };
+    const tab = item.openTab || tabByKind[item.kind];
+    if (tab && onOpenTab) {
+      onOpenTab(tab);
+      return;
+    }
     if (item.kind === 'habit' && onOpenHabits) onOpenHabits();
     if (item.kind === 'quest' && onOpenQuests) onOpenQuests();
     if (item.kind === 'victory') {
@@ -240,7 +290,7 @@ export function NextActionCard({
   };
 
   const locMeta = getLocationMeta(activeLocation, catalog);
-  const kindEmoji = { habit: '🔥', victory: '🏆' };
+  const kindEmoji = { habit: '🔥', victory: '🏆', agu: '⚖️', mindmap: '🗺️', reading: '📖' };
   const collapsedHint = primary
     ? `${kindEmoji[primary.kind] || '📜'} ${primary.title}${primary.dose?.reduced ? ` · Agora: ${primary.dose.label}` : ''}`
     : (nextAction?.emptyReason || 'Nada pendente neste lugar e neste horário.');
@@ -425,6 +475,43 @@ export function NextActionCard({
         </p>
       )}
 
+      {breakingDown && primary && (
+        <div style={{ marginBottom: '12px' }}>
+          <p style={{ fontSize: '0.8rem', color: '#e9d5ff', margin: '0 0 6px 0' }}>
+            Quebre “{primary.title}” em 3 passos. O primeiro vira a próxima indicação.
+          </p>
+          <textarea
+            value={stepsText}
+            onChange={event => setStepsText(event.target.value)}
+            rows={3}
+            placeholder={'Abrir o processo\nListar os documentos\nEscrever o primeiro parágrafo'}
+            style={{ width: '100%', borderRadius: '8px', padding: '8px', background: 'rgba(0,0,0,0.25)', color: '#f8fafc', border: '1px solid rgba(168,85,247,0.4)' }}
+          />
+          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+            <button type="button" onClick={handleBreakdown} style={quietButtonStyle}>Salvar passos</button>
+            <button type="button" onClick={() => setBreakingDown(false)} style={quietButtonStyle}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {nextAction?.triage?.items?.length > 0 && (
+        <div style={{ marginBottom: '12px', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(244,63,94,0.35)', background: 'rgba(244,63,94,0.08)' }}>
+          <p style={{ margin: '0 0 6px 0', fontSize: '0.82rem', fontWeight: 800, color: '#fda4af' }}>
+            {nextAction.triage.suggestion}
+          </p>
+          <p style={{ margin: '0 0 8px 0', fontSize: '0.75rem', color: '#fecdd3' }}>
+            {nextAction.triage.items.slice(0, 4).map(item => `${item.title} (${item.daysOverdue}d)`).join(' · ')}
+          </p>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <input type="date" value={triageDate} onChange={event => setTriageDate(event.target.value)} style={{ borderRadius: '8px', padding: '4px 8px' }} />
+            <button type="button" onClick={() => handleReschedule(nextAction.triage.items.slice(1).map(item => item.id))} style={quietButtonStyle}>
+              Remarcar o resto
+            </button>
+          </div>
+          {triageMessage && <p style={{ fontSize: '0.75rem', color: '#fecdd3', margin: '6px 0 0 0' }}>{triageMessage}</p>}
+        </div>
+      )}
+
       {primary && !energyBlocking && (
         <PrimaryRow
           item={primary}
@@ -550,14 +637,17 @@ const TRACE_LABELS = {
 
 const OUTCOME_LABEL = {
   accepted: 'aceita',
+  completed: 'concluída',
   declined: 'recusada',
   pending: 'aguardando',
   expired: 'expirada',
-  superseded: 'substituída'
+  superseded: 'substituída',
+  abandoned: 'abandonada'
 };
 
 const OUTCOME_COLOR = {
   accepted: '#86efac',
+  completed: '#86efac',
   declined: '#fda4af',
   pending: '#e9d5ff',
   expired: '#94a3b8',
@@ -765,13 +855,26 @@ function PrimaryRow({
 }) {
   const isHabit = item.kind === 'habit';
   const isVictory = item.kind === 'victory';
-  const kindLabel = isVictory ? 'Vitória do dia' : (isHabit ? 'Ritual' : 'Missão');
+  const isNavigable = item.kind === 'agu' || item.kind === 'mindmap' || item.kind === 'reading';
+  const kindLabel = isVictory
+    ? 'Vitória do dia'
+    : isHabit
+      ? 'Ritual'
+      : item.kind === 'agu'
+        ? 'Bloco AGU'
+        : item.kind === 'mindmap'
+          ? 'Mapa mental'
+          : item.kind === 'reading'
+            ? 'Leitura'
+            : 'Missão';
   const KindIcon = isVictory ? Trophy : (isHabit ? Flame : Scroll);
   const hasDose = !!item.dose?.reduced;
   // Com dose na tela, o segundo botão é o caminho "fiz tudo": o rótulo precisa
   // deixar claro o que ele conclui (e não prometer "inteiro" quando ele só
   // avança um passo da missão).
-  const fullActionLabel = isVictory
+  const fullActionLabel = isNavigable
+    ? 'Abrir'
+    : isVictory
     ? 'Concluir vitória'
     : isHabit
       ? (hasDose ? 'Marcar ritual inteiro' : 'Marcar ritual')
@@ -857,6 +960,11 @@ function PrimaryRow({
               {item.dose.fraction === 'start' ? ' (dose de partida)' : ''}
             </p>
           )}
+          {item.procrastination?.flagged && (
+            <p style={{ fontSize: '0.78rem', fontWeight: 800, color: '#9f1239', margin: '0 0 4px 0' }}>
+              Procrastinação: {item.firstStep?.suggestion || item.firstStep?.title || item.procrastination.reasons?.[0]}
+            </p>
+          )}
           {item.nextSubtask?.title && (
             <p style={{ fontSize: '0.82rem', color: '#6d28d9', margin: '0 0 4px 0' }}>
               Próximo passo: {item.nextSubtask.title}
@@ -895,8 +1003,8 @@ function PrimaryRow({
           )}
           <button
             type="button"
-            onClick={() => onDo(item)}
-            title={fullActionTitle}
+            onClick={() => (isNavigable ? onOpen(item) : onDo(item))}
+            title={isNavigable ? `Abrir ${kindLabel}` : fullActionTitle}
             style={{
               padding: '9px 14px',
               borderRadius: '10px',

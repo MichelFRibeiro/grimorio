@@ -1,5 +1,4 @@
 import { getDb } from './db.js';
-import { enrichNinetyDayGoal, formatGoalAmount } from '../src/utils/ninetyDayGoals.js';
 import { computeMapStats, getStudyQueue } from '../src/utils/mindMaps.js';
 import { MAX_DAILY_VICTORIES, summarizeDay } from '../src/utils/dailyVictories.js';
 import { parseDurationMinutes, sumDurationMap } from '../src/utils/activityDuration.js';
@@ -29,7 +28,6 @@ export function computeAnalytics() {
 
   const now = new Date();
   const todayStr = getSaoPauloDateStr(now);
-  const ninetyDayGoals = (db.ninetyDayGoals || []).map(g => enrichNinetyDayGoal(g, todayStr));
   const dailyVictorySummary = summarizeDay(db.dailyVictories || [], todayStr, db.dailyVictoryBonuses || {});
   const currentMonthStr = getSaoPauloMonthStr(now); // '2026-08'
   const currentYearStr = getSaoPauloYearStr(now); // '2026'
@@ -39,13 +37,25 @@ export function computeAnalytics() {
   const diffToMonday = (currentDayOfWeek === 0 ? -6 : 1) - currentDayOfWeek;
   const weekStartStr = addDaysToDateStr(todayStr, diffToMonday);
 
-  // 1. Hourly Distribution (0 to 23) in São Paulo
+  // 1. Pico horário: mesma fonte do motor de próxima atividade
+  // (missão, ritual, leitura, questões, bloco AGU). Gasto da taverna não entra.
+  const PRODUCTIVE_LOG_TYPES = new Set([
+    'quest_complete',
+    'habit_complete',
+    'daily_victory_complete',
+    'reading_session',
+    'exam_questions',
+    'agu_block',
+    'mind_map_study'
+  ]);
   const hourlyCount = Array(24).fill(0);
+  const dayCounts = Array(7).fill(0);
   logs.forEach(log => {
+    if (!log || !PRODUCTIVE_LOG_TYPES.has(log.type)) return;
     const h = log.hour !== undefined ? log.hour : getSaoPauloHour(log.timestamp);
-    if (h >= 0 && h < 24) {
-      hourlyCount[h] += 1;
-    }
+    if (h >= 0 && h < 24) hourlyCount[h] += 1;
+    const d = log.dayOfWeek !== undefined ? log.dayOfWeek : getSaoPauloDayOfWeek(log.timestamp);
+    if (d >= 0 && d < 7) dayCounts[d] += 1;
   });
 
   // Find peak productivity window
@@ -59,15 +69,7 @@ export function computeAnalytics() {
   });
   const peakWindow = `${String(maxHour).padStart(2, '0')}:00 - ${String(Math.min(23, maxHour + 2)).padStart(2, '0')}:00`;
 
-  // 2. Day of Week Distribution (0: Sun, 1: Mon, ..., 6: Sat) in São Paulo
   const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-  const dayCounts = Array(7).fill(0);
-  logs.forEach(log => {
-    const d = log.dayOfWeek !== undefined ? log.dayOfWeek : getSaoPauloDayOfWeek(log.timestamp);
-    if (d >= 0 && d < 7) {
-      dayCounts[d] += 1;
-    }
-  });
 
   let bestDayIndex = 0;
   let bestDayCount = 0;
@@ -345,7 +347,8 @@ export function computeAnalytics() {
       icon: 'Trophy',
       color: 'amber',
       title: 'Planeje as 3 vitórias do dia',
-      description: 'Defina até 3 tarefas que, se alcançadas, tornam o dia uma vitória. Dá para cadastrar hoje ou já deixar as de amanhã prontas.'
+      description: 'Defina até 3 tarefas que, se alcançadas, tornam o dia uma vitória. Dá para cadastrar hoje ou já deixar as de amanhã prontas.',
+      action: { type: 'plan_victory', payload: {} }
     });
   } else if (!dailyVictorySummary.allComplete) {
     insights.push({
@@ -367,8 +370,33 @@ export function computeAnalytics() {
     });
   }
 
-  const activeNinetyDayGoals = ninetyDayGoals.filter(g => g.status === 'active' || g.status === 'expired');
-  const dueMindMaps = mindMaps.filter(m => getStudyQueue(m, { today: todayStr, mode: 'branches' }).length > 0);
+  const dueMindMaps = mindMaps
+    .map(map => ({ map, due: getStudyQueue(map, { today: todayStr, mode: 'branches' }).length }))
+    .filter(item => item.due > 0)
+    .sort((a, b) => b.due - a.due);
+  const stalledBooks = books.filter(book => {
+    if (!book || book.status !== 'reading') return false;
+    const last = (readingSessions || [])
+      .filter(session => session.bookId === book.id)
+      .reduce((max, session) => {
+        const date = (session.date || session.timestamp || '').slice(0, 10);
+        return date > max ? date : max;
+      }, (book.updatedAt || book.createdAt || '').slice(0, 10));
+    if (!last) return true;
+    return last <= addDaysToDateStr(todayStr, -7);
+  });
+  if (stalledBooks.length > 0) {
+    const lead = stalledBooks[0];
+    insights.push({
+      type: 'stalled_book',
+      icon: 'BookOpen',
+      color: 'amber',
+      title: `Livro parado: ${lead.title}`,
+      description: `"${lead.title}" está em leitura e não teve sessão nos últimos 7 dias. Dez minutos hoje reabrem o ritmo.`,
+      action: { type: 'open_tab', payload: { tab: 'books', entityId: lead.id } }
+    });
+  }
+
   if (mindMaps.length === 0) {
     insights.push({
       type: 'mind_maps',
@@ -383,24 +411,9 @@ export function computeAnalytics() {
       type: 'mind_maps',
       icon: 'Network',
       color: 'amber',
-      title: `Mapas mentais prontos para revisão (${dueMindMaps.length})`,
-      description: `"${lead.title}" tem ramos vencidos hoje. Estude o mapa para consolidar a matéria e ganhar Sabedoria.`
-    });
-  }
-
-  if (activeNinetyDayGoals.length > 0) {
-    const behind = activeNinetyDayGoals.filter(g => g.pace === 'behind');
-    const lead = behind[0] || activeNinetyDayGoals[0];
-    insights.push({
-      type: 'ninety_day_goals',
-      icon: 'Mountain',
-      color: behind.length > 0 ? 'rose' : 'emerald',
-      title: behind.length > 0
-        ? `Meta de 90 dias atrasada: ${lead.title}`
-        : `Metas de 90 dias em andamento (${activeNinetyDayGoals.length}/3)`,
-      description: behind.length > 0
-        ? `"${lead.title}" está em ${formatGoalAmount(lead.currentAmount, lead.unit, lead.unitLabel)} de ${formatGoalAmount(lead.targetAmount, lead.unit, lead.unitLabel)} (${lead.percent}%). O ritmo esperado neste ponto seria ${formatGoalAmount(lead.expectedAmount, lead.unit, lead.unitLabel)}. Recupere o ciclo da semana atual.`
-        : activeNinetyDayGoals.map(g => `"${g.title}" ${g.percent}%`).join(' · ')
+      title: `${lead.due} ramo(s) vencidos em "${lead.map.title}"`,
+      description: `"${lead.map.title}" tem ${lead.due} ramo(s) vencidos. Uma revisão de 10 minutos consolida a matéria.`,
+      action: { type: 'open_tab', payload: { tab: 'maps', entityId: lead.map.id } }
     });
   }
 
@@ -411,15 +424,39 @@ export function computeAnalytics() {
   const totalHabitMinutes = habits.reduce((acc, h) => acc + sumDurationMap(h.durationsByDate), 0);
   const highPriorityPending = pendingQuests.filter(q => q.priority === 'importante' || q.priority === 'critico' || q.priority === 'alta' || q.priority === 'epica').length;
 
-  if (highPriorityPending > 0) {
+  const overdueQuests = pendingQuests
+    .filter(q => q.dueDate && q.dueDate < todayStr)
+    .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+  if (overdueQuests.length > 0) {
+    const names = overdueQuests.slice(0, 3).map(q => `"${q.title}"`).join(', ');
+    insights.unshift({
+      type: 'overdue_quests',
+      icon: 'ShieldAlert',
+      color: 'rose',
+      title: `${overdueQuests.length} missão(ões) atrasada(s)`,
+      description: `${names}${overdueQuests.length > 3 ? ` e mais ${overdueQuests.length - 3}` : ''}. Faça 1 hoje e remarque o resto.`,
+      action: {
+        type: 'reschedule',
+        payload: { ids: overdueQuests.map(q => q.id), titles: overdueQuests.slice(0, 5).map(q => q.title) }
+      }
+    });
+  }
+
+  if (highPriorityPending > 0 && overdueQuests.length === 0) {
+    const named = pendingQuests
+      .filter(q => q.priority === 'importante' || q.priority === 'critico' || q.priority === 'alta' || q.priority === 'epica')
+      .slice(0, 3)
+      .map(q => `"${q.title}"`)
+      .join(', ');
     insights.push({
       type: 'procrastination_guard',
       icon: 'ShieldAlert',
       color: 'rose',
       title: 'Guardião Contra a Procrastinação',
-      description: `Você possui ${highPriorityPending} missão(ões) importante(s) ou crítica(s) aguardando. Dividi-las em subtarefas ou atacá-las logo pela manhã reduz o atrito de início em até 60%.`
+      description: `${named || `${highPriorityPending} missão(ões)`} segue pendente. Quebre a primeira em 3 passos e faça só o primeiro.`,
+      action: { type: 'open_tab', payload: { tab: 'quests', entityId: pendingQuests.find(q => q.priority === 'critico' || q.priority === 'importante')?.id || null } }
     });
-  } else {
+  } else if (highPriorityPending === 0) {
     insights.push({
       type: 'flow_state',
       icon: 'Sparkles',
@@ -452,7 +489,8 @@ export function computeAnalytics() {
       icon: 'ShieldAlert',
       color: 'amber',
       title: `⚠️ Atenção ao Ranking: "${firstRisk.category.name}" em Risco de Queda`,
-      description: `Você está atualmente no Rank ${firstRisk.currentRank.name} em "${firstRisk.category.name}". Faltam ${firstRisk.xpNeededToMaintain} XP até sábado às 23:59 para manter seu nível e evitar a queda de 1 rank.`
+      description: `Você está no Rank ${firstRisk.currentRank.name} em "${firstRisk.category.name}". Faltam ${firstRisk.xpNeededToMaintain} XP até sábado para não cair 1 rank.`,
+      action: { type: 'open_tab', payload: { tab: 'quests' } }
     });
   }
 
@@ -471,14 +509,12 @@ export function computeAnalytics() {
     totalHabitsActive: habits.length,
     totalActionsLogged: logs.length,
     overallUserRank: rankings.overall?.rank?.name || 'E',
-    ninetyDayGoalsActive: activeNinetyDayGoals.length,
-    ninetyDayGoalsCompleted: ninetyDayGoals.filter(g => g.status === 'completed').length,
     dailyVictoriesPlanned: dailyVictorySummary.plannedCount,
     dailyVictoriesCompleted: dailyVictorySummary.completedCount,
     dailyVictoriesTripleBonus: dailyVictorySummary.tripleBonusAwarded,
     totalMindMaps: mindMaps.length,
     totalMindMapSessions: mindMapSessions.length,
-    mindMapBranchesDue: dueMindMaps.reduce((acc, m) => acc + getStudyQueue(m, { today: todayStr, mode: 'branches' }).length, 0)
+    mindMapBranchesDue: dueMindMaps.reduce((acc, item) => acc + item.due, 0)
   };
 
   return {
@@ -510,17 +546,6 @@ export function computeAnalytics() {
         lastStudiedAt: stats.lastStudiedAt
       };
     }),
-    ninetyDayGoals: ninetyDayGoals.map(g => ({
-      id: g.id,
-      title: g.title,
-      status: g.status,
-      percent: g.percent,
-      pace: g.pace,
-      currentAmount: g.currentAmount,
-      targetAmount: g.targetAmount,
-      unitLabel: g.unitLabel,
-      daysLeft: g.daysLeft
-    })),
     rankings,
     insights,
     summary
