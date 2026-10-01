@@ -16,6 +16,7 @@ import { sanitizeAguPlan, ensureCurrentCycle } from '../src/utils/aguCycle.js';
 import { sanitizeDailyVictories, sanitizeDailyVictoryBonuses } from '../src/utils/dailyVictories.js';
 import { sanitizeMindMaps, sanitizeMindMapSessions, sanitizeMindMapCategories, sanitizeMindMapImageLibrary, mergeMindMapImageLibrary } from '../src/utils/mindMaps.js';
 import { ensureOracleMemory } from './oracleMemory.js';
+import { sanitizeDailyReviews, sanitizeWeeklyPlans } from './domain/today.js';
 import { setStoredOpenRouterKey } from './jevClient.js';
 
 const { Pool } = pg;
@@ -357,7 +358,9 @@ export const defaultDatabase = () => {
     mindMapImages: [],
     oracleEnergyReadings: [],
     oracleDecisions: [],
-    oracleQuantityReads: []
+    oracleQuantityReads: [],
+    dailyReviews: [],
+    weeklyPlans: []
   };
 };
 
@@ -421,6 +424,8 @@ export function sanitizeDb(db) {
     if (!db.bossRaid.rewardXp) db.bossRaid.rewardXp = 400;
   }
   ensureOracleMemory(db);
+  db.dailyReviews = sanitizeDailyReviews(db.dailyReviews);
+  db.weeklyPlans = sanitizeWeeklyPlans(db.weeklyPlans);
   const savedKey = db.integrations?.openrouterApiKey;
   if (savedKey) setStoredOpenRouterKey(savedKey);
   applyLocationDefaults(db);

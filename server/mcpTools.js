@@ -111,6 +111,12 @@ import {
   stripMindMapImage
 } from '../src/utils/mindMaps.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, sumDurationMap, clearLiveActivityTimer } from '../src/utils/activityDuration.js';
+import {
+  buildTodayPayload,
+  buildWeeklyReview,
+  closeDay,
+  saveWeeklyPlan
+} from './domain/today.js';
 
 const locationEnum = z.enum(['anywhere', 'office', 'home', 'gym']);
 const timeWindowSchema = z.object({
@@ -119,7 +125,12 @@ const timeWindowSchema = z.object({
 }).nullable();
 
 /** Rótulo humano do tipo de atividade indicada pelo Oráculo. */
-const KIND_TEXT = { victory: 'vitória do dia', habit: 'ritual', quest: 'missão' };
+const KIND_TEXT = {
+  victory: 'vitória do dia',
+  habit: 'ritual',
+  quest: 'missão',
+  plan_day: 'planejar o dia'
+};
 
 // Unique ID generator
 const uid = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
@@ -1999,6 +2010,79 @@ export const toolsDefinition = [
   // ==========================================
   // 11. PRÓXIMA ATIVIDADE (ORÁCULO DE CONTEXTO)
   // ==========================================
+  {
+    name: 'get_today',
+    description: 'Obter o painel de Hoje: saudação, vitórias, rituais devidos, missões do dia e atrasadas, blocos AGU, mapas vencidos, próxima atividade (sem efeito colateral) e rankings em risco.',
+    schema: {
+      location: locationEnum.optional().describe('Lugar atual para a prévia da próxima atividade')
+    },
+    handler: async (args = {}) => {
+      const db = getDb();
+      const today = buildTodayPayload(db, { location: args.location });
+      return formatSuccess(today, `${today.greeting}. ${today.habitsDueCount} ritual(is) devido(s), ${today.quests.length} missão(ões) do dia ou atrasada(s).`);
+    }
+  },
+  {
+    name: 'close_day',
+    description: 'Fechar o dia: grava uma revisão (nota e humor 1-5) e concede 15 XP e +2 de consistência, uma vez por dia. Estornável se a revisão for excluída.',
+    schema: {
+      note: z.string().optional().describe('Reflexão de uma linha sobre o dia'),
+      mood: z.number().min(1).max(5).optional().describe('Humor de 1 a 5')
+    },
+    handler: async (args = {}) => {
+      const db = getDb();
+      const result = closeDay(db, { note: args.note, mood: args.mood });
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess({
+        review: result.review,
+        xp: result.rewardResult?.logEntry?.xp || 0
+      }, `Dia fechado. +${result.rewardResult?.logEntry?.xp || 0} XP.`);
+    }
+  },
+  {
+    name: 'list_daily_reviews',
+    description: 'Listar as revisões de fechamento do dia já gravadas.',
+    schema: {},
+    handler: async () => {
+      const db = getDb();
+      return formatSuccess({ reviews: db.dailyReviews || [] }, `${(db.dailyReviews || []).length} revisão(ões) de dia.`);
+    }
+  },
+  {
+    name: 'get_weekly_review',
+    description: 'Resumo de uma semana (domingo a sábado): XP por categoria, vitórias, rituais, missões, minutos de estudo e motivos de recusa do Oráculo.',
+    schema: {
+      weekKey: z.string().optional().describe('Domingo da semana YYYY-MM-DD. Se omitido, usa a semana anterior.')
+    },
+    handler: async (args = {}) => {
+      const review = buildWeeklyReview(getDb(), { weekKey: args.weekKey });
+      return formatSuccess(review, `Semana ${review.weekLabel}: ${review.victories.completed}/${review.victories.planned} vitórias, ${review.study.minutes} min de estudo.`);
+    }
+  },
+  {
+    name: 'set_weekly_plan',
+    description: 'Definir até 3 focos da semana (texto livre e categoria opcional). Não concede XP; concluir cada foco é outra ação.',
+    schema: {
+      weekKey: z.string().optional().describe('Domingo da semana YYYY-MM-DD. Padrão: semana atual.'),
+      note: z.string().optional().describe('Nota da semana'),
+      focuses: z.array(z.object({
+        title: z.string().describe('Foco da semana'),
+        category: z.string().optional().describe('Categoria opcional')
+      })).min(1).max(3).describe('Até 3 focos')
+    },
+    handler: async (args = {}) => {
+      const db = getDb();
+      const result = saveWeeklyPlan(db, {
+        weekKey: args.weekKey,
+        focuses: args.focuses,
+        note: args.note
+      });
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess({ plan: result.plan }, `${result.plan.focuses.length} foco(s) gravado(s) para a semana ${result.plan.weekKey}.`);
+    }
+  },
   {
     name: 'get_next_action',
     description: 'Indicar uma única próxima atividade. O Jev escolhe a mais provável de ser iniciada agora, usando energia recente, histórico e recusas. Sem leitura de energia, usa o motor local.',

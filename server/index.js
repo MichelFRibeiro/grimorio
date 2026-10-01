@@ -149,6 +149,17 @@ import {
   stripMindMapImage
 } from '../src/utils/mindMaps.js';
 import { sanitizeMindMapImageUrl } from '../src/utils/mindMapIcons.js';
+import {
+  acceptDayPlan,
+  buildEveningReview,
+  buildTodayPayload,
+  buildWeeklyReview,
+  closeDay,
+  deleteDailyReview,
+  saveWeeklyPlan,
+  suggestDayPlan,
+  toggleWeeklyFocus,
+} from './domain/today.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -478,6 +489,7 @@ app.get('/api/state', (req, res) => {
       openRouter: openRouterKeyStatus(),
       analytics,
       nextAction,
+      today: buildTodayPayload(db),
       oracleMemory,
       locations: LOCATIONS,
       user: req.user || null
@@ -602,6 +614,135 @@ app.post('/api/next-action/consult', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 2.3. HOJE, FECHAMENTO E REVISÃO SEMANAL
+// ==========================================
+app.get('/api/today', (req, res) => {
+  try {
+    const db = getDb();
+    const location = req.query.location ? String(req.query.location) : undefined;
+    res.json({ success: true, today: buildTodayPayload(db, { location }) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/today/plan', (req, res) => {
+  try {
+    const db = getDb();
+    const date = req.query.date ? String(req.query.date) : undefined;
+    res.json({ success: true, suggestions: suggestDayPlan(db, { date }) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/today/plan', (req, res) => {
+  try {
+    const db = getDb();
+    const result = acceptDayPlan(db, {
+      items: req.body?.items,
+      date: req.body?.date
+    });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error, skipped: result.skipped });
+    saveDb(db);
+    res.json({ success: true, ...result, today: buildTodayPayload(db) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/daily-reviews', (req, res) => {
+  try {
+    const db = getDb();
+    res.json({
+      success: true,
+      evening: buildEveningReview(db),
+      reviews: db.dailyReviews || []
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/daily-reviews', (req, res) => {
+  try {
+    const db = getDb();
+    const result = closeDay(db, { note: req.body?.note, mood: req.body?.mood });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({
+      success: true,
+      review: result.review,
+      rewardResult: result.rewardResult,
+      analytics: computeAnalytics()
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/daily-reviews/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = deleteDailyReview(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, removed: result.removed, rewardResult: result.rewardResult });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/weekly-review', (req, res) => {
+  try {
+    const db = getDb();
+    const weekKey = req.query.weekKey ? String(req.query.weekKey) : undefined;
+    res.json({ success: true, review: buildWeeklyReview(db, { weekKey }) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/weekly-plans', (req, res) => {
+  try {
+    const db = getDb();
+    const result = saveWeeklyPlan(db, {
+      weekKey: req.body?.weekKey,
+      focuses: req.body?.focuses,
+      note: req.body?.note
+    });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, plan: result.plan });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/weekly-plans/focus', (req, res) => {
+  try {
+    const db = getDb();
+    const result = toggleWeeklyFocus(db, {
+      weekKey: req.body?.weekKey,
+      focusId: req.body?.focusId,
+      done: req.body?.done
+    });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({
+      success: true,
+      plan: result.plan,
+      focus: result.focus,
+      stateUnchanged: !!result.stateUnchanged,
+      rewardResult: result.rewardResult,
+      analytics: computeAnalytics()
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

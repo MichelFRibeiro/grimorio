@@ -127,6 +127,7 @@ export function previewNextAction(db, options = {}) {
   const now = resolveNow(options);
   const heuristic = computeNextAction(db, {
     ...options,
+    includePlanDay: options.includePlanDay !== false,
     snoozedIds: [...new Set([...(options.snoozedIds || []), ...activeSnoozedIds(db, now)])]
   });
   const energy = options.energyReading || latestEnergyReading(db, now);
@@ -352,6 +353,7 @@ export async function suggestNextAction(db, options = {}, jevOptions = {}) {
   const traced = { ...jevOptions, trace };
   const heuristic = computeNextAction(db, {
     ...options,
+    includePlanDay: options.includePlanDay !== false,
     snoozedIds: [...new Set([...(options.snoozedIds || []), ...activeSnoozedIds(db, now)])]
   });
   const pool = eligiblePool(heuristic);

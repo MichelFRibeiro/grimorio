@@ -63,6 +63,9 @@ const OVERDUE_TRIAGE_MIN = 3;
 const CRITICAL_TRIAGE_DAYS = 7;
 const CRITICAL_BOOST_DAYS = 3;
 export const STARTER_DOSE_MINUTES = 5;
+/** Antes do meio-dia, sem vitória planejada, planejar o dia vem antes de qualquer tarefa. */
+export const PLAN_DAY_BEFORE_HOUR = 12;
+export const PLAN_DAY_ID = 'plan-day';
 const RELEVANT_LOG_TYPES = new Set(['quest_complete', 'habit_complete']);
 const HOUR_FIT_MAX = 8;
 const DAY_FIT_MAX = 4;
@@ -423,6 +426,23 @@ function scoreCandidate({
   const reasons = [];
   const memory = declineMemory?.byEntity?.[item.id] || null;
 
+  if (kind === 'plan_day') {
+    return {
+      score: 200,
+      reasons: [item.reason || 'O dia ainda não tem vitórias planejadas'],
+      urgency: { score: 50, label: item.reason, overdue: false, dueToday: true, dueSoon: true },
+      urgencyClass: 5,
+      hourFit: 1,
+      dayFit: 1,
+      histSource: 'plan',
+      nextSubtask: null,
+      procrastination: { flagged: false, reasons: [], postponeCount: 0, daysOverdue: 0 },
+      firstStep: null,
+      preferSmallDose: false,
+      effectivePriority: 'critico'
+    };
+  }
+
   if (kind === 'agu' || kind === 'mindmap' || kind === 'reading') {
     const base = kind === 'reading' ? 6 : (kind === 'mindmap' ? 11 : 16);
     if (item.reason) reasons.push(item.reason);
@@ -627,6 +647,11 @@ function isCriticalOverdueBoost(item) {
 }
 
 function compareCandidates(a, b) {
+  // Planejar o dia, de manhã e sem vitórias, vem antes de qualquer tarefa.
+  const aPlan = a.kind === 'plan_day' ? 1 : 0;
+  const bPlan = b.kind === 'plan_day' ? 1 : 0;
+  if (bPlan !== aPlan) return bPlan - aPlan;
+
   // Vitória planejada para hoje vem antes de missão e ritual.
   const aVictory = a.kind === 'victory' ? 1 : 0;
   const bVictory = b.kind === 'victory' ? 1 : 0;
@@ -864,6 +889,21 @@ export function computeNextAction(db, options = {}) {
 
   // Vitória planejada para hoje: prioridade máxima, na ordem em que foi cadastrada.
   const victoriesToday = (db.dailyVictories || []).filter(v => v && v.date === todayStr);
+  // Manhã sem plano: a próxima atividade é planejar, não uma tarefa solta.
+  // Opt-in: o cartão e o painel Hoje pedem; chamadas antigas do motor não mudam.
+  if (options.includePlanDay && hour < PLAN_DAY_BEFORE_HOUR && victoriesToday.length === 0 && !snoozed.has(PLAN_DAY_ID)) {
+    consider('plan_day', {
+      id: PLAN_DAY_ID,
+      title: 'Planejar o dia',
+      category: null,
+      location: 'anywhere',
+      priority: 'critico',
+      reason: 'Nenhuma vitória planejada para hoje',
+      openTab: 'today',
+      estimatedMinutes: 3
+    }, false, null, false);
+  }
+
   const victoryPlan = {
     plannedCount: victoriesToday.length,
     completedCount: victoriesToday.filter(v => v.completed).length
