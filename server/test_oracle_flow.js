@@ -1,3 +1,4 @@
+import './testEnv.js';
 /**
  * Testes de contrato do fluxo "O Oráculo indica".
  *

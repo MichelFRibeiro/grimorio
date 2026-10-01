@@ -1,3 +1,4 @@
+import './testEnv.js';
 import { composeQuantity, applyDose, energyBand, buildLearningSummary, markDecisionAccepted, acceptPartialDose, ensureOracleMemory, explicitAmount, nearestAmountId, findQuantityRead, saveQuantityRead, QUANTITY_MISS_TTL_MS } from './oracleMemory.js';
 import { interpretEnergy, chooseActivity, interpretQuantity, chooseDose, resolveChoice } from './oracleJev.js';
 import { suggestNextAction, declineAndRemember } from './oracleSuggest.js';

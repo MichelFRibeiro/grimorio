@@ -1,3 +1,4 @@
+import './testEnv.js';
 import assert from 'assert';
 import {
   isTransientHttpStatus,

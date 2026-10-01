@@ -1,3 +1,4 @@
+import './testEnv.js';
 import {
   MAX_DAILY_VICTORIES,
   EXTENDED_MAX_DAILY_VICTORIES,

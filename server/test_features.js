@@ -1,3 +1,5 @@
+import './testEnv.js';
+import { startTestServer } from './testEnv.js';
 import http from 'http';
 
 const PORT = Number(process.env.TEST_PORT || process.env.PORT || 3000);
@@ -7,7 +9,7 @@ function request(path, options = {}, body = null) {
   const { headers: extraHeaders, ...rest } = options;
   return new Promise((resolve, reject) => {
     const req = http.request({
-      hostname: 'localhost',
+      hostname: '127.0.0.1',
       port: PORT,
       path,
       headers: {
@@ -43,6 +45,8 @@ async function loginAsGuest() {
 }
 
 async function runFeatureTests() {
+  const server = await startTestServer();
+  try {
   await loginAsGuest();
   console.log('🧪 Iniciando testes das novas funcionalidades: Questões de Concurso & Citações de Leitura...');
 
@@ -172,6 +176,9 @@ async function runFeatureTests() {
   console.log('✅ Questão de teste excluída e recompensas estornadas com sucesso!');
 
   console.log('🎉 TODOS OS TESTES PASSARAM COM SUCESSO!');
+  } finally {
+    server.stop();
+  }
 }
 
 runFeatureTests().catch(err => {

@@ -1,3 +1,4 @@
+import './testEnv.js';
 import assert from 'assert';
 import { createBossRaid, BOSS_CATALOG, getDb, saveDb, rewardPlayer, revertPlayerReward } from './db.js';
 

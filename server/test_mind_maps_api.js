@@ -1,5 +1,6 @@
+import './testEnv.js';
+import { startTestServer } from './testEnv.js';
 import http from 'http';
-import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -25,24 +26,15 @@ function request(options, data = null) {
   });
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 function assert(condition, message) {
   if (!condition) throw new Error(message);
   console.log(`✅ ${message}`);
 }
 
 async function run() {
-  const port = 3017;
-  const serverProcess = spawn('node', [path.join(__dirname, 'index.js')], {
-    env: { ...process.env, PORT: String(port) },
-    stdio: 'pipe'
-  });
-  serverProcess.stdout.on('data', d => process.stdout.write(`   [Server] ${d}`));
-  serverProcess.stderr.on('data', d => process.stderr.write(`   [Server Err] ${d}`));
-  await sleep(1600);
+  const started = await startTestServer();
+  const port = started.port;
+  const serverProcess = started.child;
 
   const base = { hostname: '127.0.0.1', port, headers: { 'Content-Type': 'application/json' } };
 

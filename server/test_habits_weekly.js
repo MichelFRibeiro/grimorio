@@ -1,5 +1,6 @@
+import './testEnv.js';
+import { startTestServer } from './testEnv.js';
 import http from 'http';
-import { fork } from 'child_process';
 import { getCurrentWeekDays, getHabitWeeklyStats, getSaoPauloDateStr } from './timeUtils.js';
 
 const PORT = Number(process.env.TEST_PORT || process.env.PORT || 3000);
@@ -35,18 +36,9 @@ function request(path, options = {}, body = null) {
 }
 
 async function ensureServerRunning() {
-  try {
-    // /api/health é público: serve para saber se já há servidor no ar.
-    const res = await request('/api/health');
-    if (res.status === 200) return null;
-  } catch (e) {
-    // Start server
-    console.log('🚀 Iniciando servidor para execução dos testes...');
-    const serverProc = fork('server/index.js', [], { stdio: 'ignore' });
-    await new Promise(r => setTimeout(r, 1500));
-    return serverProc;
-  }
-  return null;
+  console.log('🚀 Iniciando servidor isolado para execução dos testes...');
+  const started = await startTestServer();
+  return started.child;
 }
 
 /** A API exige sessão: entra como convidado, como o navegador faria. */

@@ -1,3 +1,4 @@
+import './testEnv.js';
 import {
   getSaoPauloDateStr,
   getSaoPauloHour,

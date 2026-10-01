@@ -10,7 +10,8 @@
     "build": "node node_modules/vite/bin/vite.js build",
     "start": "node server/index.js",
     "serve": "npm run build && node server/index.js",
-    "mcp": "node server/mcpCli.js"
+    "mcp": "node server/mcpCli.js",
+    "test": "node scripts/run-tests.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

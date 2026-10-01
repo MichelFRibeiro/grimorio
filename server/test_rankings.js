@@ -1,3 +1,4 @@
+import './testEnv.js';
 import {
   RANK_TIERS,
   getRankIndexForXp,

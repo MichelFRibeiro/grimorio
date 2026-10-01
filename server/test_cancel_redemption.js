@@ -1,3 +1,5 @@
+import './testEnv.js';
+import { startTestServer } from './testEnv.js';
 import http from 'http';
 
 const PORT = Number(process.env.TEST_PORT || process.env.PORT || 3000);
@@ -7,7 +9,7 @@ function request(path, options = {}, body = null) {
   const { headers: extraHeaders, ...rest } = options;
   return new Promise((resolve, reject) => {
     const req = http.request({
-      hostname: 'localhost',
+      hostname: '127.0.0.1',
       port: PORT,
       path,
       headers: {
@@ -43,6 +45,8 @@ async function loginAsGuest() {
 }
 
 async function testCancelRedemption() {
+  const server = await startTestServer();
+  try {
   await loginAsGuest();
   console.log('🧪 Iniciando testes de Cancelamento de Resgate na Taverna...');
 
@@ -111,6 +115,9 @@ async function testCancelRedemption() {
   await request(`/api/rewards/${testReward.id}`, { method: 'DELETE' });
 
   console.log('🎉 TODOS OS TESTES DE CANCELAMENTO DE RESGATE PASSARAM COM 100% DE SUCESSO!');
+  } finally {
+    server.stop();
+  }
 }
 
 testCancelRedemption().catch(err => {

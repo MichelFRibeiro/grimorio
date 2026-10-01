@@ -1,12 +1,14 @@
+import './testEnv.js';
+import { startTestServer } from './testEnv.js';
 import http from 'http';
-import { getMcpToken } from './mcpAuth.js';
-import { initDb } from './db.js';
+
+const PORT = Number(process.env.TEST_PORT || process.env.PORT);
 
 function request(path, options = {}, body = null) {
   return new Promise((resolve, reject) => {
     const req = http.request({
-      hostname: 'localhost',
-      port: 3000,
+      hostname: '127.0.0.1',
+      port: PORT,
       path,
       headers: {
         'Content-Type': 'application/json',
@@ -45,8 +47,21 @@ async function runTests() {
   console.log('🧪 INICIANDO TESTES DO SERVIDOR MCP (GRIMÓRIO)');
   console.log('🔮 ==========================================\n');
 
-  await initDb();
-  const token = getMcpToken();
+  const server = await startTestServer();
+  const guest = await request('/api/auth/guest', { method: 'POST' }, {});
+  if (guest.status !== 200 || !guest.data?.token) {
+    server.stop();
+    throw new Error(`Não foi possível autenticar como convidado (HTTP ${guest.status}).`);
+  }
+  const mcpRes = await request('/api/mcp/token', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${guest.data.token}` }
+  });
+  if (mcpRes.status !== 200 || !mcpRes.data?.token) {
+    server.stop();
+    throw new Error(`Não foi possível obter o token MCP (HTTP ${mcpRes.status}).`);
+  }
+  const token = mcpRes.data.token;
   console.log(`🔑 Bearer Token ativo para testes: ${token.substring(0, 8)}...`);
 
   // 1. TESTE DE AUTENTICAÇÃO: SEM TOKEN
@@ -279,8 +294,8 @@ async function runTests() {
   console.log('\n--- 11. Teste MCP: Fluxo Completo SSE & Descoberta de Tools ---');
   await new Promise((resolve, reject) => {
     const sseReq = http.request({
-      hostname: 'localhost',
-      port: 3000,
+      hostname: '127.0.0.1',
+      port: PORT,
       path: '/mcp/sse?token=' + token,
       method: 'GET',
       headers: { 'Accept': 'text/event-stream' }
@@ -298,7 +313,7 @@ async function runTests() {
           // Enviar initialize
           const postReq = http.request({
             hostname: 'localhost',
-            port: 3000,
+            port: PORT,
             path: postEndpoint,
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
@@ -306,7 +321,7 @@ async function runTests() {
             // Enviar tools/list
             const listReq = http.request({
               hostname: 'localhost',
-              port: 3000,
+              port: PORT,
               path: postEndpoint,
               method: 'POST',
               headers: { 'Content-Type': 'application/json' }
@@ -345,6 +360,7 @@ async function runTests() {
   console.log('\n🎉 ==========================================');
   console.log('✨ TODOS OS TESTES DO SERVIDOR MCP PASSARAM COM 100% DE SUCESSO!');
   console.log('🎉 ==========================================\n');
+  server.stop();
   process.exit(0);
 }
 

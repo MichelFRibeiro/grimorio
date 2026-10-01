@@ -1,3 +1,4 @@
+import './testEnv.js';
 import assert from 'assert';
 import { brlToCoins, coinsToBrl, parseBrlAmount, normalizeBrl } from '../src/utils/coinExchange.js';
 import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';

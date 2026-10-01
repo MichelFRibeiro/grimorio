@@ -1,3 +1,4 @@
+import './testEnv.js';
 import {
   AGU_CYCLE_LENGTH,
   AGU_SUBJECTS,

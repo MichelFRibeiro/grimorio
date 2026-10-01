@@ -1,3 +1,4 @@
+import './testEnv.js';
 import { computeNextAction } from './nextAction.js';
 import { isNowInTimeWindow, locationMatches, sanitizeTimeWindow, guessCurrentLocation } from './locations.js';
 

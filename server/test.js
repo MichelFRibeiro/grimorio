@@ -1,12 +1,20 @@
+import './testEnv.js';
+import { startTestServer } from './testEnv.js';
 import http from 'http';
+
+const PORT = Number(process.env.TEST_PORT || process.env.PORT);
+let authToken = null;
 
 function request(path, options = {}, body = null) {
   return new Promise((resolve, reject) => {
     const req = http.request({
-      hostname: 'localhost',
-      port: 3000,
+      hostname: '127.0.0.1',
+      port: PORT,
       path,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      },
       ...options
     }, (res) => {
       let data = '';
@@ -26,6 +34,13 @@ function request(path, options = {}, body = null) {
 }
 
 async function runTests() {
+  const server = await startTestServer();
+  const guest = await request('/api/auth/guest', { method: 'POST' }, {});
+  if (guest.status !== 200 || !guest.data?.token) {
+    server.stop();
+    throw new Error(`Não foi possível autenticar como convidado (HTTP ${guest.status}).`);
+  }
+  authToken = guest.data.token;
   console.log('🧪 Testando estorno ao desmarcar rituais e missões...');
 
   // 1. Get initial state
@@ -73,6 +88,7 @@ async function runTests() {
   await request(`/api/habits/${habitId}`, { method: 'DELETE' });
 
   console.log('🎉 Teste de estorno de rituais PASSOU COM SUCESSO!');
+  server.stop();
   process.exit(0);
 }
 

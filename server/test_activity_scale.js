@@ -1,3 +1,4 @@
+import './testEnv.js';
 import {
   applyDifficultyFields,
   DEFAULT_DIFFICULTY,

@@ -1,5 +1,6 @@
+import './testEnv.js';
+import { startTestServer } from './testEnv.js';
 import http from 'http';
-import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { formatFullAbntCitation, formatShortAbntCitation, formatAbntAuthor } from '../src/utils/abntFormatter.js';
@@ -32,10 +33,6 @@ function request(options, data = null) {
   });
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 async function runTests() {
   console.log('🧪 Iniciando bateria de testes para as novas funcionalidades...\n');
 
@@ -60,23 +57,17 @@ async function runTests() {
   }
   console.log('   ✅ Utilitário ABNT validado com sucesso!\n');
 
-  // Start backend server process on port 3001 for test
-  console.log('2️⃣ Iniciando servidor backend de teste na porta 3001...');
-  const serverProcess = spawn('node', [path.join(__dirname, 'index.js')], {
-    env: { ...process.env, PORT: '3001' },
-    stdio: 'pipe'
-  });
-
-  serverProcess.stdout.on('data', d => console.log('   [Server]: ' + d.toString().trim()));
-  serverProcess.stderr.on('data', d => console.error('   [Server Err]: ' + d.toString().trim()));
-
-  await sleep(1500);
+  // Start backend server process on an isolated random port
+  const TEST_PORT = Number(process.env.PORT);
+  console.log(`2️⃣ Iniciando servidor backend de teste na porta ${TEST_PORT}...`);
+  const started = await startTestServer();
+  const serverProcess = started.child;
 
   try {
     // Auth Config
     const confRes = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: '/api/auth/config',
       method: 'GET'
     });
@@ -85,7 +76,7 @@ async function runTests() {
     // Guest Login
     const guestRes = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: '/api/auth/guest',
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
@@ -98,7 +89,7 @@ async function runTests() {
     // Validate session with /api/auth/me
     const meRes = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: '/api/auth/me',
       method: 'GET',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -112,7 +103,7 @@ async function runTests() {
     // Create Category
     const catCreateRes = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: '/api/quest-categories',
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
@@ -124,7 +115,7 @@ async function runTests() {
     // Edit Category
     const catUpdateRes = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: `/api/quest-categories/${createdCat.id}`,
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
@@ -134,7 +125,7 @@ async function runTests() {
     // Delete Category
     const catDeleteRes = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: `/api/quest-categories/${createdCat.id}`,
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -148,7 +139,7 @@ async function runTests() {
     // Get initial state
     const stateRes1 = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: '/api/state',
       method: 'GET',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -161,7 +152,7 @@ async function runTests() {
     // Create Quest
     const questRes = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: '/api/quests',
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
@@ -176,7 +167,7 @@ async function runTests() {
     // Edit Quest
     const editQuestRes = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: `/api/quests/${quest.id}`,
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
@@ -190,7 +181,7 @@ async function runTests() {
     // Complete Quest
     const completeRes = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: `/api/quests/${quest.id}/complete`,
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -199,7 +190,7 @@ async function runTests() {
 
     const stateRes2 = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: '/api/state',
       method: 'GET',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -212,7 +203,7 @@ async function runTests() {
     // Reopen Quest (return to pending)
     const reopenRes = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: `/api/quests/${quest.id}/complete`,
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -221,7 +212,7 @@ async function runTests() {
 
     const stateRes3 = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: '/api/state',
       method: 'GET',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -235,7 +226,7 @@ async function runTests() {
     // Cleanup test quest
     await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: `/api/quests/${quest.id}`,
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -246,7 +237,7 @@ async function runTests() {
     // Create a temporary book
     const bookRes = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: '/api/books',
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
@@ -261,7 +252,7 @@ async function runTests() {
     // Add quote
     const quoteRes = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: `/api/books/${book.id}/quotes`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
@@ -276,7 +267,7 @@ async function runTests() {
     // Edit quote
     const editQuoteRes = await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: `/api/books/${book.id}/quotes/${quote.id}`,
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
@@ -294,7 +285,7 @@ async function runTests() {
     // Cleanup test book
     await request({
       hostname: '127.0.0.1',
-      port: 3001,
+      port: TEST_PORT,
       path: `/api/books/${book.id}`,
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }

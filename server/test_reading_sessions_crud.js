@@ -1,3 +1,5 @@
+import './testEnv.js';
+import { startTestServer } from './testEnv.js';
 import http from 'http';
 
 const PORT = Number(process.env.TEST_PORT || process.env.PORT || 3000);
@@ -7,7 +9,7 @@ function request(path, options = {}, body = null) {
   const { headers: extraHeaders, ...rest } = options;
   return new Promise((resolve, reject) => {
     const req = http.request({
-      hostname: 'localhost',
+      hostname: '127.0.0.1',
       port: PORT,
       path,
       headers: {
@@ -43,6 +45,8 @@ async function loginAsGuest() {
 }
 
 async function runSessionCrudTests() {
+  const server = await startTestServer();
+  try {
   await loginAsGuest();
   console.log('🧪 Iniciando testes de Edição e Exclusão de Sessões de Leitura com Estorno de Pontos...');
 
@@ -155,6 +159,9 @@ async function runSessionCrudTests() {
   await request(`/api/books/${testBook.id}`, { method: 'DELETE' });
 
   console.log('🎉 TODOS OS TESTES DE EDIÇÃO, EXCLUSÃO E ESTORNO DE PONTOS PASSARAM COM 100% DE SUCESSO!');
+  } finally {
+    server.stop();
+  }
 }
 
 runSessionCrudTests().catch(err => {
