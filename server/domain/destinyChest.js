@@ -1,48 +1,35 @@
 /**
- * Baú do Destino — recompensa variável, determinística por dia + evento.
+ * Baú do Destino — concessão. A tabela e a rolagem determinística vivem em
+ * src/utils/destinyChest.js (mesma fonte usada pela interface).
+ *
  * A semente impede reroll: o mesmo dia e o mesmo evento pagam sempre igual.
  *
  * 60% +10 moedas · 25% +25 moedas · 10% escudo de sequência · 4% +60 XP · 1% +150 moedas.
  */
 
-export const CHEST_TABLE = [
-  { id: 'coins-10', weight: 60, coins: 10, xp: 0, shield: false, label: '+10 moedas' },
-  { id: 'coins-25', weight: 25, coins: 25, xp: 0, shield: false, label: '+25 moedas' },
-  { id: 'shield', weight: 10, coins: 0, xp: 0, shield: true, label: 'Escudo de sequência' },
-  { id: 'xp-60', weight: 4, coins: 0, xp: 60, shield: false, label: '+60 XP' },
-  { id: 'jackpot', weight: 1, coins: 150, xp: 0, shield: false, label: 'Fragmento do título · +150 moedas' }
-];
+import {
+  CHEST_TABLE,
+  CHEST_RARITIES,
+  chestRarity,
+  chestRewardText,
+  chestSeed,
+  hashSeed,
+  rollDestinyChest
+} from '../../src/utils/destinyChest.js';
 
-export function hashSeed(input) {
-  const text = String(input || '');
-  let hash = 2166136261;
-  for (let i = 0; i < text.length; i += 1) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-export function rollDestinyChest(seed) {
-  const roll = hashSeed(seed) % 100;
-  let cursor = 0;
-  for (const prize of CHEST_TABLE) {
-    cursor += prize.weight;
-    if (roll < cursor) return { ...prize, roll, seed: String(seed) };
-  }
-  return { ...CHEST_TABLE[0], roll, seed: String(seed) };
-}
-
-export function chestSeed(date, event) {
-  return `${date}:${event}`;
-}
+export { CHEST_TABLE, CHEST_RARITIES, chestRarity, chestRewardText, chestSeed, hashSeed, rollDestinyChest };
 
 /**
  * Concede o baú uma vez por dia+evento. rewardPlayer persiste o snapshot;
  * o registro do baú entra no banco vivo para o save seguinte não perdê-lo.
+ *
+ * Versão síncrona: recebe `getDb`/`rewardPlayer` injetados para poder rodar
+ * dentro dos fluxos síncronos (vitórias ligadas à tríade) sem `await import`.
  */
-export async function grantDestinyChest(db, date, event, now = new Date()) {
-  const { getDb, rewardPlayer } = await import('../db.js');
+export function grantDestinyChestSync({ getDb, rewardPlayer }, db, date, event, now = new Date()) {
+  if (typeof getDb !== 'function' || typeof rewardPlayer !== 'function') {
+    throw new Error('grantDestinyChestSync exige { getDb, rewardPlayer }.');
+  }
   const live = getDb();
   if (!Array.isArray(live.destinyChests)) live.destinyChests = [];
   const seed = chestSeed(date, event);
@@ -74,6 +61,7 @@ export async function grantDestinyChest(db, date, event, now = new Date()) {
     event,
     prizeId: prize.id,
     label: prize.label,
+    rarity: chestRarity(prize.id).key,
     roll: prize.roll,
     xp: prize.xp,
     coins: prize.coins,
@@ -86,6 +74,11 @@ export async function grantDestinyChest(db, date, event, now = new Date()) {
     db.destinyChests.unshift(chest);
   }
   return { chest, rewardResult: reward };
+}
+
+export async function grantDestinyChest(db, date, event, now = new Date()) {
+  const { getDb, rewardPlayer } = await import('../db.js');
+  return grantDestinyChestSync({ getDb, rewardPlayer }, db, date, event, now);
 }
 
 function maxShieldsOf(profile) {

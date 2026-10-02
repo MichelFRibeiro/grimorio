@@ -14,6 +14,7 @@ import { RewardsShop } from './components/RewardsShop';
 import { OracleAnalytics } from './components/OracleAnalytics';
 import { NextActionCard } from './components/NextActionCard';
 import { LevelUpModal } from './components/LevelUpModal';
+import { DestinyChestModal } from './components/DestinyChestModal';
 import { JudgmentModal, JudgmentHistory } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
 import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun } from 'lucide-react';
@@ -53,6 +54,8 @@ export function App() {
     rewardPopups,
     levelUpData,
     closeLevelUpModal,
+    activeChest,
+    closeChestReveal,
     muted,
     toggleMute,
     playClick,
@@ -245,6 +248,8 @@ export function App() {
 
   const weekKey = addDaysToDateStr(todayStr, -getSaoPauloDayOfWeek(todayStr));
   const penaltiesThisWeek = (penalties || []).filter((item) => item && item.weekKey === weekKey && !item.contestedAt).length;
+  // O baú espera Level Up e Julgamento fecharem: eles são a notícia maior da ação.
+  const chestOnHold = Boolean(levelUpData) || (penaltiesPending || []).length > 0;
 
   const habitsDueCount = (habits || []).filter((habit) => {
     const due = getHabitDueStatus(habit, getHabitWeeklyStats(habit), new Date(), todayStr);
@@ -648,6 +653,11 @@ export function App() {
           else if (action.id === 'breakdown' || action.id === 'reschedule') setActiveTab('quests');
           acknowledgePenalties();
         }}
+      />
+      {/* Baú do Destino: fila própria, mas só depois de Level Up e Julgamento. */}
+      <DestinyChestModal
+        chest={chestOnHold ? null : activeChest}
+        onClose={closeChestReveal}
       />
 
       {/* Floating XP & Coins Notification Toasts */}

@@ -1,4 +1,5 @@
-import { rewardPlayer, revertPlayerReward } from './db.js';
+import { getDb, rewardPlayer, revertPlayerReward } from './db.js';
+import { grantDestinyChestSync } from './domain/destinyChest.js';
 import { getSaoPauloDateStr } from './timeUtils.js';
 import { getReadingLoadSeries } from '../src/utils/homeostasis.js';
 import { getAguStudyLoadSeries } from '../src/utils/aguCycle.js';
@@ -14,11 +15,12 @@ import {
 
 function settleDailyVictoryRewards(result) {
   if (!result || result.stateUnchanged) {
-    return { ...result, rewardResult: null, bonusRewardResult: null };
+    return { ...result, rewardResult: null, bonusRewardResult: null, chest: null };
   }
 
   let rewardResult = null;
   let bonusRewardResult = null;
+  let chest = null;
 
   if (result.willComplete) {
     rewardResult = rewardPlayer({
@@ -51,6 +53,20 @@ function settleDailyVictoryRewards(result) {
           autoLinked: true
         }
       });
+      // A tríade fecha o dia também quando as vitórias vêm ligadas a uma missão,
+      // leitura ou bloco AGU — o baú do dia tem de sair aqui como sai no fluxo direto.
+      try {
+        chest = grantDestinyChestSync(
+          { getDb, rewardPlayer },
+          null,
+          result.victory.date,
+          'triad'
+        );
+      } catch (err) {
+        // Baú é bônus: nunca derruba o fechamento da tríade — mas não fica mudo.
+        console.warn('[Grimório] Baú do Destino da tríade falhou:', err.message);
+        chest = null;
+      }
     }
   } else {
     rewardResult = revertPlayerReward({
@@ -72,7 +88,7 @@ function settleDailyVictoryRewards(result) {
     }
   }
 
-  return { ...result, rewardResult, bonusRewardResult };
+  return { ...result, rewardResult, bonusRewardResult, chest };
 }
 
 function serializeLinkedResult(result) {
@@ -83,7 +99,8 @@ function serializeLinkedResult(result) {
     bonusAwardedNow: result.bonusAwardedNow,
     bonusRevertedNow: result.bonusRevertedNow,
     rewardResult: result.rewardResult,
-    bonusRewardResult: result.bonusRewardResult
+    bonusRewardResult: result.bonusRewardResult,
+    chest: result.chest?.chest || null
   };
 }
 

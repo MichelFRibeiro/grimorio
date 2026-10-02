@@ -694,6 +694,7 @@ app.post('/api/daily-reviews', async (req, res) => {
       success: true,
       review: result.review,
       rewardResult: result.rewardResult,
+      chest: result.chest?.chest || null,
       analytics: computeAnalytics()
     });
   } catch (err) {
@@ -2319,6 +2320,7 @@ app.post('/api/daily-victories/:id/complete', async (req, res) => {
       bonusRevertedNow: result.bonusRevertedNow,
       rewardResult: result.rewardResult,
       bonusRewardResult: result.bonusRewardResult,
+      chest: result.chest?.chest || null,
       todaySummary: summarizeDay(result.list, result.todayStr, result.bonuses),
       analytics: computeAnalytics()
     });

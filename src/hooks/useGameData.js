@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { useSoundEffects } from './useSoundEffects';
 import { formatBrl } from '../utils/coinExchange.js';
+import { normalizeChestPayload } from '../utils/destinyChest.js';
 import { hydrateLiveActivityTimers, setLiveActivityTimerSync, flushLiveActivityTimers, getLiveActivityTimers } from '../utils/liveActivityTimers.js';
 import { fetchWithRetry, connectionErrorMessage, isTransientHttpStatus, retryDelayMs } from '../utils/httpClient.js';
 
@@ -20,6 +21,7 @@ export function useGameData() {
   const [error, setError] = useState(null);
   const [rewardPopups, setRewardPopups] = useState([]);
   const [levelUpData, setLevelUpData] = useState(null);
+  const [chestQueue, setChestQueue] = useState([]);
   const dataRef = useRef(null);
   const fetchGenRef = useRef(0);
   const failCountRef = useRef(0);
@@ -207,6 +209,24 @@ export function useGameData() {
     return () => clearTimeout(timer);
   }, [error, retryNonce, fetchState]);
 
+  /**
+   * Baú do Destino: fila de reveals. O servidor pode devolver o baú em
+   * respostas diferentes da mesma ação (vitória ligada + tríade), então a
+   * interface mostra um por vez — e sempre depois de LevelUp/Julgamento.
+   */
+  const queueChest = useCallback((payload) => {
+    const chest = normalizeChestPayload(payload);
+    if (!chest) return null;
+    setChestQueue((prev) => (
+      prev.some((item) => item.id === chest.id) ? prev : [...prev, chest]
+    ));
+    return chest;
+  }, []);
+
+  const closeChestReveal = useCallback(() => {
+    setChestQueue((prev) => prev.slice(1));
+  }, []);
+
   // Trigger floating reward popup. Timers are cleared on unmount.
   const showRewardToast = useCallback((xp, coins, text, variant) => {
     const id = Date.now() + Math.random();
@@ -303,11 +323,12 @@ export function useGameData() {
         if (item.bonusAwardedNow && item.bonusRewardResult) {
           handleRewardResponse(item.bonusRewardResult, 'Tríade de vitórias conquistada!');
         }
+        if (item.chest) queueChest(item.chest);
       } else if (item.victory) {
         showRewardToast(0, 0, `Vitória reaberta: ${item.victory.title}`);
       }
     });
-  }, [handleRewardResponse, showRewardToast]);
+  }, [handleRewardResponse, showRewardToast, queueChest]);
 
   // 1. Quests Actions
   const addQuest = async (questData) => {
@@ -1023,6 +1044,7 @@ export function useGameData() {
     });
     if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível fechar o dia.' };
     if (json.rewardResult) handleRewardResponse(json.rewardResult, 'Dia fechado');
+    queueChest(json.chest);
     fetchState();
     return { ok: true, review: json.review };
   };
@@ -1106,6 +1128,7 @@ export function useGameData() {
           } else {
             confetti({ particleCount: 36, spread: 55, origin: { y: 0.7 } });
           }
+          queueChest(result.chest);
         } else {
           showRewardToast(
             -(result.rewardResult?.revertedXp || 40),
@@ -1161,6 +1184,9 @@ export function useGameData() {
     rewardPopups,
     levelUpData,
     closeLevelUpModal: () => setLevelUpData(null),
+    activeChest: chestQueue[0] || null,
+    chestQueueLength: chestQueue.length,
+    closeChestReveal,
     muted,
     toggleMute,
     playClick,

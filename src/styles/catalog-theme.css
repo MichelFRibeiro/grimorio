@@ -362,3 +362,70 @@ kbd {
 .today-stats span {
   background: rgba(61, 46, 31, 0.05);
 }
+
+/* --- Baú do Destino: reveal em papel creme ---
+   Usa [data-rarity] com a mesma especificidade do index.css para vencer
+   pela ordem de importação (este arquivo entra depois). */
+.chest-overlay {
+  background: rgba(42, 33, 24, 0.6);
+}
+
+.chest-modal {
+  background: linear-gradient(180deg, #fffdf8 0%, #fbf7ee 100%);
+  border-color: var(--cat-rule);
+  color: var(--cat-ink);
+  box-shadow: 0 18px 44px rgba(61, 46, 31, 0.26);
+}
+
+.chest-modal[data-rarity="comum"] {
+  --chest-accent: #cbb9a2;
+  --chest-accent-strong: #7a6a58;
+}
+
+.chest-modal[data-rarity="incomum"] {
+  --chest-accent: #9ac7ac;
+  --chest-accent-strong: #3f7d4e;
+}
+
+.chest-modal[data-rarity="raro"] {
+  --chest-accent: #9ccbd8;
+  --chest-accent-strong: #0f6e6b;
+}
+
+.chest-modal[data-rarity="epico"] {
+  --chest-accent: #cbb0dd;
+  --chest-accent-strong: #7c4a9b;
+}
+
+.chest-modal[data-rarity="lendario"] {
+  --chest-accent: #e6b077;
+  --chest-accent-strong: #9a3412;
+}
+
+.chest-kicker,
+.chest-chance,
+.chest-note,
+.chest-source {
+  color: var(--cat-ink-soft);
+}
+
+.chest-rarity {
+  color: var(--chest-accent-strong);
+  text-shadow: none;
+}
+
+.chest-reward {
+  background: #fffdf8;
+  border-color: var(--chest-accent-strong);
+  color: var(--cat-ink);
+}
+
+.chest-body,
+.chest-lid {
+  background: linear-gradient(180deg, #fffdf8 0%, #efe7d4 100%);
+  border-color: var(--chest-accent-strong);
+}
+
+.chest-ok {
+  color: #fffdf8;
+}

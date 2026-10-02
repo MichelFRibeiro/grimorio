@@ -2471,14 +2471,16 @@ export const toolsDefinition = [
       saveDb(db);
       const verb = result.willComplete ? 'conquistada' : 'reaberta';
       const bonusMsg = result.bonusAwardedNow ? ' Tríade completa — bônus concedido!' : (result.bonusRevertedNow ? ' Bônus da tríade estornado.' : '');
+      const chestMsg = result.chest?.chest?.label ? ` Baú do Destino: ${result.chest.chest.label}.` : '';
       return formatSuccess({
         victory: result.victory,
         willComplete: result.willComplete,
         bonusAwardedNow: result.bonusAwardedNow,
         bonusRevertedNow: result.bonusRevertedNow,
         rewardResult: result.rewardResult,
-        bonusRewardResult: result.bonusRewardResult
-      }, `Vitória '${result.victory.title}' ${verb}.${bonusMsg}`);
+        bonusRewardResult: result.bonusRewardResult,
+        chest: result.chest?.chest || null
+      }, `Vitória '${result.victory.title}' ${verb}.${bonusMsg}${chestMsg}`);
     }
   },
   {

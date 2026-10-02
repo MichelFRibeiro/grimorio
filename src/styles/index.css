@@ -2243,3 +2243,249 @@ kbd {
     padding-bottom: calc(120px + env(safe-area-inset-bottom));
   }
 }
+
+/* =========================================================================
+   Baú do Destino — reveal de recompensa variável.
+   Só classes (nenhuma cor literal no JSX): assim o tema Catálogo reinterpreta
+   pelo mesmo seletor, sem depender dos overrides gerados por estilo inline.
+   ========================================================================= */
+.chest-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(5, 7, 13, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: chestFadeIn 0.16s ease;
+}
+
+.chest-modal {
+  --chest-accent: #cbd5e1;
+  --chest-accent-strong: #94a3b8;
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  padding: 28px 24px 22px;
+  border-radius: 22px;
+  border: 1px solid var(--border-bright);
+  background: linear-gradient(180deg, var(--bg-card-hover) 0%, var(--bg-card) 100%);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 34px rgba(245, 158, 11, 0.18);
+  text-align: center;
+  color: var(--text-main);
+}
+
+.chest-modal[data-rarity="incomum"] {
+  --chest-accent: #6ee7b7;
+  --chest-accent-strong: #10b981;
+}
+
+.chest-modal[data-rarity="raro"] {
+  --chest-accent: #7dd3fc;
+  --chest-accent-strong: #0ea5e9;
+}
+
+.chest-modal[data-rarity="epico"] {
+  --chest-accent: #d8b4fe;
+  --chest-accent-strong: #a855f7;
+}
+
+.chest-modal[data-rarity="lendario"] {
+  --chest-accent: #fcd34d;
+  --chest-accent-strong: #f59e0b;
+}
+
+.chest-scene {
+  position: relative;
+  width: 148px;
+  height: 132px;
+  margin: 4px auto 14px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.chest-rays {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  width: 168px;
+  height: 168px;
+  margin-left: -84px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--chest-accent) 0%, transparent 62%);
+  opacity: 0;
+  transform: scale(0.4);
+  transition: opacity 0.5s ease 0.18s, transform 0.6s ease 0.18s;
+}
+
+.chest-scene.is-open .chest-rays {
+  opacity: 0.45;
+  transform: scale(1);
+}
+
+.chest-art {
+  position: relative;
+  width: 112px;
+  height: 84px;
+  perspective: 460px;
+}
+
+.chest-body,
+.chest-lid {
+  position: absolute;
+  left: 0;
+  width: 112px;
+  border: 2px solid var(--chest-accent-strong);
+  background: linear-gradient(180deg, var(--bg-card-active) 0%, var(--bg-main) 100%);
+  box-sizing: border-box;
+}
+
+.chest-body {
+  bottom: 0;
+  height: 54px;
+  border-radius: 0 0 10px 10px;
+}
+
+.chest-lid {
+  bottom: 52px;
+  height: 32px;
+  border-radius: 12px 12px 4px 4px;
+  transform-origin: 50% 100%;
+  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s;
+}
+
+.chest-scene.is-open .chest-lid {
+  transform: rotateX(-118deg) translateY(-6px);
+}
+
+.chest-band {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 14px;
+  height: 84px;
+  margin-left: -7px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--chest-accent) 0%, var(--chest-accent-strong) 100%);
+  opacity: 0.85;
+}
+
+.chest-lock {
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  border-radius: 5px;
+  border: 2px solid var(--chest-accent-strong);
+  background: var(--chest-accent);
+  box-shadow: 0 0 12px var(--chest-accent);
+}
+
+.chest-spark {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--chest-accent);
+  opacity: 0;
+  box-shadow: 0 0 10px var(--chest-accent);
+}
+
+.chest-spark-a { left: 18px; bottom: 62px; }
+.chest-spark-b { right: 22px; bottom: 74px; }
+.chest-spark-c { left: 50%; bottom: 96px; margin-left: -3px; }
+
+.chest-scene.is-open .chest-spark {
+  animation: chestSpark 1.5s ease-in-out 0.35s infinite;
+}
+
+.chest-scene.is-open .chest-spark-b { animation-delay: 0.75s; }
+.chest-scene.is-open .chest-spark-c { animation-delay: 1.05s; }
+
+.chest-kicker {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.chest-rarity {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1.75rem;
+  font-weight: 900;
+  color: var(--chest-accent-strong);
+  text-shadow: 0 0 22px var(--chest-accent);
+}
+
+.chest-chance {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.chest-reward {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--chest-accent-strong);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.chest-note,
+.chest-source {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.chest-source {
+  font-style: italic;
+}
+
+.chest-ok {
+  width: 100%;
+  margin-top: 20px;
+  padding: 13px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--chest-accent-strong) 0%, var(--chest-accent) 100%);
+  color: #0b0e14;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.chest-ok:hover {
+  filter: brightness(1.08);
+}
+
+@keyframes chestFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes chestSpark {
+  0%, 100% { opacity: 0; transform: translateY(0) scale(0.7); }
+  45% { opacity: 1; transform: translateY(-9px) scale(1.1); }
+}
+
+/* Movimento reduzido: o baú aparece já aberto, sem brilho pulsando. */
+@media (prefers-reduced-motion: reduce) {
+  .chest-overlay { animation: none; }
+  .chest-lid,
+  .chest-rays { transition: none; }
+  .chest-scene.is-open .chest-spark { animation: none; opacity: 0.5; }
+}
