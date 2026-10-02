@@ -164,6 +164,35 @@ export function App() {
     reading: getReadingLoadSeries(data?.readingSessions || [], todayStr).homeostasisMinMinutes
   }), [data, todayStr]);
 
+  // Atalhos de teclado (n / h / ? / Esc). Precisa ficar ACIMA dos returns
+  // antecipados de carregamento, login e erro: um hook depois deles muda a
+  // ordem dos hooks entre renders e o React dispara o erro #310.
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const tag = event.target?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || event.target?.isContentEditable;
+      if (event.key === 'Escape') {
+        setCaptureOpen(false);
+        setHelpOpen(false);
+        setEveningOpen(false);
+        setWeeklyOpen(false);
+        return;
+      }
+      if (typing) return;
+      if (event.key === 'n') {
+        event.preventDefault();
+        setCaptureOpen(true);
+      } else if (event.key === 'h') {
+        setActiveTab('today');
+      } else if (event.key === '?') {
+        setHelpOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   if (loadingAuth || (isAuthenticated && loading)) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0c0e14', color: '#fbbf24' }}>
@@ -255,32 +284,6 @@ export function App() {
     const due = getHabitDueStatus(habit, getHabitWeeklyStats(habit), new Date(), todayStr);
     return due.due && !due.completedToday;
   }).length;
-
-  useEffect(() => {
-    const onKey = (event) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      const tag = event.target?.tagName;
-      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || event.target?.isContentEditable;
-      if (event.key === 'Escape') {
-        setCaptureOpen(false);
-        setHelpOpen(false);
-        setEveningOpen(false);
-        setWeeklyOpen(false);
-        return;
-      }
-      if (typing) return;
-      if (event.key === 'n') {
-        event.preventDefault();
-        setCaptureOpen(true);
-      } else if (event.key === 'h') {
-        setActiveTab('today');
-      } else if (event.key === '?') {
-        setHelpOpen(true);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
 
   const openEvening = async () => {
     playClick();
