@@ -467,7 +467,12 @@ app.post('/api/auth/logout', (req, res) => {
 // ==========================================
 function maintain(db, now = new Date()) {
   const report = runMaintenance(db, now, { createBossRaid });
-  const changed = (report.created?.length || 0) > 0 || (report.weekly?.rolled?.length || 0) > 0 || (report.streak?.newlyConsumed?.length || 0) > 0;
+  // `report.changed` cobre punição nova, virada de semana, normalização do chefe
+  // e mexida na sequência. Passagem limpa não grava nada.
+  const changed = report.changed === true
+    || (report.created?.length || 0) > 0
+    || (report.weekly?.rolled?.length || 0) > 0
+    || (report.streak?.newlyConsumed?.length || 0) > 0;
   if (changed) saveDb(db);
   return report;
 }

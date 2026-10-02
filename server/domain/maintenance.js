@@ -141,18 +141,46 @@ export function closeBossWeek(db, weekKey, { applyPenalty, now, createBossRaid }
   return { closed: weekKey, defeated, penalty, next: db.bossRaid };
 }
 
+/** Assinatura dos campos que ensureBossWeekFields pode normalizar. */
+function bossFieldSignature(boss) {
+  if (!boss) return 'none';
+  return `${boss.weekStartDate || ''}|${boss.overkill == null ? '' : boss.overkill}|${boss.defeatedAt || ''}`;
+}
+
+/** Assinatura dos campos de sequência que syncHeroStreak reescreve. */
+function streakSignature(profile) {
+  if (!profile) return 'none';
+  const log = (Array.isArray(profile.streakShieldLog) ? profile.streakShieldLog : [])
+    .map((entry) => `${entry?.date || ''}@${entry?.consumedAt || ''}`)
+    .join(',');
+  return [
+    profile.streak,
+    profile.streakShields,
+    profile.streakShieldsEarned,
+    profile.maxStreakShields,
+    profile.lastActiveDate || '',
+    log
+  ].join('|');
+}
+
 export function runWeeklyMaintenance(db, now = new Date(), options = {}) {
   const { createBossRaid } = options;
   if (typeof createBossRaid !== 'function') {
     throw new Error('runWeeklyMaintenance exige createBossRaid.');
   }
-  if (!db.bossRaid) return { rolled: [] };
+  if (!db.bossRaid) return { rolled: [], changed: false };
+  const beforeFields = bossFieldSignature(db.bossRaid);
   ensureBossWeekFields(db.bossRaid, getSaoPauloDateStr(now));
   const currentKey = weekKeyOf(now);
   const bossKey = db.bossRaid.weekStartDate;
   if (bossKey >= currentKey) {
     db.bossRaid.weekStartDate = bossKey;
-    return { rolled: [], currentKey };
+    return {
+      rolled: [],
+      currentKey,
+      // Normalizar quarta → domingo é migração real: precisa ser persistida.
+      changed: bossFieldSignature(db.bossRaid) !== beforeFields
+    };
   }
   const missed = weeksBetween(bossKey, currentKey);
   const penalized = new Set(missed.slice(-PENALTY_WEEK_CAP));
@@ -166,7 +194,7 @@ export function runWeeklyMaintenance(db, now = new Date(), options = {}) {
     rolled.push(result);
   });
   db.bossRaid.weekStartDate = currentKey;
-  return { rolled, currentKey };
+  return { rolled, currentKey, changed: true };
 }
 
 export function runDailyMaintenance(db, now = new Date(), options = {}) {
@@ -192,13 +220,22 @@ export function runDailyMaintenance(db, now = new Date(), options = {}) {
   }));
   accept(evaluateDailyDefeat(db, today, ctx));
 
+  const beforeStreak = streakSignature(db.userProfile);
   const streak = syncHeroStreak(db, { today, now });
+  const streakChanged = streakSignature(db.userProfile) !== beforeStreak;
+
   maintenance.lastDailyRun = today;
   maintenance.lastWeeklyRun = weekly.currentKey || weekKeyOf(now);
   if (db.userProfile) {
     db.userProfile.attributeEffects = attributeEffects(db.userProfile.stats || {});
   }
-  return { today, created, weekly, streak };
+  // `changed` existe para o GET /api/state só gravar quando algo de fato mudou:
+  // passagem limpa não deve gerar write no arquivo nem no Postgres.
+  const changed = created.length > 0
+    || (weekly.rolled || []).length > 0
+    || Boolean(weekly.changed)
+    || streakChanged;
+  return { today, created, weekly, streak, changed };
 }
 
 export function runMaintenance(db, now = new Date(), options = {}) {
