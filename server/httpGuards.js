@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { flushDb, getDataDir, getDb, saveDb } from './db.js';
+import { currentWriteSeq, flushDb, getDataDir, getDb, saveDb } from './db.js';
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.ogg', '.m4a', '.wav']);
 
@@ -241,15 +241,27 @@ export async function importBackup(incoming, pool) {
   const snapshot = await writePreImportSnapshot(current, pool);
   const next = buildImportedDb(incoming, current);
   saveDb(next);
-  await flushDb();
+  await flushDb({ timeoutMs: 30000 });
   return { snapshot };
 }
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+/** Prazo máximo que uma resposta mutante espera pela confirmação da persistência. */
+const RESPONSE_FLUSH_TIMEOUT_MS = Number(process.env.GRIMORIO_FLUSH_TIMEOUT_MS) > 0
+  ? Number(process.env.GRIMORIO_FLUSH_TIMEOUT_MS)
+  : 8000;
+
 /**
- * Em rotas mutáveis de /api e /mcp, espera a fila de escrita do Postgres
- * antes de enviar o JSON. Se a persistência falhar, responde 500 genérico.
+ * Em rotas mutáveis de /api e /mcp, espera APENAS a escrita que contém as
+ * mudanças desta requisição antes de enviar o JSON.
+ *
+ * Antes esperava a fila inteira esvaziar: com qualquer enqueue contínuo
+ * (heartbeat de timers, outra rota salvando, manutenção) a promessa nunca
+ * resolvia e a resposta nunca saía — o "Aceitar Plano girando para sempre" e o
+ * timeout do MCP. Agora a sequência é capturada AQUI (depois do handler, que é
+ * quem enfileira a escrita) e há prazo: estourou, responde de qualquer forma e
+ * registra o aviso, porque o dado já está em memória e a fila continua tentando.
  */
 export function persistenceFlushMiddleware(req, res, next) {
   const mutating = MUTATING.has(req.method) && (req.path.startsWith('/api/') || req.path.startsWith('/mcp'));
@@ -258,9 +270,17 @@ export function persistenceFlushMiddleware(req, res, next) {
   const originalJson = res.json.bind(res);
   res.json = function flushedJson(body) {
     if (res.headersSent) return originalJson(body);
-    return flushDb().then(
+    const seq = currentWriteSeq();
+    return flushDb({ seq, timeoutMs: RESPONSE_FLUSH_TIMEOUT_MS }).then(
       () => originalJson(body),
       (err) => {
+        if (err?.code === 'ETIMEDOUT') {
+          console.warn(
+            `⚠️ [Grimório DB] Persistência não confirmou em ${RESPONSE_FLUSH_TIMEOUT_MS} ms ` +
+            `(${req.method} ${req.path}, pedido ${seq}); respondendo mesmo assim.`
+          );
+          return originalJson(body);
+        }
         console.error('❌ [Grimório DB] Falha ao confirmar persistência antes da resposta:', err.message);
         res.status(500);
         return originalJson({ error: 'Não foi possível salvar os dados. Tente novamente.' });

@@ -92,6 +92,11 @@ function postgresSslOption(connectionString) {
   return { rejectUnauthorized: false };
 }
 
+function envNumber(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 export function getPool() {
   if (pool) return pool;
   const connectionString = process.env.DATABASE_URL;
@@ -105,17 +110,54 @@ export function getPool() {
     const ssl = postgresSslOption(connectionString);
     pool = new Pool({
       connectionString,
+      // O documento é único e a escrita é coalescida: poucas conexões bastam e
+      // demais conexões só pressionam o pooler do Supabase.
+      max: envNumber('PG_POOL_MAX', 4),
+      // Nenhuma etapa pode esperar para sempre: sem connectionTimeoutMillis o pg
+      // fica preso indefinidamente e a fila inteira de escrita morre com ele.
+      connectionTimeoutMillis: envNumber('PG_CONNECT_TIMEOUT_MS', 10000),
+      idleTimeoutMillis: envNumber('PG_IDLE_TIMEOUT_MS', 30000),
+      keepAlive: true,
+      // statement_timeout (servidor) + query_timeout (cliente) garantem que uma
+      // query travada vire erro em vez de pendurar a resposta para sempre.
+      statement_timeout: envNumber('PG_STATEMENT_TIMEOUT_MS', 15000),
+      query_timeout: envNumber('PG_QUERY_TIMEOUT_MS', 15000),
       ...(ssl ? { ssl } : {})
+    });
+    // Sem este listener, um erro em cliente ocioso derruba o processo.
+    pool.on('error', (err) => {
+      console.error('❌ [Grimório DB] Erro em conexão ociosa do pool:', err.message);
     });
   }
   return pool;
 }
 
-/** Só para testes: injeta um pool falso e descarta a fila de escrita. */
+/** Só para testes: injeta um pool falso e zera o estado da fila. */
 export function __setPoolForTests(fakePool) {
   pool = fakePool;
-  writeChain = Promise.resolve();
-  pendingWrite = null;
+  resetWriteQueue();
+}
+
+/**
+ * Zera contadores e cancela a fila. A geração invalida qualquer escrita em voo:
+ * sem isso, uma query antiga terminando depois do reset gravaria um `writtenSeq`
+ * maior que o `writeSeq` novo e a fila passaria a achar que já está tudo salvo.
+ */
+function resetWriteQueue() {
+  writeSeq = 0;
+  writtenSeq = 0;
+  writeInFlight = false;
+  writeFailures = 0;
+  lastWriteFailure = null;
+  lastWriteFinishedAt = 0;
+  pumpScheduled = false;
+  queueGeneration += 1;
+  if (writeRetryTimer) {
+    clearTimeout(writeRetryTimer);
+    writeRetryTimer = null;
+  }
+  writeWaiters.forEach((waiter) => clearTimeout(waiter.timer));
+  writeWaiters.clear();
 }
 
 // XP needed for a given level
@@ -539,59 +581,250 @@ export function migrateCanonicalSchemas(db) {
 let cachedDb = null;
 
 /**
- * Fila de escrita no Postgres com coalescência: se já há uma escrita em
- * voo, agenda no máximo mais uma com o snapshot mais recente. O snapshot
- * é serializado no momento do enfileiramento, então mutações posteriores
- * não vazam para uma escrita já agendada.
+ * Fila de escrita no Postgres.
+ *
+ * Garantias (cada uma corrige um modo de falha real de produção):
+ *  1. No máximo UMA escrita em voo. Pedidos que chegam durante a escrita apenas
+ *     marcam o estado como sujo; o snapshot é serializado no início da escrita,
+ *     sempre o mais recente. Um documento de vários MB é stringificado uma vez
+ *     por escrita, não uma vez por pedido.
+ *  2. `flushDb({ seq })` espera só até que a escrita que contém aquele pedido
+ *     termine — nunca o esvaziamento da fila. Era isso que travava as respostas
+ *     mutantes: com enqueues contínuos (heartbeat de timers, manutenção, saves
+ *     de outras rotas) o laço antigo nunca saía e a resposta nunca saía.
+ *  3. Falha não deixa a fila presa: a próxima tentativa reescreve o snapshot
+ *     atual com backoff e nada fica "pegajoso" (o erro anterior derrubava todas
+ *     as respostas mutantes seguintes).
+ *  4. `flushDb` tem prazo. Nenhuma requisição espera para sempre.
  */
-let writeChain = Promise.resolve();
-let pendingWrite = null;
-let lastWriteError = null;
+let writeSeq = 0;
+let writtenSeq = 0;
+let writeInFlight = false;
+let writeFailures = 0;
+let lastWriteFailure = null; // { seq, message, at }
+let writeRetryTimer = null;
+let queueGeneration = 0;
+let lastWriteFinishedAt = 0;
+let pumpScheduled = false;
+const writeWaiters = new Set();
+
+const RETRY_BASE_MS = envNumber('GRIMORIO_WRITE_RETRY_MS', 250);
+const RETRY_MAX_MS = Math.max(RETRY_BASE_MS, envNumber('GRIMORIO_WRITE_RETRY_MAX_MS', 15000));
+const SLOW_WRITE_MS = envNumber('GRIMORIO_SLOW_WRITE_MS', 2500);
+/** Janela para juntar saves em rajada da mesma requisição numa só gravação. */
+const WRITE_SETTLE_MS = envNumber('GRIMORIO_WRITE_SETTLE_MS', 20);
+/**
+ * Tentativas rápidas antes de liberar quem espera com erro. Passado esse ponto a
+ * fila continua tentando em segundo plano (backoff maior), mas as requisições
+ * recebem erro claro em vez de esperar pelo banco.
+ */
+const QUICK_FAILURE_LIMIT = 3;
+const DEFAULT_FLUSH_TIMEOUT_MS = envNumber('GRIMORIO_FLUSH_TIMEOUT_MS', 8000);
+
+function retryDelayFor(failures) {
+  if (failures <= QUICK_FAILURE_LIMIT) {
+    return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.max(0, failures - 1));
+  }
+  return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.min(6, failures - 1));
+}
 
 const UPSERT_SQL = `
   INSERT INTO grimorio_store (key, data, updated_at)
-  VALUES ('main', $1, NOW())
+  VALUES ('main', $1::jsonb, NOW())
   ON CONFLICT (key) DO UPDATE
-  SET data = $1, updated_at = NOW();
+  SET data = $1::jsonb, updated_at = NOW();
 `;
 
-function enqueuePostgresWrite(snapshotJson) {
-  const p = getPool();
-  if (!p) return;
-  if (pendingWrite) {
-    pendingWrite.snapshotJson = snapshotJson;
+/** Sequência do último pedido de escrita. Usada para esperar só a escrita desta requisição. */
+export function currentWriteSeq() {
+  return writeSeq;
+}
+
+/** Só para diagnóstico/testes. */
+export function getWriteState() {
+  return {
+    writeSeq,
+    writtenSeq,
+    inFlight: writeInFlight,
+    failures: writeFailures,
+    retryArmed: Boolean(writeRetryTimer),
+    lastFailure: lastWriteFailure
+  };
+}
+
+function queuePostgresWrite() {
+  writeSeq += 1;
+  // Um pedido novo cancela o backoff pendente: o snapshot mais recente vale mais
+  // que a espera do antigo.
+  if (writeRetryTimer) {
+    clearTimeout(writeRetryTimer);
+    writeRetryTimer = null;
+  }
+  if (writeInFlight || pumpScheduled) return;
+  // Vários saveDb da MESMA requisição (rewardPlayer + rota, por exemplo) chegam
+  // em sequência: esperar um instante depois da escrita anterior junta tudo numa
+  // única gravação de vários MB. A primeira escrita de uma fila ociosa sai na hora.
+  const sinceLastWrite = Date.now() - lastWriteFinishedAt;
+  if (lastWriteFinishedAt > 0 && sinceLastWrite < WRITE_SETTLE_MS) {
+    armRetry(Math.max(1, WRITE_SETTLE_MS - sinceLastWrite));
     return;
   }
-  pendingWrite = { snapshotJson };
-  writeChain = writeChain.then(() => drainPostgresWrites(p)).catch((err) => {
-    lastWriteError = err;
-    console.error('❌ [Grimório DB] Erro ao persistir dados no PostgreSQL:', err.message);
+  schedulePump();
+}
+
+/**
+ * Inicia a escrita no próximo microtask.
+ *
+ * O snapshot é serializado quando a escrita começa, então adiar por um microtask
+ * faz os saveDb do mesmo turno síncrono (rewardPlayer + rota, ~2 ms de distância)
+ * caírem no MESMO snapshot: um toggle de hábito passa a gerar uma gravação de
+ * vários MB em vez de duas. Microtask não cede para I/O — não custa latência.
+ */
+function schedulePump() {
+  if (pumpScheduled || writeInFlight) return;
+  pumpScheduled = true;
+  queueMicrotask(() => {
+    pumpScheduled = false;
+    pumpPostgresWrites();
   });
 }
 
-async function drainPostgresWrites(p) {
-  while (pendingWrite) {
-    const job = pendingWrite;
-    pendingWrite = null;
-    try {
-      await p.query(UPSERT_SQL, [JSON.parse(job.snapshotJson)]);
-      lastWriteError = null;
-    } catch (err) {
-      lastWriteError = err;
-      console.error('❌ [Grimório DB] Erro ao persistir dados no PostgreSQL:', err.message);
-      throw err;
+function armRetry(delayMs) {
+  if (writeRetryTimer || writeInFlight || pumpScheduled) return;
+  writeRetryTimer = setTimeout(() => {
+    writeRetryTimer = null;
+    pumpPostgresWrites();
+  }, delayMs);
+  if (typeof writeRetryTimer.unref === 'function') writeRetryTimer.unref();
+}
+
+function writeFailureFor(seq) {
+  if (writtenSeq >= seq) return null;
+  // Com uma tentativa em voo, agendada ou no backoff, ela ainda pode resolver:
+  // cada pedido ganha a sua chance. O erro sai quando a tentativa que o cobria
+  // falha de fato (ver notifyWriteWaiters no fim do pump).
+  if (writeInFlight || pumpScheduled || writeRetryTimer) return null;
+  if (!lastWriteFailure || writeFailures < QUICK_FAILURE_LIMIT) return null;
+  const err = new Error(`Não foi possível persistir os dados: ${lastWriteFailure.message}`);
+  err.code = 'EWRITEFAILED';
+  return err;
+}
+
+function notifyWriteWaiters() {
+  if (!writeWaiters.size) return;
+  for (const waiter of [...writeWaiters]) {
+    if (writtenSeq >= waiter.seq) {
+      clearTimeout(waiter.timer);
+      writeWaiters.delete(waiter);
+      waiter.resolve({ seq: waiter.seq, writtenSeq });
+      continue;
+    }
+    const failure = writeFailureFor(waiter.seq);
+    if (failure) {
+      clearTimeout(waiter.timer);
+      writeWaiters.delete(waiter);
+      waiter.reject(failure);
     }
   }
 }
 
-/** Resolve quando a fila de escrita do Postgres esvazia. Rejeita se a última escrita falhou. */
-export function flushDb() {
+async function pumpPostgresWrites() {
+  if (writeInFlight) return;
+  const generation = queueGeneration;
+  writeInFlight = true;
+  let retryDelay = 0;
+  let first = true;
+  try {
+    while (writtenSeq < writeSeq) {
+      if (generation !== queueGeneration) return;
+      if (!first) {
+        // Pausa curta entre duas escritas do MESMO laço: é onde uma rajada de
+        // saveDb (rewardPlayer + rota) se junta numa gravação só. A primeira
+        // escrita de uma fila ociosa não espera nada.
+        await new Promise((resolve) => { setTimeout(resolve, WRITE_SETTLE_MS); });
+        if (generation !== queueGeneration) return;
+        if (writtenSeq >= writeSeq) break;
+      }
+      first = false;
+      const p = getPool();
+      if (!p) return;
+      const target = writeSeq;
+      // Serializa uma vez, no início da escrita, sempre o estado mais recente.
+      const payload = JSON.stringify(cachedDb ?? {});
+      const startedAt = Date.now();
+      try {
+        await p.query(UPSERT_SQL, [payload]);
+        if (generation !== queueGeneration) return;
+        writtenSeq = Math.min(target, writeSeq);
+        writeFailures = 0;
+        lastWriteFailure = null;
+        // Avisa DEPOIS DE CADA escrita: sob carga contínua o laço abaixo não
+        // termina, e quem espera não pode depender do fim do laço.
+        notifyWriteWaiters();
+        const elapsed = Date.now() - startedAt;
+        if (elapsed > SLOW_WRITE_MS) {
+          console.warn(
+            `⚠️ [Grimório DB] Escrita lenta no PostgreSQL: ${elapsed} ms para ` +
+            `${(payload.length / 1048576).toFixed(2)} MB.`
+          );
+        }
+      } catch (err) {
+        if (generation !== queueGeneration) return;
+        writeFailures += 1;
+        lastWriteFailure = { seq: target, message: err.message, at: Date.now() };
+        retryDelay = retryDelayFor(writeFailures);
+        console.error(
+          `❌ [Grimório DB] Falha ao persistir no PostgreSQL (tentativa ${writeFailures}, ` +
+          `nova tentativa em ${retryDelay} ms): ${err.message}`
+        );
+        break;
+      }
+    }
+  } catch (err) {
+    console.error('❌ [Grimório DB] Erro inesperado na fila de escrita:', err?.message || err);
+  } finally {
+    writeInFlight = false;
+    lastWriteFinishedAt = Date.now();
+    notifyWriteWaiters();
+    if (retryDelay > 0 && writtenSeq < writeSeq) armRetry(retryDelay);
+  }
+}
+
+/**
+ * Espera a persistência. Por padrão espera a escrita do pedido mais recente.
+ * `flushDb()` / `flushDb(seq)` / `flushDb({ seq, timeoutMs })`.
+ * Nunca espera a fila esvaziar: resolve assim que o pedido informado está no banco.
+ */
+export function flushDb(arg) {
+  const options = typeof arg === 'number' ? { seq: arg } : (arg || {});
   const p = getPool();
-  if (!p) return Promise.resolve();
-  return writeChain.then(() => {
-    if (lastWriteError) {
-      const err = lastWriteError;
-      return Promise.reject(err);
+  if (!p) return Promise.resolve({ seq: 0, writtenSeq: 0, skipped: true });
+  const seq = Number.isFinite(options.seq) ? options.seq : writeSeq;
+  const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
+    ? options.timeoutMs
+    : DEFAULT_FLUSH_TIMEOUT_MS;
+
+  if (writtenSeq >= seq) return Promise.resolve({ seq, writtenSeq });
+
+  const immediateFailure = writeFailureFor(seq);
+  if (immediateFailure) return Promise.reject(immediateFailure);
+
+  return new Promise((resolve, reject) => {
+    const waiter = { seq, resolve, reject, timer: null };
+    waiter.timer = setTimeout(() => {
+      writeWaiters.delete(waiter);
+      const err = new Error(
+        `Persistência não confirmada em ${timeoutMs} ms (pedido ${seq}, gravado ${writtenSeq}).`
+      );
+      err.code = 'ETIMEDOUT';
+      reject(err);
+    }, timeoutMs);
+    writeWaiters.add(waiter);
+    // O registro acontece depois da checagem: reavalia para não pendurar quem já
+    // está pronto, nem perder um erro que acabou de acontecer.
+    notifyWriteWaiters();
+    if (writeWaiters.has(waiter) && !writeInFlight && !writeRetryTimer && writtenSeq < writeSeq) {
+      schedulePump();
     }
   });
 }
@@ -668,7 +901,7 @@ export async function initDb() {
       if (!initialData) initialData = defaultDatabase();
       initialData = sanitizeDb(initialData);
 
-      await p.query(UPSERT_SQL, [initialData]);
+      await p.query(UPSERT_SQL, [JSON.stringify(initialData)]);
 
       cachedDb = initialData;
       console.log('🔮 [Grimório DB] PostgreSQL (Supabase) inicializado com sucesso e dados migrados!');
@@ -699,27 +932,76 @@ export function getDb() {
 
 export function saveDb(data) {
   cachedDb = sanitizeDb(data);
-  const snapshotJson = JSON.stringify(cachedDb);
+  const p = getPool();
 
-  // 1. Save local file atomically (also the backup when Postgres is primary)
+  // 1. Com Postgres como fonte da verdade, o arquivo local é só um backup de
+  //    emergência: gravá-lo a cada mutação custava um stringify indentado e uma
+  //    escrita síncrona de vários MB no caminho crítico da resposta.
+  if (p) {
+    queuePostgresWrite();
+    scheduleLocalBackup();
+    return;
+  }
+
+  // 2. Sem Postgres, o arquivo é a persistência real (escrita atômica síncrona).
   try {
     writeDbFileAtomic(DB_FILE, JSON.stringify(cachedDb, null, 2));
   } catch (err) {
     console.error('Error saving local database backup:', err);
   }
+}
 
-  // 2. Save to Postgres if available (queued, coalesced, snapshotted)
-  if (getPool()) {
-    enqueuePostgresWrite(snapshotJson);
+/**
+ * Backup local espaçado (só quando o Postgres é a fonte da verdade).
+ * Assíncrono e no máximo um em voo: nunca bloqueia a resposta.
+ */
+let localBackupTimer = null;
+let localBackupInFlight = false;
+let lastLocalBackupAt = 0;
+const LOCAL_BACKUP_INTERVAL_MS = envNumber('GRIMORIO_LOCAL_BACKUP_MS', 5 * 60 * 1000);
+
+function scheduleLocalBackup() {
+  if (localBackupInFlight) return;
+  const since = Date.now() - lastLocalBackupAt;
+  if (since >= LOCAL_BACKUP_INTERVAL_MS) {
+    runLocalBackup();
+    return;
   }
+  if (localBackupTimer) return;
+  localBackupTimer = setTimeout(() => {
+    localBackupTimer = null;
+    runLocalBackup();
+  }, LOCAL_BACKUP_INTERVAL_MS - since);
+  if (typeof localBackupTimer.unref === 'function') localBackupTimer.unref();
+}
+
+function runLocalBackup() {
+  if (localBackupInFlight || !cachedDb) return;
+  localBackupInFlight = true;
+  lastLocalBackupAt = Date.now();
+  let payload = '';
+  try {
+    payload = JSON.stringify(cachedDb, null, 2);
+  } catch (err) {
+    localBackupInFlight = false;
+    console.warn('[Grimório DB] Backup local ignorado (serialização falhou):', err.message);
+    return;
+  }
+  fs.promises.writeFile(DB_FILE + '.tmp', payload, 'utf-8')
+    .then(() => fs.promises.rename(DB_FILE + '.tmp', DB_FILE))
+    .then(() => {
+      localBackupInFlight = false;
+    })
+    .catch((err) => {
+      localBackupInFlight = false;
+      console.warn('[Grimório DB] Backup local falhou (o Postgres segue como fonte da verdade):', err.message);
+    });
 }
 
 /** Só para testes: descarta o cache em memória para forçar releitura do disco. */
 export function __resetDbCacheForTests() {
   cachedDb = null;
-  writeChain = Promise.resolve();
-  pendingWrite = null;
-  lastWriteError = null;
+  __setPoolForTests(null);
 }
 
 // Find or create user on login

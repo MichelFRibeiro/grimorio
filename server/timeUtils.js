@@ -10,6 +10,69 @@ export const SAO_PAULO_TZ = 'America/Sao_Paulo';
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
+ * Cache dos Intl.DateTimeFormat.
+ *
+ * Construir um Intl.DateTimeFormat custa centenas de microssegundos (carrega e
+ * compila dados de fuso do ICU). O código antigo criava um NOVO formatador em
+ * cada chamada: um único GET /api/state chegava a 51.808 construções — mais de
+ * 5 segundos de CPU travando o event loop e, com ele, TODAS as outras rotas
+ * (era a causa da lentidão geral e do timeout do MCP). Formatadores são
+ * imutáveis e `format` é puro, então uma instância por formato basta.
+ */
+const formatterCache = new Map();
+
+function getFormatter(key, build) {
+  const cached = formatterCache.get(key);
+  if (cached) return cached;
+  const created = build();
+  formatterCache.set(key, created);
+  return created;
+}
+
+const dateFormatter = () => getFormatter('date', () => new Intl.DateTimeFormat('en-CA', {
+  timeZone: SAO_PAULO_TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+}));
+
+const hourFormatter = () => getFormatter('hour', () => new Intl.DateTimeFormat('en-US', {
+  timeZone: SAO_PAULO_TZ,
+  hour: 'numeric',
+  hourCycle: 'h23'
+}));
+
+const minuteFormatter = () => getFormatter('minute', () => new Intl.DateTimeFormat('en-US', {
+  timeZone: SAO_PAULO_TZ,
+  minute: '2-digit'
+}));
+
+const weekdayFormatter = () => getFormatter('weekday', () => new Intl.DateTimeFormat('en-US', {
+  timeZone: SAO_PAULO_TZ,
+  weekday: 'short'
+}));
+
+/**
+ * 'YYYY-MM-DD' válido → componentes, sem passar pelo Intl.
+ * Devolve null quando a string não é uma data civil válida (aí o caminho
+ * normal cuida de validar/estourar como antes).
+ */
+function parseDateOnly(value) {
+  if (typeof value !== 'string' || !DATE_ONLY_RE.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const probe = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  if (
+    probe.getUTCFullYear() !== year
+    || probe.getUTCMonth() !== month - 1
+    || probe.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return { year, month, day, noonUtc: probe };
+}
+
+/**
  * Converte Date|string|number em Date válida.
  * Strings 'YYYY-MM-DD' são tratadas como data civil (meio-dia UTC),
  * evitando o deslocamento de fuso de `new Date('YYYY-MM-DD')` (meia-noite UTC),
@@ -29,20 +92,22 @@ function toValidDate(date = new Date()) {
 
 /**
  * Retorna a data no formato 'YYYY-MM-DD' de acordo com o fuso horário de São Paulo.
+ *
+ * Atalho para 'YYYY-MM-DD': a data civil já É a resposta (meio-dia UTC em
+ * America/Sao_Paulo nunca cruza a meia-noite), então não há nada a converter.
  * @param {Date|string|number} [date=new Date()]
  * @returns {string} Ex: '2026-08-20'
  */
 export function getSaoPauloDateStr(date = new Date()) {
+  const dateOnly = parseDateOnly(date);
+  if (dateOnly) {
+    return `${dateOnly.year}-${String(dateOnly.month).padStart(2, '0')}-${String(dateOnly.day).padStart(2, '0')}`;
+  }
   try {
     const d = toValidDate(date);
     if (isNaN(d.getTime())) return getSaoPauloDateStr(new Date());
 
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: SAO_PAULO_TZ,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(d);
+    return dateFormatter().format(d);
   } catch (e) {
     const fallback = new Date();
     const y = fallback.getFullYear();
@@ -80,11 +145,7 @@ export function getSaoPauloHour(date = new Date()) {
     const d = toValidDate(date);
     if (isNaN(d.getTime())) return getSaoPauloHour(new Date());
 
-    const hourStr = new Intl.DateTimeFormat('en-US', {
-      timeZone: SAO_PAULO_TZ,
-      hour: 'numeric',
-      hourCycle: 'h23'
-    }).format(d);
+    const hourStr = hourFormatter().format(d);
 
     const h = parseInt(hourStr, 10);
     return isNaN(h) ? d.getHours() : (h === 24 ? 0 : h);
@@ -103,10 +164,7 @@ export function getSaoPauloMinute(date = new Date()) {
     const d = toValidDate(date);
     if (isNaN(d.getTime())) return getSaoPauloMinute(new Date());
 
-    const minuteStr = new Intl.DateTimeFormat('en-US', {
-      timeZone: SAO_PAULO_TZ,
-      minute: '2-digit'
-    }).format(d);
+    const minuteStr = minuteFormatter().format(d);
 
     const m = parseInt(minuteStr, 10);
     return isNaN(m) ? d.getMinutes() : m;
@@ -121,14 +179,17 @@ export function getSaoPauloMinute(date = new Date()) {
  * @returns {number} 0 a 6
  */
 export function getSaoPauloDayOfWeek(date = new Date()) {
+  const dateOnly = parseDateOnly(date);
+  if (dateOnly) {
+    // Meio-dia UTC cai no mesmo dia civil em São Paulo (UTC-3/-2), então o dia
+    // da semana em UTC é o dia da semana local.
+    return dateOnly.noonUtc.getUTCDay();
+  }
   try {
     const d = toValidDate(date);
     if (isNaN(d.getTime())) return getSaoPauloDayOfWeek(new Date());
 
-    const weekdayStr = new Intl.DateTimeFormat('en-US', {
-      timeZone: SAO_PAULO_TZ,
-      weekday: 'short'
-    }).format(d);
+    const weekdayStr = weekdayFormatter().format(d);
 
     const days = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
     return days[weekdayStr] !== undefined ? days[weekdayStr] : d.getDay();

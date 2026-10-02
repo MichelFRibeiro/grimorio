@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { getDb, saveDb, initDb, getPool, flushDb, rewardPlayer, revertPlayerReward, revertLog, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG, applyCategoryRename } from './db.js';
 import { runMaintenance } from './domain/maintenance.js';
+import { weekKeyOf } from './domain/bossWeek.js';
 import { listUnacknowledged, acknowledgePenalty, acknowledgeAllPenalties, prepareContest } from './domain/penalties.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
@@ -465,7 +466,37 @@ app.post('/api/auth/logout', (req, res) => {
 // ==========================================
 // 1. GET FULL GAME STATE & ANALYTICS
 // ==========================================
+/**
+ * Manutenção preguiçosa, com memória do último ciclo.
+ *
+ * Era executada em TODA leitura de /api/state e /api/today: varredura do ledger
+ * para derivar sequência/escudos, avaliação de punições e virada de semana. Como
+ * as leituras são frequentes (a interface refaz /api/state depois de cada ação e
+ * há polling de timers), o mesmo cálculo se repetia centenas de vezes por hora.
+ * Chave = dia + semana de São Paulo: quando ela muda, roda; dentro do mesmo
+ * ciclo, no máximo uma vez a cada MAINTAIN_MIN_INTERVAL_MS.
+ */
+const MAINTAIN_MIN_INTERVAL_MS = Number(process.env.GRIMORIO_MAINTAIN_INTERVAL_MS) > 0
+  ? Number(process.env.GRIMORIO_MAINTAIN_INTERVAL_MS)
+  : 2 * 60 * 1000;
+let maintainCache = { key: null, ranAt: 0, report: null };
+
 function maintain(db, now = new Date()) {
+  const today = getSaoPauloDateStr(now);
+  const key = `${today}|${weekKeyOf(now)}`;
+  const elapsed = Date.now() - maintainCache.ranAt;
+  if (maintainCache.key === key && maintainCache.ranAt > 0 && elapsed < MAINTAIN_MIN_INTERVAL_MS) {
+    // Relatório "nada a fazer" para as leituras dentro do mesmo ciclo, com a
+    // mesma forma do relatório real (created/changed vazios).
+    return {
+      today,
+      created: [],
+      weekly: { rolled: [], currentKey: weekKeyOf(now), changed: false },
+      streak: { newlyConsumed: [] },
+      changed: false,
+      skipped: true
+    };
+  }
   const report = runMaintenance(db, now, { createBossRaid });
   // `report.changed` cobre punição nova, virada de semana, normalização do chefe
   // e mexida na sequência. Passagem limpa não grava nada.
@@ -474,6 +505,7 @@ function maintain(db, now = new Date()) {
     || (report.weekly?.rolled?.length || 0) > 0
     || (report.streak?.newlyConsumed?.length || 0) > 0;
   if (changed) saveDb(db);
+  maintainCache = { key, ranAt: Date.now(), report };
   return report;
 }
 

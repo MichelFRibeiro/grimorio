@@ -155,17 +155,31 @@ export function getFrequencyLabel(habit) {
   return 'Diário';
 }
 
+/**
+ * Formatador de data civil em São Paulo. Instância única em cache: construir um
+ * Intl.DateTimeFormat por chamada era parte da lentidão (dezenas de milhares de
+ * construções por leitura de estado).
+ */
+let saoPauloDateFormatter = null;
+
+function getSaoPauloDateFormatter() {
+  if (!saoPauloDateFormatter) {
+    saoPauloDateFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: SAO_PAULO_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+  }
+  return saoPauloDateFormatter;
+}
+
 function toDateStr(date = new Date()) {
   if (typeof date === 'string' && DATE_ONLY_RE.test(date)) return date;
   try {
     const d = date instanceof Date ? date : new Date(date || Date.now());
     if (isNaN(d.getTime())) return toDateStr(new Date());
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: SAO_PAULO_TZ,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(d);
+    return getSaoPauloDateFormatter().format(d);
   } catch {
     const fallback = new Date();
     const y = fallback.getFullYear();

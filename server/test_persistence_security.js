@@ -110,10 +110,12 @@ async function testWriteQueueOrdering() {
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   let calls = 0;
+  // O pool recebe o documento já serializado ($1::jsonb): evita re-parsear
+  // vários MB por escrita.
   const fakePool = {
     async query(_sql, params) {
       calls += 1;
-      const payload = params[0];
+      const payload = typeof params[0] === 'string' ? JSON.parse(params[0]) : params[0];
       queries.push(payload.marker);
       if (calls === 1) await gate;
     }
