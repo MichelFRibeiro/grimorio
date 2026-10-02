@@ -182,8 +182,8 @@ export function createMindMapNode({
     collapsed: !!collapsed,
     curve: sanitizeMindMapCurve(curve),
     fontSize: sanitizeMindMapNodeFontSize(fontSize, null),
-    ease: Math.max(1.3, clampNumber(ease, 2.5)),
-    interval: Math.max(0, Math.round(clampNumber(interval, 0))),
+    ease: Math.min(2.8, Math.max(1.3, clampNumber(ease, 2.5))),
+    interval: Math.min(180, Math.max(0, Math.round(clampNumber(interval, 0)))),
     dueDate: sanitizeDate(dueDate, null),
     reviews: Math.max(0, Math.round(clampNumber(reviews, 0))),
     lapses: Math.max(0, Math.round(clampNumber(lapses, 0))),
@@ -963,34 +963,81 @@ export function getStudyQueue(map, { today = getSaoPauloDateStr(), mode = 'branc
     });
 }
 
+const SRS_EASE_MIN = 1.3;
+const SRS_EASE_MAX = 2.8;
+const SRS_INTERVAL_CAP = 180;
+
+function clampEase(value) {
+  return Math.min(SRS_EASE_MAX, Math.max(SRS_EASE_MIN, Math.round(clampNumber(value, 2.5) * 100) / 100));
+}
+
+function clampInterval(value) {
+  return Math.min(SRS_INTERVAL_CAP, Math.max(1, Math.round(clampNumber(value, 1))));
+}
+
+/**
+ * SM-2 adaptado à escala 0–3 do Grimório.
+ * 0 esqueceu → 1 dia (não o mesmo dia), lapse, ease −0.2.
+ * 1 difícil → intervalo anterior × 1.2 (mín. 1), ease −0.15.
+ * 2 bom → 1, depois 3, depois intervalo × ease.
+ * 3 fácil → 2, depois 4, depois intervalo × ease × 1.3, ease +0.15.
+ * Ease fica entre 1.3 e 2.8. Intervalo nunca passa de 180 dias.
+ */
 export function applyReviewToNode(node, quality, todayStr) {
   const q = Math.max(0, Math.min(3, Math.round(clampNumber(quality, 0))));
   const next = { ...node };
+  const prevInterval = Math.max(0, Math.round(clampNumber(next.interval, 0)));
+  const ease = clampNumber(next.ease, 2.5);
   next.reviews = (next.reviews || 0) + 1;
   next.lastReviewedAt = todayStr;
 
   if (q === 0) {
     next.lapses = (next.lapses || 0) + 1;
-    next.interval = 0;
-    next.ease = Math.max(1.3, (next.ease || 2.5) - 0.2);
-    next.dueDate = todayStr;
-    return next;
+    next.interval = 1;
+    next.ease = clampEase(ease - 0.2);
+  } else if (q === 1) {
+    next.interval = clampInterval(Math.max(1, Math.round(Math.max(prevInterval, 1) * 1.2)));
+    next.ease = clampEase(ease - 0.15);
+  } else if (prevInterval <= 0) {
+    next.interval = q === 3 ? 2 : 1;
+  } else if (prevInterval === 1) {
+    next.interval = q === 3 ? 4 : 3;
+    if (q === 3) next.ease = clampEase(ease + 0.15);
+  } else if (q === 3) {
+    next.ease = clampEase(ease + 0.15);
+    next.interval = clampInterval(prevInterval * next.ease * 1.3);
+  } else {
+    next.interval = clampInterval(prevInterval * clampEase(ease));
   }
 
-  if (q === 1) {
-    next.interval = 1;
-    next.ease = Math.max(1.3, (next.ease || 2.5) - 0.05);
-  } else if ((next.interval || 0) === 0) {
-    next.interval = q === 3 ? 3 : 1;
-  } else if (next.interval === 1) {
-    next.interval = q === 3 ? 6 : 3;
-  } else {
-    const easeDelta = q === 3 ? 0.15 : 0.05;
-    next.ease = Math.max(1.3, (next.ease || 2.5) + easeDelta);
-    next.interval = Math.max(1, Math.round(next.interval * next.ease));
-  }
+  next.interval = Math.min(SRS_INTERVAL_CAP, Math.max(1, next.interval));
   next.dueDate = addDaysToDateStr(todayStr, next.interval);
   return next;
+}
+
+export function schedulingSnapshot(node) {
+  if (!node) return null;
+  return {
+    ease: node.ease,
+    interval: node.interval,
+    dueDate: node.dueDate || null,
+    reviews: node.reviews || 0,
+    lapses: node.lapses || 0,
+    lastReviewedAt: node.lastReviewedAt || null
+  };
+}
+
+export function restoreScheduling(node, snapshot) {
+  if (!node || !snapshot) return node;
+  return {
+    ...node,
+    ease: snapshot.ease,
+    interval: snapshot.interval,
+    dueDate: snapshot.dueDate || null,
+    reviews: snapshot.reviews || 0,
+    lapses: snapshot.lapses || 0,
+    lastReviewedAt: snapshot.lastReviewedAt || null
+  };
 }
 
 export function computeStudyRewards({ reviewed = 0, recalled = 0, durationMinutes = 0 } = {}) {
@@ -1021,11 +1068,13 @@ export function applyStudySession(map, reviews = [], {
   let recalled = 0;
   const applied = [];
 
+  const snapshots = [];
   list.forEach((review) => {
     const nodeId = review?.nodeId;
     const node = byId.get(nodeId);
     if (!node) return;
     const quality = Math.max(0, Math.min(3, Math.round(clampNumber(review.quality, 0))));
+    snapshots.push({ nodeId, before: schedulingSnapshot(node) });
     byId.set(nodeId, applyReviewToNode(node, quality, today));
     if (quality >= 2) recalled += 1;
     applied.push({ nodeId, quality, label: node.label });
@@ -1060,6 +1109,7 @@ export function applyStudySession(map, reviews = [], {
     xpEarned: rewards.xp,
     coinsEarned: rewards.coins,
     reviews: applied,
+    nodeSnapshots: snapshots,
     timestamp: new Date().toISOString()
   };
 
@@ -1244,6 +1294,21 @@ export function sanitizeMindMapSessions(list = []) {
     xpEarned: Math.max(0, Math.round(clampNumber(s.xpEarned, 0))),
     coinsEarned: Math.max(0, Math.round(clampNumber(s.coinsEarned, 0))),
     reviews: Array.isArray(s.reviews) ? s.reviews : [],
+    nodeSnapshots: Array.isArray(s.nodeSnapshots) ? s.nodeSnapshots : [],
     timestamp: s.timestamp || new Date().toISOString()
   }));
+}
+
+/** Desfaz o agendamento gravado na sessão, do snapshot mais recente para o mais antigo. */
+export function restoreSessionScheduling(map, session) {
+  if (!map || !session) return map;
+  const snapshots = Array.isArray(session.nodeSnapshots) ? session.nodeSnapshots : [];
+  if (!snapshots.length) return map;
+  const byId = new Map(snapshots.map((snap) => [snap.nodeId, snap.before]));
+  return {
+    ...map,
+    nodes: (map.nodes || []).map((node) => (
+      byId.has(node.id) ? restoreScheduling(node, byId.get(node.id)) : node
+    ))
+  };
 }

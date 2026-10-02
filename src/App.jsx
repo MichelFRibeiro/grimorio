@@ -14,6 +14,7 @@ import { RewardsShop } from './components/RewardsShop';
 import { OracleAnalytics } from './components/OracleAnalytics';
 import { NextActionCard } from './components/NextActionCard';
 import { LevelUpModal } from './components/LevelUpModal';
+import { JudgmentModal, JudgmentHistory } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
 import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun } from 'lucide-react';
 import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
@@ -23,7 +24,7 @@ import { MindMapsView } from './components/MindMapsView';
 import { AguCampaignView } from './components/AguCampaignView';
 import { FocusChamberView, FocusMiniPlayer } from './components/FocusPlayer';
 import { useFocusPlayer } from './hooks/useFocusPlayer';
-import { getSaoPauloDateStr, addDaysToDateStr } from './utils/timeUtils';
+import { getSaoPauloDateStr, addDaysToDateStr, getSaoPauloDayOfWeek } from './utils/timeUtils';
 import { summarizePlan, getAguStudyLoadSeries } from './utils/aguCycle';
 import { getReadingLoadSeries } from './utils/homeostasis';
 
@@ -87,6 +88,8 @@ export function App() {
     cancelRewardRedemption,
     deleteReward,
     resetBoss,
+    acknowledgePenalties,
+    contestPenalty,
     setCurrentLocation,
     refreshNextAction,
     submitOracleEnergy,
@@ -106,6 +109,9 @@ export function App() {
     resetAguPlan,
     advanceAguCycle,
     logAguProduct,
+    addAguError,
+    reviewAguError,
+    deleteAguError,
     updateAguPlan,
     closeDay,
     fetchEveningReview,
@@ -139,6 +145,7 @@ export function App() {
   } = useGameData();
 
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [showJudgmentHistory, setShowJudgmentHistory] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [eveningOpen, setEveningOpen] = useState(false);
   const [eveningReview, setEveningReview] = useState(null);
@@ -231,8 +238,13 @@ export function App() {
     mindMaps,
     mindMapSessions,
     mindMapCategories,
-    mindMapImages
+    mindMapImages,
+    penalties = [],
+    penaltiesPending = []
   } = data || {};
+
+  const weekKey = addDaysToDateStr(todayStr, -getSaoPauloDayOfWeek(todayStr));
+  const penaltiesThisWeek = (penalties || []).filter((item) => item && item.weekKey === weekKey && !item.contestedAt).length;
 
   const habitsDueCount = (habits || []).filter((habit) => {
     const due = getHabitDueStatus(habit, getHabitWeeklyStats(habit), new Date(), todayStr);
@@ -341,6 +353,7 @@ export function App() {
         muted={muted}
         onToggleMute={toggleMute}
         onOpenOracle={() => setActiveTab('oracle')}
+        penaltiesThisWeek={penaltiesThisWeek}
       />
 
       <DailyVictoriesCard
@@ -356,7 +369,7 @@ export function App() {
       />
 
       {/* Boss Raid Banner */}
-      <BossRaid boss={bossRaid} onResetBoss={resetBoss} />
+      <BossRaid boss={bossRaid} />
 
       {/* Navigation Tab Bar */}
       <nav className="glass-panel app-nav">
@@ -462,7 +475,12 @@ export function App() {
             onOpenWeekly={openWeekly}
             onToggleFocus={(id, done) => toggleWeeklyFocus(id, done, today?.weekKey)}
             playClick={playClick}
+            penalties={penalties || []}
+            onOpenJudgment={() => setShowJudgmentHistory((open) => !open)}
           />
+          {showJudgmentHistory && (
+            <JudgmentHistory penalties={penalties || []} onClose={() => setShowJudgmentHistory(false)} />
+          )}
           </>
         )}
 
@@ -599,6 +617,9 @@ export function App() {
             onAdvanceCycle={advanceAguCycle}
             onLogProduct={logAguProduct}
             onUpdatePlan={updateAguPlan}
+            onAddAguError={addAguError}
+            onReviewAguError={reviewAguError}
+            onDeleteAguError={deleteAguError}
             onOpenQuestions={() => setActiveTab('questions')}
             onAddQuestions={addExamQuestions}
             onAddDailyVictory={addDailyVictory}
@@ -617,6 +638,17 @@ export function App() {
 
       {/* Level Up Pop-up Modal */}
       <LevelUpModal data={levelUpData} onClose={closeLevelUpModal} />
+      <JudgmentModal
+        penalties={penaltiesPending || []}
+        onAcknowledge={acknowledgePenalties}
+        onContest={contestPenalty}
+        onAction={(action) => {
+          if (action.id === 'open-rituals') setActiveTab('habits');
+          else if (action.id === 'plan-victory') setActiveTab('today');
+          else if (action.id === 'breakdown' || action.id === 'reschedule') setActiveTab('quests');
+          acknowledgePenalties();
+        }}
+      />
 
       {/* Floating XP & Coins Notification Toasts */}
       <FloatingToasts toasts={rewardPopups} />

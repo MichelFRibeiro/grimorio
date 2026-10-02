@@ -55,7 +55,9 @@ export function TodayView({
   onOpenEvening,
   onOpenWeekly,
   onToggleFocus,
-  playClick
+  playClick,
+  penalties = [],
+  onOpenJudgment
 }) {
   const payload = today || {};
   const hour = payload.hour ?? 12;
@@ -125,6 +127,9 @@ export function TodayView({
           </button>
           <button type="button" className="today-ghost" onClick={() => onOpenWeekly?.()}>
             <CalendarRange size={15} /> Semana
+          </button>
+          <button type="button" className="today-ghost" onClick={() => onOpenJudgment?.()}>
+            <ShieldAlert size={15} /> Julgamentos{penalties.length ? ` (${penalties.length})` : ''}
           </button>
         </div>
       </header>

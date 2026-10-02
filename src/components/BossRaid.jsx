@@ -99,7 +99,7 @@ export function BossRaid({ boss, onResetBoss }) {
 
               {boss.defeated ? (
                 <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.25)', color: '#fbbf24', fontWeight: 800 }}>
-                  DERROTADO!
+                  Chefe derrotado — novo chefe no domingo
                 </span>
               ) : (
                 <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(244, 63, 94, 0.2)', color: '#f43f5e', fontWeight: 800 }}>
@@ -109,8 +109,8 @@ export function BossRaid({ boss, onResetBoss }) {
             </div>
             <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>
               {boss.defeated
-                ? 'Parabéns! O chefe foi aniquilado com sua produtividade e foco!'
-                : (boss.subtitle || 'Suas tarefas, páginas lidas e processos causam dano a este titã.')}
+                ? `A semana está ganha. Overkill: ${boss.overkill || 0}. O próximo chefe chega no domingo.`
+                : (boss.subtitle || 'Só ação produtiva fere este titã. Taverna e bônus não contam.')}
             </p>
           </div>
         </div>
@@ -127,9 +127,9 @@ export function BossRaid({ boss, onResetBoss }) {
                   <span style={{ color: '#f87171', fontFamily: 'var(--font-mono)' }}>
                     {boss.currentHp} / {boss.maxHp} HP ({hpPercent}%)
                   </span>
-                  <button
+                  {onResetBoss ? <button
                     onClick={onResetBoss}
-                    title="Trocar oponente ou reiniciar chefe"
+                    title="Reset explícito — só com o chefe derrotado, ou force no servidor"
                     style={{
                       background: 'none',
                       border: 'none',
@@ -145,7 +145,7 @@ export function BossRaid({ boss, onResetBoss }) {
                     onMouseLeave={e => e.currentTarget.style.color = 'rgba(148, 163, 184, 0.6)'}
                   >
                     <RefreshCw size={12} />
-                  </button>
+                  </button> : null}
                 </div>
               </div>
               <div className="progress-container" style={{ height: '10px' }}>
@@ -157,26 +157,7 @@ export function BossRaid({ boss, onResetBoss }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#fbbf24', fontSize: '0.85rem', fontWeight: 700 }}>
                 <Sparkles size={16} /> +{boss.rewardXp} XP & +{boss.rewardCoins} 🪙
               </div>
-              <button
-                onClick={onResetBoss}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 14px',
-                  borderRadius: '8px',
-                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.3) 0%, rgba(239, 68, 68, 0.3) 100%)',
-                  border: '1px solid rgba(245, 158, 11, 0.5)',
-                  color: '#fff',
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  boxShadow: '0 0 12px rgba(245, 158, 11, 0.2)',
-                  transition: 'all 0.2s'
-                }}
-              >
-                <RefreshCw size={14} /> Próximo Chefe (Nv. {currentLevel + 1} • +10% Força)
-              </button>
+              <span style={{ color: '#fbbf24', fontSize: '0.82rem', fontWeight: 700 }}>Novo chefe no domingo</span>
             </div>
           )}
         </div>

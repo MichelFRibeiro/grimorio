@@ -36,6 +36,15 @@ import { consumeActivityTimerMinutes, peekActivityTimerMinutes } from '../utils/
 const HIDE_SETTLED_STORAGE_KEY = 'grimorio_hide_settled_habits';
 const MONTH_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
 
+/**
+ * A sequência de um ritual pode ser contada em dias, semanas ou períodos
+ * (quinzena/mês). Sem isso, "3 semanas" apareceria como "3 dias".
+ */
+function streakUnitsLabel(unit, value = 0) {
+  const singular = unit === 'weeks' ? 'semana' : unit === 'periods' ? 'período' : 'dia';
+  return Math.abs(Number(value) || 0) === 1 ? singular : `${singular}s`;
+}
+
 function MonthDaySelect({ value, onChange, accent = '#ef4444' }) {
   return (
     <select
@@ -745,7 +754,9 @@ export function HabitsView({
               : null;
             const isCycleDone = periodStats ? !periodStats.due : isDoneToday;
             const streak = habit.currentStreak || 0;
-            const multiplier = Math.min(2.0, 1 + streak * 0.1).toFixed(1);
+            const streakUnits = streakUnitsLabel(habit.streakUnit, streak);
+            const multiplierStep = habit.streakUnit === 'days' || !habit.streakUnit ? 0.1 : 0.2;
+            const multiplier = Math.min(2.0, 1 + streak * multiplierStep).toFixed(1);
             const habitCat = habit.category || 'Pessoal';
             const catInfo = activeCategories.find(c => (typeof c === 'string' ? c : c.name) === habitCat);
             const catColor = (catInfo && typeof catInfo === 'object' && catInfo.color) ? catInfo.color : '#f59e0b';
@@ -1095,7 +1106,7 @@ export function HabitsView({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Flame size={18} color={streak > 0 ? '#ef4444' : '#64748b'} />
                     <span style={{ fontSize: '0.85rem', fontWeight: 900, color: streak > 0 ? '#f87171' : '#64748b', fontFamily: 'var(--font-mono)' }}>
-                      {streak} {streak === 1 ? 'dia' : 'dias'}
+                      {streak} {streakUnits}
                     </span>
                     {streak > 1 && (
                       <span style={{ fontSize: '0.7rem', color: '#fbbf24', fontWeight: 700 }}>
@@ -1810,11 +1821,11 @@ export function HabitsView({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(239, 68, 68, 0.15)', padding: '4px 8px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
                     <Flame size={14} color="#ef4444" />
                     <span style={{ fontSize: '0.8rem', fontWeight: 900, color: '#f87171', fontFamily: 'var(--font-mono)' }}>
-                      {activeHabit.currentStreak || 0} {activeHabit.currentStreak === 1 ? 'dia' : 'dias'}
+                      {activeHabit.currentStreak || 0} {streakUnitsLabel(activeHabit.streakUnit, activeHabit.currentStreak)}
                     </span>
                   </div>
                   <span style={{ fontSize: '0.7rem', color: '#fbbf24', fontWeight: 700 }}>
-                    Recorde: {activeHabit.bestStreak || 0}d 🏆
+                    Recorde: {activeHabit.bestStreak || 0} {streakUnitsLabel(activeHabit.streakUnit, activeHabit.bestStreak)} 🏆
                   </span>
                 </div>
               </div>

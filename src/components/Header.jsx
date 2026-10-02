@@ -4,7 +4,7 @@ import { Volume2, VolumeX, Flame, Coins, Shield, Brain, Zap, Swords, Sparkles, L
 import { ConfirmModal } from './ConfirmModal';
 import { McpModal } from './McpModal';
 
-export function Header({ profile, currentUser, onLogout, boss, rankings, muted, onToggleMute, onOpenOracle }) {
+export function Header({ profile, currentUser, onLogout, boss, rankings, muted, onToggleMute, onOpenOracle, penaltiesThisWeek = 0 }) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showRankingsModal, setShowRankingsModal] = useState(false);
   const [showMcpModal, setShowMcpModal] = useState(false);
@@ -23,6 +23,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
   if (!profile) return null;
 
   const xpPercent = Math.min(100, Math.round((profile.xp / profile.xpToNextLevel) * 100));
+  const effects = profile.attributeEffects?.tooltips || {};
   const overallRank = rankings?.overall?.rank || { name: 'E', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.15)', border: '#64748b', title: 'Iniciado' };
 
   const handleConfirmLogout = () => {
@@ -145,12 +146,22 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
               background: 'rgba(239, 68, 68, 0.12)',
               border: '1px solid rgba(239, 68, 68, 0.3)'
             }}
-            title="Sequência de dias ativos"
+            title={`Sequência derivada do ledger${profile.streakShields ? ` · ${profile.streakShields} escudo(s)` : ''}`}
           >
             <Flame size={18} color="#f87171" />
             <span style={{ color: '#f87171', fontWeight: 800, fontSize: '0.95rem' }}>
-              {profile.streak || 1} {profile.streak === 1 ? 'dia' : 'dias'}
+              {profile.streak || 0} {(profile.streak || 0) === 1 ? 'dia' : 'dias'}
             </span>
+            {(profile.streakShields || 0) > 0 && (
+              <span title="Escudos de sequência" style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: '#fbbf24', fontSize: '0.75rem', fontWeight: 800 }}>
+                <Shield size={12} /> {profile.streakShields}
+              </span>
+            )}
+            {penaltiesThisWeek > 0 && (
+              <span className="header-penalty-flag" title="Atributos punidos nesta semana">
+                <AlertTriangle size={12} /> {penaltiesThisWeek}
+              </span>
+            )}
           </div>
 
           {/* Overall Rank Pill */}
@@ -194,7 +205,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
                 border: '1px solid rgba(16, 185, 129, 0.2)',
                 fontSize: '0.78rem'
               }}
-              title="Sabedoria (Leitura de Livros)"
+              title={effects.wisdom || 'Sabedoria: +1% de XP de estudo a cada 100 (teto +15%)'}
             >
               <Brain size={14} color="#34d399" />
               <span style={{ color: '#34d399', fontWeight: 700 }}>{profile.stats?.wisdom || 0}</span>
@@ -211,7 +222,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
                 border: '1px solid rgba(6, 182, 212, 0.2)',
                 fontSize: '0.78rem'
               }}
-              title="Foco (Processos & Execução)"
+              title={effects.focus || 'Foco: +1% de dano no chefe a cada 50 (teto +20%)'}
             >
               <Zap size={14} color="#38bdf8" />
               <span style={{ color: '#38bdf8', fontWeight: 700 }}>{profile.stats?.focus || 0}</span>
@@ -228,10 +239,27 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
                 border: '1px solid rgba(168, 85, 247, 0.2)',
                 fontSize: '0.78rem'
               }}
-              title="Vontade (Missões Épicas)"
+              title={effects.willpower || 'Vontade: −1% no custo em moedas da punição a cada 20 (teto 30%)'}
             >
               <Swords size={14} color="#c084fc" />
               <span style={{ color: '#c084fc', fontWeight: 700 }}>{profile.stats?.willpower || 0}</span>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '6px 10px',
+                borderRadius: '8px',
+                background: 'rgba(245, 158, 11, 0.1)',
+                border: '1px solid rgba(245, 158, 11, 0.25)',
+                fontSize: '0.78rem'
+              }}
+              title={effects.consistency || 'Consistência: +1 escudo de sequência a cada 250 (estoque até 4)'}
+            >
+              <Shield size={14} color="#fbbf24" />
+              <span style={{ color: '#fbbf24', fontWeight: 700 }}>{profile.stats?.consistency || 0}</span>
             </div>
           </div>
 

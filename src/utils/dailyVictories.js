@@ -403,7 +403,10 @@ export function sanitizeDailyVictoryBonuses(raw = {}) {
       awarded: true,
       awardedAt: value.awardedAt || null,
       xp: DAILY_VICTORY_TRIPLE_BONUS.xp,
-      coins: DAILY_VICTORY_TRIPLE_BONUS.coins
+      coins: DAILY_VICTORY_TRIPLE_BONUS.coins,
+      rewardLogId: value.rewardLogId || null,
+      legacy: !!value.legacy,
+      plannedCount: Number(value.plannedCount) || null
     };
   });
   return next;
@@ -549,17 +552,21 @@ export function completeDailyVictory(list = [], bonuses = {}, id, { note, comple
   const completedCount = countCompletedForDate(next, existing.date);
   const plannedCount = countVictoriesForDate(next, existing.date);
 
-  if (willComplete && plannedCount >= MAX_DAILY_VICTORIES && completedCount >= MAX_DAILY_VICTORIES && !isTripleBonusAwarded(nextBonuses, existing.date)) {
+  const allPlannedDone = plannedCount >= MAX_DAILY_VICTORIES && completedCount === plannedCount;
+  const existingBonus = nextBonuses[existing.date];
+  if (willComplete && allPlannedDone && !isTripleBonusAwarded(nextBonuses, existing.date)) {
     nextBonuses[existing.date] = {
       awarded: true,
       awardedAt: nowIso,
       xp: DAILY_VICTORY_TRIPLE_BONUS.xp,
-      coins: DAILY_VICTORY_TRIPLE_BONUS.coins
+      coins: DAILY_VICTORY_TRIPLE_BONUS.coins,
+      plannedCount
     };
     bonusAwardedNow = true;
   }
 
-  if (!willComplete && isTripleBonusAwarded(nextBonuses, existing.date) && completedCount < MAX_DAILY_VICTORIES) {
+  // Bônus antigo (pago com 3 de 5) não é arrancado retroativamente.
+  if (!willComplete && isTripleBonusAwarded(nextBonuses, existing.date) && !existingBonus?.legacy && completedCount < plannedCount) {
     delete nextBonuses[existing.date];
     bonusRevertedNow = true;
   }
@@ -586,9 +593,10 @@ export function deleteDailyVictory(list = [], bonuses = {}, id) {
   const [removed] = current.splice(index, 1);
   let bonusRevertedNow = false;
 
-  if (removed.completed && isTripleBonusAwarded(nextBonuses, removed.date)) {
+  if (removed.completed && isTripleBonusAwarded(nextBonuses, removed.date) && !nextBonuses[removed.date]?.legacy) {
     const completedCount = countCompletedForDate(current, removed.date);
-    if (completedCount < MAX_DAILY_VICTORIES) {
+    const plannedCount = countVictoriesForDate(current, removed.date);
+    if (completedCount < plannedCount || plannedCount < MAX_DAILY_VICTORIES) {
       delete nextBonuses[removed.date];
       bonusRevertedNow = true;
     }

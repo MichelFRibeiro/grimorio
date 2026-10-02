@@ -42,6 +42,19 @@ import { getSaoPauloDateStr } from '../utils/timeUtils.js';
 import { AguStudyLoadChart } from './AguStudyLoadChart';
 import { PlanHomeostasisVictoryButton } from './PlanHomeostasisVictoryButton';
 
+const ghostBtnStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  padding: '8px 12px',
+  borderRadius: '10px',
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  color: '#e2e8f0',
+  fontWeight: 700,
+  cursor: 'pointer'
+};
+
 const PROTOCOL = [
   `Blocos de ${AGU_BLOCK_MINUTES} min. A quantidade do dia segue o setpoint (de 1 a 6), não um número fixo.`,
   `O bloco fecha com ${AGU_BLOCK_MINUTES} minutos ou com ${AGU_BLOCK_QUESTION_TARGET} questões — o que ocorrer primeiro.`,
@@ -74,6 +87,58 @@ function StatChip({ label, value, color, sub }) {
       <div style={{ fontSize: '1.35rem', fontWeight: 800, color: color || '#fbbf24', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>{value}</div>
       {sub && <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>{sub}</div>}
     </div>
+  );
+}
+
+function AguErrorNotebook({ plan, todayStr, onAdd, onReview, onDelete }) {
+  const errors = plan?.errorNotebook || [];
+  const due = errors.filter((item) => !item.resolved && item.nextReviewAt && item.nextReviewAt <= todayStr);
+  const [note, setNote] = useState('');
+  const [subjectId, setSubjectId] = useState('');
+  const [link, setLink] = useState('');
+
+  return (
+    <section className="glass-panel" style={{ padding: '20px', marginBottom: '18px' }}>
+      <h3 className="font-cinzel" style={{ color: '#fb7185', marginBottom: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <AlertTriangle size={18} /> Caderno de erros
+      </h3>
+      <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: '12px' }}>
+        {due.length} vencido{due.length === 1 ? '' : 's'} de {errors.length}. Revisar de novo em 1 dia se errar; acertar empurra o intervalo.
+      </p>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!note.trim()) return;
+          onAdd?.({ note: note.trim(), subjectId: subjectId || null, url: link || null });
+          setNote('');
+          setLink('');
+        }}
+        style={{ display: 'grid', gap: '8px', marginBottom: '14px' }}
+      >
+        <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="O que você errou" style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.25)', color: '#fff' }} />
+        <input value={link} onChange={(event) => setLink(event.target.value)} placeholder="Link da questão (opcional)" style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.25)', color: '#fff' }} />
+        <select value={subjectId} onChange={(event) => setSubjectId(event.target.value)} style={{ padding: '8px 10px', borderRadius: '8px' }}>
+          <option value="">Matéria</option>
+          {AGU_SUBJECTS.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+        </select>
+        <button type="submit" style={{ ...ghostBtnStyle, justifySelf: 'start' }}>Anotar erro</button>
+      </form>
+      <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {(due.length ? due : errors).slice(0, 20).map((item) => (
+          <li key={item.id} className="rpg-card" style={{ padding: '10px 12px' }}>
+            <strong style={{ color: '#fecdd3' }}>{item.note}</strong>
+            <div style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '4px 0' }}>
+              {item.subjectId || 'sem matéria'} · próxima {item.nextReviewAt} · {item.lapses || 0} lapsos
+            </div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <button type="button" style={ghostBtnStyle} onClick={() => onReview?.(item.id, 0)}>Errei de novo</button>
+              <button type="button" style={ghostBtnStyle} onClick={() => onReview?.(item.id, 2)}>Acertei</button>
+              <button type="button" style={ghostBtnStyle} onClick={() => onDelete?.(item.id)}>Excluir</button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -216,7 +281,10 @@ export function AguCampaignView({
   onUpdatePlan,
   onOpenQuestions,
   onAddQuestions,
-  onAddDailyVictory
+  onAddDailyVictory,
+  onAddAguError,
+  onReviewAguError,
+  onDeleteAguError
 }) {
   const todayStr = getSaoPauloDateStr();
   const summary = useMemo(
@@ -445,7 +513,8 @@ export function AguCampaignView({
         {[
           { id: 'hoje', label: 'Hoje', icon: Target },
           { id: 'edital', label: 'Edital verticalizado', icon: Table2 },
-          { id: 'historico', label: 'Histórico de blocos', icon: History }
+          { id: 'historico', label: 'Histórico de blocos', icon: History },
+          { id: 'erros', label: 'Caderno de erros', icon: AlertTriangle }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -592,6 +661,16 @@ export function AguCampaignView({
 
       {screen === 'edital' && (
         <EditalTable subjects={summary.edital?.subjects || []} />
+      )}
+
+      {screen === 'erros' && (
+        <AguErrorNotebook
+          plan={aguPlan}
+          todayStr={todayStr}
+          onAdd={onAddAguError}
+          onReview={onReviewAguError}
+          onDelete={onDeleteAguError}
+        />
       )}
 
       {screen === 'historico' && (
@@ -1224,19 +1303,7 @@ function linkBtnStyle(color) {
   };
 }
 
-const ghostBtnStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '6px',
-  padding: '8px 12px',
-  borderRadius: '10px',
-  background: 'rgba(255,255,255,0.04)',
-  color: '#e2e8f0',
-  border: '1px solid rgba(255,255,255,0.1)',
-  fontWeight: 700,
-  fontSize: '0.78rem',
-  cursor: 'pointer'
-};
+
 
 const inputStyle = {
   width: '100%',

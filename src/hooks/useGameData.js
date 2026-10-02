@@ -777,6 +777,19 @@ export function useGameData() {
   };
 
   // 6. Boss Actions
+  const acknowledgePenalties = async (id) => {
+    await mutate('/api/penalties/acknowledge', { body: id ? { id } : {} });
+  };
+
+  const contestPenalty = async (id, reason) => {
+    const result = await mutate(`/api/penalties/${id}/contest`, {
+      body: { reason },
+      toastOnError: false
+    });
+    if (!result || result.__error) throw new Error(result?.error || 'Contestação recusada.');
+    return result;
+  };
+
   const resetBoss = async () => {
     playClick();
     await mutate('/api/boss/reset');
@@ -1115,6 +1128,21 @@ export function useGameData() {
     return { success: true };
   };
 
+  const addAguError = async (payload) => {
+    playClick();
+    await mutate('/api/agu-plan/errors', { body: payload });
+  };
+
+  const reviewAguError = async (id, quality) => {
+    playClick();
+    await mutate(`/api/agu-plan/errors/${id}/review`, { body: { quality } });
+  };
+
+  const deleteAguError = async (id) => {
+    playClick();
+    await mutate(`/api/agu-plan/errors/${id}`, { method: 'DELETE' });
+  };
+
   const resetAguPlan = async () => {
     playClick();
     await mutate('/api/agu-plan/reset');
@@ -1168,6 +1196,8 @@ export function useGameData() {
     cancelRewardRedemption,
     deleteReward,
     resetBoss,
+    acknowledgePenalties,
+    contestPenalty,
     updateProfile,
     setCurrentLocation,
     refreshNextAction,
@@ -1189,6 +1219,9 @@ export function useGameData() {
     resetAguPlan,
     advanceAguCycle,
     logAguProduct,
+    addAguError,
+    reviewAguError,
+    deleteAguError,
     fetchToday,
     closeDay,
     fetchEveningReview,
