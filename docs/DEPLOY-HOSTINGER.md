@@ -16,7 +16,7 @@ banco próprio no VPS, **sem mexer no que está no Render**.
 
 | Item | Como conferir |
 | --- | --- |
-| Projeto do Traefik já instalado no VPS | Docker Manager → **Projects**: deve existir um projeto com Traefik (com a rede `traefik-proxy`, entrypoint `websecure` e certresolver `letsencrypt`). Este guia **não** instala Traefik. |
+| Traefik já instalado no VPS | O Traefik roda **no host** (com `network_mode: host`), com provider `docker`, entrypoints `web`/`websecure` e certresolver `letsencrypt`. **Não** existe rede `traefik-proxy`: cada projeto se anuncia apenas pelas labels. Este guia **não** instala Traefik. |
 | DNS apontando para o VPS | No seu provedor de domínio, registro **A** de `grimorio.michelfernandes.adv.br` → IP do VPS. Já está feito, segundo você. |
 | Repositório público | `https://github.com/MichelFRibeiro/grimorio` está **público** (conferido). É obrigatório por **dois** motivos: o "Compose from URL" baixa o YAML sem chave de acesso **e** o build da imagem clona o repositório direto do GitHub. Se o repositório virar **privado**, este caminho para de funcionar e será preciso outra abordagem (enviar o código para o VPS ou publicar a imagem em um registro). |
 | `git` instalado no VPS | O build a partir do GitHub usa o `git` do host para clonar o repositório. Se faltar, o build falha (veja a seção 11). Confira no **Web Console**: `git --version`. Se não existir: `apt-get install -y git`. |
@@ -74,7 +74,8 @@ Render: o próprio app mostra as instruções na tela de login.
 
 3. Dê ao projeto um nome fácil de lembrar, por exemplo **grimorio**.
 4. **Não** altere nenhuma porta: o arquivo não publica portas de propósito. O
-   Traefik entra pela rede interna `traefik-proxy`.
+   Traefik do host alcança o container na 3000 pela rede default do projeto,
+   só pelas labels — o compose **não** tem bloco `networks:`.
 
 > **Como o build funciona (importante):** o "Compose from URL" baixa **apenas o
 > arquivo** `docker-compose.yml` para `/docker/<projeto>/` — o VPS **não** recebe
@@ -266,7 +267,8 @@ simples para uma cópia manual.
 | --- | --- |
 | **"Implantação falhou. / Docker project not found"** | O compose foi baixado, mas o build não achou o que construir. Quase sempre é `build: .` (não há Dockerfile no host) ou falta de `git` no VPS. Veja o passo a passo logo abaixo da tabela. |
 | Build falha com `git: not found` / `exec: "git": executable file not found` | O VPS não tem `git`, que é obrigatório para o contexto Git remoto. No **Web Console**: `apt-get update && apt-get install -y git` e faça o **Deploy** de novo. |
-| Página "404 page not found" do Traefik | O container não está na rede `traefik-proxy` ou o projeto do Traefik está parado. Confira em Docker Manager se o projeto do Traefik está **Running** e se o projeto `grimorio` mostra a rede `traefik-proxy`. |
+| Página "404 page not found" do Traefik | O Traefik não enxergou as labels do container: confirme que ele está rodando no host e que o projeto `grimorio` está **Running**. As 5 labels (`traefik.enable=true`, a regra `Host(...)`, `entrypoints=websecure`, `certresolver=letsencrypt` e a porta 3000) precisam estar no serviço `grimorio` do compose. |
+| Deploy para em `docker compose pull` (`pull access denied for grimorio` / `not found`) | Existe uma linha `image:` no serviço apontando para uma tag que só existe no VPS. Este compose **não** usa `image:` de propósito (veja a seção 13): remova a linha e faça o Deploy de novo. |
 | Certificado ainda "não seguro" | Espere 1–3 minutos e recarregue. Se passar de 10 minutos: confira se o DNS **A** de `grimorio.michelfernandes.adv.br` aponta para o IP do VPS (a emissão do certificado usa a porta 80). |
 | **502 Bad Gateway** | O container subiu e caiu, ou ainda está construindo. Veja os **Logs** do projeto. Build que falhou aparece como erro do npm/vite no log. |
 | Botão do Google não aparece | `GOOGLE_CLIENT_ID` vazio. Confira em `/api/auth/config` e reveja o passo 4. |
@@ -321,9 +323,10 @@ URL" salva **somente o YAML** em `/docker/grimorio/` — o Dockerfile não está
 5. Depois de corrigir, faça um **Deploy** novo no projeto. O build limpo baixa o
    código e compila a imagem (5 a 15 minutos na primeira vez).
 
-> Como conferir que o contexto certo chegou: no Web Console,
-> `docker image inspect grimorio:latest` deve existir depois de um build
-> bem-sucedido, e `docker ps` deve mostrar o container `grimorio` **Up**.
+> Como conferir que o contexto certo chegou: `docker images | grep grimorio`
+> deve mostrar a imagem construída depois de um build bem-sucedido (o nome é o
+> padrão do projeto, algo como `<projeto>-grimorio`), e `docker ps` deve mostrar
+> o container `grimorio` **Up**.
 
 ---
 
@@ -352,8 +355,11 @@ URL" salva **somente o YAML** em `/docker/grimorio/` — o Dockerfile não está
   `node:22-bookworm-slim` (glibc, porque o build do Vite usa binários de
   esbuild/rollup compatíveis com o `package-lock.json`). Roda como usuário
   **node** (não root), `EXPOSE 3000`, `HEALTHCHECK` chamando
-  `http://127.0.0.1:3000/api/health`. No compose a imagem recebe o nome estável
-  `grimorio:latest`.
+  `http://127.0.0.1:3000/api/health`. O compose **não** define `image:`: o Docker
+  Manager executa `docker compose pull` antes de construir e uma tag local
+  (`grimorio:latest`, que não existe em registro nenhum) faz esse pull falhar.
+  A imagem construída fica com o nome padrão do projeto (`<projeto>-grimorio`),
+  o que não afeta o Traefik — a rota usa o nome do **serviço**, não da imagem.
 - **Contexto de build remoto:** `context: https://github.com/MichelFRibeiro/grimorio.git#main`.
   O Docker Manager só tem o `docker-compose.yml` em `/docker/<projeto>/`, então
   o Docker clona o repositório **no host** (exige `git` instalado no VPS) e usa

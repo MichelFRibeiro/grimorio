@@ -15,12 +15,23 @@
 # outra abordagem (ex.: enviar o código para o host ou um registro de imagens).
 #
 # Ele sobe UM serviço (grimorio) atrás do Traefik que já existe no host:
-#  - nenhuma porta é publicada (sem "ports:"); o Traefik entra pela rede
-#    externa traefik-proxy e fala com o container na 3000;
+#  - o Traefik do host roda em network_mode: host (provider docker, entrypoints
+#    web/websecure, certresolver letsencrypt). NÃO existe rede externa
+#    traefik-proxy no VPS: os outros projetos (agent-zero, site do
+#    michelfernandes) sobem na própria rede default do compose e se anunciam
+#    apenas pelas labels. Este arquivo segue o mesmo padrão — sem "networks:";
+#  - nenhuma porta é publicada (sem "ports:"); o Traefik alcança o container
+#    na 3000 pela rede default do próprio projeto;
 #  - o certificado TLS é emitido pelo certresolver letsencrypt do host;
 #  - os dados ficam no volume nomeado grimorio-data, montado em /data
 #    (database.json + backups/). Nada de Supabase aqui: o Render continua
 #    dono do banco Postgres dele e os dois não escrevem no mesmo lugar.
+#
+# Sem "image:" de propósito: o Docker Manager da Hostinger roda
+# "docker compose pull" antes de construir, e um serviço apontando para
+# "image: grimorio:latest" faz esse pull falhar (essa tag só existe no VPS,
+# não em registro nenhum). Sem a linha, o compose só constrói e a imagem
+# recebe o nome padrão do projeto — o Traefik não depende do nome.
 #
 # Preencha as variáveis no painel do projeto (aba de Environment) antes de
 # subir:
@@ -35,8 +46,6 @@ services:
     build:
       context: https://github.com/MichelFRibeiro/grimorio.git#main
       dockerfile: Dockerfile
-    # Nome estável para a imagem construída (facilita inspeção/limpeza no VPS)
-    image: grimorio:latest
     container_name: grimorio
     restart: unless-stopped
     stop_grace_period: 20s
@@ -78,20 +87,12 @@ services:
         max-size: 10m
         max-file: "3"
 
-    networks:
-      - traefik-proxy
-
     labels:
       - traefik.enable=true
       - traefik.http.routers.grimorio.rule=Host(`grimorio.michelfernandes.adv.br`)
       - traefik.http.routers.grimorio.entrypoints=websecure
       - traefik.http.routers.grimorio.tls.certresolver=letsencrypt
       - traefik.http.services.grimorio.loadbalancer.server.port=3000
-      - traefik.docker.network=traefik-proxy
 
 volumes:
   grimorio-data:
-
-networks:
-  traefik-proxy:
-    external: true
