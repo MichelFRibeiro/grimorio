@@ -88,6 +88,8 @@ export function applyPenaltyDeltas(db, penalty, { now = new Date() } = {}) {
   if (!db.actionLogs) db.actionLogs = [];
   db.actionLogs.unshift(logEntry);
   penalty.applied = applied;
+  // logId é o nome do registro; rewardLogId é o mesmo id lido pelo estorno.
+  penalty.logId = logEntry.id;
   penalty.rewardLogId = logEntry.id;
   return { penalty, logEntry, applied };
 }

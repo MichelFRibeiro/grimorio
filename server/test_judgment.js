@@ -223,6 +223,7 @@ async function run() {
   runMaintenance(contestDb, new Date('2026-10-07T12:00:00-03:00'), { createBossRaid });
   const penalty = contestDb.penalties.find((item) => item.type === 'critical_quest_overdue');
   assert.ok(penalty.rewardLogId, 'punição tem log no ledger');
+  assert.equal(penalty.logId, penalty.rewardLogId, 'logId aponta para o mesmo log do ledger');
   const coinsAfter = contestDb.userProfile.coins;
   const willAfter = contestDb.userProfile.stats.willpower;
   const reverted = revertLog(contestDb, penalty.rewardLogId, { save: false });
