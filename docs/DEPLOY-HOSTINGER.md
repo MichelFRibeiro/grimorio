@@ -18,7 +18,9 @@ banco próprio no VPS, **sem mexer no que está no Render**.
 | --- | --- |
 | Projeto do Traefik já instalado no VPS | Docker Manager → **Projects**: deve existir um projeto com Traefik (com a rede `traefik-proxy`, entrypoint `websecure` e certresolver `letsencrypt`). Este guia **não** instala Traefik. |
 | DNS apontando para o VPS | No seu provedor de domínio, registro **A** de `grimorio.michelfernandes.adv.br` → IP do VPS. Já está feito, segundo você. |
-| Repositório público | `https://github.com/MichelFRibeiro/grimorio` está **público** (conferido). É o que permite usar o "Compose from URL" sem chave de acesso. |
+| Repositório público | `https://github.com/MichelFRibeiro/grimorio` está **público** (conferido). É obrigatório por **dois** motivos: o "Compose from URL" baixa o YAML sem chave de acesso **e** o build da imagem clona o repositório direto do GitHub. Se o repositório virar **privado**, este caminho para de funcionar e será preciso outra abordagem (enviar o código para o VPS ou publicar a imagem em um registro). |
+| `git` instalado no VPS | O build a partir do GitHub usa o `git` do host para clonar o repositório. Se faltar, o build falha (veja a seção 11). Confira no **Web Console**: `git --version`. Se não existir: `apt-get install -y git`. |
+| Acesso ao Web Console do VPS | Docker Manager → seu VPS → **Web Console** (terminal do host). É onde você lê `/docker/grimorio/.build.log` e instala pacotes, se precisar. |
 | Acesso ao Google Cloud Console | Para liberar o novo endereço no cliente OAuth que já existe. |
 
 Nada precisa ser instalado na sua máquina: o VPS constrói a imagem.
@@ -73,6 +75,26 @@ Render: o próprio app mostra as instruções na tela de login.
 3. Dê ao projeto um nome fácil de lembrar, por exemplo **grimorio**.
 4. **Não** altere nenhuma porta: o arquivo não publica portas de propósito. O
    Traefik entra pela rede interna `traefik-proxy`.
+
+> **Como o build funciona (importante):** o "Compose from URL" baixa **apenas o
+> arquivo** `docker-compose.yml` para `/docker/<projeto>/` — o VPS **não** recebe
+> o código-fonte. Por isso o compose não usa `build: .` e sim um **contexto Git
+> remoto**:
+>
+> ```yaml
+> build:
+>   context: https://github.com/MichelFRibeiro/grimorio.git#main
+>   dockerfile: Dockerfile
+> ```
+>
+> O Docker clona o repositório no host durante a construção e usa a raiz dele
+> como contexto (o `Dockerfile` está na raiz e o `.dockerignore` do projeto é
+> respeitado: `node_modules`, `dist` e o banco real não entram na imagem). Ou
+> seja, **cada build pega o estado atual da branch `main`** — um `git push` e um
+> **Update/Redeploy** já trazem o código novo (veja a seção 8).
+>
+> Se você colar o YAML manualmente no campo "Compose file" (alternativa acima), o
+> comportamento é o mesmo: o build continua vindo do GitHub.
 
 ---
 
@@ -242,6 +264,8 @@ simples para uma cópia manual.
 
 | Sintoma | Provável causa e o que fazer |
 | --- | --- |
+| **"Implantação falhou. / Docker project not found"** | O compose foi baixado, mas o build não achou o que construir. Quase sempre é `build: .` (não há Dockerfile no host) ou falta de `git` no VPS. Veja o passo a passo logo abaixo da tabela. |
+| Build falha com `git: not found` / `exec: "git": executable file not found` | O VPS não tem `git`, que é obrigatório para o contexto Git remoto. No **Web Console**: `apt-get update && apt-get install -y git` e faça o **Deploy** de novo. |
 | Página "404 page not found" do Traefik | O container não está na rede `traefik-proxy` ou o projeto do Traefik está parado. Confira em Docker Manager se o projeto do Traefik está **Running** e se o projeto `grimorio` mostra a rede `traefik-proxy`. |
 | Certificado ainda "não seguro" | Espere 1–3 minutos e recarregue. Se passar de 10 minutos: confira se o DNS **A** de `grimorio.michelfernandes.adv.br` aponta para o IP do VPS (a emissão do certificado usa a porta 80). |
 | **502 Bad Gateway** | O container subiu e caiu, ou ainda está construindo. Veja os **Logs** do projeto. Build que falhou aparece como erro do npm/vite no log. |
@@ -253,6 +277,54 @@ simples para uma cópia manual.
 | Apareceu "Backup diário" nos logs | É normal e desejado: uma linha por dia, gravando `/data/backups/database-AAAA-MM-DD.json`. |
 | Log de `KeepAlive` a cada 10 min | Normal: o app se auto-verifica pela URL pública. Não faz mal (era obrigatório no Render; aqui é só um teste de vida). |
 
+### 11.1 "Docker project not found" — o que fazer
+
+Esse aviso significa que o Docker Manager baixou o `docker-compose.yml`, mas a
+etapa de build não encontrou código-fonte no VPS. Lembre-se: o "Compose from
+URL" salva **somente o YAML** em `/docker/grimorio/` — o Dockerfile não está lá.
+
+1. **Leia o log do build** (é a fonte da verdade). Docker Manager → seu VPS →
+   **Web Console** (terminal do host) e rode:
+
+   ```bash
+   ls -la /docker/grimorio/          # deve ter só o docker-compose.yml (+ .env)
+   tail -n 80 /docker/grimorio/.build.log
+   ```
+
+   O nome do arquivo pode variar um pouco conforme a versão do painel; se não
+   achar, procure na pasta: `ls -la /docker/grimorio/ | grep -i log`.
+2. **Se o log reclamar de `git`** (`git: not found`, `exec: "git" ... not found`
+   ou `failed to fetch`), instale o `git` no **host** e repita o Deploy:
+
+   ```bash
+   apt-get update && apt-get install -y git
+   git --version
+   ```
+
+   O `git` é necessário porque o build clona
+   `https://github.com/MichelFRibeiro/grimorio.git#main`.
+3. **Se o log mostrar `Cannot locate specified Dockerfile` ou
+   `failed to read dockerfile: open Dockerfile`**, o compose ainda está com
+   `build: .` — o contexto precisa ser a URL do repositório (veja a seção 3).
+   Confirme que a URL crua está entregando a versão nova do arquivo:
+
+   ```bash
+   curl -s https://raw.githubusercontent.com/MichelFRibeiro/grimorio/main/docker-compose.yml | head -30
+   ```
+
+   O CDN do GitHub pode guardar em cache por até ~5 minutos depois de um push.
+   Se a linha `context:` ainda vier `context: .`, espere um pouco e tente de
+   novo (ou recrie o projeto para forçar a re-leitura da URL).
+4. **Se o log tiver erro de rede/DNS** ao buscar o repositório, o VPS está sem
+   saída para o GitHub. Teste no Web Console:
+   `git ls-remote https://github.com/MichelFRibeiro/grimorio.git HEAD`.
+5. Depois de corrigir, faça um **Deploy** novo no projeto. O build limpo baixa o
+   código e compila a imagem (5 a 15 minutos na primeira vez).
+
+> Como conferir que o contexto certo chegou: no Web Console,
+> `docker image inspect grimorio:latest` deve existir depois de um build
+> bem-sucedido, e `docker ps` deve mostrar o container `grimorio` **Up**.
+
 ---
 
 ## 12. Checklist final
@@ -260,6 +332,8 @@ simples para uma cópia manual.
 - [ ] Origem `https://grimorio.michelfernandes.adv.br` adicionada no Google Cloud
       Console (sem apagar as antigas).
 - [ ] Projeto criado no Docker Manager a partir do compose do GitHub.
+- [ ] Repositório **público** e `git` instalado no VPS (`git --version` no Web
+      Console) — os dois são exigidos pelo build a partir do GitHub.
 - [ ] `GOOGLE_CLIENT_ID` e `OWNER_EMAILS` preenchidos; **sem** `DATABASE_URL`.
 - [ ] `/api/auth/config` mostra o `googleClientId`.
 - [ ] Login Google funcionando no endereço novo.
@@ -274,10 +348,27 @@ simples para uma cópia manual.
 
 ## 13. Detalhes técnicos (para quem for mexer depois)
 
-- **Imagem:** `Dockerfile` na raiz, multi-stage `node:22-bookworm-slim`
-  (glibc, porque o build do Vite usa binários de esbuild/rollup compatíveis com
-  o `package-lock.json`). Roda como usuário **node** (não root), `EXPOSE 3000`,
-  `HEALTHCHECK` chamando `http://127.0.0.1:3000/api/health`.
+- **Imagem:** `Dockerfile` na raiz do repositório, multi-stage
+  `node:22-bookworm-slim` (glibc, porque o build do Vite usa binários de
+  esbuild/rollup compatíveis com o `package-lock.json`). Roda como usuário
+  **node** (não root), `EXPOSE 3000`, `HEALTHCHECK` chamando
+  `http://127.0.0.1:3000/api/health`. No compose a imagem recebe o nome estável
+  `grimorio:latest`.
+- **Contexto de build remoto:** `context: https://github.com/MichelFRibeiro/grimorio.git#main`.
+  O Docker Manager só tem o `docker-compose.yml` em `/docker/<projeto>/`, então
+  o Docker clona o repositório **no host** (exige `git` instalado no VPS) e usa
+  a raiz do clone como contexto. Consequências: (a) o repositório precisa ser
+  **público**; (b) o `.dockerignore` do repositório é aplicado, então
+  `node_modules`, `dist`, `data/database.json` e `data/backups` ficam de fora;
+  (c) cada build pega o topo da branch `main`. Arquivos que o Dockerfile copia e
+  que por isso **precisam estar versionados**: `package.json`,
+  `package-lock.json`, `server/`, `src/`, `data/audio/focus_mp3.mp3` (conferido
+  com `git ls-files data/audio`). O `dist/` não é versionado de propósito — é
+  gerado dentro do build por `npm run build`.
+- **Variáveis do compose:** as interpoladas usam default vazio
+  (`${GOOGLE_CLIENT_ID:-}`, `${OWNER_EMAILS:-}`, `${OPENROUTER_API_KEY:-}`,
+  `${MCP_BEARER_TOKEN:-}`) para que a validação do compose não emita aviso de
+  variável em branco antes de você cadastrá-las no painel.
 - **Estrutura dentro da imagem:** `/app/server`, `/app/src`, `/app/dist`,
   `/app/data/audio/focus_mp3.mp3`, `/app/package*.json`. O banco **não** entra
   na imagem.

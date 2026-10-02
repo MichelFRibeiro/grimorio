@@ -4,6 +4,16 @@
 # Este arquivo é usado pelo "Compose from URL" do Docker Manager:
 #   https://raw.githubusercontent.com/MichelFRibeiro/grimorio/main/docker-compose.yml
 #
+# IMPORTANTE (contexto de build): o "Compose from URL" baixa APENAS este arquivo
+# para /docker/<projeto>/ — não há código-fonte nem Dockerfile no host. Por isso
+# o build usa um contexto Git remoto (o repositório público) em vez de ".":
+#   build:
+#     context: https://github.com/MichelFRibeiro/grimorio.git#main
+# O Docker clona o repositório no host e constrói a imagem a partir da raiz dele
+# (o Dockerfile está na raiz e o .dockerignore do repositório é respeitado).
+# Se o repositório virar privado, este caminho deixa de funcionar e será preciso
+# outra abordagem (ex.: enviar o código para o host ou um registro de imagens).
+#
 # Ele sobe UM serviço (grimorio) atrás do Traefik que já existe no host:
 #  - nenhuma porta é publicada (sem "ports:"); o Traefik entra pela rede
 #    externa traefik-proxy e fala com o container na 3000;
@@ -21,9 +31,11 @@
 # =============================================================================
 services:
   grimorio:
+    # Contexto Git remoto: o Docker Manager não tem o código no host.
     build:
-      context: .
+      context: https://github.com/MichelFRibeiro/grimorio.git#main
       dockerfile: Dockerfile
+    # Nome estável para a imagem construída (facilita inspeção/limpeza no VPS)
     image: grimorio:latest
     container_name: grimorio
     restart: unless-stopped
@@ -45,9 +57,11 @@ services:
       TRUST_PROXY: "1"
       APP_URL: https://grimorio.michelfernandes.adv.br
       ALLOWED_ORIGINS: https://grimorio.michelfernandes.adv.br
-      # Vêm das variáveis do projeto (painel do Docker Manager)
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      OWNER_EMAILS: ${OWNER_EMAILS}
+      # Vêm das variáveis do projeto (painel do Docker Manager). O ":-" evita
+      # aviso de variável em branco na validação do compose quando ainda não
+      # foram cadastradas (o app simplesmente sobe sem login Google/OWNER_EMAILS).
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      OWNER_EMAILS: ${OWNER_EMAILS:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN:-}
       # Sem DATABASE_URL de propósito: assim o app usa o JSON do volume.
