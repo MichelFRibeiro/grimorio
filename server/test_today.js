@@ -174,11 +174,11 @@ await check('plan_day é a indicação antes do meio-dia sem vitórias', () => {
   assert.notEqual(later.primary?.kind, 'plan_day');
 });
 
-await check('fechar o dia concede a recompensa uma vez e estorna ao excluir', () => {
+await check('fechar o dia concede a recompensa uma vez e estorna ao excluir', async () => {
   const db = freshDb();
   const before = db.userProfile.xp;
   const consistency = db.userProfile.stats.consistency;
-  const first = closeDay(db, { note: 'Dia curto', mood: 4 });
+  const first = await closeDay(db, { note: 'Dia curto', mood: 4 });
   assert.equal(first.error, undefined);
   assert.equal(first.review.note, 'Dia curto');
   assert.equal(first.review.mood, 4);
@@ -186,7 +186,7 @@ await check('fechar o dia concede a recompensa uma vez e estorna ao excluir', ()
   assert.equal(db.userProfile.stats.consistency, consistency + DAILY_REVIEW_REWARDS.consistency);
   assert.equal(db.actionLogs.filter((log) => log.type === 'daily_review').length, 1);
 
-  const second = closeDay(db, { note: 'De novo' });
+  const second = await closeDay(db, { note: 'De novo' });
   assert.equal(second.status, 409);
   assert.equal(db.actionLogs.filter((log) => log.type === 'daily_review').length, 1);
 

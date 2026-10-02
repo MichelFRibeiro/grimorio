@@ -3,7 +3,7 @@
  * Fuso horário padrão: América/São Paulo (BRT, UTC-3)
  */
 
-import { isPeriodFrequency, getHabitPeriodStatus, getHabitWeekDays } from '../src/utils/habitFrequency.js';
+import { isPeriodFrequency, getHabitPeriodStatus, getHabitWeekDays, canonicalizeHabitFrequency } from '../src/utils/habitFrequency.js';
 
 export const SAO_PAULO_TZ = 'America/Sao_Paulo';
 
@@ -299,5 +299,115 @@ export function getHabitWeeklyStats(habit, date = new Date()) {
     isGoalMet,
     completedDays,
     period
+  };
+}
+
+function sundayOfWeek(dateStr) {
+  return addDaysToDateStr(dateStr, -getSaoPauloDayOfWeek(dateStr));
+}
+
+function weekMet(habit, sunday, target) {
+  const end = addDaysToDateStr(sunday, 6);
+  const history = Array.isArray(habit?.history) ? habit.history : [];
+  const done = history.filter((date) => typeof date === 'string' && date >= sunday && date <= end).length;
+  return done >= target;
+}
+
+export function weekRangeForStreak(dateStr) {
+  const sunday = sundayOfWeek(dateStr);
+  return { start: sunday, end: addDaysToDateStr(sunday, 6) };
+}
+
+function weeklyTargetOf(habit) {
+  const freq = canonicalizeHabitFrequency(habit?.frequency || 'daily');
+  if (freq === 'weekly') return 1;
+  const days = getHabitWeekDays(habit);
+  if (days?.length) return days.length;
+  return Math.max(1, Math.min(7, parseInt(habit?.targetTimesPerWeek || habit?.timesPerWeek, 10) || 3));
+}
+
+/**
+ * Sequência pela frequência, não por dia corrido.
+ * daily/weekdays contam dias devidos consecutivos.
+ * weekly/times_per_week contam semanas em que a meta fechou.
+ * fortnightly/monthly contam períodos concluídos.
+ * A semana/período corrente ainda aberta não quebra a sequência.
+ */
+export function calculateFrequencyStreak(habit, refDate = new Date()) {
+  const freq = canonicalizeHabitFrequency(habit?.frequency || 'daily');
+  const history = Array.isArray(habit?.history) ? habit.history : [];
+  const today = getSaoPauloDateStr(refDate);
+  const previousBest = habit?.bestStreak || 0;
+
+  if (freq === 'weekly' || freq === 'times_per_week') {
+    const target = weeklyTargetOf(habit);
+    let cursor = sundayOfWeek(today);
+    if (!weekMet(habit, cursor, target)) cursor = addDaysToDateStr(cursor, -7);
+    let current = 0;
+    let guard = 0;
+    while (weekMet(habit, cursor, target) && guard < 520) {
+      current += 1;
+      cursor = addDaysToDateStr(cursor, -7);
+      guard += 1;
+    }
+    return {
+      currentStreak: current,
+      bestStreak: Math.max(previousBest, current),
+      unit: 'weeks',
+      unitLabel: current === 1 ? 'semana' : 'semanas'
+    };
+  }
+
+  if (isPeriodFrequency(freq)) {
+    const currentPeriod = getHabitPeriodStatus(habit, today);
+    let cursor = currentPeriod?.start || today;
+    if (currentPeriod && !currentPeriod.completed) {
+      cursor = addDaysToDateStr(currentPeriod.start, -1);
+    }
+    let current = 0;
+    let guard = 0;
+    while (guard < 240) {
+      const period = getHabitPeriodStatus(habit, cursor);
+      if (!period?.completed) break;
+      current += 1;
+      cursor = addDaysToDateStr(period.start, -1);
+      guard += 1;
+    }
+    return {
+      currentStreak: current,
+      bestStreak: Math.max(previousBest, current),
+      unit: 'periods',
+      unitLabel: current === 1 ? 'período' : 'períodos'
+    };
+  }
+
+  const dateSet = new Set(history.filter((date) => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)));
+  const dueOn = (dateStr) => {
+    if (freq === 'weekdays') {
+      const day = getSaoPauloDayOfWeek(dateStr);
+      return day >= 1 && day <= 5;
+    }
+    return true;
+  };
+  let cursor = today;
+  if (!dateSet.has(today)) cursor = addDaysToDateStr(today, -1);
+  let current = 0;
+  let guard = 0;
+  while (guard < 2000) {
+    if (!dueOn(cursor)) {
+      cursor = addDaysToDateStr(cursor, -1);
+      guard += 1;
+      continue;
+    }
+    if (!dateSet.has(cursor)) break;
+    current += 1;
+    cursor = addDaysToDateStr(cursor, -1);
+    guard += 1;
+  }
+  return {
+    currentStreak: current,
+    bestStreak: Math.max(previousBest, current),
+    unit: 'days',
+    unitLabel: current === 1 ? 'dia' : 'dias'
   };
 }

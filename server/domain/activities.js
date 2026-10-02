@@ -9,7 +9,9 @@
  * O chamador HTTP/MCP faz um saveDb final para gravar o estado das entidades.
  */
 
-import { rewardPlayer, revertPlayerReward, revertLog, findRewardLog, uid } from '../db.js';
+import { rewardPlayer, revertPlayerReward, revertLog, findRewardLog, uid, createBossRaid, getDb } from '../db.js';
+import { runMaintenance } from './maintenance.js';
+import { grantDestinyChest } from './destinyChest.js';
 import { getSaoPauloDateStr, getSaoPauloHour, getSaoPauloDayOfWeek, calculateHabitStreak } from '../timeUtils.js';
 import { willpowerForDifficulty } from '../../src/utils/activityScale.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, clearLiveActivityTimer } from '../../src/utils/activityDuration.js';
@@ -24,7 +26,8 @@ import {
   sanitizeDailyVictories,
   sanitizeDailyVictoryBonuses
 } from '../../src/utils/dailyVictories.js';
-import { computeStudyRewards } from '../../src/utils/mindMaps.js';
+import { computeStudyRewards, restoreSessionScheduling } from '../../src/utils/mindMaps.js';
+import { calculateFrequencyStreak } from '../timeUtils.js';
 import {
   DomainError,
   LIMITS,
@@ -56,7 +59,14 @@ function asError(err) {
   throw err;
 }
 
+function ensureMaintained(db) {
+  if (!db || db.__maintenanceRan) return;
+  runMaintenance(db, new Date(), { createBossRaid });
+  db.__maintenanceRan = true;
+}
+
 function grant(payload) {
+  ensureMaintained(getDb());
   return rewardPlayer(payload);
 }
 
@@ -242,9 +252,10 @@ export function toggleHabit(db, { id, date, durationMinutes: rawDuration, decisi
     clearHabitDurationForDate(habit, targetDate);
     const logId = habit.rewardLogs[targetDate];
     delete habit.rewardLogs[targetDate];
-    const streakData = calculateHabitStreak(habit.history, refDate, habit.bestStreak || 0);
+    const streakData = calculateFrequencyStreak(habit, refDate);
     habit.currentStreak = streakData.currentStreak;
-    habit.bestStreak = streakData.bestStreak;
+    habit.bestStreak = Math.max(habit.bestStreak || 0, streakData.bestStreak);
+    habit.streakUnit = streakData.unit;
     const rewards = habitRewards(habit, 0);
     rewardResult = revertByRef({
       logId,
@@ -267,10 +278,11 @@ export function toggleHabit(db, { id, date, durationMinutes: rawDuration, decisi
       return asError(err);
     }
     setHabitDurationForDate(habit, targetDate, minutes);
-    const streakData = calculateHabitStreak(habit.history, refDate, habit.bestStreak || 0);
+    const streakData = calculateFrequencyStreak(habit, refDate);
     habit.currentStreak = streakData.currentStreak;
-    habit.bestStreak = streakData.bestStreak;
-    const rewards = habitRewards(habit, habit.currentStreak);
+    habit.bestStreak = Math.max(habit.bestStreak || 0, streakData.bestStreak);
+    habit.streakUnit = streakData.unit;
+    const rewards = habitRewards(habit, habit.currentStreak, streakData.unit);
     const isToday = targetDate === todayStr;
     const dateParts = targetDate.split('-');
     const formattedDate = isToday ? 'Hoje' : `${dateParts[2]}/${dateParts[1]}`;
@@ -1184,7 +1196,7 @@ export function redeemReward(db, { id, notes } = {}) {
 // Vitória do dia
 // ---------------------------------------------------------------------------
 
-export function completeDailyVictoryUseCase(db, { id, completed, note, durationMinutes: rawDuration, decisionId } = {}) {
+export async function completeDailyVictoryUseCase(db, { id, completed, note, durationMinutes: rawDuration, decisionId } = {}) {
   const todayStr = getSaoPauloDateStr();
   db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
   db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
@@ -1238,6 +1250,7 @@ export function completeDailyVictoryUseCase(db, { id, completed, note, durationM
         });
         const bonus = db.dailyVictoryBonuses?.[result.victory.date];
         if (bonus && bonusRewardResult?.logEntry?.id) bonus.rewardLogId = bonusRewardResult.logEntry.id;
+        result.chest = await grantDestinyChest(getDb(), result.victory.date, 'triad');
       }
     } else {
       const victoryLogId = result.victory.rewardLogId;
@@ -1294,6 +1307,10 @@ export function deleteMindMapSession(db, id) {
   const index = db.mindMapSessions.findIndex(s => s.id === id);
   if (index === -1) return fail('Sessão de estudo não encontrada', 404);
   const [removed] = db.mindMapSessions.splice(index, 1);
+  const mapIndex = (db.mindMaps || []).findIndex(map => map.id === removed.mapId);
+  if (mapIndex !== -1 && Array.isArray(removed.nodeSnapshots) && removed.nodeSnapshots.length) {
+    db.mindMaps[mapIndex] = restoreSessionScheduling(db.mindMaps[mapIndex], removed);
+  }
   const rewardResult = revertMindMapSession(db, removed);
   return { removed, rewardResult };
 }

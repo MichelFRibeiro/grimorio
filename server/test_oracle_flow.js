@@ -4,6 +4,11 @@ import './testEnv.js';
  *
  * Cobrem a ponte entre servidor e cartão (energia, pular, abstenção), a
  * memória (vitória, expiração, dedupe) e a leitura de quantidade.
+ *
+ * Todas as chamadas passam `includePlanDay: false`: o candidato "Planejar o
+ * dia" só existe de manhã e sem vitórias planejadas, então deixá-lo ligado
+ * fazia esta suíte passar à tarde e falhar de manhã. O plan_day tem teste
+ * próprio, com relógio fixo, em test_today.js.
  */
 
 import {
@@ -95,42 +100,42 @@ async function run() {
 
   // ---------------------------------------------------------------- energia
   const previewDb = baseDb();
-  const semEnergia = previewNextAction(previewDb, { location: 'office' });
+  const semEnergia = previewNextAction(previewDb, { location: 'office', includePlanDay: false });
   assert(semEnergia.needsEnergy === true, 'sem leitura, o retrato do estado pede energia');
   assert(semEnergia.primary?.id === 'q-peticao', 'sem leitura, o retrato já traz a indicação local');
   assert(Array.isArray(semEnergia.declineReasons) && semEnergia.declineReasons.length > 0, 'o retrato traz os motivos de recusa');
   assert(semEnergia.source === 'preview', 'o retrato não se diz consulta ao Jev');
 
   const comEnergiaDb = baseDb({ oracleEnergyReadings: [energyReading(6)] });
-  const comEnergia = previewNextAction(comEnergiaDb, { location: 'office' });
+  const comEnergia = previewNextAction(comEnergiaDb, { location: 'office', includePlanDay: false });
   assert(comEnergia.needsEnergy === false, 'com leitura recente, o retrato NÃO volta a pedir energia');
   assert(comEnergia.energy?.score === 6, 'o retrato devolve a energia vigente');
 
   const velhaDb = baseDb({
     oracleEnergyReadings: [energyReading(6, new Date(Date.now() - 90 * 60 * 1000).toISOString())]
   });
-  assert(previewNextAction(velhaDb, { location: 'office' }).needsEnergy === true, 'leitura vencida volta a pedir energia');
+  assert(previewNextAction(velhaDb, { location: 'office', includePlanDay: false }).needsEnergy === true, 'leitura vencida volta a pedir energia');
 
   // ----------------------------------------------------------------- pular
   // O botão "Pular" só aparece quando falta leitura de energia.
   const skipDb = baseDb();
   markEnergySkip(skipDb, {});
-  const pulado = previewNextAction(skipDb, { location: 'office' });
+  const pulado = previewNextAction(skipDb, { location: 'office', includePlanDay: false });
   assert(pulado.needsEnergy === false, '"pular" vale para as próximas atualizações da tela');
   assert(pulado.energy === null && pulado.primary?.id === 'q-peticao', '"pular" mostra a indicação local sem energia');
 
-  const skipSuggestion = await suggestNextAction(skipDb, { location: 'office', skipJev: true }, {
+  const skipSuggestion = await suggestNextAction(skipDb, { location: 'office', includePlanDay: false, skipJev: true }, {
     fetchImpl: async () => { throw new Error('não deveria consultar o Jev'); }
   });
   assert(skipSuggestion.primary?.id === 'q-peticao', 'com "pular", a indicação sai do motor local');
   assert(skipSuggestion.trace.some(entry => entry.step === 'fallback' && /pulada/i.test(entry.note || '')), 'o processo registra que a energia foi pulada');
 
   const skipVencidoDb = baseDb({ oracleEnergySkip: { at: new Date(Date.now() - ENERGY_SKIP_TTL_MS - 1000).toISOString() } });
-  assert(previewNextAction(skipVencidoDb, { location: 'office' }).needsEnergy === true, 'o "pular" expira junto com a leitura de energia');
+  assert(previewNextAction(skipVencidoDb, { location: 'office', includePlanDay: false }).needsEnergy === true, 'o "pular" expira junto com a leitura de energia');
 
   // ------------------------------------------- energia com o Jev indisponível
   const quedaDb = baseDb({ oracleEnergyReadings: [] });
-  const queda = await recordEnergyAndSuggest(quedaDb, 'cansado, mas consigo algo curto', { location: 'office' }, {
+  const queda = await recordEnergyAndSuggest(quedaDb, 'cansado, mas consigo algo curto', { location: 'office', includePlanDay: false }, {
     fetchImpl: async () => { throw Object.assign(new Error('sem rede'), { code: 'ENETUNREACH' }); }
   });
   assert(queda.reading?.score === 4, 'falha do Jev usa a média ponderada local, não o mínimo');
@@ -142,7 +147,7 @@ async function run() {
   assert(quedaDb.oracleEnergyReadings[0]?.date === getSaoPauloDateStr(), 'a energia é gravada com a data civil de São Paulo');
 
   const vazioDb = baseDb();
-  const semPista = await recordEnergyAndSuggest(vazioDb, 'vamos ver no que dá', { location: 'office' }, {
+  const semPista = await recordEnergyAndSuggest(vazioDb, 'vamos ver no que dá', { location: 'office', includePlanDay: false }, {
     fetchImpl: async () => { throw new Error('sem rede'); }
   });
   assert(semPista.reading == null, 'sem pista no texto, a energia não é inventada');
@@ -150,7 +155,7 @@ async function run() {
 
   // ------------------------------------------------------------- abstenção
   const abstencaoDb = baseDb();
-  const abstencao = await suggestNextAction(abstencaoDb, { location: 'office', energyReading: energyReading(7) }, {
+  const abstencao = await suggestNextAction(abstencaoDb, { location: 'office', includePlanDay: false, energyReading: energyReading(7) }, {
     fetchImpl: choiceFetch('none', { none: 0.8, 'q-peticao': 0.2 })
   });
   assert(abstencao.abstained === true, 'a abstenção do Jev é registrada na resposta');
@@ -163,7 +168,7 @@ async function run() {
   const vitoriaDb = baseDb({
     dailyVictories: [{ id: 'dv-1', date: getSaoPauloDateStr(), title: 'Finalizar a petição do INSS', category: 'INSS', completed: false }]
   });
-  const vitoria = await suggestNextAction(vitoriaDb, { location: 'office', energyReading: energyReading(7) }, {
+  const vitoria = await suggestNextAction(vitoriaDb, { location: 'office', includePlanDay: false, energyReading: energyReading(7) }, {
     fetchImpl: choiceFetch('dv-1', { 'dv-1': 0.9, 'q-peticao': 0.1 })
   });
   assert(vitoria.primary?.id === 'dv-1', 'a Vitória do Dia é a candidata indicada');
@@ -205,7 +210,7 @@ async function run() {
   assert(recusaTardia.decision?.outcome === 'declined', 'ainda é possível dizer o motivo de uma indicação expirada');
 
   const dedupeDb = baseDb();
-  const options = { location: 'office', energyReading: energyReading(7) };
+  const options = { location: 'office', includePlanDay: false, energyReading: energyReading(7) };
   const jevOptions = { fetchImpl: choiceFetch('q-peticao', { 'q-peticao': 0.9 }) };
   await suggestNextAction(dedupeDb, options, jevOptions);
   await suggestNextAction(dedupeDb, options, jevOptions);
@@ -307,7 +312,7 @@ async function run() {
   const reuseDb = baseDb({
     oracleQuantityReads: [...cacheDb.oracleQuantityReads]
   });
-  const reuse = await suggestNextAction(reuseDb, { location: 'office', energyReading: energyReading(4) }, {
+  const reuse = await suggestNextAction(reuseDb, { location: 'office', includePlanDay: false, energyReading: energyReading(4) }, {
     fetchImpl: async (_url, init) => {
       const body = JSON.parse(init.body);
       if (body.questions.has_quantity) {
@@ -364,7 +369,7 @@ async function run() {
   };
 
   const partidaDb = baseDb({ quests: [aberta] });
-  const partida = await suggestNextAction(partidaDb, { location: 'office', energyReading: energyReading(2) }, {
+  const partida = await suggestNextAction(partidaDb, { location: 'office', includePlanDay: false, energyReading: energyReading(2) }, {
     fetchImpl: semQuantidade
   });
   assert(partida.primary?.dose?.fraction === 'start', 'tarefa sem quantitativo recebe dose de partida, não fica sem dose');
@@ -379,7 +384,7 @@ async function run() {
 
   // Sem resposta utilizável do Jev, a faixa de energia garante a dose.
   const faixaDb = baseDb({ quests: [aberta] });
-  const faixa = await suggestNextAction(faixaDb, { location: 'office', energyReading: energyReading(2) }, {
+  const faixa = await suggestNextAction(faixaDb, { location: 'office', includePlanDay: false, energyReading: energyReading(2) }, {
     fetchImpl: async (_url, init) => {
       const body = JSON.parse(init.body);
       if (body.questions.most_likely_now) return choiceFetch('q-limpar', { 'q-limpar': 0.9 })();
@@ -393,7 +398,7 @@ async function run() {
 
   // Jev fora do ar: a dose de partida continua saindo do motor local.
   const offlineDb = baseDb({ quests: [aberta] });
-  const offline = await suggestNextAction(offlineDb, { location: 'office', energyReading: energyReading(3) }, {
+  const offline = await suggestNextAction(offlineDb, { location: 'office', includePlanDay: false, energyReading: energyReading(3) }, {
     fetchImpl: async () => { throw new Error('sem rede'); }
   });
   assert(offline.primary?.dose?.amount === 10, 'com o Jev fora do ar, a dose de partida sai da faixa de energia');
@@ -404,7 +409,7 @@ async function run() {
   const savedKey = process.env.OPENROUTER_API_KEY;
   process.env.OPENROUTER_API_KEY = '';
   try {
-    const semChave = await suggestNextAction(noKeyDb, { location: 'office', energyReading: energyReading(5) });
+    const semChave = await suggestNextAction(noKeyDb, { location: 'office', includePlanDay: false, energyReading: energyReading(5) });
     assert(semChave.primary?.dose?.amount === 15, 'sem chave do OpenRouter, a dose de partida ainda é sugerida');
   } finally {
     process.env.OPENROUTER_API_KEY = savedKey;
@@ -412,7 +417,7 @@ async function run() {
 
   // A abstenção do Jev não pode tirar a dose: é quando ela mais importa.
   const abstencaoDoseDb = baseDb({ quests: [aberta] });
-  const abstencaoDose = await suggestNextAction(abstencaoDoseDb, { location: 'office', energyReading: energyReading(2) }, {
+  const abstencaoDose = await suggestNextAction(abstencaoDoseDb, { location: 'office', includePlanDay: false, energyReading: energyReading(2) }, {
     fetchImpl: async (_url, init) => {
       const body = JSON.parse(init.body);
       if (body.questions.most_likely_now) return choiceFetch('none', { none: 0.9 })();
@@ -426,7 +431,7 @@ async function run() {
 
   // Falha na etapa da dose não pode derrubar a escolha do Jev.
   const falhaDoseDb = baseDb({ quests: [questComQuantidade] });
-  const falhaDose = await suggestNextAction(falhaDoseDb, { location: 'office', energyReading: energyReading(2) }, {
+  const falhaDose = await suggestNextAction(falhaDoseDb, { location: 'office', includePlanDay: false, energyReading: energyReading(2) }, {
     fetchImpl: async (_url, init) => {
       const body = JSON.parse(init.body);
       if (body.questions.dose) return fakeFetch({ error: { message: 'falha na dose' } }, 500)();
@@ -448,7 +453,7 @@ async function run() {
 
   // Energia alta continua sem dose.
   const altaDb = baseDb({ quests: [aberta] });
-  const alta = await suggestNextAction(altaDb, { location: 'office', energyReading: energyReading(8) }, {
+  const alta = await suggestNextAction(altaDb, { location: 'office', includePlanDay: false, energyReading: energyReading(8) }, {
     fetchImpl: choiceFetch('q-limpar', { 'q-limpar': 0.9 })
   });
   assert(!alta.primary?.dose, 'com energia alta não se oferece dose');
@@ -456,7 +461,7 @@ async function run() {
   // ------------------------------------------- quantidade só quando é útil
   let altoQuantityCalls = 0;
   const altoDb = baseDb();
-  await suggestNextAction(altoDb, { location: 'office', energyReading: energyReading(9) }, {
+  await suggestNextAction(altoDb, { location: 'office', includePlanDay: false, energyReading: energyReading(9) }, {
     fetchImpl: async (_url, init) => {
       const body = JSON.parse(init.body);
       if (body.questions.has_quantity) altoQuantityCalls += 1;

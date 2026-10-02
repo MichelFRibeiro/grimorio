@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { getDb, saveDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, createBossRaid, applyCategoryRename } from './db.js';
+import { getDb, saveDb, rewardPlayer, revertPlayerReward, revertLog, getXpForLevel, getTitleForLevel, createBossRaid, applyCategoryRename } from './db.js';
+import { runMaintenance } from './domain/maintenance.js';
+import { listUnacknowledged, acknowledgePenalty, prepareContest } from './domain/penalties.js';
 import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
 import { computeAnalytics } from './analytics.js';
@@ -1904,14 +1906,18 @@ export const toolsDefinition = [
   },
   {
     name: 'reset_boss_raid',
-    description: 'Invocar um novo Chefe Semanal ou avançar para o próximo nível (+10% de vida e recompensas). Escolhe dinamicamente um novo chefe motivador com nome e ícone exclusivos.',
+    description: 'Invocar o próximo chefe somente se o atual já foi derrotado. force=true é o reset explícito e não apaga HP em silêncio: sem derrota, recusa.',
     schema: {
       level: z.number().int().positive().optional().describe('Nível do chefe desejado (opcional. Se omitido, avança 1 nível caso o atual tenha sido derrotado)'),
-      name: z.string().optional().describe('Nome forçado para o chefe (opcional)')
+      name: z.string().optional().describe('Nome forçado para o chefe (opcional)'),
+      force: z.boolean().optional().describe('true só para reset explícito com o chefe ainda vivo')
     },
     handler: async (args = {}) => {
       const db = getDb();
       const currentBoss = db.bossRaid;
+      if (!currentBoss?.defeated && args.force !== true) {
+        return formatError('O chefe da semana ainda está de pé. Novo chefe no domingo. Passe force=true para um reset explícito.');
+      }
       let targetLevel;
 
       if (args.level !== undefined) {
@@ -1935,6 +1941,62 @@ export const toolsDefinition = [
         db.bossRaid,
         `${icon} Chefe Nível ${db.bossRaid.level} invocado: "${db.bossRaid.name}" com ${db.bossRaid.maxHp} HP${pctStronger}!`
       );
+    }
+  },
+
+  {
+    name: 'list_penalties',
+    description: 'Listar os julgamentos do Grimório (punições). pending=true devolve só os não reconhecidos.',
+    schema: {
+      pending: z.boolean().optional().describe('Se true, só julgamentos ainda não reconhecidos')
+    },
+    handler: async (args = {}) => {
+      const db = getDb();
+      runMaintenance(db, new Date(), { createBossRaid });
+      saveDb(db);
+      const all = db.penalties || [];
+      const list = args.pending ? listUnacknowledged(db) : all;
+      return formatSuccess({ penalties: list, pending: listUnacknowledged(db).length }, `${list.length} julgamento(s).`);
+    }
+  },
+  {
+    name: 'acknowledge_penalty',
+    description: 'Reconhecer um julgamento (“Entendi, vou melhorar”). Sem id, reconhece todos os pendentes.',
+    schema: {
+      id: z.string().optional().describe('ID do julgamento. Omita para reconhecer todos.')
+    },
+    handler: async (args = {}) => {
+      const db = getDb();
+      if (args.id) {
+        const result = acknowledgePenalty(db, args.id);
+        if (result.error) return formatError(result.error);
+        saveDb(db);
+        return formatSuccess(result.penalty, 'Julgamento reconhecido.');
+      }
+      const pending = listUnacknowledged(db);
+      const at = new Date().toISOString();
+      pending.forEach((item) => { item.acknowledgedAt = at; });
+      saveDb(db);
+      return formatSuccess({ acknowledged: pending.length }, `${pending.length} julgamento(s) reconhecido(s).`);
+    }
+  },
+  {
+    name: 'contest_penalty',
+    description: 'Contestar um julgamento em até 24h (máximo 2 por semana). Estorna moedas e atributos pelo ledger.',
+    schema: {
+      id: z.string().describe('ID do julgamento'),
+      reason: z.string().describe('Motivo da contestação')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const prepared = prepareContest(db, args.id, args.reason);
+      if (prepared.error) return formatError(prepared.error);
+      if (prepared.penalty.rewardLogId) revertLog(db, prepared.penalty.rewardLogId, { save: false });
+      prepared.penalty.contestedAt = new Date().toISOString();
+      prepared.penalty.contestReason = prepared.reason;
+      prepared.penalty.acknowledgedAt = prepared.penalty.contestedAt;
+      saveDb(db);
+      return formatSuccess(prepared.penalty, 'Contestação aceita. A punição foi estornada.');
     }
   },
 
@@ -2034,7 +2096,7 @@ export const toolsDefinition = [
     },
     handler: async (args = {}) => {
       const db = getDb();
-      const result = closeDay(db, { note: args.note, mood: args.mood });
+      const result = await closeDay(db, { note: args.note, mood: args.mood });
       if (result.error) return formatError(result.error);
       saveDb(db);
       return formatSuccess({
@@ -2404,7 +2466,7 @@ export const toolsDefinition = [
     },
     handler: async (args) => {
       const db = getDb();
-      const result = completeDailyVictoryUseCase(db, args);
+      const result = await completeDailyVictoryUseCase(db, args);
       if (result.error) return formatError(result.error);
       saveDb(db);
       const verb = result.willComplete ? 'conquistada' : 'reaberta';

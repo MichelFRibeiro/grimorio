@@ -18,6 +18,10 @@ import { sanitizeMindMaps, sanitizeMindMapSessions, sanitizeMindMapCategories, s
 import { ensureOracleMemory } from './oracleMemory.js';
 import { sanitizeDailyReviews, sanitizeWeeklyPlans } from './domain/today.js';
 import { setStoredOpenRouterKey } from './jevClient.js';
+import { computeBossDamage, ensureBossWeekFields } from './domain/bossWeek.js';
+import { applyWisdomToStudyXp, attributeEffects } from './domain/attributes.js';
+import { syncHeroStreak } from './domain/streaks.js';
+import { runWeeklyMaintenance } from './domain/maintenance.js';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -141,6 +145,8 @@ export const defaultQuestCategories = [
 ];
 
 export const uid = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Propaga rename/remoção de categoria para missões, processos, hábitos,
@@ -330,6 +336,11 @@ export const defaultDatabase = () => {
       },
       streak: 1,
       lastActiveDate: todayStr,
+      streakShields: 0,
+      streakShieldsEarned: 0,
+      maxStreakShields: 2,
+      streakRestDays: [],
+      streakShieldLog: [],
       theme: 'dark-fantasy',
       currentLocation: null,
       locationManual: false
@@ -360,7 +371,16 @@ export const defaultDatabase = () => {
     oracleDecisions: [],
     oracleQuantityReads: [],
     dailyReviews: [],
-    weeklyPlans: []
+    weeklyPlans: [],
+    penalties: [],
+    bossHistory: [],
+    destinyChests: [],
+    maintenance: {
+      penaltiesSince: todayStr,
+      penaltyKeys: {},
+      lastDailyRun: null,
+      lastWeeklyRun: null
+    }
   };
 };
 
@@ -423,6 +443,25 @@ export function sanitizeDb(db) {
     if (db.bossRaid.defeated === undefined) db.bossRaid.defeated = false;
     if (!db.bossRaid.rewardCoins) db.bossRaid.rewardCoins = 150;
     if (!db.bossRaid.rewardXp) db.bossRaid.rewardXp = 400;
+    ensureBossWeekFields(db.bossRaid, todayStr);
+    if (db.bossRaid.overkill == null) db.bossRaid.overkill = 0;
+  }
+  if (!Array.isArray(db.penalties)) db.penalties = [];
+  if (!Array.isArray(db.bossHistory)) db.bossHistory = [];
+  if (!Array.isArray(db.destinyChests)) db.destinyChests = [];
+  if (!db.maintenance || typeof db.maintenance !== 'object') db.maintenance = {};
+  if (!DATE_KEY_RE.test(String(db.maintenance.penaltiesSince || ''))) {
+    // Ativação desta versão: não julga histórico anterior (setembro incluso).
+    db.maintenance.penaltiesSince = todayStr;
+  }
+  if (!db.maintenance.penaltyKeys || typeof db.maintenance.penaltyKeys !== 'object') {
+    db.maintenance.penaltyKeys = {};
+  }
+  if (db.userProfile) {
+    if (!Array.isArray(db.userProfile.streakRestDays)) db.userProfile.streakRestDays = [];
+    if (!Array.isArray(db.userProfile.streakShieldLog)) db.userProfile.streakShieldLog = [];
+    if (db.userProfile.streakShields == null) db.userProfile.streakShields = 0;
+    db.userProfile.attributeEffects = attributeEffects(db.userProfile.stats || {});
   }
   ensureOracleMemory(db);
   db.dailyReviews = sanitizeDailyReviews(db.dailyReviews);
@@ -470,6 +509,17 @@ export function migrateCanonicalSchemas(db) {
     process.totalSteps = process.totalUnits;
     process.currentStep = process.completedUnits;
     process.stepUnit = process.unitName;
+  });
+
+  (db.mindMaps || []).forEach((map) => {
+    if (!map || !Array.isArray(map.nodes)) return;
+    map.nodes.forEach((node) => {
+      if (!node) return;
+      const ease = finiteOr(node.ease, 2.5);
+      const interval = finiteOr(node.interval, 0);
+      node.ease = Math.min(2.8, Math.max(1.3, ease));
+      node.interval = Math.min(180, Math.max(0, Math.round(interval)));
+    });
   });
 
   (db.rewards || []).forEach((reward) => {
@@ -792,12 +842,16 @@ function legacyApplied(log, fallback = {}) {
     focus: finiteOr(fallback.focus, 0),
     willpower: finiteOr(fallback.willpower, 0),
     consistency: finiteOr(fallback.consistency, 0),
-    bossDamage: Math.round(xp * 0.8 + coins * 1.2),
+    bossDamage: Math.round(Math.max(0, xp) * 0.8 + Math.max(0, coins) * 1.2),
     bossDefeated: !!(log?.details?.bossDefeated),
     bossId: log?.details?.bossId || null,
     bossRewardXp: 0,
     bossRewardCoins: 0,
-    levelUps: []
+    levelUps: [],
+    wisdomXpBonus: 0,
+    focusDamageBonus: 0,
+    overkill: 0,
+    shieldGranted: 0
   };
 }
 
@@ -816,7 +870,11 @@ function resolveApplied(log, fallback = {}) {
       bossId: applied.bossId || null,
       bossRewardXp: finiteOr(applied.bossRewardXp, 0),
       bossRewardCoins: finiteOr(applied.bossRewardCoins, 0),
-      levelUps: Array.isArray(applied.levelUps) ? applied.levelUps : []
+      levelUps: Array.isArray(applied.levelUps) ? applied.levelUps : [],
+      wisdomXpBonus: finiteOr(applied.wisdomXpBonus, 0),
+      focusDamageBonus: finiteOr(applied.focusDamageBonus, 0),
+      overkill: finiteOr(applied.overkill, 0),
+      shieldGranted: finiteOr(applied.shieldGranted, 0)
     };
   }
   return legacyApplied(log, fallback);
@@ -849,14 +907,20 @@ export function findRewardLog(db, { logId, entityId, actionType, date } = {}) {
 // Reward player helper: handles XP, leveling, coins, stats, boss damage and action logging.
 // O timestamp do cliente só data o log (lançamento retroativo). A sequência do herói
 // usa sempre a data de São Paulo do servidor — um relógio do cliente não a move.
-export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpower = 0, consistency = 0, actionType, entityId, title, details = {}, timestamp, logDate }) {
+export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpower = 0, consistency = 0, actionType, entityId, title, details = {}, timestamp, logDate, damageBoss, grantShield = 0 }) {
   const db = getDb();
   const profile = db.userProfile;
   if (!profile.stats) profile.stats = { wisdom: 0, focus: 0, willpower: 0, consistency: 0 };
   ensureStats(profile);
 
   const serverNow = new Date();
-  const safeXp = finiteOr(xp, 0);
+  // A virada da semana precisa acontecer antes da recompensa: senão o dano de
+  // uma ação feita já no domingo cairia no chefe da semana passada (já fechado)
+  // e o novo chefe nasceria com o HP errado. É idempotente e barato: só faz
+  // algo quando o weekStartDate do chefe ficou para trás.
+  runWeeklyMaintenance(db, serverNow, { createBossRaid });
+  const wisdomApplied = applyWisdomToStudyXp(finiteOr(xp, 0), actionType, profile.stats);
+  const safeXp = wisdomApplied.xp;
   const safeCoins = finiteOr(coins, 0);
   const safeWisdom = finiteOr(wisdom, 0);
   const safeFocus = finiteOr(focus, 0);
@@ -876,35 +940,51 @@ export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpow
   const boss = db.bossRaid;
   let bossDefeatedNow = false;
   let bossDamage = 0;
+  let focusDamageBonus = 0;
+  let overkill = 0;
   let bossRewardXp = 0;
   let bossRewardCoins = 0;
   let bossId = boss?.id || null;
-  if (boss && !boss.defeated) {
-    bossDamage = Math.round(safeXp * 0.8 + safeCoins * 1.2);
-    boss.currentHp = Math.max(0, finiteOr(boss.currentHp, boss.maxHp || 0) - bossDamage);
-    if (boss.currentHp === 0) {
-      boss.defeated = true;
-      boss.defeatsCount = finiteOr(boss.defeatsCount, 0) + 1;
-      bossDefeatedNow = true;
-      bossRewardCoins = finiteOr(boss.rewardCoins, 0);
-      bossRewardXp = finiteOr(boss.rewardXp, 0);
-      profile.coins = finiteOr(profile.coins, 0) + bossRewardCoins;
-      // XP do chefe também passa pelo laço de level-up (antes ficava acima de xpToNextLevel).
-      levelUps.push(...applyXpAndLevelUps(profile, bossRewardXp));
+  const dealt = computeBossDamage({
+    xp: safeXp,
+    coins: safeCoins,
+    actionType,
+    focus: profile.stats.focus,
+    damageBoss
+  });
+  if (boss && dealt.damage > 0) {
+    bossId = boss.id;
+    if (!boss.defeated) {
+      bossDamage = dealt.damage;
+      focusDamageBonus = dealt.focusBonus;
+      const before = finiteOr(boss.currentHp, boss.maxHp || 0);
+      boss.currentHp = Math.max(0, before - bossDamage);
+      if (boss.currentHp === 0) {
+        boss.defeated = true;
+        boss.defeatedAt = serverNow.toISOString();
+        boss.defeatsCount = finiteOr(boss.defeatsCount, 0) + 1;
+        bossDefeatedNow = true;
+        bossRewardCoins = finiteOr(boss.rewardCoins, 0);
+        bossRewardXp = finiteOr(boss.rewardXp, 0);
+        profile.coins = finiteOr(profile.coins, 0) + bossRewardCoins;
+        // XP do chefe também passa pelo laço de level-up (antes ficava acima de xpToNextLevel).
+        levelUps.push(...applyXpAndLevelUps(profile, bossRewardXp));
+      }
+    } else {
+      // Chefe da semana já caiu: o esforço vira overkill, sem invocar outro.
+      overkill = dealt.damage;
+      boss.overkill = finiteOr(boss.overkill, 0) + overkill;
     }
   }
 
-  // Sequência do herói: somente a data do servidor.
-  const streakDate = getSaoPauloDateStr(serverNow);
-  if (profile.lastActiveDate !== streakDate) {
-    const yesterday = getYesterdaySaoPauloDateStr(serverNow);
-    if (profile.lastActiveDate === yesterday) {
-      profile.streak = finiteOr(profile.streak, 0) + 1;
-    } else {
-      profile.streak = 1;
-    }
-    profile.lastActiveDate = streakDate;
+  const shieldGranted = Math.max(0, Math.round(finiteOr(grantShield, 0)));
+  if (shieldGranted > 0) {
+    const cap = attributeEffects(profile.stats).maxStreakShields;
+    profile.streakShields = Math.min(cap, finiteOr(profile.streakShields, 0) + shieldGranted);
+    profile.maxStreakShields = cap;
   }
+
+  // Sequência do herói sai do ledger depois que o log entra — ver abaixo.
 
   // Data do log pode ser retroativa (timestamp/logDate do cliente), sem mexer na sequência.
   let logMoment = serverNow;
@@ -928,7 +1008,11 @@ export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpow
     bossId,
     bossRewardXp,
     bossRewardCoins,
-    levelUps
+    levelUps,
+    wisdomXpBonus: wisdomApplied.wisdomXpBonus,
+    focusDamageBonus,
+    overkill,
+    shieldGranted
   };
 
   const logEntry = {
@@ -956,6 +1040,9 @@ export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpow
     db.actionLogs = db.actionLogs.slice(0, 5000);
   }
 
+  const streakSync = syncHeroStreak(db, { today: getSaoPauloDateStr(serverNow), now: serverNow });
+  profile.attributeEffects = attributeEffects(profile.stats);
+
   saveDb(db);
 
   return {
@@ -966,7 +1053,12 @@ export function rewardPlayer({ xp = 0, coins = 0, wisdom = 0, focus = 0, willpow
     newLevel: profile.level,
     bossDefeatedNow,
     logEntry,
-    levelUps
+    levelUps,
+    streakSync,
+    attributeBonus: {
+      wisdomXpBonus: wisdomApplied.wisdomXpBonus,
+      focusDamageBonus
+    }
   };
 }
 
@@ -1000,11 +1092,17 @@ export function revertLog(db, logId, { save = true } = {}) {
   applyLevelDowns(profile, applied.levelUps);
 
   const boss = target.bossRaid;
-  if (boss && applied.bossDamage) {
+  if (boss && applied.bossDamage && (!applied.bossId || boss.id === applied.bossId)) {
     boss.currentHp = Math.min(
       finiteOr(boss.maxHp, boss.currentHp || 0),
       finiteOr(boss.currentHp, 0) + applied.bossDamage
     );
+  }
+  if (boss && applied.overkill && (!applied.bossId || boss.id === applied.bossId)) {
+    boss.overkill = Math.max(0, finiteOr(boss.overkill, 0) - applied.overkill);
+  }
+  if (applied.shieldGranted) {
+    profile.streakShields = Math.max(0, finiteOr(profile.streakShields, 0) - applied.shieldGranted);
   }
   const sameBoss = !applied.bossId || !boss?.id || applied.bossId === boss.id;
   if (boss && applied.bossDefeated && sameBoss && boss.currentHp > 0) {
@@ -1017,6 +1115,9 @@ export function revertLog(db, logId, { save = true } = {}) {
     // nível se o XP ficar negativo, sem cobrar o bônus de novo.
     applyLevelDowns(profile, applied.levelUps, { chargeCoins: false });
   }
+
+  syncHeroStreak(target, { today: getSaoPauloDateStr(), now: new Date() });
+  if (profile) profile.attributeEffects = attributeEffects(profile.stats);
 
   if (save) saveDb(target);
 
@@ -1077,6 +1178,7 @@ export function revertPlayerReward({ xp = 0, coins = 0, wisdom = 0, focus = 0, w
   profile.coins = finiteOr(profile.coins, 0) - applied.coins;
   profile.xp = finiteOr(profile.xp, 0) - applied.xp;
   applyLevelDowns(profile, []);
+  syncHeroStreak(db, { today: getSaoPauloDateStr(), now: new Date() });
   saveDb(db);
   return {
     profile,

@@ -149,7 +149,7 @@ function runTests() {
   const easyNode = studied.map.nodes.find(n => n.id === rightsId);
   const forgotNode = studied.map.nodes.find(n => n.id === art5Id);
   assert(easyNode.dueDate > '2026-04-01', 'Acerto fácil adia a próxima revisão');
-  assert(forgotNode.dueDate === '2026-04-01', 'Esquecimento mantém o ramo para hoje');
+  assert(forgotNode.dueDate === '2026-04-02', 'Esquecimento adia 1 dia, sem farm no mesmo dia');
   assert(studied.map.lastStudiedAt === '2026-04-01', 'Atualiza última sessão de estudo');
 
   const dirty = sanitizeMindMap({

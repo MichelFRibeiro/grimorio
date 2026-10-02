@@ -336,10 +336,31 @@ function runTests() {
   const o3 = completeDailyVictory(overflowList, overflowBonuses, overflowList[2].id, { today });
   overflowList = o3.list;
   overflowBonuses = o3.bonuses;
-  assert(o3.bonusAwardedNow === true, 'Tríade dispara ao concluir 3 mesmo com 5 planejadas');
-  assert(summarizeDay(overflowList, today, overflowBonuses).allComplete === false, 'Dia com overflow só fecha com as 5');
+  assert(o3.bonusAwardedNow === false, 'Tríade só dispara quando TODAS as planejadas fecham');
+  const o4 = completeDailyVictory(overflowList, overflowBonuses, overflowList[3].id, { today });
+  overflowList = o4.list;
+  overflowBonuses = o4.bonuses;
+  const o5 = completeDailyVictory(overflowList, overflowBonuses, overflowList[4].id, { today });
+  overflowList = o5.list;
+  overflowBonuses = o5.bonuses;
+  assert(o5.bonusAwardedNow === true, 'Tríade dispara ao concluir as 5 planejadas');
+  assert(summarizeDay(overflowList, today, overflowBonuses).allComplete === true, 'Dia com overflow fecha com as 5');
 
-  const moved = updateDailyVictory(overflowList, studyOverflow.victory.id, { date: tomorrow }, { today });
+  // A tríade fechou com as 5: mover uma vitória já realizada é recusado.
+  let bloqueio = null;
+  try {
+    updateDailyVictory(overflowList, overflowList[0].id, { date: tomorrow }, { today });
+  } catch (err) {
+    bloqueio = err.message;
+  }
+  assert(!!bloqueio, 'Vitória já realizada não pode mudar de dia');
+
+  // Reabrir a quinta libera a vaga e estorna a tríade; aí sim dá para remarcar.
+  const reaberta = completeDailyVictory(overflowList, overflowBonuses, overflowList[4].id, { today, completed: false });
+  overflowList = reaberta.list;
+  overflowBonuses = reaberta.bonuses;
+  assert(reaberta.bonusRevertedNow === true, 'Reabrir uma das 5 estorna a tríade');
+  const moved = updateDailyVictory(overflowList, overflowList[4].id, { date: tomorrow }, { today });
   overflowList = moved.list;
   assert(overflowList.filter(v => v.date === today).length === 4, 'Mover overflow para amanhã libera uma vaga hoje');
   assert(overflowList.filter(v => v.date === tomorrow).length === 1, 'Overflow de estudo pode ir para amanhã');

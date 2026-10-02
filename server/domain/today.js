@@ -30,7 +30,9 @@ import {
 } from '../../src/utils/dailyVictories.js';
 import { normalizePriority } from '../../src/utils/activityScale.js';
 import { parseDurationMinutes } from '../../src/utils/activityDuration.js';
-import { getDb, rewardPlayer, revertLog, findRewardLog } from '../db.js';
+import { getDb, rewardPlayer, revertLog, findRewardLog, createBossRaid, saveDb } from '../db.js';
+import { runMaintenance } from './maintenance.js';
+import { grantDestinyChest } from './destinyChest.js';
 
 function uid(prefix = 'id') {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -550,8 +552,9 @@ export function sanitizeDailyReviews(list) {
  * Fecha o dia uma vez. A recompensa (15 XP, +2 consistência) fica no ledger
  * e é estornada se a revisão for excluída.
  */
-export function closeDay(_db, { note, mood, now = new Date() } = {}) {
+export async function closeDay(_db, { note, mood, now = new Date() } = {}) {
   const db = getDb();
+  runMaintenance(db, now, { createBossRaid });
   if (!Array.isArray(db.dailyReviews)) db.dailyReviews = [];
   const todayStr = getSaoPauloDateStr(now);
   if (db.dailyReviews.some((item) => item && item.date === todayStr)) {
@@ -580,7 +583,9 @@ export function closeDay(_db, { note, mood, now = new Date() } = {}) {
   if (!Array.isArray(persisted.dailyReviews)) persisted.dailyReviews = [];
   persisted.dailyReviews = persisted.dailyReviews.filter((item) => item?.date !== todayStr);
   persisted.dailyReviews.unshift(review);
-  return { review, rewardResult: reward, alreadyClosed: false };
+  const chest = await grantDestinyChest(persisted, todayStr, 'daily-review', now);
+  saveDb(persisted);
+  return { review, rewardResult: reward, chest, alreadyClosed: false };
 }
 
 export function deleteDailyReview(_db, id) {
@@ -597,6 +602,11 @@ export function deleteDailyReview(_db, id) {
   });
   let rewardResult = null;
   if (log) rewardResult = revertLog(db, log.id, { save: false });
+  const chest = (db.destinyChests || []).find((item) => item && item.event === 'daily-review' && item.date === removed.date);
+  if (chest?.rewardLogId) {
+    revertLog(db, chest.rewardLogId, { save: false });
+    db.destinyChests = (db.destinyChests || []).filter((item) => item?.id !== chest.id);
+  }
   return { removed, rewardResult };
 }
 

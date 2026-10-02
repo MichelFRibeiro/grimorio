@@ -4,7 +4,9 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, saveDb, initDb, getPool, flushDb, rewardPlayer, revertPlayerReward, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG, applyCategoryRename } from './db.js';
+import { getDb, saveDb, initDb, getPool, flushDb, rewardPlayer, revertPlayerReward, revertLog, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG, applyCategoryRename } from './db.js';
+import { runMaintenance } from './domain/maintenance.js';
+import { listUnacknowledged, acknowledgePenalty, acknowledgeAllPenalties, prepareContest } from './domain/penalties.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
 import { suggestNextAction, previewNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly, snoozeAndRemember } from './oracleSuggest.js';
@@ -74,7 +76,10 @@ import {
   logDiscursiveProduct,
   deleteStudyBlock,
   updateStudyBlockMeta,
-  refreshAguProgress
+  refreshAguProgress,
+  addAguError,
+  reviewAguError,
+  dueAguErrors
 } from '../src/utils/aguCycle.js';
 import { collectStudyBlocks } from '../src/utils/aguStudyEngine.js';
 import {
@@ -460,9 +465,17 @@ app.post('/api/auth/logout', (req, res) => {
 // ==========================================
 // 1. GET FULL GAME STATE & ANALYTICS
 // ==========================================
+function maintain(db, now = new Date()) {
+  const report = runMaintenance(db, now, { createBossRaid });
+  const changed = (report.created?.length || 0) > 0 || (report.weekly?.rolled?.length || 0) > 0 || (report.streak?.newlyConsumed?.length || 0) > 0;
+  if (changed) saveDb(db);
+  return report;
+}
+
 app.get('/api/state', (req, res) => {
   try {
     const db = getDb();
+    const maintenance = maintain(db);
     const todayStr = getSaoPauloDateStr();
     db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
     db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
@@ -492,7 +505,9 @@ app.get('/api/state', (req, res) => {
       today: buildTodayPayload(db),
       oracleMemory,
       locations: LOCATIONS,
-      user: req.user || null
+      user: req.user || null,
+      penaltiesPending: listUnacknowledged(db),
+      maintenance
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -623,6 +638,7 @@ app.post('/api/next-action/consult', async (req, res) => {
 app.get('/api/today', (req, res) => {
   try {
     const db = getDb();
+    maintain(db);
     const location = req.query.location ? String(req.query.location) : undefined;
     res.json({ success: true, today: buildTodayPayload(db, { location }) });
   } catch (err) {
@@ -668,10 +684,10 @@ app.get('/api/daily-reviews', (req, res) => {
   }
 });
 
-app.post('/api/daily-reviews', (req, res) => {
+app.post('/api/daily-reviews', async (req, res) => {
   try {
     const db = getDb();
-    const result = closeDay(db, { note: req.body?.note, mood: req.body?.mood });
+    const result = await closeDay(db, { note: req.body?.note, mood: req.body?.mood });
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({
@@ -1712,8 +1728,13 @@ app.post('/api/boss/reset', (req, res) => {
   try {
     const db = getDb();
     const currentBoss = db.bossRaid;
+    const force = req.body?.force === true;
+    if (!currentBoss?.defeated && !force) {
+      return res.status(409).json({
+        error: 'O chefe da semana ainda está de pé. Novo chefe só no domingo — ou force=true para um reset explícito.'
+      });
+    }
     let targetLevel;
-
     if (req.body && req.body.level !== undefined) {
       targetLevel = Math.max(1, parseInt(req.body.level, 10) || 1);
     } else if (currentBoss && currentBoss.defeated) {
@@ -1721,16 +1742,64 @@ app.post('/api/boss/reset', (req, res) => {
     } else {
       targetLevel = currentBoss?.level || 1;
     }
-
     const forceName = req.body?.name || null;
+    const hpBefore = currentBoss?.currentHp;
     db.bossRaid = createBossRaid({
       level: targetLevel,
       currentBoss,
       forceName
     });
-
+    if (force && !currentBoss?.defeated && hpBefore != null && req.body?.keepHp) {
+      db.bossRaid.currentHp = Math.min(db.bossRaid.maxHp, hpBefore);
+    }
     saveDb(db);
     res.json({ success: true, bossRaid: db.bossRaid });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/penalties', (req, res) => {
+  try {
+    const db = getDb();
+    maintain(db);
+    res.json({
+      success: true,
+      penalties: db.penalties || [],
+      pending: listUnacknowledged(db)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/penalties/acknowledge', (req, res) => {
+  try {
+    const db = getDb();
+    const result = req.body?.id
+      ? acknowledgePenalty(db, req.body.id)
+      : acknowledgeAllPenalties(db);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, ...result, pending: listUnacknowledged(db) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/penalties/:id/contest', (req, res) => {
+  try {
+    const db = getDb();
+    const prepared = prepareContest(db, req.params.id, req.body?.reason);
+    if (prepared.error) return res.status(prepared.status || 400).json({ error: prepared.error });
+    const revert = prepared.penalty.rewardLogId
+      ? revertLog(db, prepared.penalty.rewardLogId, { save: false })
+      : null;
+    prepared.penalty.contestedAt = new Date().toISOString();
+    prepared.penalty.contestReason = prepared.reason;
+    prepared.penalty.acknowledgedAt = prepared.penalty.contestedAt;
+    saveDb(db);
+    res.json({ success: true, penalty: prepared.penalty, revert });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1765,6 +1834,73 @@ function persistAguPlan(db, todayStr, examQuestions) {
   }
   return db.aguPlan;
 }
+
+app.get('/api/agu-plan/errors', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    const plan = sanitizeAguPlan(db.aguPlan, todayStr);
+    const due = dueAguErrors(plan, todayStr);
+    res.json({ success: true, due, errors: plan.errorNotebook || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/agu-plan/errors', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    const note = String(req.body?.note || req.body?.text || '').trim();
+    if (!note) return res.status(400).json({ error: 'Descreva o erro.' });
+    db.aguPlan = addAguError(sanitizeAguPlan(db.aguPlan, todayStr), {
+      note,
+      subjectId: req.body?.subjectId || null,
+      topicId: req.body?.topicId || null,
+      url: req.body?.url || req.body?.link || null
+    }, todayStr);
+    saveDb(db);
+    res.json({ success: true, error: db.aguPlan.errorNotebook[0], errors: db.aguPlan.errorNotebook });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/agu-plan/errors/:id/review', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    const quality = Number(req.body?.quality);
+    db.aguPlan = reviewAguError(
+      sanitizeAguPlan(db.aguPlan, todayStr),
+      req.params.id,
+      Number.isFinite(quality) ? quality : 2,
+      todayStr
+    );
+    saveDb(db);
+    const item = (db.aguPlan.errorNotebook || []).find((error) => error.id === req.params.id);
+    if (!item) return res.status(404).json({ error: 'Erro não encontrado.' });
+    res.json({ success: true, error: item, due: dueAguErrors(db.aguPlan, todayStr) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/agu-plan/errors/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
+    const before = db.aguPlan.errorNotebook || [];
+    const removed = before.find((item) => item.id === req.params.id);
+    if (!removed) return res.status(404).json({ error: 'Erro não encontrado.' });
+    db.aguPlan.errorNotebook = before.filter((item) => item.id !== req.params.id);
+    saveDb(db);
+    res.json({ success: true, removed });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get('/api/agu-plan', (req, res) => {
   try {
@@ -2162,10 +2298,10 @@ app.put('/api/daily-victories/:id', (req, res) => {
   }
 });
 
-app.post('/api/daily-victories/:id/complete', (req, res) => {
+app.post('/api/daily-victories/:id/complete', async (req, res) => {
   try {
     const db = getDb();
-    const result = completeDailyVictoryUseCase(db, {
+    const result = await completeDailyVictoryUseCase(db, {
       id: req.params.id,
       note: req.body?.note,
       completed: req.body?.completed,
@@ -2732,8 +2868,9 @@ app.post('/api/mind-maps/:id/study', (req, res) => {
     const index = db.mindMaps.findIndex(m => m.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Mapa mental não encontrado.' });
 
-    const { reviews, durationMinutes, mode, date } = req.body || {};
-    const todayStr = date || getSaoPauloDateStr();
+    const { reviews, durationMinutes, mode } = req.body || {};
+    // Data do cliente não agenda revisão — o dia é o de São Paulo no servidor.
+    const todayStr = getSaoPauloDateStr();
     const result = applyStudySession(db.mindMaps[index], reviews, {
       today: todayStr,
       durationMinutes,

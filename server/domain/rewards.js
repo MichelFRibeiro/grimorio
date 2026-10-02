@@ -56,8 +56,11 @@ export function questRewards(quest, { willpowerForDifficulty }) {
   };
 }
 
-export function habitRewards(habit, currentStreak) {
-  const multiplier = Math.min(2.0, 1 + (currentStreak || 0) * 0.1);
+export function habitRewards(habit, currentStreak, unit = 'days') {
+  const units = Math.max(0, currentStreak || 0);
+  // Semana/período pesa o dobro por unidade, porque cada unidade já é um ciclo.
+  const step = unit === 'days' ? 0.1 : 0.2;
+  const multiplier = Math.min(2.0, 1 + units * step);
   return {
     xp: Math.round((habit?.xpReward || 30) * multiplier),
     coins: habit?.coinReward || 8,
