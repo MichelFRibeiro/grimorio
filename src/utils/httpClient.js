@@ -1,5 +1,30 @@
 const TRANSIENT_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
+/** Chave do localStorage onde a sessão (token Bearer) fica guardada. */
+export const AUTH_TOKEN_STORAGE_KEY = 'grimorio_auth_token';
+
+/** Token da sessão atual, ou null quando não há login. */
+export function getAuthToken() {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cabeçalhos de uma requisição autenticada.
+ * A API do Grimório só aceita a sessão via `Authorization: Bearer <token>`,
+ * então nada que chame /api/ protegida pode depender de navegação direta
+ * (link, window.location, window.open) — o navegador não envia esse header.
+ */
+export function getAuthHeaders(extra = {}) {
+  const headers = { ...extra };
+  const token = getAuthToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
 export function isTransientHttpStatus(status) {
   return TRANSIENT_STATUS.has(Number(status));
 }

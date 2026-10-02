@@ -254,10 +254,10 @@ function streamFocusAudio(req, res) {
   res.setHeader('Cache-Control', 'public, max-age=86400');
   res.setHeader('Content-Disposition', 'inline; filename="focus_mp3.mp3"');
 
-  if (req.method === 'HEAD') {
-    res.setHeader('Content-Length', fileSize);
-    return res.status(200).end();
-  }
+  // HEAD espelha o GET (inclusive 206 + Content-Range): players e CDNs sondam
+  // o áudio com HEAD + Range antes de baixar, e um 200 sem Content-Range fazia
+  // o cliente concluir que o servidor não suporta streaming parcial.
+  const isHead = req.method === 'HEAD';
 
   if (range) {
     const match = /bytes=(\d*)-(\d*)/.exec(range);
@@ -279,10 +279,12 @@ function streamFocusAudio(req, res) {
     res.status(206);
     res.setHeader('Content-Range', `bytes ${start}-${safeEnd}/${fileSize}`);
     res.setHeader('Content-Length', chunkSize);
+    if (isHead) return res.end();
     return fs.createReadStream(filePath, { start, end: safeEnd }).pipe(res);
   }
 
   res.setHeader('Content-Length', fileSize);
+  if (isHead) return res.end();
   return fs.createReadStream(filePath).pipe(res);
 }
 

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -13,6 +13,8 @@ import {
 } from 'chart.js';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { formatDurationLabel } from '../utils/activityDuration';
+import { getAuthHeaders, connectionErrorMessage } from '../utils/httpClient.js';
+import { getSaoPauloDateStr } from '../utils/timeUtils.js';
 import {
   Compass,
   Clock,
@@ -51,10 +53,40 @@ ChartJS.register(
   LineElement
 );
 
+/** Mensagem legível para uma falha da API de backup (o 401 é o caso do link sem sessão). */
+async function describeBackupFailure(res, action) {
+  if (res.status === 401) {
+    return `Sua sessão expirou. Faça login novamente para ${action} o backup.`;
+  }
+  try {
+    const data = await res.json();
+    if (data?.error) return data.error;
+  } catch {
+    // resposta sem JSON (ex.: página de erro de proxy) — segue para a mensagem genérica
+  }
+  return `Não foi possível ${action} o backup (HTTP ${res.status}).`;
+}
+
 export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAction }) {
   const fileInputRef = useRef(null);
   const [selectedHorizon, setSelectedHorizon] = useState('total'); // 'day' | 'week' | 'month' | 'year' | 'total'
   const [rankingTab, setRankingTab] = useState('categories'); // 'categories' | 'tiers'
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupToast, setBackupToast] = useState(null); // { text, variant }
+  const backupToastTimerRef = useRef(null);
+
+  useEffect(() => () => {
+    if (backupToastTimerRef.current) clearTimeout(backupToastTimerRef.current);
+  }, []);
+
+  const notifyBackup = (text, variant = 'success') => {
+    setBackupToast({ text, variant, id: Date.now() });
+    if (backupToastTimerRef.current) clearTimeout(backupToastTimerRef.current);
+    backupToastTimerRef.current = setTimeout(
+      () => setBackupToast(null),
+      variant === 'error' ? 8000 : 4000
+    );
+  };
 
   if (!analytics) {
     return (
@@ -198,8 +230,32 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
     }
   };
 
-  const handleExportBackup = () => {
-    window.location.href = '/api/backup/export';
+  const handleExportBackup = async () => {
+    if (backupBusy) return;
+    setBackupBusy(true);
+    try {
+      // A sessão viaja no cabeçalho Authorization: navegar direto para a URL
+      // (window.location / <a href>) manda um GET sem Bearer e a API responde 401.
+      const res = await fetch('/api/backup/export', { headers: getAuthHeaders() });
+      if (!res.ok) {
+        notifyBackup(await describeBackupFailure(res, 'exportar'), 'error');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `grimorio-backup-${getSaoPauloDateStr()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      notifyBackup('Backup exportado com sucesso.', 'success');
+    } catch (err) {
+      notifyBackup(connectionErrorMessage(err) || 'Falha ao exportar o backup.', 'error');
+    } finally {
+      setBackupBusy(false);
+    }
   };
 
   const handleImportBackup = async (e) => {
@@ -211,17 +267,19 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
       const json = JSON.parse(text);
       const res = await fetch('/api/backup/import', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(json)
       });
       if (res.ok) {
-        alert('Backup restaurado com sucesso!');
+        notifyBackup('Backup restaurado com sucesso!', 'success');
         onRefresh();
       } else {
-        alert('Erro ao restaurar backup.');
+        notifyBackup(await describeBackupFailure(res, 'restaurar'), 'error');
       }
     } catch (err) {
-      alert('Arquivo de backup inválido: ' + err.message);
+      notifyBackup('Arquivo de backup inválido: ' + err.message, 'error');
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -243,6 +301,38 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
 
   return (
     <div>
+      {/* Toast de backup (exportar/restaurar) */}
+      {backupToast && (
+        <div
+          role="status"
+          style={{
+            position: 'fixed',
+            top: '18px',
+            right: '18px',
+            zIndex: 2000,
+            maxWidth: '360px',
+            padding: '12px 16px',
+            borderRadius: '12px',
+            background: 'rgba(19, 23, 34, 0.96)',
+            border: backupToast.variant === 'error'
+              ? '1px solid rgba(244, 63, 94, 0.55)'
+              : '1px solid rgba(16, 185, 129, 0.55)',
+            boxShadow: backupToast.variant === 'error'
+              ? '0 10px 25px rgba(0,0,0,0.6), 0 0 15px rgba(244, 63, 94, 0.25)'
+              : '0 10px 25px rgba(0,0,0,0.6), 0 0 15px rgba(16, 185, 129, 0.2)',
+            color: backupToast.variant === 'error' ? '#fda4af' : '#a7f3d0',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          {backupToast.variant === 'error' ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+          <span>{backupToast.text}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '20px' }}>
         <div>
@@ -258,6 +348,8 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
             onClick={handleExportBackup}
+            disabled={backupBusy}
+            title="Baixa um JSON com todos os dados do Grimório"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -269,10 +361,11 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
               color: '#fff',
               fontSize: '0.85rem',
               fontWeight: 600,
-              cursor: 'pointer'
+              cursor: backupBusy ? 'wait' : 'pointer',
+              opacity: backupBusy ? 0.6 : 1
             }}
           >
-            <Download size={14} /> Exportar Backup JSON
+            <Download size={14} /> {backupBusy ? 'Exportando…' : 'Exportar Backup JSON'}
           </button>
 
           <input

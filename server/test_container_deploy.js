@@ -99,8 +99,70 @@ async function testFocusAudioComesFromImage() {
     ok(String(ranged.headers['content-range'] || '').startsWith('bytes 0-1023/'),
       `Content-Range correto (${ranged.headers['content-range']})`);
 
+    // HEAD precisa espelhar o GET: players sondam com HEAD + Range antes de baixar.
+    const headPlain = await request(server.port, '/api/focus/audio', { method: 'HEAD' });
+    ok(headPlain.status === 200, 'HEAD /api/focus/audio responde 200 sem Range');
+    ok(Number(headPlain.headers['content-length']) === trackJson.sizeBytes,
+      'HEAD devolve Content-Length do arquivo inteiro');
+    ok(String(headPlain.headers['accept-ranges']) === 'bytes',
+      'HEAD anuncia Accept-Ranges: bytes');
+
+    const headRanged = await request(server.port, '/api/focus/audio', {
+      method: 'HEAD',
+      headers: { Range: 'bytes=0-1023' }
+    });
+    ok(headRanged.status === 206, 'HEAD /api/focus/audio espelha o 206 do GET quando há Range');
+    ok(String(headRanged.headers['content-range'] || '').startsWith('bytes 0-1023/'),
+      `HEAD devolve Content-Range (${headRanged.headers['content-range']})`);
+    ok(Number(headRanged.headers['content-length']) === 1024,
+      'HEAD com Range devolve o Content-Length do trecho pedido');
+
+    const headUnsatisfiable = await request(server.port, '/api/focus/audio', {
+      method: 'HEAD',
+      headers: { Range: `bytes=${trackJson.sizeBytes + 10}-` }
+    });
+    ok(headUnsatisfiable.status === 416,
+      'HEAD com Range fora do arquivo responde 416 (mesmo comportamento do GET)');
+
     fs.writeFileSync(path.join(dataDir, 'database.json'), JSON.stringify({ hero: { name: 'Volume' } }));
     ok(fs.existsSync(path.join(dataDir, 'database.json')), 'o data dir é gravável (volume persistente)');
+  } finally {
+    server.stop();
+  }
+}
+
+/**
+ * O backup só pode ser baixado com o Bearer da sessão: é o que impede o link
+ * direto (window.location / <a href>) de funcionar — o navegador não manda o
+ * header numa navegação normal e a API responde 401.
+ */
+async function testBackupExportRequiresBearer() {
+  console.log('\n--- backup export exige sessão (Bearer) ---');
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'grimorio-backup-'));
+  const server = await startTestServer({ HOST: '127.0.0.1', GRIMORIO_DATA_DIR: dataDir });
+  try {
+    const anonymous = await request(server.port, '/api/backup/export');
+    ok(anonymous.status === 401, '/api/backup/export sem Bearer responde 401 (link direto não funciona)');
+    ok(String(JSON.parse(anonymous.body).error || '').includes('Não autorizado'),
+      'a resposta 401 é a mensagem de sessão ausente');
+
+    const login = await request(server.port, '/api/auth/guest', { method: 'POST' });
+    ok(login.status === 200 && JSON.parse(login.body).token, 'POST /api/auth/guest fornece um token de sessão');
+    const token = JSON.parse(login.body).token;
+
+    const authorized = await request(server.port, '/api/backup/export', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    ok(authorized.status === 200, '/api/backup/export com Bearer responde 200');
+    ok(String(authorized.headers['content-disposition'] || '').includes('attachment; filename=grimorio-backup-'),
+      `Content-Disposition de download presente (${authorized.headers['content-disposition']})`);
+    const payload = JSON.parse(authorized.body);
+    ok(payload && typeof payload === 'object', 'o corpo é o JSON do backup, pronto para virar Blob');
+
+    const badToken = await request(server.port, '/api/backup/export', {
+      headers: { Authorization: 'Bearer token-invalido' }
+    });
+    ok(badToken.status === 401, 'Bearer inválido continua sendo 401');
   } finally {
     server.stop();
   }
@@ -109,7 +171,8 @@ async function testFocusAudioComesFromImage() {
 async function main() {
   await testHostAndPublicEndpoints();
   await testFocusAudioComesFromImage();
-  console.log('\n✅ Container: HOST, áudio empacotado e endpoints públicos validados.');
+  await testBackupExportRequiresBearer();
+  console.log('\n✅ Container: HOST, áudio empacotado, backup autenticado e endpoints públicos validados.');
 }
 
 main().catch((err) => {

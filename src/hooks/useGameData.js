@@ -4,16 +4,9 @@ import { useSoundEffects } from './useSoundEffects';
 import { formatBrl } from '../utils/coinExchange.js';
 import { normalizeChestPayload } from '../utils/destinyChest.js';
 import { hydrateLiveActivityTimers, setLiveActivityTimerSync, flushLiveActivityTimers, getLiveActivityTimers } from '../utils/liveActivityTimers.js';
-import { fetchWithRetry, connectionErrorMessage, isTransientHttpStatus, retryDelayMs } from '../utils/httpClient.js';
+import { fetchWithRetry, connectionErrorMessage, isTransientHttpStatus, retryDelayMs, getAuthHeaders as buildAuthHeaders } from '../utils/httpClient.js';
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('grimorio_auth_token');
-  const headers = { 'Content-Type': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
-};
+const getAuthHeaders = () => buildAuthHeaders({ 'Content-Type': 'application/json' });
 
 export function useGameData() {
   const [data, setData] = useState(null);
