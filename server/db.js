@@ -913,6 +913,11 @@ export async function initDb() {
 
   // Fallback to local file
   getDb();
+  if (DAILY_BACKUPS_ENABLED) {
+    // Backup no boot + checagem a cada 6h (processo vivo virando o dia).
+    runDailyBackupIfDue();
+    ensureDailyBackupWatcher();
+  }
   return cachedDb;
 }
 
@@ -946,6 +951,8 @@ export function saveDb(data) {
   // 2. Sem Postgres, o arquivo é a persistência real (escrita atômica síncrona).
   try {
     writeDbFileAtomic(DB_FILE, JSON.stringify(cachedDb, null, 2));
+    // Primeira gravação do dia já deixa o retrato diário (quando ligado).
+    if (DAILY_BACKUPS_ENABLED) runDailyBackupIfDue();
   } catch (err) {
     console.error('Error saving local database backup:', err);
   }
@@ -996,6 +1003,111 @@ function runLocalBackup() {
       localBackupInFlight = false;
       console.warn('[Grimório DB] Backup local falhou (o Postgres segue como fonte da verdade):', err.message);
     });
+}
+
+// ==========================================
+// BACKUP DIÁRIO LOCAL (apenas no modo arquivo JSON)
+// ==========================================
+/**
+ * Uma cópia por dia de São Paulo em <GRIMORIO_DATA_DIR>/backups/database-AAAA-MM-DD.json.
+ *
+ * Regras de segurança operacional:
+ *  - desligado por padrão (GRIMORIO_DAILY_BACKUPS=1 liga), então o Render/Supabase
+ *    continua exatamente como está;
+ *  - só roda no modo arquivo: com Postgres a fonte da verdade é o banco e o
+ *    arquivo local é apenas rascunho;
+ *  - o retrato do dia é imutável: se o arquivo do dia já existe, nada é
+ *    sobrescrito (assim um banco corrompido no meio do dia não apaga a única
+ *    cópia boa);
+ *  - a escrita é atômica (temporário + rename), nunca deixa arquivo pela metade.
+ */
+const DAILY_BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const DAILY_BACKUPS_ENABLED = process.env.GRIMORIO_DAILY_BACKUPS === '1';
+const DAILY_BACKUP_RETENTION = Math.max(1, Math.trunc(envNumber('GRIMORIO_BACKUP_RETENTION', 30)));
+const DAILY_BACKUP_CHECK_MS = envNumber('GRIMORIO_BACKUP_CHECK_MS', 6 * 60 * 60 * 1000);
+const DAILY_BACKUP_FILE_RE = /^database-\d{4}-\d{2}-\d{2}\.json$/;
+
+let lastDailyBackupDate = null;
+let dailyBackupWatcher = null;
+
+export function dailyBackupsEnabled() {
+  return DAILY_BACKUPS_ENABLED;
+}
+
+export function getDailyBackupDir() {
+  return DAILY_BACKUP_DIR;
+}
+
+/** Mantém apenas os N arquivos mais recentes (nome ordena por data). */
+function pruneDailyBackups() {
+  let entries;
+  try {
+    entries = fs.readdirSync(DAILY_BACKUP_DIR).filter(name => DAILY_BACKUP_FILE_RE.test(name)).sort();
+  } catch {
+    return;
+  }
+  const excess = entries.length - DAILY_BACKUP_RETENTION;
+  for (let i = 0; i < excess; i += 1) {
+    try {
+      fs.unlinkSync(path.join(DAILY_BACKUP_DIR, entries[i]));
+    } catch (err) {
+      console.warn('[Grimório DB] Backup diário antigo não pôde ser removido:', err.message);
+    }
+  }
+}
+
+/**
+ * Copia o database.json atual para backups/database-AAAA-MM-DD.json.
+ * No máximo uma vez por dia de São Paulo. Devolve o caminho gravado ou null
+ * quando não havia nada a fazer.
+ */
+export function runDailyBackupIfDue(now = new Date()) {
+  if (!DAILY_BACKUPS_ENABLED) return null;
+  if (getPool()) return null;
+
+  const today = getSaoPauloDateStr(now);
+  if (lastDailyBackupDate === today) return null;
+
+  try {
+    if (!fs.existsSync(DB_FILE)) return null;
+  } catch {
+    return null;
+  }
+
+  const target = path.join(DAILY_BACKUP_DIR, `database-${today}.json`);
+  try {
+    if (fs.existsSync(target)) {
+      // Retrato do dia já existe: preserva o original.
+      lastDailyBackupDate = today;
+      return target;
+    }
+    fs.mkdirSync(DAILY_BACKUP_DIR, { recursive: true });
+    const tmp = `${target}.${process.pid}.tmp`;
+    fs.copyFileSync(DB_FILE, tmp);
+    fs.renameSync(tmp, target);
+    lastDailyBackupDate = today;
+    pruneDailyBackups();
+    console.log(`🗄️ [Grimório DB] Backup diário gravado em ${path.basename(target)}.`);
+    return target;
+  } catch (err) {
+    console.warn('[Grimório DB] Backup diário falhou:', err.message);
+    return null;
+  }
+}
+
+/** Checagem periódica (a primeira gravação do dia também dispara o backup). */
+export function ensureDailyBackupWatcher() {
+  if (!DAILY_BACKUPS_ENABLED || dailyBackupWatcher) return dailyBackupWatcher;
+  dailyBackupWatcher = setInterval(() => {
+    runDailyBackupIfDue();
+  }, DAILY_BACKUP_CHECK_MS);
+  if (typeof dailyBackupWatcher.unref === 'function') dailyBackupWatcher.unref();
+  return dailyBackupWatcher;
+}
+
+/** Só para testes: libera a marca do dia para permitir nova checagem. */
+export function __resetDailyBackupStateForTests() {
+  lastDailyBackupDate = null;
 }
 
 /** Só para testes: descarta o cache em memória para forçar releitura do disco. */

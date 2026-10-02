@@ -1,0 +1,83 @@
+# =============================================================================
+# Grimório de Missões — projeto próprio no Docker Manager da Hostinger
+#
+# Este arquivo é usado pelo "Compose from URL" do Docker Manager:
+#   https://raw.githubusercontent.com/MichelFRibeiro/grimorio/main/docker-compose.yml
+#
+# Ele sobe UM serviço (grimorio) atrás do Traefik que já existe no host:
+#  - nenhuma porta é publicada (sem "ports:"); o Traefik entra pela rede
+#    externa traefik-proxy e fala com o container na 3000;
+#  - o certificado TLS é emitido pelo certresolver letsencrypt do host;
+#  - os dados ficam no volume nomeado grimorio-data, montado em /data
+#    (database.json + backups/). Nada de Supabase aqui: o Render continua
+#    dono do banco Postgres dele e os dois não escrevem no mesmo lugar.
+#
+# Preencha as variáveis no painel do projeto (aba de Environment) antes de
+# subir:
+#   GOOGLE_CLIENT_ID=...            (obrigatório para o login Google)
+#   OWNER_EMAILS=seu@email.com      (obrigatório: quem pode entrar)
+#   OPENROUTER_API_KEY=...          (opcional: Oráculo/Jev com IA)
+#   MCP_BEARER_TOKEN=...            (opcional: fixa o token do MCP)
+# =============================================================================
+services:
+  grimorio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: grimorio:latest
+    container_name: grimorio
+    restart: unless-stopped
+    stop_grace_period: 20s
+
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # 0.0.0.0 para o Traefik alcançar o container pela rede interna
+      HOST: 0.0.0.0
+      # Dados persistentes no volume (não no Supabase)
+      GRIMORIO_DATA_DIR: /data
+      # Backup diário local em /data/backups/database-AAAA-MM-DD.json
+      GRIMORIO_DAILY_BACKUPS: "1"
+      GRIMORIO_BACKUP_RETENTION: "30"
+      # Áudio empacotado na imagem (o fallback interno também o encontraria)
+      FOCUS_AUDIO_PATH: /app/data/audio/focus_mp3.mp3
+      # Atrás do Traefik: confia no primeiro hop (req.protocol https, req.ip)
+      TRUST_PROXY: "1"
+      APP_URL: https://grimorio.michelfernandes.adv.br
+      ALLOWED_ORIGINS: https://grimorio.michelfernandes.adv.br
+      # Vêm das variáveis do projeto (painel do Docker Manager)
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      OWNER_EMAILS: ${OWNER_EMAILS}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN:-}
+      # Sem DATABASE_URL de propósito: assim o app usa o JSON do volume.
+
+    volumes:
+      - grimorio-data:/data
+
+    # Protege os outros serviços do VPS
+    mem_limit: 512m
+
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+    networks:
+      - traefik-proxy
+
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.grimorio.rule=Host(`grimorio.michelfernandes.adv.br`)
+      - traefik.http.routers.grimorio.entrypoints=websecure
+      - traefik.http.routers.grimorio.tls.certresolver=letsencrypt
+      - traefik.http.services.grimorio.loadbalancer.server.port=3000
+      - traefik.docker.network=traefik-proxy
+
+volumes:
+  grimorio-data:
+
+networks:
+  traefik-proxy:
+    external: true

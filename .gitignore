@@ -5,3 +5,5 @@ dist
 *.log
 data/database.json
 data/*.tmp
+# Backups diários locais (GRIMORIO_DAILY_BACKUPS=1) — no VPS ficam no volume
+data/backups

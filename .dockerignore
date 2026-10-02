@@ -1,0 +1,30 @@
+# Contexto de build da imagem do Grimório (Dockerfile / docker-compose.yml).
+# O que NÃO entra na imagem:
+node_modules
+dist
+.git
+.gitignore
+.github
+.env
+.env.*
+*.log
+npm-debug.log*
+# Banco real e artefatos locais: o container começa vazio e recebe os dados
+# pelo backup exportado do Render.
+data/database.json
+data/database.json.bak
+data/database.json.*.bak
+data/database.json.tmp
+data/*.tmp
+data/backups
+data/database.corrupt-*.json
+# Arquivos que só existem na máquina Windows do dono
+iniciar.bat
+iniciar_silencioso.vbs
+# O próprio empacotamento não precisa ir para dentro da imagem
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# ATENÇÃO: data/audio NÃO é ignorado de propósito — o áudio de foco
+# (data/audio/focus_mp3.mp3) é copiado para a imagem.

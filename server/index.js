@@ -4,7 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, saveDb, initDb, getPool, flushDb, rewardPlayer, revertPlayerReward, revertLog, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG, applyCategoryRename } from './db.js';
+import { getDb, saveDb, initDb, getPool, flushDb, rewardPlayer, revertPlayerReward, revertLog, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG, applyCategoryRename, getDataDir } from './db.js';
 import { runMaintenance } from './domain/maintenance.js';
 import { weekKeyOf } from './domain/bossWeek.js';
 import { listUnacknowledged, acknowledgePenalty, acknowledgeAllPenalties, prepareContest } from './domain/penalties.js';
@@ -173,6 +173,21 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+/**
+ * Atrás de proxy reverso (Traefik no VPS, Render) o Express só enxerga
+ * X-Forwarded-Proto/For se confiar no primeiro hop — é o que faz
+ * `req.protocol` devolver https nos links do MCP. Fica desligado por padrão
+ * para não mudar nada no Render; ligue com TRUST_PROXY=1 (o docker-compose.yml
+ * do VPS já define).
+ */
+const TRUST_PROXY = String(process.env.TRUST_PROXY || '').trim();
+if (TRUST_PROXY && TRUST_PROXY !== '0' && TRUST_PROXY.toLowerCase() !== 'false') {
+  const value = /^\d+$/.test(TRUST_PROXY)
+    ? Number(TRUST_PROXY)
+    : (TRUST_PROXY.toLowerCase() === 'true' ? true : TRUST_PROXY);
+  app.set('trust proxy', value);
+}
+
 app.use(cors({ origin: corsOriginDelegate }));
 app.use(express.json({ limit: '10mb' }));
 app.use(persistenceFlushMiddleware);
@@ -208,6 +223,10 @@ function getFocusAudioPath() {
   const candidates = [
     process.env.FOCUS_AUDIO_PATH,
     BUNDLED_FOCUS_AUDIO,
+    // Volume de dados (GRIMORIO_DATA_DIR=/data no Docker): permite trocar o
+    // áudio sem reconstruir a imagem. Como o caminho empacotado acima não
+    // depende do data dir, o áudio da imagem continua sendo encontrado.
+    path.join(getDataDir(), 'audio', 'focus_mp3.mp3'),
     process.env.AZ_VAULT_PATH && path.join(process.env.AZ_VAULT_PATH, FOCUS_AUDIO_REL),
     path.join('/a0/usr/workdir/az-vault', FOCUS_AUDIO_REL),
     path.resolve(process.cwd(), 'az-vault', FOCUS_AUDIO_REL),
@@ -3043,19 +3062,28 @@ export function createApp() {
   return app;
 }
 
-export function start(port = PORT) {
+/**
+ * HOST opcional: no Docker o processo precisa escutar em 0.0.0.0 para o Traefik
+ * alcançá-lo (o compose define HOST=0.0.0.0). Sem HOST o comportamento é o de
+ * sempre — escuta em todas as interfaces, igual ao Render.
+ */
+function resolveListenHost() {
+  const host = String(process.env.HOST || '').trim();
+  return host || undefined;
+}
+
+export function start(port = PORT, host = resolveListenHost()) {
   warnIfGoogleClientIdMissing();
+  const onListening = (suffix) => () => {
+    const where = host ? `${host}:${port}` : `localhost:${port}`;
+    console.log(`🗡️ [Grimório de Missões] Servidor iniciado com sucesso em http://${where}${suffix}`);
+    initKeepAlive();
+  };
   return initDb().then(() => {
-    return app.listen(port, () => {
-      console.log(`🗡️ [Grimório de Missões] Servidor iniciado com sucesso em http://localhost:${port}`);
-      initKeepAlive();
-    });
+    return app.listen(port, host, onListening(''));
   }).catch(err => {
     console.error('Erro na inicialização do DB:', err);
-    return app.listen(port, () => {
-      console.log(`🗡️ [Grimório de Missões] Servidor iniciado com fallback local em http://localhost:${port}`);
-      initKeepAlive();
-    });
+    return app.listen(port, host, onListening(' (fallback local)'));
   });
 }
 
