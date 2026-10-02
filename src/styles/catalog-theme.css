@@ -29,10 +29,10 @@
   --border-bright: rgba(194, 65, 12, 0.55);
 
   --text-main: #2a2118;
-  --text-muted: #7a6a58;
-  --text-dim: #9a8976;
+  --text-muted: #6d5d4c;
+  --text-dim: #7d6a58;
 
-  --accent-gold: #c2410c;
+  --accent-gold: #b0380b;
   --accent-gold-glow: rgba(194, 65, 12, 0.18);
   --accent-cyan: #1d6f8a;
   --accent-emerald: #3f7d4e;
@@ -43,9 +43,9 @@
   --cat-paper-deep: #efe7d4;
   --cat-card: #fbf7ee;
   --cat-ink: #2a2118;
-  --cat-ink-soft: #7a6a58;
+  --cat-ink-soft: #6d5d4c;
   --cat-rule: rgba(61, 46, 31, 0.14);
-  --cat-stamp: #c2410c;
+  --cat-stamp: #b0380b;
   --cat-stamp-deep: #9a3412;
   --cat-teal: #0f6e6b;
 }
@@ -379,7 +379,7 @@ kbd {
 
 .chest-modal[data-rarity="comum"] {
   --chest-accent: #cbb9a2;
-  --chest-accent-strong: #7a6a58;
+  --chest-accent-strong: #6d5d4c;
 }
 
 .chest-modal[data-rarity="incomum"] {
@@ -428,4 +428,196 @@ kbd {
 
 .chest-ok {
   color: #fffdf8;
+}
+
+/* =========================================================================
+   Tribunal dos Rankings & Maestria de Categorias.
+   As superfícies agora têm classes próprias (ver index.css), então o papel
+   creme entra por classe em vez de seletor [style*="..."] — bem menos frágil.
+   As cores de faixa (E…S+) continuam vindo do servidor: os tons claros que
+   não teriam contraste no papel são escurecidos pelo mapa do gerador.
+   ========================================================================= */
+.rankings-panel {
+  background: var(--cat-card);
+  box-shadow: none;
+}
+
+.rankings-tabs {
+  background: var(--cat-paper-deep);
+  border: 1px solid var(--cat-rule);
+}
+
+.rankings-tab {
+  color: var(--cat-ink-soft);
+}
+
+.rankings-tab:hover {
+  color: var(--cat-ink);
+}
+
+.rankings-tab.is-active {
+  background: linear-gradient(135deg, var(--cat-stamp) 0%, var(--cat-stamp-deep) 100%);
+  color: #fffdf8;
+}
+
+.rankings-summary {
+  /* O fundo da faixa (rank.bg) é claro e translúcido: sobre papel continua legível. */
+  border-color: rgba(61, 46, 31, 0.24) !important;
+}
+
+.rankings-summary-badge {
+  background: #fffdf8;
+  box-shadow: none !important;
+}
+
+.rankings-metric {
+  background: #fffdf8;
+  border: 1px solid var(--cat-rule);
+}
+
+.rankings-card {
+  background: #fffdf8;
+  border-color: var(--cat-rule) !important;
+}
+
+.rankings-badge {
+  box-shadow: none !important;
+}
+
+.rankings-chip--promoted {
+  background: rgba(22, 101, 52, 0.12);
+  color: #166534;
+  border: 1px solid rgba(22, 101, 52, 0.35);
+}
+
+.rankings-chip--at-risk {
+  background: rgba(154, 52, 18, 0.12);
+  color: var(--cat-stamp-deep);
+  border: 1px solid rgba(154, 52, 18, 0.4);
+}
+
+.rankings-chip--maintained {
+  background: rgba(21, 94, 117, 0.12);
+  color: #155e75;
+  border: 1px solid rgba(21, 94, 117, 0.35);
+}
+
+.rankings-history-chip.is-closed {
+  background: rgba(61, 46, 31, 0.05);
+  border: 1px solid var(--cat-rule);
+  color: var(--cat-ink-soft);
+}
+
+.rankings-history-chip.is-current {
+  background: rgba(194, 65, 12, 0.1);
+  border: 1px solid rgba(194, 65, 12, 0.4);
+  color: var(--cat-stamp-deep);
+}
+
+.rankings-progress {
+  background: var(--cat-paper-deep);
+}
+
+.rankings-tiers {
+  background: var(--cat-paper-deep);
+  border: 1px solid var(--cat-rule);
+}
+
+.rankings-tiers-note {
+  background: rgba(21, 94, 117, 0.08);
+  border: 1px solid rgba(21, 94, 117, 0.25);
+}
+
+.rankings-table thead tr {
+  border-bottom: 1px solid var(--cat-rule);
+  color: var(--cat-ink-soft);
+}
+
+.rankings-table-row {
+  border-bottom: 1px solid var(--cat-rule);
+}
+
+.rankings-table-row.is-even {
+  background: rgba(61, 46, 31, 0.04);
+}
+
+/* --- cores por classe que o gerador não alcança (index.css) --- */
+.agu-load-chart-band-label--home {
+  color: var(--accent-emerald);
+}
+
+/* O rastro do "Ver processo" era obsidiana (#1c2333) com texto claro, tudo
+   por classe — o gerador só reinterpreta estilos inline. */
+.oracle-trace-step {
+  background: #fffdf8;
+  border-color: var(--cat-rule);
+}
+
+.oracle-trace-step summary {
+  color: var(--cat-ink);
+}
+
+.oracle-trace-note {
+  color: var(--cat-ink-soft);
+}
+
+.oracle-trace-label {
+  color: var(--cat-stamp-deep);
+}
+
+.oracle-trace-error {
+  color: #9f1239;
+}
+
+.oracle-trace-json {
+  color: var(--cat-ink);
+}
+
+.judgment-seal,
+.judgment-close {
+  color: #9f1239;
+}
+
+.judgment-error {
+  color: #b91c1c;
+}
+
+.today-line .is-late,
+.today-error,
+.header-penalty-flag {
+  color: #b91c1c;
+}
+
+/* Cartão do Token MCP: o véu preto deixava o texto destrutivo ilegível
+   (o fundo vem inline, então a sobreposição precisa de !important). */
+.mcp-token-card {
+  background: #fffdf8 !important;
+  border-color: var(--cat-rule) !important;
+}
+
+.mcp-token-reset,
+.mcp-token-reset span {
+  color: #b91c1c;
+}
+
+.mcp-token-reset:hover {
+  color: #7f1d1d;
+}
+
+/* Botões do Julgamento: nasciam com texto creme sobre véu claro. */
+.judgment-contest,
+.judgment-contest-form button {
+  background: #fffdf8;
+  border: 1px solid rgba(159, 18, 57, 0.35);
+  color: #3d2e1f;
+}
+
+.judgment-contest:hover,
+.judgment-contest-form button:hover {
+  background: rgba(159, 18, 57, 0.08);
+}
+
+/* Tarefa concluída/atrasada na lista do dia: cinza e rosa eram do fundo escuro. */
+.today-line .is-done {
+  color: var(--cat-ink-soft);
 }

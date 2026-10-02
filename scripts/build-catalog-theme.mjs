@@ -16,12 +16,12 @@ import { writeFileSync } from 'node:fs';
 const CHROME = process.env.CHROME_PATH || '/a0/tmp/playwright/chromium-1169/chrome-linux/chrome';
 
 const INK = '#2a2118';
-const INK_SOFT = '#7a6a58';
-const INK_DIM = '#9a8976';
+const INK_SOFT = '#6d5d4c';
+const INK_DIM = '#7d6a58';
 const PAPER = '#fbf7ee';
 const PAPER_DEEP = '#efe7d4';
 const CREAM = '#fffdf8';
-const STAMP = '#c2410c';
+const STAMP = '#b0380b';
 const STAMP_DEEP = '#9a3412';
 
 /** Texto claro literal → tinta. */
@@ -41,6 +41,7 @@ const TEXT = {
   '#d97706': STAMP_DEEP,
   '#fde68a': STAMP_DEEP,
   '#eab308': '#a16207',
+  '#fb923c': STAMP,
   // azul neon → petróleo
   '#38bdf8': '#1d6f8a',
   '#7dd3fc': '#155e75',
@@ -49,8 +50,11 @@ const TEXT = {
   // roxo neon → ameixa
   '#a855f7': '#7c4a9b',
   '#c084fc': '#6d28d9',
+  '#a78bfa': '#6d28d9',
   '#e9d5ff': '#5b2e86',
   '#c4b5fd': '#6d28d9',
+  // rosa neon → magenta fechado
+  '#e879f9': '#a21caf',
   // verde neon → floresta
   '#10b981': '#3f7d4e',
   '#34d399': '#166534',
@@ -58,6 +62,7 @@ const TEXT = {
   '#6ee7b7': '#166534',
   '#059669': '#166534',
   '#d1fae5': '#14532d',
+  '#a7f3d0': '#14532d',
   // vermelho claro demais para papel
   '#f87171': '#b91c1c',
   '#fb7185': '#be123c',
@@ -67,7 +72,15 @@ const TEXT = {
   '#f472b6': '#9d174d',
   '#ec4899': '#9d174d',
   '#fca5a5': '#b91c1c',
-  '#ef4444': '#b91c1c'
+  '#ef4444': '#b91c1c',
+  // Preto literal → tinta. No JSX ele aparece sobre botões dourados/azuis, que
+  // aqui viram carimbo fechado; as regras de "botões chapados" e "gradientes"
+  // abaixo reaplicam o creme por cima deles (e por serem posteriores no
+  // arquivo vencem esta). Nas lavagens claras (chips, seletores), tinta é o
+  // correto — creme sobre papel era ilegível.
+  '#000': INK,
+  '#000000': INK,
+  'black': INK
 };
 
 /** Fundo escuro literal → papel. */
@@ -157,6 +170,18 @@ const VEILS = {
   'rgba(0, 0, 0, 0.45)': 'rgba(42, 33, 24, 0.4)',
   'rgba(0, 0, 0, 0.4)': 'rgba(42, 33, 24, 0.36)',
   'rgba(0, 0, 0, 0.25)': 'rgba(42, 33, 24, 0.22)',
+  // Superfícies obsidiana escritas como rgba no JSX (painéis, cartões de
+  // insight, toasts e seletores). Sem isto o fundo continuava escuro enquanto
+  // os textos já tinham virado tinta — ilegível.
+  'rgba(19, 23, 34, 0.85)': 'rgba(251, 247, 238, 0.95)',
+  'rgba(19, 23, 34, 0.9)': 'rgba(251, 247, 238, 0.96)',
+  'rgba(19, 23, 34, 0.95)': 'rgba(251, 247, 238, 0.97)',
+  'rgba(19, 23, 34, 0.96)': 'rgba(251, 247, 238, 0.97)',
+  'rgba(19, 23, 34, 0.7)': 'rgba(239, 231, 212, 0.92)',
+  'rgba(18, 22, 34, 0.9)': 'rgba(251, 247, 238, 0.96)',
+  'rgba(23, 22, 18, 0.85)': 'rgba(251, 244, 228, 0.96)',
+  'rgba(23, 22, 18, 0.9)': 'rgba(251, 244, 228, 0.96)',
+  'rgba(8, 10, 18, 0.55)': 'rgba(61, 46, 31, 0.06)',
   'rgba(5, 7, 13, 0.88)': 'rgba(42, 33, 24, 0.66)',
   'rgba(15, 18, 28, 0.7)': 'rgba(42, 33, 24, 0.55)',
   'rgba(12, 14, 20, 0.94)': 'rgba(42, 33, 24, 0.72)',
@@ -231,16 +256,15 @@ lines.push('/* Gerado por scripts/build-catalog-theme.mjs — não editar à mã
 lines.push('/* Reinterpreta os tons literais do JSX. O mapa mental fica de fora. */');
 lines.push('');
 
-// Texto. O preto literal vira creme: no tema antigo ele só existia sobre o
-// botão dourado, que aqui é o carimbo terracota.
+// Texto. O preto literal vira tinta: no tema antigo ele só existia sobre
+// botões dourados/azuis, que aqui são tons fechados com texto creme — e as
+// regras de botões (mais abaixo no arquivo) cuidam desses casos.
 lines.push('/* --- texto --- */');
 for (const [from, to] of Object.entries(TEXT)) {
   const ser = await serialized('color', from);
   const needle = ser.replace('color: ', '');
   rule(`[style*="color: ${needle}"]`, `color: ${to} !important;`);
 }
-rule('[style*="color: rgb(0, 0, 0)"]', `color: ${CREAM} !important;`);
-rule('[style*="color: black"]', `color: ${CREAM} !important;`);
 
 // Superfícies escuras.
 lines.push('', '/* --- superfícies --- */');
@@ -293,9 +317,12 @@ for (const [from, to] of Object.entries(BORDERS)) {
 
 // O mapa mental conserva o contraste escuro: o que vazou para dentro dele
 // volta ao valor inline original.
-lines.push('', '/* --- o mapa mental não entra no tema --- */');
+lines.push('', '/* --- superfícies que seguem escuras de propósito --- */');
 lines.push('.mindmap-canvas [style*="color:"], .mindmap-fullscreen-root [style*="color:"] { color: revert-layer; }');
 lines.push('.mindmap-canvas [style*="background"], .mindmap-fullscreen-root [style*="background"] { background: revert-layer; }');
+// A capa do livro também é uma superfície colorida escura (gradient-*), com
+// texto creme e chips translúcidos: dentro dela os tons inline continuam.
+lines.push('.book-cover [style*="color:"], .book-cover [style*="background"] { color: revert-layer; background: revert-layer; }');
 
 await browser.close();
 

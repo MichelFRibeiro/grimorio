@@ -876,7 +876,7 @@ export function BooksView({
                   >
                     {/* Book Cover Header Bar */}
                     <div
-                      className={book.coverColor || 'gradient-amber'}
+                      className={`book-cover ${book.coverColor || 'gradient-amber'}`}
                       style={{
                         padding: '20px',
                         position: 'relative',

@@ -311,6 +311,7 @@ print("Missão Criada:", nova_missao.json())`;
 
           {/* Token Management Card */}
           <div
+            className="mcp-token-card"
             style={{
               padding: '18px 20px',
               borderRadius: '16px',
@@ -323,6 +324,7 @@ print("Missão Criada:", nova_missao.json())`;
                 <Key size={16} color="#fbbf24" /> Seu Bearer Token MCP
               </span>
               <button
+                className="mcp-token-reset"
                 onClick={handleRegenerate}
                 disabled={regenerating}
                 style={{

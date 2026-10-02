@@ -462,12 +462,11 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
       {/* SECTION: TRIBUNAL DOS RANKINGS & MAESTRIA DE CATEGORIAS */}
       {analytics.rankings && (
         <div
-          className="glass-panel"
+          className="glass-panel rankings-panel"
           style={{
             padding: '24px',
             marginBottom: '26px',
             border: `1px solid ${analytics.rankings.overall?.rank?.border || 'rgba(245, 158, 11, 0.4)'}`,
-            background: 'rgba(18, 22, 34, 0.9)',
             boxShadow: `0 0 25px ${analytics.rankings.overall?.rank?.glow || 'rgba(0,0,0,0.3)'}`
           }}
         >
@@ -483,46 +482,17 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
             </div>
 
             {/* Tab Selector */}
-            <div
-              style={{
-                padding: '4px',
-                borderRadius: '10px',
-                background: 'rgba(0,0,0,0.35)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                display: 'inline-flex',
-                gap: '4px'
-              }}
-            >
+            <div className="rankings-tabs">
               <button
+                className={`rankings-tab${rankingTab === 'categories' ? ' is-active' : ''}`}
                 onClick={() => setRankingTab('categories')}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '8px',
-                  background: rankingTab === 'categories' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
-                  color: rankingTab === 'categories' ? '#000' : '#94a3b8',
-                  fontWeight: rankingTab === 'categories' ? 800 : 600,
-                  fontSize: '0.82rem',
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
               >
                 📊 Rankings por Categoria
               </button>
 
               <button
+                className={`rankings-tab${rankingTab === 'tiers' ? ' is-active' : ''}`}
                 onClick={() => setRankingTab('tiers')}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '8px',
-                  background: rankingTab === 'tiers' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
-                  color: rankingTab === 'tiers' ? '#000' : '#94a3b8',
-                  fontWeight: rankingTab === 'tiers' ? 800 : 600,
-                  fontSize: '0.82rem',
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
               >
                 📜 Tabela de Faixas (E a S+)
               </button>
@@ -531,33 +501,18 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
 
           {/* Hero Card - Overall User Ranking */}
           <div
+            className="rankings-summary"
             style={{
-              padding: '20px 24px',
-              borderRadius: '16px',
               background: analytics.rankings.overall?.rank?.bg || 'rgba(245, 158, 11, 0.12)',
-              border: `1px solid ${analytics.rankings.overall?.rank?.border || 'rgba(245, 158, 11, 0.35)'}`,
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '20px',
-              marginBottom: '24px'
+              border: `1px solid ${analytics.rankings.overall?.rank?.border || 'rgba(245, 158, 11, 0.35)'}`
             }}
           >
             {/* Rank Identity */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
               <div
+                className="rankings-summary-badge"
                 style={{
-                  width: '64px',
-                  height: '64px',
-                  borderRadius: '16px',
-                  background: 'rgba(0,0,0,0.4)',
                   border: `2px solid ${analytics.rankings.overall?.rank?.border || '#fbbf24'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1.8rem',
-                  fontWeight: 900,
                   color: analytics.rankings.overall?.rank?.textColor || '#fbbf24',
                   boxShadow: `0 0 18px ${analytics.rankings.overall?.rank?.glow || 'rgba(245, 158, 11, 0.3)'}`
                 }}
@@ -590,21 +545,21 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
 
             {/* Stats Metrics */}
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px' }}>
-              <div style={{ padding: '10px 16px', borderRadius: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="rankings-metric">
                 <span style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Pontuação Média</span>
                 <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#f8fafc', fontFamily: 'var(--font-mono)' }}>
                   {analytics.rankings.overall?.avgScore || 0} <span style={{ fontSize: '0.8rem', color: '#64748b' }}>/ 10</span>
                 </div>
               </div>
 
-              <div style={{ padding: '10px 16px', borderRadius: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="rankings-metric">
                 <span style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>XP Semanal Total</span>
                 <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>
                   +{analytics.rankings.overall?.totalWeeklyXp || 0} XP
                 </div>
               </div>
 
-              <div style={{ padding: '10px 16px', borderRadius: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="rankings-metric">
                 <span style={{ fontSize: '0.7rem', color: '#38bdf8', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Clock size={12} /> Fechamento Semanal
                 </span>
@@ -631,13 +586,9 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
                   return (
                     <div
                       key={catRank.category.name}
+                      className="rankings-card"
                       style={{
-                        padding: '18px',
-                        borderRadius: '14px',
-                        background: 'rgba(255, 255, 255, 0.025)',
-                        border: `1px solid ${rank.border ? `${rank.border}40` : 'rgba(255, 255, 255, 0.08)'}`,
-                        position: 'relative',
-                        overflow: 'hidden'
+                        border: `1px solid ${rank.border ? `${rank.border}40` : 'rgba(255, 255, 255, 0.08)'}`
                       }}
                     >
                       {/* Top Row: Category Name + Rank Badge */}
@@ -664,15 +615,11 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
 
                         {/* Big Rank Badge */}
                         <div
+                          className="rankings-badge"
                           style={{
-                            padding: '8px 16px',
-                            borderRadius: '12px',
                             background: rank.bg,
                             border: `2px solid ${rank.border}`,
                             color: rank.textColor,
-                            fontWeight: 900,
-                            fontSize: '1.25rem',
-                            textAlign: 'center',
                             boxShadow: `0 0 12px ${rank.glow}`
                           }}
                           title={`Tier ${rank.name} • Mínimo para manter: ${catRank.maintainMinXp} XP`}
@@ -694,8 +641,7 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
 
                         {/* Progress Bar: XP da semana / meta do próximo tier (ex.: 222/700) */}
                         <div
-                          className="progress-container"
-                          style={{ height: '8px', background: 'rgba(0,0,0,0.4)' }}
+                          className="progress-container rankings-progress"
                           title={`${weeklyXp} / ${catRank.nextRank ? nextRankMinXp : weeklyXp} XP`}
                         >
                           <div
@@ -712,17 +658,17 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
                         {/* Status Note */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
                           {status === 'promoted' && (
-                            <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', fontWeight: 800, border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                            <span className="rankings-chip rankings-chip--promoted">
                               ⚡ Promovido esta semana!
                             </span>
                           )}
                           {status === 'at_risk' && (
-                            <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', fontWeight: 800, border: '1px solid rgba(245, 158, 11, 0.3)' }} title={`Faltam ${catRank.xpNeededToMaintain} XP para não cair`}>
+                            <span className="rankings-chip rankings-chip--at-risk" title={`Faltam ${catRank.xpNeededToMaintain} XP para não cair`}>
                               ⚠️ Risco de Queda (-1 Rank no domingo)
                             </span>
                           )}
                           {status === 'maintained' && (
-                            <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 800, border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                            <span className="rankings-chip rankings-chip--maintained">
                               🛡️ Nível Garantido
                             </span>
                           )}
@@ -747,18 +693,7 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
                             {catRank.history.map((h, hIdx) => (
                               <div
                                 key={h.weekKey}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '3px',
-                                  fontSize: '0.72rem',
-                                  padding: '2px 6px',
-                                  borderRadius: '6px',
-                                  background: h.isClosed ? 'rgba(255, 255, 255, 0.04)' : 'rgba(245, 158, 11, 0.15)',
-                                  border: h.isClosed ? '1px solid rgba(255, 255, 255, 0.06)' : '1px solid rgba(245, 158, 11, 0.35)',
-                                  color: h.isClosed ? '#cbd5e1' : '#fbbf24',
-                                  fontWeight: 700
-                                }}
+                                className={`rankings-history-chip${h.isClosed ? ' is-closed' : ' is-current'}`}
                                 title={`${h.weekLabel}: ${h.xp} XP gerados -> Rank ${h.rank}`}
                               >
                                 <span style={{ color: '#94a3b8', fontSize: '0.65rem' }}>{h.shortLabel}:</span>
@@ -777,17 +712,17 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
 
           {/* TAB 2: 11-Tiers Reference Guide Table */}
           {rankingTab === 'tiers' && (
-            <div style={{ padding: '10px', borderRadius: '14px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div style={{ marginBottom: '14px', padding: '12px 16px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
+            <div className="rankings-tiers">
+              <div className="rankings-tiers-note" style={{ marginBottom: '14px' }}>
                 <p style={{ fontSize: '0.85rem', color: '#cbd5e1', margin: 0, lineHeight: 1.5 }}>
                   ℹ️ <strong>Como funcionam as 11 Faixas de Ranking:</strong> O ranking de cada categoria é calculado com base no XP semanal gerado entre Domingo e Sábado. Ao atingir o XP da faixa, você sobe imediatamente de tier. Caso passe uma semana inteira sem produzir o XP mínimo para manter seu nível, aquela categoria <strong>cai 1 nível</strong> no domingo subsequente (decaimento gradual, sem queda abrupta).
                 </p>
               </div>
 
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <table className="rankings-table">
                   <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left', color: '#94a3b8' }}>
+                    <tr>
                       <th style={{ padding: '10px 14px' }}>Tier</th>
                       <th style={{ padding: '10px 14px' }}>Faixa de XP Semanal</th>
                       <th style={{ padding: '10px 14px' }}>Título de Prestígio</th>
@@ -796,23 +731,14 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
                   </thead>
                   <tbody>
                     {(analytics.rankings.tiers || []).map((t, idx) => (
-                      <tr
-                        key={t.name}
-                        style={{
-                          borderBottom: '1px solid rgba(255,255,255,0.04)',
-                          background: idx % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent'
-                        }}
-                      >
+                      <tr key={t.name} className={`rankings-table-row${idx % 2 === 0 ? ' is-even' : ''}`}>
                         <td style={{ padding: '10px 14px' }}>
                           <span
+                            className="rankings-badge rankings-badge--table"
                             style={{
-                              padding: '4px 10px',
-                              borderRadius: '6px',
                               background: t.bg,
                               color: t.textColor,
-                              border: `1px solid ${t.border}`,
-                              fontWeight: 900,
-                              fontSize: '0.88rem'
+                              border: `1px solid ${t.border}`
                             }}
                           >
                             {t.name}
