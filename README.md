@@ -20,16 +20,17 @@ O script irá:
 ### 1. Perfil do Herói e Níveis
 - **XP e Subida de Nível**: Todas as tarefas, páginas lidas e processos analisados concedem Experiência.
 - **Títulos Honoríficos**: Conforme sobe de nível, novos títulos são desbloqueados (*Aprendiz das Chamas*, *Adepto do Foco*, *Estrategista do Tempo*, *Mestre do Conhecimento*, *Soberano da Execução Lendária*).
-- **Atributos**:
-  - 🧠 **Sabedoria**: Aumenta ao ler livros e registrar insights.
-  - ⚡ **Foco**: Aumenta ao analisar lotes de processos e concluir tarefas.
-  - ⚔️ **Vontade**: Aumenta ao finalizar tarefas difíceis e épicas.
-  - 🛡️ **Consistência**: Aumenta ao manter sequências de dias em hábitos.
+- **Atributos** (com efeito, visível no tooltip do cabeçalho):
+  - 🧠 **Sabedoria**: +1% de XP em estudo a cada 100 (teto +15%).
+  - ⚡ **Foco**: +1% de dano no chefe a cada 50 (teto +20%).
+  - ⚔️ **Vontade**: −1% no custo em moedas das punições a cada 20 (teto 30%).
+  - 🛡️ **Consistência**: +1 escudo de sequência a cada 250 (estoque de 2 até 4).
 
 ### 2. Chefe Semanal da Procrastinação (Boss Raid)
-- Toda semana há um chefe temático (*O Dragão da Procrastinação*).
-- Cada missão concluída, página lida ou processo avançado desfere dano contra o chefe.
-- Ao derrotá-lo até domingo, você recebe um baú de moedas de ouro e XP extra!
+- Semana = domingo a sábado (America/Sao_Paulo). No domingo o chefe vira: se caiu, o próximo sobe de nível; se não caiu, o mesmo nível volta com HP novo e o Grimório julga a semana.
+- HP mira ~15% acima do dano médio das últimas 4 semanas (entre 50% e 200% da fórmula do catálogo).
+- Só ação produtiva fere o chefe (missão, ritual, leitura, questão, bloco AGU, mapa, processo, vitória, revisão). Taverna, punição, tríade e o próprio baú do chefe não contam. Foco soma até +20% de dano.
+- Derrotado no máximo uma vez por semana. Depois disso o dano vira overkill e o próximo chefe só nasce no domingo.
 
 ### 3. A Taverna & Loja de Recompensas
 - Ganhe **Moedas de Ouro (🪙)** em suas atividades.
@@ -73,8 +74,17 @@ O script irá:
 - Barra de progresso com marco de 100%.
 
 ### 🔥 Rituais Diários (Hábitos & Streaks)
-- Hábitos diários com contador de sequência (chamas 🔥).
-- Multiplicador progressivo de XP (até 2.0x de bônus) para dias consecutivos.
+- Sequência pela frequência: dias devidos, semanas com a meta batida, ou períodos (quinzena/mês). Um ritual seg/qua/sex não quebra por ter terça vazia.
+- Multiplicador até 2.0x: +0,1 por dia ou +0,2 por semana/período.
+
+### ⚖️ Julgamento
+- Punição preguiçosa, idempotente, só a partir da data de ativação (`penaltiesSince`) — o histórico anterior não é julgado.
+- Missão crítica vencida (dia 1, 3, 7 e depois semanal), semana sem derrubar o chefe, ritual crítico perdido e dia planejado com zero vitórias.
+- Modal “O Julgamento do Grimório” na carga, com custo, conselho e contestação em 24h (máximo 2 por semana, estorno pelo ledger). XP nunca cai; moedas e atributos têm piso 0.
+
+### Sequência do herói e Baú do Destino
+- A sequência sai do ledger (estorno corrige). 1 escudo a cada 7 dias, consumido automaticamente num dia vazio. Folga opcional em `streakRestDays`.
+- Fechar o dia e completar a tríade (todas as vitórias planejadas, mínimo 3) rola o Baú do Destino, determinístico por dia+evento.
 
 ### 🔮 Oráculo de Análises & Padrões Comportamentais (Objetivo Secundário)
 - **Janela de Pico Produtivo**: Gráfico horário (00h às 23h) que identifica exatamente quando você rende mais.
@@ -177,7 +187,8 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 - `list_rewards`, `create_reward`, `redeem_reward`, `list_reward_redemptions`, `cancel_reward_redemption`, `delete_reward`.
 
 #### 10. 🧙‍♂️ Herói & Boss Raid
-- `get_player_state`, `reset_boss_raid`.
+- `get_player_state`, `reset_boss_raid` (só com chefe derrotado, ou `force=true`).
+- `list_penalties`, `acknowledge_penalty`, `contest_penalty`.
 
 #### 11. 🔮 Oráculo de Análises & Padrões (Somente Leitura)
 - `get_oracle_analytics`: Relatório completo (janela de pico produtivo, mapa de calor, ritmo semanal, simulados, hábitos e previsões).
