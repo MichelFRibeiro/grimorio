@@ -393,6 +393,32 @@ export function App() {
       {/* Boss Raid Banner */}
       <BossRaid boss={bossRaid} />
 
+      <NextActionCard
+        nextAction={nextAction}
+        locations={locations}
+        currentLocation={userProfile?.currentLocation || nextAction?.context?.location}
+        onChangeLocation={setCurrentLocation}
+        onCompleteQuest={completeQuest}
+        onUpdateQuest={updateQuest}
+        onToggleHabit={toggleHabit}
+        onCompleteVictory={completeDailyVictory}
+        quests={quests}
+        onOpenQuests={() => setActiveTab('quests')}
+        onOpenHabits={() => setActiveTab('habits')}
+        onOpenTab={(tab) => setActiveTab(tab)}
+        onBreakdownQuest={breakDownQuest}
+        onRescheduleQuests={rescheduleQuests}
+        onRefresh={refreshNextAction}
+        onSubmitEnergy={submitOracleEnergy}
+        onSkipEnergy={skipOracleEnergy}
+        oracleMemory={data?.oracleMemory}
+        openRouter={data?.openRouter}
+        onSaveOpenRouterKey={saveOpenRouterKey}
+        onDeclineSuggestion={declineOracleSuggestion}
+        onAcceptDose={acceptOracleDose}
+        playClick={playClick}
+      />
+
       {/* Navigation Tab Bar */}
       <nav className="glass-panel app-nav">
         {tabs.map(tab => {
@@ -457,31 +483,6 @@ export function App() {
       <main>
         {(activeTab === 'today' || activeTab == null) && (
           <>
-          <NextActionCard
-            nextAction={nextAction}
-            locations={locations}
-            currentLocation={userProfile?.currentLocation || nextAction?.context?.location}
-            onChangeLocation={setCurrentLocation}
-            onCompleteQuest={completeQuest}
-            onUpdateQuest={updateQuest}
-            onToggleHabit={toggleHabit}
-            onCompleteVictory={completeDailyVictory}
-            quests={quests}
-            onOpenQuests={() => setActiveTab('quests')}
-            onOpenHabits={() => setActiveTab('habits')}
-            onOpenTab={(tab) => setActiveTab(tab)}
-            onBreakdownQuest={breakDownQuest}
-            onRescheduleQuests={rescheduleQuests}
-            onRefresh={refreshNextAction}
-            onSubmitEnergy={submitOracleEnergy}
-            onSkipEnergy={skipOracleEnergy}
-            oracleMemory={data?.oracleMemory}
-            openRouter={data?.openRouter}
-            onSaveOpenRouterKey={saveOpenRouterKey}
-            onDeclineSuggestion={declineOracleSuggestion}
-            onAcceptDose={acceptOracleDose}
-            playClick={playClick}
-          />
           <TodayView
             today={today}
             dailyVictories={dailyVictories}

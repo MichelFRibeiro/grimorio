@@ -205,15 +205,22 @@ registrar no lado errado.
 
 ## 8. Atualizar depois de um `git push`
 
-Quando o código novo for enviado para a branch `main` do GitHub:
+Quando o código novo for enviado para a branch `main` do GitHub, o botão
+**Update / Redeploy** do Docker Manager **não basta**: ele só reinicia o
+container com a imagem antiga. O site continua servindo o pacote de sexta
+(confira o `last-modified` de `https://grimorio.michelfernandes.adv.br/`).
 
-1. Docker Manager → **Projects** → projeto **grimorio**.
-2. Use a ação **Update / Redeploy / Rebuild** do projeto (o nome varia um
-   pouco conforme a versão do painel).
-3. Espere o rebuild (**2 a 10 minutos**; as camadas de dependências ficam em
-   cache, então costuma ser bem mais rápido que a primeira subida). Os dados
-   **não** são afetados: eles vivem no volume `grimorio-data`, que o rebuild não
-   toca.
+No **Web Console** do VPS, force a imagem nova:
+
+```bash
+cd /docker/grimorio
+docker compose build --no-cache --pull
+docker compose up -d
+```
+
+Espere o build (alguns minutos). O volume `grimorio-data` não entra nesses
+comandos, então missões e histórico ficam. Depois recarregue o site: o
+`index.html` precisa apontar para um pacote novo, não para o de 2 de outubro.
 
 Se preferir, apague e recrie o projeto — o volume continua existindo e os dados
 seguem lá.
