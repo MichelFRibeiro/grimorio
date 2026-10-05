@@ -79,6 +79,18 @@ assert(plan.blockDurations[`${monday}|administrativo|estudo|atos`] === 45, 'Dura
 const laterExam = { subject: 'Direito Civil', subjectId: 'civil', topicId: 'pessoas', totalQuestions: 10, correctAnswers: 9, date: '2026-10-01', durationMinutes: 50 };
 const timeTotals = getAguStudyTimeTotals(plan, [...exams, laterExam], monday);
 assert(timeTotals.day === 140, `Hoje 140 min (95 exames + 45 bloco sem exame), veio ${timeTotals.day}`);
+
+// O lançamento de um bloco grava o tempo em examQuestions e em blockDurations.
+// O gráfico não pode somar as duas fontes: o histórico mostra o bloco uma vez.
+const doubledExams = [
+  { subject: 'Língua Portuguesa', subjectId: 'portugues', topicId: 'ortografia', blockKey: `${monday}|portugues|estudo|ortografia`, totalQuestions: 10, correctAnswers: 6, date: monday, durationMinutes: 81 }
+];
+let doubledPlan = createDefaultAguPlan(monday);
+doubledPlan = startAguPlan(doubledPlan, monday);
+doubledPlan = addBlockDuration(doubledPlan, `${monday}|portugues|estudo|ortografia`, 81);
+const doubledSeries = getAguStudyLoadSeries(doubledPlan, doubledExams, monday, { days: 14 });
+const doubledPoint = doubledSeries.points.find((p) => p.dateStr === monday);
+assert(doubledPoint.minutes === 81, `Gráfico deve bater com o histórico (81 min), veio ${doubledPoint.minutes}`);
 assert(timeTotals.week === 140, `Semana deve incluir só o ciclo atual, veio ${timeTotals.week}`);
 assert(timeTotals.cycle === 140, `Ciclo deve ignorar outubro, veio ${timeTotals.cycle}`);
 assert(timeTotals.month === 140, `Mês deve ignorar outubro, veio ${timeTotals.month}`);
@@ -105,6 +117,7 @@ assert(classifyStudyLoadHours(0, buildHomeostasisBand(0, 0)) === 'homeostasis', 
 
 const loadSeries = getAguStudyLoadSeries(plan, [...exams, laterExam], monday, { days: 14 });
 const mondayPoint = loadSeries.points.find((p) => p.dateStr === monday);
+// Os exames não têm blockKey, então cada um entra uma vez — igual ao histórico.
 assert(mondayPoint.minutes === 140, `Segunda deve ter 140 min, veio ${mondayPoint.minutes}`);
 assert(loadSeries.activeDays === 1, `Só segunda teve sessão, veio ${loadSeries.activeDays}`);
 assert(loadSeries.setpointMinutes >= 20, `setpoint nasce do baseline, veio ${loadSeries.setpointMinutes}`);

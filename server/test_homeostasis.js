@@ -17,7 +17,8 @@ import {
   READING_HOMEOSTASIS_VICTORY_CATEGORY
 } from '../src/utils/homeostasis.js';
 import { DAILY_VICTORY_OVERFLOW_SOURCES } from '../src/utils/dailyVictories.js';
-import { getAguStudyLoadSeries, buildAguHomeostasisStudyVictory } from '../src/utils/aguCycle.js';
+import { getAguStudyLoadSeries, buildAguHomeostasisStudyVictory, addBlockDuration, startAguPlan } from '../src/utils/aguCycle.js';
+import { createDefaultAguPlan } from '../src/data/aguCurriculum.js';
 
 function run() {
   console.log('🧪 Testando faixa de homeostase em minutos...\n');
@@ -144,6 +145,29 @@ function run() {
     'mapas mentais entram nas duas pontas (aqui sem sessões, o número coincide)'
   );
   console.log('✅ Gráfico, vitória planejada e servidor usam o mesmo número.');
+
+  // O lançamento grava o tempo no exame e no bloco. O gráfico tem que mostrar
+  // o mesmo número do Histórico de blocos, sem contar o bloco duas vezes.
+  const dia = '2026-10-05';
+  let planoDuplicado = startAguPlan(createDefaultAguPlan(dia), dia);
+  planoDuplicado = addBlockDuration(planoDuplicado, `${dia}|portugues|estudo|ortografia`, 81);
+  const exameDoBloco = [{
+    subject: 'Língua Portuguesa',
+    subjectId: 'portugues',
+    topicId: 'ortografia',
+    blockKey: `${dia}|portugues|estudo|ortografia`,
+    totalQuestions: 10,
+    correctAnswers: 6,
+    date: dia,
+    durationMinutes: 81
+  }];
+  const serieDuplicada = getAguStudyLoadSeries(planoDuplicado, exameDoBloco, dia, { days: 14 });
+  assert.strictEqual(
+    serieDuplicada.today.minutes,
+    81,
+    `gráfico não pode dobrar o tempo do bloco lançado, veio ${serieDuplicada.today.minutes}`
+  );
+  console.log('✅ Gráfico conta cada bloco uma vez, igual ao histórico.');
 
   const zeros = {};
   for (let i = 0; i < 14; i += 1) zeros[`2026-08-${String(25 + i).padStart(2, '0')}`] = i === 13 ? 86 : 0;

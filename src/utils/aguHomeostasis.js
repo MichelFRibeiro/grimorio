@@ -21,6 +21,7 @@ import {
   sessionDateStr
 } from './homeostasis.js';
 import { getSaoPauloDayOfWeek } from './timeUtils.js';
+import { collectStudyBlocks } from './aguStudyEngine.js';
 
 export const AGU_CATEGORY_ALIASES = {
   constitucional: ['constitucional'],
@@ -112,22 +113,26 @@ export function migrateCapacityToHomeostasis(plan, minutesByDate = {}, todayStr)
   };
 }
 
+/**
+ * Minutos de estudo AGU por dia, na mesma conta do Histórico de blocos.
+ *
+ * O lançamento de um bloco grava o tempo duas vezes: em `examQuestions` (quando
+ * há questões) e em `blockDurations` (sempre). Somar as duas fontes conta o
+ * mesmo bloco duas vezes — o gráfico mostrava 2h 42 min num dia cujo histórico
+ * tinha 1h 21 min. `collectStudyBlocks` já funde as duas pelo maior valor de
+ * cada bloco, e é exatamente o número exibido no histórico. Um exame sem
+ * `blockKey` também não pode ser somado de novo: a fusão já o absorveu no bloco
+ * da mesma data, matéria e tópico.
+ */
 export function studyMinutesByDate(plan, examQuestions = [], mindMapSessions = [], mindMaps = []) {
   const byDate = {};
   const mapById = {};
   (mindMaps || []).forEach((map) => {
     if (map?.id) mapById[map.id] = map;
   });
-  (examQuestions || []).forEach((entry) => {
-    if (!entry?.date) return;
-    if (entry.subjectId && !getAguSubject(entry.subjectId)) return;
-    if (!entry.subjectId && !String(entry.notes || '').includes('Campanha AGU')) return;
-    byDate[entry.date] = (byDate[entry.date] || 0) + parseDurationMinutes(entry.durationMinutes);
-  });
-  Object.entries(plan?.blockDurations || {}).forEach(([key, minutes]) => {
-    const dateStr = String(key).split('|')[0];
-    if (!dateStr) return;
-    byDate[dateStr] = (byDate[dateStr] || 0) + parseDurationMinutes(minutes);
+  collectStudyBlocks(plan, examQuestions).forEach((block) => {
+    if (!block?.dateStr) return;
+    byDate[block.dateStr] = (byDate[block.dateStr] || 0) + parseDurationMinutes(block.durationMinutes);
   });
   (mindMapSessions || []).forEach((session) => {
     const dateStr = sessionDateStr(session);
