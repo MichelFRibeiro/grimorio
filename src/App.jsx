@@ -8,6 +8,7 @@ import { DailyVictoriesCard } from './components/DailyVictoriesCard';
 import { QuestsView } from './components/QuestsView';
 import { QuestionsView } from './components/QuestionsView';
 import { BooksView } from './components/BooksView';
+import { ScriptureView } from './components/ScriptureView';
 import { ProcessesView } from './components/ProcessesView';
 import { HabitsView } from './components/HabitsView';
 import { RewardsShop } from './components/RewardsShop';
@@ -17,7 +18,7 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { DestinyChestModal } from './components/DestinyChestModal';
 import { JudgmentModal, JudgmentHistory } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun } from 'lucide-react';
+import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun } from 'lucide-react';
 import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
@@ -27,7 +28,7 @@ import { FocusChamberView, FocusMiniPlayer } from './components/FocusPlayer';
 import { useFocusPlayer } from './hooks/useFocusPlayer';
 import { getSaoPauloDateStr, addDaysToDateStr, getSaoPauloDayOfWeek } from './utils/timeUtils';
 import { summarizePlan, getAguStudyLoadSeries } from './utils/aguCycle';
-import { getReadingLoadSeries } from './utils/homeostasis';
+import { getReadingLoadSeries, getScriptureLoadSeries } from './utils/homeostasis';
 
 export function App() {
   const [activeTab, setActiveTab] = useState('today');
@@ -75,6 +76,12 @@ export function App() {
     addBookQuote,
     updateBookQuote,
     deleteBookQuote,
+    logScriptureSession,
+    deleteScriptureSession,
+    addScriptureQuote,
+    deleteScriptureQuote,
+    addScriptureReflection,
+    deleteScriptureReflection,
     addExamQuestions,
     updateExamQuestions,
     deleteExamQuestions,
@@ -161,7 +168,8 @@ export function App() {
     study: getAguStudyLoadSeries(data?.aguPlan, data?.examQuestions || [], todayStr, {
       mindMapSessions: data?.mindMapSessions || []
     }).homeostasisMinMinutes,
-    reading: getReadingLoadSeries(data?.readingSessions || [], todayStr).homeostasisMinMinutes
+    reading: getReadingLoadSeries(data?.readingSessions || [], todayStr).homeostasisMinMinutes,
+    scripture: getScriptureLoadSeries(data?.scriptureSessions || [], todayStr).homeostasisMinMinutes
   }), [data, todayStr]);
 
   // Atalhos de teclado (n / h / ? / Esc). Precisa ficar ACIMA dos returns
@@ -253,6 +261,10 @@ export function App() {
     questCategories,
     books,
     readingSessions,
+    scriptureProgress,
+    scriptureSessions,
+    scriptureQuotes,
+    scriptureReflections,
     examQuestions,
     aguPlan,
     processes,
@@ -337,6 +349,7 @@ export function App() {
     { id: 'quests', label: 'Missões', icon: Scroll, badge: pendingQuestsCount },
     { id: 'questions', label: 'Questões', icon: Target, badge: todayQuestionsCount },
     { id: 'books', label: 'Biblioteca', icon: BookOpen, badge: activeBooksCount },
+    { id: 'scripture', label: 'Escrituras', icon: BookMarked },
     { id: 'maps', label: 'Mapas', icon: Network, badge: dueMindMapsCount },
     { id: 'processes', label: 'Processos', icon: Layers, badge: activeProcessesCount },
     { id: 'habits', label: 'Rituais', icon: Flame, badge: habitsDueCount },
@@ -374,6 +387,7 @@ export function App() {
         onDeleteVictory={deleteDailyVictory}
         studyFloorMinutes={homeostasisFloors.study}
         readingFloorMinutes={homeostasisFloors.reading}
+        scriptureFloorMinutes={homeostasisFloors.scripture}
       />
 
       {/* Boss Raid Banner */}
@@ -564,6 +578,22 @@ export function App() {
             onAddBookQuote={addBookQuote}
             onUpdateBookQuote={updateBookQuote}
             onDeleteBookQuote={deleteBookQuote}
+            onAddDailyVictory={addDailyVictory}
+          />
+        )}
+
+        {activeTab === 'scripture' && (
+          <ScriptureView
+            scriptureProgress={scriptureProgress}
+            scriptureSessions={scriptureSessions}
+            scriptureQuotes={scriptureQuotes}
+            scriptureReflections={scriptureReflections}
+            onLogSession={logScriptureSession}
+            onDeleteSession={deleteScriptureSession}
+            onAddQuote={addScriptureQuote}
+            onDeleteQuote={deleteScriptureQuote}
+            onAddReflection={addScriptureReflection}
+            onDeleteReflection={deleteScriptureReflection}
             onAddDailyVictory={addDailyVictory}
           />
         )}

@@ -113,6 +113,14 @@ import {
   updateQuote as domainUpdateQuote,
   deleteQuote as domainDeleteQuote,
   deleteBook as domainDeleteBook,
+  logScriptureSession as domainLogScriptureSession,
+  updateScriptureSession as domainUpdateScriptureSession,
+  deleteScriptureSession as domainDeleteScriptureSession,
+  addScriptureQuote as domainAddScriptureQuote,
+  updateScriptureQuote as domainUpdateScriptureQuote,
+  deleteScriptureQuote as domainDeleteScriptureQuote,
+  addScriptureReflection as domainAddScriptureReflection,
+  deleteScriptureReflection as domainDeleteScriptureReflection,
   logExamQuestions as domainLogExamQuestions,
   updateExamQuestions as domainUpdateExamQuestions,
   deleteExamQuestions as domainDeleteExamQuestions,
@@ -1401,6 +1409,112 @@ app.delete('/api/books/:id/quotes/:quoteId', (req, res) => {
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({ success: true, book: result.book, rewardResult: result.rewardResult });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 4.1. ESCRITURAS (LEITURA DA BÍBLIA)
+// Tempo independente da Biblioteca.
+// ==========================================
+app.post('/api/scripture/sessions', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainLogScriptureSession(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({
+      success: true,
+      session: result.session,
+      rewardResult: result.rewardResult,
+      linkedVictories: result.linkedVictories,
+      finishedCanon: result.finishedCanon
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.put('/api/scripture/sessions/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainUpdateScriptureSession(db, req.params.id, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, session: result.session, rewardResult: result.rewardResult, linkedVictories: result.linkedVictories });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/scripture/sessions/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainDeleteScriptureSession(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, rewardResult: result.rewardResult, linkedVictories: result.linkedVictories });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/scripture/quotes', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainAddScriptureQuote(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, quote: result.quote, rewardResult: result.rewardResult });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/scripture/quotes/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainUpdateScriptureQuote(db, { id: req.params.id, ...(req.body || {}) });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, quote: result.quote });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/scripture/quotes/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainDeleteScriptureQuote(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, rewardResult: result.rewardResult });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/scripture/reflections', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainAddScriptureReflection(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, reflection: result.reflection });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/scripture/reflections/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainDeleteScriptureReflection(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

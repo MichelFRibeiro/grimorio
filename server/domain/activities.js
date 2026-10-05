@@ -27,6 +27,14 @@ import {
   sanitizeDailyVictoryBonuses
 } from '../../src/utils/dailyVictories.js';
 import { computeStudyRewards, restoreSessionScheduling } from '../../src/utils/mindMaps.js';
+import {
+  BIBLE_BOOKS,
+  getBibleBook,
+  chapterCount,
+  verseCount,
+  formatReference,
+  comparePassage
+} from '../../src/data/bibleCanon.js';
 import { calculateFrequencyStreak } from '../timeUtils.js';
 import {
   DomainError,
@@ -43,6 +51,7 @@ import {
 } from './validate.js';
 import {
   readingSessionRewards,
+  scriptureSessionRewards,
   quoteRewards,
   examQuestionRewards,
   processStepRewards,
@@ -1300,6 +1309,448 @@ export function revertMindMapSession(db, session) {
     wisdom: rewards.wisdom,
     focus: rewards.focus
   });
+}
+
+// ---------------------------------------------------------------------------
+// Escrituras — leitura da Bíblia (tempo independente da Biblioteca)
+// ---------------------------------------------------------------------------
+
+const SCRIPTURE_CATEGORY = 'Estudos';
+
+function ensureScripture(db) {
+  if (!db.scriptureProgress || typeof db.scriptureProgress !== 'object') {
+    db.scriptureProgress = {};
+  }
+  if (!Array.isArray(db.scriptureSessions)) db.scriptureSessions = [];
+  if (!Array.isArray(db.scriptureQuotes)) db.scriptureQuotes = [];
+  if (!Array.isArray(db.scriptureReflections)) db.scriptureReflections = [];
+  return db;
+}
+
+function parsePassage(label, { bookId, chapter, verse }) {
+  const book = getBibleBook(bookId);
+  if (!book) throw new DomainError(`${label}: livro não faz parte do cânone.`);
+  const ch = intInRange(chapter, { min: 1, max: chapterCount(book), label: `${label}: capítulo` });
+  const vs = intInRange(verse, { min: 1, max: verseCount(book, ch), label: `${label}: versículo` });
+  return { book, bookId: book.id, chapter: ch, verse: vs };
+}
+
+function parseScriptureSpan(body = {}) {
+  const start = parsePassage('Início', {
+    bookId: body.startBookId,
+    chapter: body.startChapter,
+    verse: body.startVerse
+  });
+  const end = parsePassage('Fim', {
+    bookId: body.endBookId,
+    chapter: body.endChapter,
+    verse: body.endVerse
+  });
+  if (comparePassage(end, start) < 0) {
+    throw new DomainError('O ponto final precisa ser igual ou posterior ao ponto inicial.');
+  }
+  const chapters = [];
+  let cursor = BIBLE_BOOKS.indexOf(start.book);
+  const last = BIBLE_BOOKS.indexOf(end.book);
+  while (cursor <= last) {
+    const book = BIBLE_BOOKS[cursor];
+    const from = book.id === start.bookId ? start.chapter : 1;
+    const to = book.id === end.bookId ? end.chapter : chapterCount(book);
+    for (let chapter = from; chapter <= to; chapter += 1) chapters.push({ bookId: book.id, chapter });
+    cursor += 1;
+  }
+  if (chapters.length > LIMITS.pagesPerSession) {
+    throw new DomainError(`Uma sessão não pode avançar mais de ${LIMITS.pagesPerSession} capítulos.`);
+  }
+  return {
+    start,
+    end,
+    chapters,
+    chaptersRead: chapters.length,
+    finishedCanon: end.bookId === 'ap'
+      && end.chapter === chapterCount(end.book)
+      && end.verse === verseCount(end.book, end.chapter)
+  };
+}
+
+function parseScriptureQuotes(quotes, fallback) {
+  if (!Array.isArray(quotes)) return [];
+  return quotes.filter((item) => item && String(item.quote || '').trim()).map((item) => {
+    const located = item.bookId
+      ? parsePassage('Citação', {
+        bookId: item.bookId,
+        chapter: item.chapter,
+        verse: item.verse
+      })
+      : fallback.end;
+    return {
+      id: item.id || uid('sq'),
+      bookId: located.bookId,
+      chapter: located.chapter,
+      verse: located.verse,
+      reference: formatReference(located.book, located.chapter, located.verse),
+      quote: String(item.quote).trim(),
+      note: String(item.note || '').trim(),
+      createdAt: item.createdAt || new Date().toISOString()
+    };
+  });
+}
+
+function sessionChapters(session) {
+  if (Array.isArray(session?.chapters) && session.chapters.length) return session.chapters;
+  if (!session?.startBookId || !session?.endBookId) return [];
+  try {
+    return parseScriptureSpan(session).chapters;
+  } catch {
+    return [];
+  }
+}
+
+function refreshScriptureProgress(db) {
+  ensureScripture(db);
+  const next = {};
+  (db.scriptureSessions || []).forEach((session) => {
+    sessionChapters(session).forEach(({ bookId, chapter }) => {
+      const current = next[bookId] || { chapters: new Set(), lastDate: '' };
+      current.chapters.add(chapter);
+      if ((session.date || '') > current.lastDate) current.lastDate = session.date;
+      if (session.endBookId === bookId && session.endChapter === chapter) {
+        current.verse = Math.max(current.verse || 0, session.endVerse || 0);
+      }
+      next[bookId] = current;
+    });
+  });
+  db.scriptureProgress = {};
+  BIBLE_BOOKS.forEach((book) => {
+    const read = next[book.id];
+    if (!read) return;
+    const total = chapterCount(book);
+    const lastChapter = [...read.chapters].sort((a, b) => a - b).pop();
+    db.scriptureProgress[book.id] = {
+      bookId: book.id,
+      chaptersRead: read.chapters.size,
+      chapter: lastChapter,
+      verse: read.verse || verseCount(book, lastChapter),
+      completed: read.chapters.size >= total,
+      lastReadDate: read.lastDate || null
+    };
+  });
+}
+
+function scriptureGrantTitle(span, quotesCount) {
+  const from = formatReference(span.start.book, span.start.chapter, span.start.verse);
+  const to = formatReference(span.end.book, span.end.chapter, span.end.verse);
+  const range = from === to ? from : `${from}–${to}`;
+  return `Escritura ${range} (+${span.chaptersRead} cap.${quotesCount ? `, ${quotesCount} citação(ões)` : ''})`;
+}
+
+export function logScriptureSession(db, body = {}) {
+  ensureScripture(db);
+  let span;
+  let minutes;
+  try {
+    span = parseScriptureSpan(body);
+    minutes = body.durationMinutes == null || body.durationMinutes === ''
+      ? 20
+      : durationMinutes(body.durationMinutes, { fallback: 20, label: 'Duração da leitura' });
+    if (body.date) dateOnly(body.date);
+  } catch (err) {
+    return asError(err);
+  }
+
+  const parsedQuotes = parseScriptureQuotes(body.quotes, span);
+  const rewards = scriptureSessionRewards({
+    chaptersRead: span.chaptersRead,
+    finishedCanon: span.finishedCanon,
+    quotesCount: parsedQuotes.length
+  });
+  const session = {
+    id: uid('ss'),
+    startBookId: span.start.bookId,
+    startChapter: span.start.chapter,
+    startVerse: span.start.verse,
+    endBookId: span.end.bookId,
+    endChapter: span.end.chapter,
+    endVerse: span.end.verse,
+    chapters: span.chapters,
+    chaptersRead: span.chaptersRead,
+    durationMinutes: minutes,
+    notes: String(body.notes || '').trim(),
+    reflection: String(body.reflection || '').trim(),
+    quotes: parsedQuotes,
+    xpEarned: rewards.xp,
+    coinsEarned: rewards.coins,
+    wisdomEarned: rewards.wisdom,
+    date: body.date || getSaoPauloDateStr(),
+    timestamp: new Date().toISOString()
+  };
+  db.scriptureSessions.unshift(session);
+  if (parsedQuotes.length) db.scriptureQuotes.unshift(...parsedQuotes);
+  if (session.reflection) {
+    db.scriptureReflections.unshift({
+      id: uid('sr'),
+      sessionId: session.id,
+      bookId: span.end.bookId,
+      chapter: span.end.chapter,
+      verse: span.end.verse,
+      reference: formatReference(span.end.book, span.end.chapter, span.end.verse),
+      text: session.reflection,
+      date: session.date,
+      createdAt: session.timestamp
+    });
+  }
+  refreshScriptureProgress(db);
+
+  const rewardResult = grant({
+    xp: rewards.xp,
+    coins: rewards.coins,
+    wisdom: rewards.wisdom,
+    actionType: 'scripture_session',
+    entityId: session.id,
+    title: scriptureGrantTitle(span, parsedQuotes.length),
+    details: {
+      category: SCRIPTURE_CATEGORY,
+      chaptersRead: span.chaptersRead,
+      durationMinutes: minutes,
+      quotesCount: parsedQuotes.length,
+      reference: formatReference(span.end.book, span.end.chapter, span.end.verse)
+    },
+    logDate: session.date
+  });
+  attachLog(session, rewardResult);
+  const linkedVictories = syncDailyVictoriesFromActivity(db, { syncScripture: true });
+  return { session, rewardResult, linkedVictories, finishedCanon: span.finishedCanon };
+}
+
+export function updateScriptureSession(db, id, body = {}) {
+  ensureScripture(db);
+  const session = db.scriptureSessions.find((item) => item.id === id);
+  if (!session) return fail('Sessão de Escritura não encontrada', 404);
+
+  let span;
+  let minutes;
+  try {
+    span = parseScriptureSpan({
+      startBookId: body.startBookId ?? session.startBookId,
+      startChapter: body.startChapter ?? session.startChapter,
+      startVerse: body.startVerse ?? session.startVerse,
+      endBookId: body.endBookId ?? session.endBookId,
+      endChapter: body.endChapter ?? session.endChapter,
+      endVerse: body.endVerse ?? session.endVerse
+    });
+    minutes = body.durationMinutes == null || body.durationMinutes === ''
+      ? (session.durationMinutes || 20)
+      : durationMinutes(body.durationMinutes, { fallback: session.durationMinutes || 20 });
+  } catch (err) {
+    return asError(err);
+  }
+
+  const parsedQuotes = Array.isArray(body.quotes)
+    ? parseScriptureQuotes(body.quotes, span)
+    : (session.quotes || []);
+  const oldIds = new Set((session.quotes || []).map((quote) => quote.id));
+  db.scriptureQuotes = db.scriptureQuotes.filter((quote) => !oldIds.has(quote.id));
+  if (parsedQuotes.length) db.scriptureQuotes.unshift(...parsedQuotes);
+
+  revertByRef({
+    logId: session.rewardLogId,
+    entityId: session.id,
+    actionType: 'scripture_session',
+    date: session.date,
+    xp: session.xpEarned || 0,
+    coins: session.coinsEarned || 0,
+    wisdom: session.wisdomEarned || 0
+  });
+
+  const rewards = scriptureSessionRewards({
+    chaptersRead: span.chaptersRead,
+    finishedCanon: span.finishedCanon,
+    quotesCount: parsedQuotes.length
+  });
+  Object.assign(session, {
+    startBookId: span.start.bookId,
+    startChapter: span.start.chapter,
+    startVerse: span.start.verse,
+    endBookId: span.end.bookId,
+    endChapter: span.end.chapter,
+    endVerse: span.end.verse,
+    chapters: span.chapters,
+    chaptersRead: span.chaptersRead,
+    durationMinutes: minutes,
+    quotes: parsedQuotes,
+    xpEarned: rewards.xp,
+    coinsEarned: rewards.coins,
+    wisdomEarned: rewards.wisdom
+  });
+  if (body.notes !== undefined) session.notes = String(body.notes || '').trim();
+  if (body.reflection !== undefined) session.reflection = String(body.reflection || '').trim();
+  refreshScriptureProgress(db);
+
+  const rewardResult = grant({
+    xp: rewards.xp,
+    coins: rewards.coins,
+    wisdom: rewards.wisdom,
+    actionType: 'scripture_session',
+    entityId: session.id,
+    title: scriptureGrantTitle(span, parsedQuotes.length),
+    details: {
+      category: SCRIPTURE_CATEGORY,
+      chaptersRead: span.chaptersRead,
+      durationMinutes: minutes,
+      quotesCount: parsedQuotes.length
+    },
+    logDate: session.date
+  });
+  attachLog(session, rewardResult);
+  const linkedVictories = syncDailyVictoriesFromActivity(db, { syncScripture: true });
+  return { session, rewardResult, linkedVictories };
+}
+
+export function deleteScriptureSession(db, id) {
+  ensureScripture(db);
+  const index = db.scriptureSessions.findIndex((item) => item.id === id);
+  if (index === -1) return fail('Sessão de Escritura não encontrada', 404);
+  const [session] = db.scriptureSessions.splice(index, 1);
+  const rewardResult = revertByRef({
+    logId: session.rewardLogId,
+    entityId: session.id,
+    actionType: 'scripture_session',
+    date: session.date,
+    xp: session.xpEarned || 0,
+    coins: session.coinsEarned || 0,
+    wisdom: session.wisdomEarned || 0
+  });
+  const ids = new Set((session.quotes || []).map((quote) => quote.id));
+  db.scriptureQuotes = db.scriptureQuotes.filter((quote) => !ids.has(quote.id));
+  db.scriptureReflections = db.scriptureReflections.filter((item) => item.sessionId !== session.id);
+  refreshScriptureProgress(db);
+  const linkedVictories = syncDailyVictoriesFromActivity(db, { syncScripture: true });
+  return { removed: session, rewardResult, linkedVictories };
+}
+
+export function addScriptureQuote(db, body = {}) {
+  ensureScripture(db);
+  if (!body.quote || !String(body.quote).trim()) return fail('O texto da citação é obrigatório.');
+  let located;
+  try {
+    located = parsePassage('Citação', body);
+  } catch (err) {
+    return asError(err);
+  }
+  const quote = {
+    id: uid('sq'),
+    bookId: located.bookId,
+    chapter: located.chapter,
+    verse: located.verse,
+    reference: formatReference(located.book, located.chapter, located.verse),
+    quote: String(body.quote).trim(),
+    note: String(body.note || '').trim(),
+    createdAt: new Date().toISOString()
+  };
+  db.scriptureQuotes.unshift(quote);
+  const rewards = quoteRewards();
+  const rewardResult = grant({
+    xp: rewards.xp,
+    coins: rewards.coins,
+    wisdom: rewards.wisdom,
+    actionType: 'scripture_quote',
+    entityId: quote.id,
+    title: `Citação: ${quote.reference}`,
+    details: { category: SCRIPTURE_CATEGORY, reference: quote.reference, quote: quote.quote.slice(0, 50) }
+  });
+  attachLog(quote, rewardResult);
+  return { quote, rewardResult };
+}
+
+export function updateScriptureQuote(db, { id, quote, note, bookId, chapter, verse } = {}) {
+  ensureScripture(db);
+  const item = db.scriptureQuotes.find((entry) => entry.id === id);
+  if (!item) return fail('Citação não encontrada', 404);
+  if (bookId || chapter || verse) {
+    try {
+      const located = parsePassage('Citação', {
+        bookId: bookId || item.bookId,
+        chapter: chapter || item.chapter,
+        verse: verse || item.verse
+      });
+      item.bookId = located.bookId;
+      item.chapter = located.chapter;
+      item.verse = located.verse;
+      item.reference = formatReference(located.book, located.chapter, located.verse);
+    } catch (err) {
+      return asError(err);
+    }
+  }
+  if (quote !== undefined) item.quote = String(quote).trim();
+  if (note !== undefined) item.note = String(note).trim();
+  db.scriptureSessions.forEach((session) => {
+    (session.quotes || []).forEach((embedded) => {
+      if (embedded.id !== id) return;
+      embedded.quote = item.quote;
+      embedded.note = item.note;
+      embedded.bookId = item.bookId;
+      embedded.chapter = item.chapter;
+      embedded.verse = item.verse;
+      embedded.reference = item.reference;
+    });
+  });
+  return { quote: item };
+}
+
+export function deleteScriptureQuote(db, id) {
+  ensureScripture(db);
+  const index = db.scriptureQuotes.findIndex((entry) => entry.id === id);
+  if (index === -1) return fail('Citação não encontrada', 404);
+  const [removed] = db.scriptureQuotes.splice(index, 1);
+  db.scriptureSessions.forEach((session) => {
+    if (session.quotes) session.quotes = session.quotes.filter((quote) => quote.id !== id);
+  });
+  const standalone = removed.rewardLogId
+    || findRewardLog(db, { entityId: removed.id, actionType: 'scripture_quote' });
+  let rewardResult = null;
+  if (standalone) {
+    rewardResult = revertByRef({
+      logId: removed.rewardLogId,
+      entityId: removed.id,
+      actionType: 'scripture_quote',
+      ...quoteRewards()
+    });
+  }
+  return { removed, rewardResult };
+}
+
+export function addScriptureReflection(db, body = {}) {
+  ensureScripture(db);
+  const text = String(body.text || body.reflection || '').trim();
+  if (!text) return fail('A reflexão é obrigatória.');
+  let located;
+  try {
+    located = parsePassage('Reflexão', body);
+    if (body.date) dateOnly(body.date);
+  } catch (err) {
+    return asError(err);
+  }
+  const reflection = {
+    id: uid('sr'),
+    sessionId: null,
+    bookId: located.bookId,
+    chapter: located.chapter,
+    verse: located.verse,
+    reference: formatReference(located.book, located.chapter, located.verse),
+    text,
+    date: body.date || getSaoPauloDateStr(),
+    createdAt: new Date().toISOString()
+  };
+  db.scriptureReflections.unshift(reflection);
+  return { reflection };
+}
+
+export function deleteScriptureReflection(db, id) {
+  ensureScripture(db);
+  const index = db.scriptureReflections.findIndex((entry) => entry.id === id);
+  if (index === -1) return fail('Reflexão não encontrada', 404);
+  const [removed] = db.scriptureReflections.splice(index, 1);
+  return { removed };
 }
 
 export function deleteMindMapSession(db, id) {

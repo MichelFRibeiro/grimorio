@@ -1,9 +1,10 @@
 export const LIVE_READING_SESSION_KEY = 'grimorio_live_reading_session';
+export const LIVE_SCRIPTURE_SESSION_KEY = 'grimorio_live_scripture_session';
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-export function readLiveReadingSession() {
+export function readLiveReadingSession(key = LIVE_READING_SESSION_KEY) {
   try {
-    const raw = sessionStorage.getItem(LIVE_READING_SESSION_KEY);
+    const raw = sessionStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || !parsed.bookId) return null;
@@ -14,17 +15,17 @@ export function readLiveReadingSession() {
   }
 }
 
-export function writeLiveReadingSession(payload) {
+export function writeLiveReadingSession(payload, key = LIVE_READING_SESSION_KEY) {
   try {
-    sessionStorage.setItem(LIVE_READING_SESSION_KEY, JSON.stringify(payload));
+    sessionStorage.setItem(key, JSON.stringify(payload));
   } catch {
     // Quota / modo privado: o cronômetro em memória continua válido nesta aba.
   }
 }
 
-export function clearLiveReadingSession() {
+export function clearLiveReadingSession(key = LIVE_READING_SESSION_KEY) {
   try {
-    sessionStorage.removeItem(LIVE_READING_SESSION_KEY);
+    sessionStorage.removeItem(key);
   } catch {
     // ignore
   }
@@ -32,4 +33,16 @@ export function clearLiveReadingSession() {
 
 export function hasLiveReadingSession() {
   return Boolean(readLiveReadingSession()?.bookId);
+}
+
+export function readLiveScriptureSession() {
+  return readLiveReadingSession(LIVE_SCRIPTURE_SESSION_KEY);
+}
+
+export function writeLiveScriptureSession(payload) {
+  writeLiveReadingSession(payload, LIVE_SCRIPTURE_SESSION_KEY);
+}
+
+export function clearLiveScriptureSession() {
+  clearLiveReadingSession(LIVE_SCRIPTURE_SESSION_KEY);
 }

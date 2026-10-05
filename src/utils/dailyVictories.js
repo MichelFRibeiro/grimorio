@@ -12,7 +12,8 @@ export const EXTENDED_MAX_DAILY_VICTORIES = 5;
 
 export const DAILY_VICTORY_OVERFLOW_SOURCES = {
   study: 'homeostasis-study',
-  reading: 'homeostasis-reading'
+  reading: 'homeostasis-reading',
+  scripture: 'homeostasis-scripture'
 };
 
 export function isOverflowDailyVictorySource(source) {
@@ -307,19 +308,21 @@ export function listOverflowVictoriesForDate(list = [], dateStr, source) {
  * Título exibido da vitória de homeostase: o número segue o piso vivo da faixa.
  * Vitória manual (sem origem de homeostase) volta intacta.
  */
-export function displayHomeostasisVictoryTitle(victory, { studyFloorMinutes, readingFloorMinutes } = {}) {
+export function displayHomeostasisVictoryTitle(victory, { studyFloorMinutes, readingFloorMinutes, scriptureFloorMinutes } = {}) {
   if (!victory) return '';
   const source = victory.source;
   const floor = source === DAILY_VICTORY_OVERFLOW_SOURCES.study
     ? studyFloorMinutes
     : source === DAILY_VICTORY_OVERFLOW_SOURCES.reading
       ? readingFloorMinutes
-      : null;
+      : source === DAILY_VICTORY_OVERFLOW_SOURCES.scripture
+        ? scriptureFloorMinutes
+        : null;
   if (floor == null || !Number.isFinite(Number(floor))) return victory.title || '';
   const minutes = Math.max(0, Math.round(Number(floor)));
-  return source === DAILY_VICTORY_OVERFLOW_SOURCES.study
-    ? `Estudar no mínimo ${minutes} minutos.`
-    : `Ler no mínimo ${minutes} minutos.`;
+  if (source === DAILY_VICTORY_OVERFLOW_SOURCES.study) return `Estudar no mínimo ${minutes} minutos.`;
+  if (source === DAILY_VICTORY_OVERFLOW_SOURCES.scripture) return `Ler a Bíblia no mínimo ${minutes} minutos.`;
+  return `Ler no mínimo ${minutes} minutos.`;
 }
 
 export function parseHomeostasisVictoryTargetMinutes(title) {
@@ -361,8 +364,10 @@ export function planLinkedDailyVictoryUpdates(list = [], {
   questNote,
   readingMinutes,
   studyMinutes,
+  scriptureMinutes,
   readingTargetMinutes,
-  studyTargetMinutes
+  studyTargetMinutes,
+  scriptureTargetMinutes
 } = {}) {
   const updates = [];
   if (questId && questCompleted !== undefined) {
@@ -383,6 +388,13 @@ export function planLinkedDailyVictoryUpdates(list = [], {
     listOverflowVictoriesForDate(list, today, DAILY_VICTORY_OVERFLOW_SOURCES.study).forEach((victory) => {
       if (!isHomeostasisVictoryFulfilled(victory, studyMinutes, studyTargetMinutes)) return;
       pushCompletionUpdate(updates, victory, true, `Estudo AGU do dia: ${Number(studyMinutes) || 0} min.`);
+    });
+  }
+
+  if (scriptureMinutes !== undefined) {
+    listOverflowVictoriesForDate(list, today, DAILY_VICTORY_OVERFLOW_SOURCES.scripture).forEach((victory) => {
+      if (!isHomeostasisVictoryFulfilled(victory, scriptureMinutes, scriptureTargetMinutes)) return;
+      pushCompletionUpdate(updates, victory, true, `Leitura da Bíblia: ${Number(scriptureMinutes) || 0} min.`);
     });
   }
 

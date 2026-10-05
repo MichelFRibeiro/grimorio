@@ -21,6 +21,8 @@ export const MAX_STREAK_SHIELDS = 4;
 export const STUDY_ACTION_TYPES = new Set([
   'reading_session',
   'book_quote',
+  'scripture_session',
+  'scripture_quote',
   'exam_questions',
   'mind_map_study',
   'agu_block'

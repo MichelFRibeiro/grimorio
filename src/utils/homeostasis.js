@@ -13,13 +13,15 @@ export const HOMEOSTASIS_BAND_RATIO = 0.2;
  */
 export const HOMEOSTASIS_FLOOR_MINUTES = {
   study: 20,
-  reading: 15
+  reading: 15,
+  scripture: 15
 };
 
 /** Meta de longo prazo. Estudo sobe até 180 min/dia; leitura estabiliza em 30. */
 export const HOMEOSTASIS_TARGET_MINUTES = {
   study: 180,
-  reading: 30
+  reading: 30,
+  scripture: 30
 };
 
 /** Passo de arredondamento e de expansão/contração (minutos). */
@@ -535,6 +537,57 @@ export function sessionDateStr(entry) {
   if (entry.timestamp) return getSaoPauloDateStr(entry.timestamp);
   if (entry.createdAt) return getSaoPauloDateStr(entry.createdAt);
   return '';
+}
+
+export function scriptureHomeostasisConfig(options = {}) {
+  return {
+    floorMinutes: options.floorMinutes ?? HOMEOSTASIS_FLOOR_MINUTES.scripture,
+    targetMinutes: options.targetMinutes ?? options.state?.targetMinutes ?? HOMEOSTASIS_TARGET_MINUTES.scripture,
+    stepMinutes: options.stepMinutes ?? HOMEOSTASIS_STEP_MINUTES,
+    maxWeeklyIncrease: options.maxWeeklyIncrease ?? HOMEOSTASIS_MAX_WEEKLY_INCREASE
+  };
+}
+
+/** Tempo da Escritura. Não entra na série da Biblioteca. */
+export function getScriptureLoadSeries(scriptureSessions = [], todayStr, options = {}) {
+  const byDate = {};
+  (scriptureSessions || []).forEach((session) => {
+    const dateStr = sessionDateStr(session);
+    if (!dateStr) return;
+    byDate[dateStr] = (byDate[dateStr] || 0) + parseDurationMinutes(session.durationMinutes);
+  });
+  const config = scriptureHomeostasisConfig(options);
+  return buildDailyLoadSeries({
+    minutesByDate: byDate,
+    todayStr,
+    days: options.days,
+    liveMinutesToday: options.liveMinutesToday,
+    floorMinutes: config.floorMinutes,
+    targetMinutes: config.targetMinutes,
+    stepMinutes: config.stepMinutes,
+    maxWeeklyIncrease: config.maxWeeklyIncrease,
+    state: options.state || null,
+    evaluate: options.evaluate,
+    mode: options.mode
+  });
+}
+
+export const SCRIPTURE_HOMEOSTASIS_VICTORY_CATEGORY = 'Estudos';
+
+export function formatScriptureHomeostasisVictoryTitle(minutes) {
+  return `Ler a Bíblia no mínimo ${roundLoadMinutes(minutes)} minutos.`;
+}
+
+export function buildScriptureHomeostasisVictory(scriptureSessions = [], todayStr, options = {}) {
+  const series = getScriptureLoadSeries(scriptureSessions, todayStr, options);
+  const target = series.todayTargetMinutes || series.setpointMinutes || series.homeostasisMinMinutes;
+  return {
+    title: formatScriptureHomeostasisVictoryTitle(target),
+    category: SCRIPTURE_HOMEOSTASIS_VICTORY_CATEGORY,
+    date: todayStr || getSaoPauloDateStr(),
+    source: DAILY_VICTORY_OVERFLOW_SOURCES.scripture,
+    targetMinutes: target
+  };
 }
 
 export function readingHomeostasisConfig(options = {}) {

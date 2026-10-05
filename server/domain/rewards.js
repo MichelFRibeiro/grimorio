@@ -17,6 +17,18 @@ export function quoteRewards() {
   return { xp: 20, coins: 5, wisdom: 10 };
 }
 
+/**
+ * Sessão da Escritura. Mesma conta da Biblioteca, em capítulos:
+ * o tempo não entra na fórmula, só no cronômetro e na homeostase própria.
+ */
+export function scriptureSessionRewards({ chaptersRead, finishedCanon = false, quotesCount = 0 }) {
+  return readingSessionRewards({
+    pagesRead: chaptersRead,
+    finishedBook: finishedCanon,
+    quotesCount
+  });
+}
+
 export function examQuestionRewards({ total, correct }) {
   const accuracyRate = total > 0 ? Math.round((correct / total) * 1000) / 10 : 0;
   const accuracyBonusXp = accuracyRate === 100 ? 50 : accuracyRate >= 90 ? 30 : accuracyRate >= 80 ? 15 : 0;

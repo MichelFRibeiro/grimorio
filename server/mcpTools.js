@@ -42,6 +42,7 @@ import {
   getHabitWeeklyStats,
   calculateHabitStreak
 } from './timeUtils.js';
+import { BIBLE_BOOKS, bibleTotals, getBibleBook, formatReference } from '../src/data/bibleCanon.js';
 import { applyHabitFrequency } from '../src/utils/habitFrequency.js';
 import {
   MAX_DAILY_VICTORIES,
@@ -73,6 +74,14 @@ import {
   updateQuote as domainUpdateQuote,
   deleteQuote as domainDeleteQuote,
   deleteBook as domainDeleteBook,
+  logScriptureSession as domainLogScriptureSession,
+  updateScriptureSession as domainUpdateScriptureSession,
+  deleteScriptureSession as domainDeleteScriptureSession,
+  addScriptureQuote as domainAddScriptureQuote,
+  updateScriptureQuote as domainUpdateScriptureQuote,
+  deleteScriptureQuote as domainDeleteScriptureQuote,
+  addScriptureReflection as domainAddScriptureReflection,
+  deleteScriptureReflection as domainDeleteScriptureReflection,
   logExamQuestions as domainLogExamQuestions,
   updateExamQuestions as domainUpdateExamQuestions,
   deleteExamQuestions as domainDeleteExamQuestions,
@@ -730,6 +739,142 @@ export const toolsDefinition = [
       if (result.error) return formatError(result.error);
       saveDb(db);
       return formatSuccess({ removed: result.removed, book: result.book, linkedVictories: result.linkedVictories }, 'Sessão de leitura excluída e progresso estornado com sucesso.');
+    }
+  },
+
+  // ==========================================
+  // 4.1. ESCRITURAS (BÍBLIA) — tempo independente da Biblioteca
+  // ==========================================
+  {
+    name: 'list_scripture',
+    description: 'Listar o cânone, o progresso de leitura da Bíblia, as sessões, citações e reflexões. O tempo não entra na Biblioteca.',
+    schema: {
+      bookId: z.string().optional().describe('Filtrar por livro (ex: jo, sl, gn)')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const bookId = args.bookId || null;
+      const sessions = (db.scriptureSessions || []).filter(item => !bookId || item.startBookId === bookId || item.endBookId === bookId);
+      const quotes = (db.scriptureQuotes || []).filter(item => !bookId || item.bookId === bookId);
+      const reflections = (db.scriptureReflections || []).filter(item => !bookId || item.bookId === bookId);
+      return formatSuccess({
+        canon: bibleTotals(),
+        translation: 'Almeida (cânone protestante)',
+        books: BIBLE_BOOKS.map(book => ({
+          id: book.id,
+          name: book.name,
+          abbr: book.abbr,
+          testament: book.testament,
+          chapters: book.chapters.length,
+          progress: (db.scriptureProgress || {})[book.id] || null
+        })),
+        sessions,
+        quotes,
+        reflections
+      }, 'Leitura da Bíblia.');
+    }
+  },
+  {
+    name: 'log_scripture_session',
+    description: 'Registrar uma sessão de leitura da Bíblia (livro, capítulo e versículo). Concede XP, moedas e Sabedoria. Não altera o tempo da Biblioteca.',
+    schema: {
+      startBookId: z.string().describe('Livro inicial (id do cânone, ex: jo)'),
+      startChapter: z.number().describe('Capítulo inicial'),
+      startVerse: z.number().describe('Versículo inicial'),
+      endBookId: z.string().describe('Livro final'),
+      endChapter: z.number().describe('Capítulo final'),
+      endVerse: z.number().describe('Versículo final'),
+      durationMinutes: z.number().optional().describe('Duração em minutos'),
+      notes: z.string().optional().describe('Notas da sessão'),
+      reflection: z.string().optional().describe('Reflexão pessoal sobre o trecho'),
+      date: z.string().optional().describe('Data YYYY-MM-DD'),
+      quotes: z.array(z.object({
+        bookId: z.string().optional(),
+        chapter: z.number().optional(),
+        verse: z.number().optional(),
+        quote: z.string(),
+        note: z.string().optional()
+      })).optional().describe('Citações coletadas na sessão')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = domainLogScriptureSession(db, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result, `Sessão da Escritura registrada (+${result.session.xpEarned} XP).`);
+    }
+  },
+  {
+    name: 'delete_scripture_session',
+    description: 'Excluir uma sessão de leitura da Bíblia e estornar as recompensas.',
+    schema: { id: z.string().describe('ID da sessão') },
+    handler: async (args) => {
+      const db = getDb();
+      const result = domainDeleteScriptureSession(db, args.id);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.removed, 'Sessão da Escritura excluída e recompensas estornadas.');
+    }
+  },
+  {
+    name: 'add_scripture_quote',
+    description: 'Adicionar uma citação bíblica com referência (livro, capítulo, versículo) e reflexão opcional.',
+    schema: {
+      bookId: z.string().describe('ID do livro (ex: jo)'),
+      chapter: z.number(),
+      verse: z.number(),
+      quote: z.string().describe('Texto da citação'),
+      note: z.string().optional().describe('Reflexão ou anotação')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = domainAddScriptureQuote(db, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      const book = getBibleBook(result.quote.bookId);
+      return formatSuccess(result, `Citação salva: ${formatReference(book, result.quote.chapter, result.quote.verse)}.`);
+    }
+  },
+  {
+    name: 'delete_scripture_quote',
+    description: 'Remover uma citação bíblica e estornar a recompensa avulsa, se houver.',
+    schema: { id: z.string().describe('ID da citação') },
+    handler: async (args) => {
+      const db = getDb();
+      const result = domainDeleteScriptureQuote(db, args.id);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.removed, 'Citação bíblica removida.');
+    }
+  },
+  {
+    name: 'add_scripture_reflection',
+    description: 'Escrever uma reflexão pessoal sobre um versículo, sem conceder recompensa extra.',
+    schema: {
+      bookId: z.string(),
+      chapter: z.number(),
+      verse: z.number(),
+      text: z.string().describe('Texto da reflexão'),
+      date: z.string().optional()
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = domainAddScriptureReflection(db, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.reflection, 'Reflexão registrada.');
+    }
+  },
+  {
+    name: 'delete_scripture_reflection',
+    description: 'Excluir uma reflexão da Escritura.',
+    schema: { id: z.string() },
+    handler: async (args) => {
+      const db = getDb();
+      const result = domainDeleteScriptureReflection(db, args.id);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.removed, 'Reflexão excluída.');
     }
   },
 
@@ -2407,7 +2552,7 @@ export const toolsDefinition = [
       title: z.string().describe('Título da vitória (ex: Finalizar petição, Treinar 40 min)'),
       category: z.string().optional().describe('Categoria (ex: Trabalho, Estudos, Pessoal, Saúde)'),
       date: z.string().optional().describe('Data YYYY-MM-DD (hoje ou amanhã). Padrão: hoje'),
-      source: z.enum(['homeostasis-study', 'homeostasis-reading']).optional().describe('Origem especial que permite ir além de 3 (estudo AGU ou leitura)'),
+      source: z.enum(['homeostasis-study', 'homeostasis-reading', 'homeostasis-scripture']).optional().describe('Origem especial que permite ir além de 3 (estudo AGU, leitura ou Bíblia)'),
       questId: z.string().optional().describe('ID da missão de origem, se a vitória foi planejada a partir de uma missão')
     },
     handler: async (args) => {
@@ -2795,6 +2940,26 @@ export const resourcesDefinition = [
         uri: 'grimorio://habits',
         mimeType: 'application/json',
         text: JSON.stringify(habits, null, 2)
+      };
+    }
+  },
+  {
+    uri: 'grimorio://scripture',
+    name: 'Escrituras',
+    description: 'Cânone, progresso, sessões, citações e reflexões da leitura da Bíblia',
+    mimeType: 'application/json',
+    handler: async () => {
+      const db = getDb();
+      return {
+        uri: 'grimorio://scripture',
+        mimeType: 'application/json',
+        text: JSON.stringify({
+          canon: bibleTotals(),
+          progress: db.scriptureProgress || {},
+          sessions: db.scriptureSessions || [],
+          quotes: db.scriptureQuotes || [],
+          reflections: db.scriptureReflections || []
+        }, null, 2)
       };
     }
   },

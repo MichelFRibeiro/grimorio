@@ -267,7 +267,14 @@ function resolveLogCategory(log, db, registeredNames) {
     return resolved;
   }
 
-  if (log.type === 'reading_session' || log.type === 'book_quote' || log.type === 'exam_questions' || log.type === 'mind_map_study') {
+  if (
+    log.type === 'reading_session'
+    || log.type === 'book_quote'
+    || log.type === 'scripture_session'
+    || log.type === 'scripture_quote'
+    || log.type === 'exam_questions'
+    || log.type === 'mind_map_study'
+  ) {
     return findRegisteredFallback(registeredNames, ['Estudos']);
   }
 

@@ -433,6 +433,47 @@ export function useGameData() {
     await mutate(`/api/books/${bookId}/quotes/${quoteId}`, { method: 'DELETE' });
   };
 
+  const logScriptureSession = async (sessionData) => {
+    playClick();
+    const result = await mutate('/api/scripture/sessions', { body: sessionData, refreshOnSuccess: false });
+    if (!result) return;
+    handleRewardResponse(result.rewardResult, `Escritura: +${result.session.chaptersRead} capítulo(s)!`);
+    handleLinkedVictories(result.linkedVictories);
+    confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
+    fetchState();
+  };
+
+  const deleteScriptureSession = async (id) => {
+    playClick();
+    const result = await mutate(`/api/scripture/sessions/${id}`, { method: 'DELETE', refreshOnSuccess: false });
+    if (!result) return;
+    handleLinkedVictories(result.linkedVictories);
+    fetchState();
+  };
+
+  const addScriptureQuote = async (quoteData) => {
+    playClick();
+    const result = await mutate('/api/scripture/quotes', { body: quoteData, refreshOnSuccess: false });
+    if (!result) return;
+    if (result.rewardResult) handleRewardResponse(result.rewardResult, 'Citação guardada nas Escrituras!');
+    fetchState();
+  };
+
+  const deleteScriptureQuote = async (id) => {
+    playClick();
+    await mutate(`/api/scripture/quotes/${id}`, { method: 'DELETE' });
+  };
+
+  const addScriptureReflection = async (reflectionData) => {
+    playClick();
+    await mutate('/api/scripture/reflections', { body: reflectionData });
+  };
+
+  const deleteScriptureReflection = async (id) => {
+    playClick();
+    await mutate(`/api/scripture/reflections/${id}`, { method: 'DELETE' });
+  };
+
   const addExamQuestions = async (questionData) => {
     playBossHit();
     const result = await mutate('/api/questions', { body: questionData, refreshOnSuccess: false });
@@ -1199,6 +1240,12 @@ export function useGameData() {
     addBookQuote,
     updateBookQuote,
     deleteBookQuote,
+    logScriptureSession,
+    deleteScriptureSession,
+    addScriptureQuote,
+    deleteScriptureQuote,
+    addScriptureReflection,
+    deleteScriptureReflection,
     addExamQuestions,
     updateExamQuestions,
     deleteExamQuestions,

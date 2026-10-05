@@ -44,6 +44,7 @@ export function computeAnalytics() {
     'habit_complete',
     'daily_victory_complete',
     'reading_session',
+    'scripture_session',
     'exam_questions',
     'agu_block',
     'mind_map_study'

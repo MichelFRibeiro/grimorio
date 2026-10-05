@@ -16,6 +16,8 @@ export const PRODUCTIVE_ACTION_TYPES = new Set([
   'habit_complete',
   'reading_session',
   'book_quote',
+  'scripture_session',
+  'scripture_quote',
   'exam_questions',
   'agu_block',
   'mind_map_study',

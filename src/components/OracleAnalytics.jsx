@@ -1133,7 +1133,7 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ fontSize: '1.1rem' }}>
-                  {log.type === 'quest_complete' ? '📜' : log.type === 'reading_session' ? '📚' : log.type === 'exam_questions' ? '🎯' : log.type === 'book_quote' ? '✍️' : log.type === 'process_step' ? '⚡' : log.type === 'habit_complete' ? '🔥' : '🎁'}
+                  {log.type === 'quest_complete' ? '📜' : log.type === 'reading_session' ? '📚' : log.type === 'scripture_session' ? '✝️' : log.type === 'scripture_quote' ? '🕊️' : log.type === 'exam_questions' ? '🎯' : log.type === 'book_quote' ? '✍️' : log.type === 'process_step' ? '⚡' : log.type === 'habit_complete' ? '🔥' : '🎁'}
                 </span>
                 <span style={{ color: '#f8fafc', fontWeight: 600 }}>{log.title}</span>
               </div>

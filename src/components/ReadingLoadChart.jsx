@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { getReadingLoadSeries, HOMEOSTASIS_WINDOW_DAYS } from '../utils/homeostasis';
+import { getReadingLoadSeries, getScriptureLoadSeries, HOMEOSTASIS_WINDOW_DAYS } from '../utils/homeostasis';
 import { HomeostasisLoadChart } from './HomeostasisLoadChart';
 
 const READING_ZONE_COPY = {
@@ -45,6 +45,53 @@ export function ReadingLoadChart({
       seriesLabel="Leitura"
       accentColor="#34d399"
       zoneCopy={READING_ZONE_COPY}
+      actions={actions}
+    />
+  );
+}
+
+const SCRIPTURE_ZONE_COPY = {
+  homeostasis: {
+    label: 'Homeostase',
+    color: '#f59e0b',
+    glow: 'rgba(245, 158, 11, 0.35)',
+    copy: 'Dentro da faixa real dos últimos 14 dias. O ritmo da Escritura está sendo absorvido.'
+  },
+  'allostasis-under': {
+    label: 'Alostase · subcarga',
+    color: '#f43f5e',
+    glow: 'rgba(244, 63, 94, 0.35)',
+    copy: 'Abaixo da média recente de leitura da Bíblia.'
+  },
+  'allostasis-over': {
+    label: 'Alostase · sobrecarga',
+    color: '#f43f5e',
+    glow: 'rgba(244, 63, 94, 0.35)',
+    copy: 'Acima da média recente. A leitura da Bíblia passou do ritmo que vinha sendo sustentado.'
+  }
+};
+
+export function ScriptureLoadChart({
+  scriptureSessions,
+  todayStr,
+  liveMinutes = 0,
+  days = HOMEOSTASIS_WINDOW_DAYS,
+  actions = null
+}) {
+  const series = useMemo(() => getScriptureLoadSeries(scriptureSessions || [], todayStr, {
+    days,
+    liveMinutesToday: liveMinutes
+  }), [scriptureSessions, todayStr, liveMinutes, days]);
+
+  return (
+    <HomeostasisLoadChart
+      series={series}
+      days={days}
+      title="Escritura — Homeostase & Alostase"
+      description="Tempo só da Bíblia. Não entra na faixa da Biblioteca. A meta estabiliza em 30 minutos."
+      seriesLabel="Bíblia"
+      accentColor="#fbbf24"
+      zoneCopy={SCRIPTURE_ZONE_COPY}
       actions={actions}
     />
   );

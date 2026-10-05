@@ -393,6 +393,10 @@ export const defaultDatabase = () => {
     quests: [],
     books: [],
     readingSessions: [],
+    scriptureProgress: {},
+    scriptureSessions: [],
+    scriptureQuotes: [],
+    scriptureReflections: [],
     examQuestions: [],
     processes: [],
     processSteps: [],
@@ -434,6 +438,10 @@ export function sanitizeDb(db) {
   }
   if (!db.books) db.books = [];
   if (!db.readingSessions) db.readingSessions = [];
+  if (!db.scriptureProgress || typeof db.scriptureProgress !== 'object') db.scriptureProgress = {};
+  if (!Array.isArray(db.scriptureSessions)) db.scriptureSessions = [];
+  if (!Array.isArray(db.scriptureQuotes)) db.scriptureQuotes = [];
+  if (!Array.isArray(db.scriptureReflections)) db.scriptureReflections = [];
   if (!db.examQuestions) db.examQuestions = [];
   if (!db.processes) db.processes = [];
   if (!db.processSteps) db.processSteps = [];

@@ -441,6 +441,7 @@ export function recentActionCards(logs, limit = 8) {  const relevant = new Set([
     'quest_complete',
     'habit_complete',
     'reading_session',
+    'scripture_session',
     'exam_questions',
     'mind_map_study',
     'process_step'

@@ -1,7 +1,7 @@
 import { getDb, rewardPlayer, revertPlayerReward } from './db.js';
 import { grantDestinyChestSync } from './domain/destinyChest.js';
 import { getSaoPauloDateStr } from './timeUtils.js';
-import { getReadingLoadSeries } from '../src/utils/homeostasis.js';
+import { getReadingLoadSeries, getScriptureLoadSeries } from '../src/utils/homeostasis.js';
 import { getAguStudyLoadSeries } from '../src/utils/aguCycle.js';
 import {
   DAILY_VICTORY_REWARDS,
@@ -114,7 +114,8 @@ export function syncDailyVictoriesFromActivity(db, {
   questCompleted,
   questNote,
   syncReading = false,
-  syncStudy = false
+  syncStudy = false,
+  syncScripture = false
 } = {}) {
   const state = {
     list: sanitizeDailyVictories(db.dailyVictories),
@@ -128,6 +129,9 @@ export function syncDailyVictoriesFromActivity(db, {
       mindMapSessions: db.mindMapSessions || []
     })
     : null;
+  const scriptureSeries = syncScripture
+    ? getScriptureLoadSeries(db.scriptureSessions || [], today)
+    : null;
   const updates = planLinkedDailyVictoryUpdates(state.list, {
     today,
     questId,
@@ -136,7 +140,9 @@ export function syncDailyVictoriesFromActivity(db, {
     readingMinutes: readingSeries ? (readingSeries.today?.minutes || 0) : undefined,
     studyMinutes: studySeries ? (studySeries.today?.minutes || 0) : undefined,
     readingTargetMinutes: readingSeries ? readingSeries.homeostasisMinMinutes : undefined,
-    studyTargetMinutes: studySeries ? studySeries.homeostasisMinMinutes : undefined
+    studyTargetMinutes: studySeries ? studySeries.homeostasisMinMinutes : undefined,
+    scriptureMinutes: scriptureSeries ? (scriptureSeries.today?.minutes || 0) : undefined,
+    scriptureTargetMinutes: scriptureSeries ? scriptureSeries.homeostasisMinMinutes : undefined
   });
 
   const settled = [];

@@ -47,6 +47,11 @@ O script irá:
 - Subtarefas com checklists interativos.
 - Filtros por categoria (*Trabalho*, *Estudos*, *Pessoal*, *Projetos*, *Saúde*, *Finanças*).
 
+### ✝️ Escrituras (Leitura da Bíblia)
+- Cânone protestante (66 livros, capítulos e versículos) para marcar o ponto de leitura.
+- Sessão com cronômetro, citações por referência (`Jo 3:16`) e reflexões pessoais.
+- O tempo é independente da Biblioteca: faixa de homeostase, vitória do dia e gráfico próprios. A meta estabiliza em 30 minutos, como a leitura.
+
 ### 📖 Biblioteca Ancestral (Livros & Sessões de Leitura)
 - Cadastro de livros com total de páginas e capa temática.
 - **Sessão de Leitura com Cronômetro**:
@@ -159,6 +164,11 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 #### 3. 📚 Livros & Citações (`books`)
 - `list_books`, `get_book`, `create_book`, `update_book`, `delete_book`.
 - `add_book_quote`, `update_book_quote`, `delete_book_quote`.
+
+#### 3.1. ✝️ Escrituras (`scripture`)
+- `list_scripture`, `log_scripture_session`, `delete_scripture_session`.
+- `add_scripture_quote`, `delete_scripture_quote`, `add_scripture_reflection`, `delete_scripture_reflection`.
+- O tempo não entra em `readingSessions`.
 
 #### 4. 📖 Sessões de Leitura (`readingSessions`)
 - `list_reading_sessions`, `log_reading_session`, `update_reading_session`, `delete_reading_session`.
