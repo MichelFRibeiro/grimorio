@@ -34,6 +34,7 @@ import {
   chapterCount,
   verseCount,
   formatReference,
+  formatVerseSpan,
   comparePassage
 } from '../../src/data/bibleCanon.js';
 import { calculateFrequencyStreak } from '../timeUtils.js';
@@ -1384,12 +1385,18 @@ function parseScriptureQuotes(quotes, fallback) {
         verse: item.verse
       })
       : fallback.end;
+    const endVerse = intInRange(item.endVerse || located.verse, {
+      min: located.verse,
+      max: verseCount(located.book, located.chapter),
+      label: 'Citação: versículo final'
+    });
     return {
       id: item.id || uid('sq'),
       bookId: located.bookId,
       chapter: located.chapter,
       verse: located.verse,
-      reference: formatReference(located.book, located.chapter, located.verse),
+      endVerse,
+      reference: formatVerseSpan(located.book, located.chapter, located.verse, endVerse),
       quote: String(item.quote).trim(),
       note: String(item.note || '').trim(),
       createdAt: item.createdAt || new Date().toISOString()
@@ -1603,7 +1610,31 @@ export function updateScriptureSession(db, id, body = {}) {
     wisdomEarned: rewards.wisdom
   });
   if (body.notes !== undefined) session.notes = String(body.notes || '').trim();
-  if (body.reflection !== undefined) session.reflection = String(body.reflection || '').trim();
+  if (body.reflection !== undefined) {
+    session.reflection = String(body.reflection || '').trim();
+    const linked = (db.scriptureReflections || []).find((item) => item.sessionId === session.id);
+    if (session.reflection) {
+      const payload = {
+        bookId: span.end.bookId,
+        chapter: span.end.chapter,
+        verse: span.end.verse,
+        reference: formatReference(span.end.book, span.end.chapter, span.end.verse),
+        text: session.reflection
+      };
+      if (linked) Object.assign(linked, payload);
+      else {
+        db.scriptureReflections.unshift({
+          id: uid('sr'),
+          sessionId: session.id,
+          ...payload,
+          date: session.date,
+          createdAt: new Date().toISOString()
+        });
+      }
+    } else if (linked) {
+      db.scriptureReflections = db.scriptureReflections.filter((item) => item.id !== linked.id);
+    }
+  }
   refreshScriptureProgress(db);
 
   const rewardResult = grant({
@@ -1662,6 +1693,7 @@ export function addScriptureQuote(db, body = {}) {
     bookId: located.bookId,
     chapter: located.chapter,
     verse: located.verse,
+    endVerse: located.verse,
     reference: formatReference(located.book, located.chapter, located.verse),
     quote: String(body.quote).trim(),
     note: String(body.note || '').trim(),
@@ -1682,21 +1714,27 @@ export function addScriptureQuote(db, body = {}) {
   return { quote, rewardResult };
 }
 
-export function updateScriptureQuote(db, { id, quote, note, bookId, chapter, verse } = {}) {
+export function updateScriptureQuote(db, { id, quote, note, bookId, chapter, verse, endVerse } = {}) {
   ensureScripture(db);
   const item = db.scriptureQuotes.find((entry) => entry.id === id);
   if (!item) return fail('Citação não encontrada', 404);
-  if (bookId || chapter || verse) {
+  if (bookId || chapter || verse || endVerse) {
     try {
       const located = parsePassage('Citação', {
         bookId: bookId || item.bookId,
         chapter: chapter || item.chapter,
         verse: verse || item.verse
       });
+      const lastVerse = intInRange(endVerse || item.endVerse || located.verse, {
+        min: located.verse,
+        max: verseCount(located.book, located.chapter),
+        label: 'Citação: versículo final'
+      });
       item.bookId = located.bookId;
       item.chapter = located.chapter;
       item.verse = located.verse;
-      item.reference = formatReference(located.book, located.chapter, located.verse);
+      item.endVerse = lastVerse;
+      item.reference = formatVerseSpan(located.book, located.chapter, located.verse, lastVerse);
     } catch (err) {
       return asError(err);
     }
@@ -1711,6 +1749,7 @@ export function updateScriptureQuote(db, { id, quote, note, bookId, chapter, ver
       embedded.bookId = item.bookId;
       embedded.chapter = item.chapter;
       embedded.verse = item.verse;
+      embedded.endVerse = item.endVerse;
       embedded.reference = item.reference;
     });
   });

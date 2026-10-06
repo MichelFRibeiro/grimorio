@@ -10,7 +10,9 @@ import {
   ScrollText,
   Trash2,
   CheckCircle2,
-  Search
+  Search,
+  Pencil,
+  History
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { useStopwatch, formatTimer } from '../hooks/useStopwatch';
@@ -23,6 +25,7 @@ import {
   chapterCount,
   verseCount,
   formatReference,
+  formatVerseSpan,
   getBibleBook
 } from '../data/bibleCanon';
 import {
@@ -45,6 +48,19 @@ const fieldStyle = {
   color: '#fff',
   fontSize: '0.92rem'
 };
+
+function normalizedQuoteSpan(passage, endVerse) {
+  const book = getBibleBook(passage?.bookId);
+  const chapter = passage?.chapter || 1;
+  const verse = passage?.verse || 1;
+  const max = verseCount(book, chapter) || verse;
+  const last = Math.min(max, Math.max(verse, Number(endVerse) || verse));
+  return { bookId: passage?.bookId || 'gn', chapter, verse, endVerse: last };
+}
+
+function quoteReference(item) {
+  return formatVerseSpan(getBibleBook(item?.bookId), item?.chapter, item?.verse, item?.endVerse || item?.verse);
+}
 
 function PassageFields({ label, bookId, chapter, verse, onChange, accent = '#fbbf24' }) {
   const book = getBibleBook(bookId);
@@ -86,8 +102,10 @@ export function ScriptureView({
   scriptureQuotes = [],
   scriptureReflections = [],
   onLogSession,
+  onUpdateSession,
   onDeleteSession,
   onAddQuote,
+  onUpdateQuote,
   onDeleteQuote,
   onAddReflection,
   onDeleteReflection,
@@ -109,7 +127,11 @@ export function ScriptureView({
   const [reflection, setReflection] = useState(restored?.reflection || '');
   const [quoteText, setQuoteText] = useState(restored?.quoteText || '');
   const [quoteNote, setQuoteNote] = useState(restored?.quoteNote || '');
+  const [quotePassage, setQuotePassage] = useState(restored?.quotePassage || restored?.end || { bookId: 'gn', chapter: 1, verse: 1 });
+  const [quoteEndVerse, setQuoteEndVerse] = useState(restored?.quoteEndVerse || restored?.end?.verse || 1);
   const [quotes, setQuotes] = useState(restored?.quotes || []);
+  const [editingSession, setEditingSession] = useState(null);
+  const [editingQuote, setEditingQuote] = useState(null);
   const [directQuote, setDirectQuote] = useState('');
   const [directNote, setDirectNote] = useState('');
   const [reflectionText, setReflectionText] = useState('');
@@ -140,7 +162,7 @@ export function ScriptureView({
     return !q || book.name.toLowerCase().includes(q) || book.abbr.toLowerCase().includes(q);
   });
 
-  fieldsRef.current = { start, end, notes, reflection, quoteText, quoteNote, quotes };
+  fieldsRef.current = { start, end, notes, reflection, quoteText, quoteNote, quotePassage, quoteEndVerse, quotes };
 
   const buildDraft = (overrides = {}) => {
     const fields = fieldsRef.current || {};
@@ -154,6 +176,8 @@ export function ScriptureView({
       quotes: fields.quotes,
       quoteText: fields.quoteText,
       quoteNote: fields.quoteNote,
+      quotePassage: fields.quotePassage,
+      quoteEndVerse: fields.quoteEndVerse,
       timer: { accumulatedMs: snap.accumulatedMs, runStartedAt: snap.runStartedAt },
       updatedAt: Date.now(),
       ...overrides
@@ -173,6 +197,8 @@ export function ScriptureView({
     setQuotes(draft.quotes || []);
     setQuoteText(draft.quoteText || '');
     setQuoteNote(draft.quoteNote || '');
+    setQuotePassage(draft.quotePassage || draft.end);
+    setQuoteEndVerse(draft.quoteEndVerse || draft.end?.verse || 1);
     setSelectedId(draft.end?.bookId || draft.start?.bookId || 'gn');
     appliedRemoteAtRef.current = draft.updatedAt || Date.now();
     if (resumeTimer) {
@@ -231,7 +257,7 @@ export function ScriptureView({
       window.removeEventListener('pagehide', persist);
       document.removeEventListener('freeze', persist);
     };
-  }, [sessionOpen, start, end, notes, reflection, quoteText, quoteNote, quotes, timer.isRunning, timer.getSnapshot, onSaveLiveDraft]);
+  }, [sessionOpen, start, end, notes, reflection, quoteText, quoteNote, quotePassage, quoteEndVerse, quotes, timer.isRunning, timer.getSnapshot, onSaveLiveDraft]);
 
   const openSession = (book) => {
     if (sessionOpen && persistEnabledRef.current) {
@@ -247,6 +273,8 @@ export function ScriptureView({
     setQuotes([]);
     setQuoteText('');
     setQuoteNote('');
+    setQuotePassage(next);
+    setQuoteEndVerse(1);
     timer.restart();
     setSessionOpen(true);
     setTab('canon');
@@ -262,6 +290,8 @@ export function ScriptureView({
     setQuotes([]);
     setQuoteText('');
     setQuoteNote('');
+    setQuotePassage({ bookId: 'gn', chapter: 1, verse: 1 });
+    setQuoteEndVerse(1);
     setNotes('');
     setReflection('');
     onClearLiveDraft?.()?.catch?.(() => {});
@@ -275,9 +305,7 @@ export function ScriptureView({
     if (quoteText.trim() || quoteNote.trim()) {
       collected.push({
         id: `sqd-${Date.now()}`,
-        bookId: end.bookId,
-        chapter: end.chapter,
-        verse: end.verse,
+        ...normalizedQuoteSpan(quotePassage, quoteEndVerse),
         quote: quoteText.trim(),
         note: quoteNote.trim()
       });
@@ -304,9 +332,7 @@ export function ScriptureView({
     if (!quoteText.trim() && !quoteNote.trim()) return;
     setQuotes((prev) => [...prev, {
       id: `sqd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      bookId: end.bookId,
-      chapter: end.chapter,
-      verse: end.verse,
+      ...normalizedQuoteSpan(quotePassage, quoteEndVerse),
       quote: quoteText.trim(),
       note: quoteNote.trim()
     }]);
@@ -345,7 +371,7 @@ export function ScriptureView({
       />
 
       <div className="glass-panel" style={{ display: 'flex', gap: '8px', padding: '6px', margin: '16px 0', borderRadius: '12px', width: 'fit-content' }}>
-        {[['canon', 'Cânone'], ['quotes', `Citações (${scriptureQuotes.length})`], ['reflections', `Reflexões (${scriptureReflections.length})`]].map(([id, label]) => (
+        {[['canon', 'Cânone'], ['sessions', `Sessões (${scriptureSessions.length})`], ['quotes', `Citações (${scriptureQuotes.length})`], ['reflections', `Reflexões (${scriptureReflections.length})`]].map(([id, label]) => (
           <button key={id} type="button" onClick={() => setTab(id)} style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 800, background: tab === id ? 'rgba(245,158,11,0.2)' : 'transparent', color: tab === id ? '#fbbf24' : '#94a3b8' }}>{label}</button>
         ))}
       </div>
@@ -403,13 +429,17 @@ export function ScriptureView({
 
             {bookSessions.length > 0 && (
               <div>
-                <h4 style={{ color: '#f8fafc', marginBottom: '8px' }}>Sessões deste livro</h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <h4 style={{ color: '#f8fafc' }}>Sessões deste livro</h4>
+                  <button type="button" onClick={() => setTab('sessions')} style={{ background: 'none', border: 'none', color: '#fbbf24', fontWeight: 800, cursor: 'pointer', fontSize: '0.78rem' }}>Ver histórico</button>
+                </div>
                 {bookSessions.slice(0, 6).map((session) => (
                   <div key={session.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', padding: '8px 0', borderTop: '1px solid rgba(255,255,255,0.06)', color: '#cbd5e1', fontSize: '0.82rem' }}>
                     <span>{formatReference(getBibleBook(session.startBookId), session.startChapter, session.startVerse)} – {formatReference(getBibleBook(session.endBookId), session.endChapter, session.endVerse)}</span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Clock size={12} /> {session.durationMinutes} min
-                      <button type="button" aria-label="Excluir sessão" onClick={() => setConfirm({ title: 'Excluir sessão', message: 'O XP e a Sabedoria desta sessão serão estornados.', onConfirm: () => onDeleteSession?.(session.id) })} style={{ background: 'none', border: 'none', color: '#fb7185', cursor: 'pointer' }}><Trash2 size={13} /></button>
+                      <button type="button" aria-label="Editar sessão" onClick={() => setEditingSession(session)} style={{ background: 'none', border: 'none', color: '#fbbf24', cursor: 'pointer' }}><Pencil size={13} /></button>
+                      <button type="button" aria-label="Excluir sessão" onClick={() => setConfirm({ title: 'Excluir sessão', message: 'O XP, a Sabedoria e as citações desta sessão serão estornados.', onConfirm: () => onDeleteSession?.(session.id) })} style={{ background: 'none', border: 'none', color: '#fb7185', cursor: 'pointer' }}><Trash2 size={13} /></button>
                     </span>
                   </div>
                 ))}
@@ -417,6 +447,18 @@ export function ScriptureView({
             )}
           </div>
         </div>
+      )}
+
+      {tab === 'sessions' && (
+        <SessionHistory
+          sessions={scriptureSessions}
+          onEdit={setEditingSession}
+          onDelete={(session) => setConfirm({
+            title: 'Excluir sessão',
+            message: 'O XP, a Sabedoria e as citações desta sessão serão estornados.',
+            onConfirm: () => onDeleteSession?.(session.id)
+          })}
+        />
       )}
 
       {tab === 'quotes' && (
@@ -434,6 +476,7 @@ export function ScriptureView({
             setDirectQuote('');
             setDirectNote('');
           }}
+          onEdit={setEditingQuote}
           onDelete={(id) => setConfirm({ title: 'Excluir citação', message: 'A recompensa avulsa, se houver, será estornada.', onConfirm: () => onDeleteQuote?.(id) })}
         />
       )}
@@ -490,6 +533,21 @@ export function ScriptureView({
                 <strong style={{ color: '#fbbf24', display: 'flex', gap: '6px', alignItems: 'center' }}><Quote size={14} /> Citações deste trecho</strong>
                 <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>{quotes.length} {quotes.length === 1 ? 'citação' : 'citações'}</span>
               </div>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '10px', alignItems: 'flex-end' }}>
+                <PassageFields label="Referência da citação" {...quotePassage} onChange={(next) => { setQuotePassage(next); setQuoteEndVerse(next.verse); }} />
+                <label style={{ minWidth: '120px', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 800 }}>Até o versículo
+                  <select
+                    aria-label="Versículo final da citação"
+                    value={quoteEndVerse}
+                    onChange={(event) => setQuoteEndVerse(Number(event.target.value))}
+                    style={{ ...fieldStyle, marginTop: '6px' }}
+                  >
+                    {Array.from({ length: Math.max(0, verseCount(getBibleBook(quotePassage.bookId), quotePassage.chapter) - quotePassage.verse + 1) }, (_, i) => quotePassage.verse + i).map((n) => (
+                      <option key={n} value={n}>{n === quotePassage.verse ? `${n} (só este)` : n}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               <label style={{ display: 'block', marginTop: '8px', color: '#94a3b8', fontSize: '0.78rem', fontWeight: 700 }}>Citação
                 <textarea value={quoteText} onChange={(e) => setQuoteText(e.target.value)} rows={3} placeholder="Versículo ou trecho marcado" style={{ ...fieldStyle, marginTop: '4px' }} />
               </label>
@@ -504,7 +562,7 @@ export function ScriptureView({
                   {quotes.map((item) => (
                     <article key={item.id} style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', display: 'flex', gap: '10px', justifyContent: 'space-between' }}>
                       <div style={{ minWidth: 0 }}>
-                        <strong style={{ color: '#fbbf24', fontSize: '0.75rem' }}>{formatReference(getBibleBook(item.bookId), item.chapter, item.verse)}</strong>
+                        <strong style={{ color: '#fbbf24', fontSize: '0.75rem' }}>{quoteReference(item)}</strong>
                         {item.quote && <p style={{ color: '#f8fafc', fontStyle: 'italic', marginTop: '4px', whiteSpace: 'pre-wrap' }}>“{item.quote}”</p>}
                         {item.note && <p style={{ color: '#94a3b8', marginTop: '4px', whiteSpace: 'pre-wrap' }}>{item.note}</p>}
                       </div>
@@ -527,6 +585,28 @@ export function ScriptureView({
         </div>
       )}
 
+      {editingSession && (
+        <SessionEditor
+          session={editingSession}
+          onCancel={() => setEditingSession(null)}
+          onSave={(payload) => {
+            onUpdateSession?.(editingSession.id, payload);
+            setEditingSession(null);
+          }}
+        />
+      )}
+
+      {editingQuote && (
+        <QuoteEditor
+          quote={editingQuote}
+          onCancel={() => setEditingQuote(null)}
+          onSave={(payload) => {
+            onUpdateQuote?.(editingQuote.id, payload);
+            setEditingQuote(null);
+          }}
+        />
+      )}
+
       {confirm && (
         <ConfirmModal
           isOpen
@@ -542,7 +622,7 @@ export function ScriptureView({
   );
 }
 
-function QuotePanel({ quotes, draft, note, passage, onPassage, onDraft, onNote, onAdd, onDelete }) {
+function QuotePanel({ quotes, draft, note, passage, onPassage, onDraft, onNote, onAdd, onEdit, onDelete }) {
   return (
     <div className="glass-panel" style={{ padding: '16px' }}>
       <PassageFields label="Referência" {...passage} onChange={onPassage} />
@@ -558,7 +638,10 @@ function QuotePanel({ quotes, draft, note, passage, onPassage, onDraft, onNote, 
           <article key={item.id} style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)' }}>
             <header style={{ display: 'flex', justifyContent: 'space-between', color: '#fbbf24', fontWeight: 800 }}>
               <span>{item.reference}</span>
-              <button type="button" aria-label="Excluir citação" onClick={() => onDelete(item.id)} style={{ background: 'none', border: 'none', color: '#fb7185', cursor: 'pointer' }}><Trash2 size={13} /></button>
+              <span style={{ display: 'flex', gap: '8px' }}>
+                <button type="button" aria-label="Editar citação" onClick={() => onEdit?.(item)} style={{ background: 'none', border: 'none', color: '#fbbf24', cursor: 'pointer' }}><Pencil size={13} /></button>
+                <button type="button" aria-label="Excluir citação" onClick={() => onDelete(item.id)} style={{ background: 'none', border: 'none', color: '#fb7185', cursor: 'pointer' }}><Trash2 size={13} /></button>
+              </span>
             </header>
             <p style={{ color: '#f8fafc', fontStyle: 'italic', marginTop: '6px', whiteSpace: 'pre-wrap' }}>“{item.quote}”</p>
             {item.note && <p style={{ color: '#94a3b8', marginTop: '4px', whiteSpace: 'pre-wrap' }}>{item.note}</p>}
@@ -566,6 +649,202 @@ function QuotePanel({ quotes, draft, note, passage, onPassage, onDraft, onNote, 
         ))}
         {quotes.length === 0 && <p style={{ color: '#64748b' }}>Nenhuma citação ainda.</p>}
       </div>
+    </div>
+  );
+}
+
+function sessionRange(session) {
+  const from = formatReference(getBibleBook(session.startBookId), session.startChapter, session.startVerse);
+  const to = formatReference(getBibleBook(session.endBookId), session.endChapter, session.endVerse);
+  return from === to ? from : `${from} – ${to}`;
+}
+
+function SessionHistory({ sessions, onEdit, onDelete }) {
+  const [query, setQuery] = useState('');
+  const visible = (sessions || []).filter((session) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    const blob = [
+      sessionRange(session),
+      session.notes,
+      session.reflection,
+      session.date,
+      ...(session.quotes || []).map((item) => `${item.reference} ${item.quote} ${item.note}`)
+    ].join(' ').toLowerCase();
+    return blob.includes(q);
+  });
+  return (
+    <div className="glass-panel" style={{ padding: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+        <h3 className="font-cinzel" style={{ color: '#f8fafc', display: 'flex', gap: '8px', alignItems: 'center' }}><History size={16} color="#fbbf24" /> Histórico de sessões</h3>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar trecho, nota ou citação" style={{ ...fieldStyle, maxWidth: '320px' }} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {visible.map((session) => (
+          <article key={session.id} style={{ padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)' }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'flex-start' }}>
+              <div>
+                <strong style={{ color: '#fbbf24' }}>{sessionRange(session)}</strong>
+                <p style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '2px' }}>{session.date} · {session.durationMinutes} min · {session.chaptersRead || 0} cap. · {(session.quotes || []).length} citações</p>
+              </div>
+              <span style={{ display: 'flex', gap: '8px' }}>
+                <button type="button" aria-label="Editar sessão" onClick={() => onEdit(session)} style={{ background: 'none', border: 'none', color: '#fbbf24', cursor: 'pointer' }}><Pencil size={14} /></button>
+                <button type="button" aria-label="Excluir sessão" onClick={() => onDelete(session)} style={{ background: 'none', border: 'none', color: '#fb7185', cursor: 'pointer' }}><Trash2 size={14} /></button>
+              </span>
+            </header>
+            {session.notes && <p style={{ color: '#e2e8f0', marginTop: '8px', whiteSpace: 'pre-wrap' }}>{session.notes}</p>}
+            {session.reflection && <p style={{ color: '#cbd5e1', marginTop: '6px', whiteSpace: 'pre-wrap' }}>{session.reflection}</p>}
+            {(session.quotes || []).length > 0 && (
+              <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {session.quotes.map((item) => (
+                  <p key={item.id} style={{ color: '#94a3b8', fontSize: '0.82rem' }}>
+                    <strong style={{ color: '#fbbf24' }}>{item.reference || quoteReference(item)}</strong> {item.quote}
+                  </p>
+                ))}
+              </div>
+            )}
+          </article>
+        ))}
+        {visible.length === 0 && <p style={{ color: '#64748b' }}>Nenhuma sessão encontrada.</p>}
+      </div>
+    </div>
+  );
+}
+
+function SessionEditor({ session, onCancel, onSave }) {
+  const [start, setStart] = useState({ bookId: session.startBookId, chapter: session.startChapter, verse: session.startVerse });
+  const [end, setEnd] = useState({ bookId: session.endBookId, chapter: session.endChapter, verse: session.endVerse });
+  const [minutes, setMinutes] = useState(session.durationMinutes || 1);
+  const [notes, setNotes] = useState(session.notes || '');
+  const [reflection, setReflection] = useState(session.reflection || '');
+  const [quotes, setQuotes] = useState((session.quotes || []).map((item) => ({
+    ...item,
+    endVerse: item.endVerse || item.verse
+  })));
+
+  const updateQuote = (id, patch) => {
+    setQuotes((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  };
+
+  return (
+    <div className="modal-overlay" onMouseDown={(event) => event.stopPropagation()} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave({
+            startBookId: start.bookId,
+            startChapter: start.chapter,
+            startVerse: start.verse,
+            endBookId: end.bookId,
+            endChapter: end.chapter,
+            endVerse: end.verse,
+            durationMinutes: Math.max(1, Number(minutes) || 1),
+            notes,
+            reflection,
+            quotes: quotes.filter((item) => item.quote.trim()).map((item) => ({
+              ...item,
+              ...normalizedQuoteSpan(item, item.endVerse)
+            }))
+          });
+        }}
+        className="glass-panel modal-sheet"
+        style={{ width: 'min(860px, 100%)', maxHeight: '92vh', overflowY: 'auto', padding: '24px', borderRadius: '18px' }}
+      >
+        <h3 className="font-cinzel" style={{ color: '#f8fafc', marginBottom: '12px' }}>Editar sessão · {session.date}</h3>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <PassageFields label="De" {...start} onChange={setStart} />
+          <PassageFields label="Até" {...end} onChange={setEnd} accent="#34d399" />
+        </div>
+        <label style={{ display: 'block', marginTop: '12px', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700 }}>Duração (minutos)
+          <input type="number" min="1" max="480" value={minutes} onChange={(event) => setMinutes(event.target.value)} style={{ ...fieldStyle, marginTop: '4px', maxWidth: '160px' }} />
+        </label>
+        <label style={{ display: 'block', marginTop: '10px', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700 }}>Notas
+          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} style={{ ...fieldStyle, marginTop: '4px' }} />
+        </label>
+        <label style={{ display: 'block', marginTop: '10px', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700 }}>Reflexão
+          <textarea value={reflection} onChange={(event) => setReflection(event.target.value)} rows={3} style={{ ...fieldStyle, marginTop: '4px' }} />
+        </label>
+        <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <strong style={{ color: '#fbbf24' }}>Citações desta sessão</strong>
+          {quotes.map((item) => (
+            <div key={item.id} style={{ padding: '12px', borderRadius: '12px', border: '1px solid rgba(245,158,11,0.25)' }}>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <PassageFields
+                  label="Referência"
+                  bookId={item.bookId}
+                  chapter={item.chapter}
+                  verse={item.verse}
+                  onChange={(next) => updateQuote(item.id, { ...next, endVerse: next.verse })}
+                />
+                <label style={{ minWidth: '120px', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 800 }}>Até o versículo
+                  <select value={item.endVerse || item.verse} onChange={(event) => updateQuote(item.id, { endVerse: Number(event.target.value) })} style={{ ...fieldStyle, marginTop: '6px' }}>
+                    {Array.from({ length: Math.max(0, verseCount(getBibleBook(item.bookId), item.chapter) - item.verse + 1) }, (_, i) => item.verse + i).map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </label>
+                <button type="button" aria-label="Remover citação da sessão" onClick={() => setQuotes((prev) => prev.filter((quote) => quote.id !== item.id))} style={{ background: 'none', border: 'none', color: '#fb7185', cursor: 'pointer' }}><Trash2 size={14} /></button>
+              </div>
+              <textarea value={item.quote} onChange={(event) => updateQuote(item.id, { quote: event.target.value })} rows={3} style={{ ...fieldStyle, marginTop: '8px' }} />
+              <textarea value={item.note || ''} onChange={(event) => updateQuote(item.id, { note: event.target.value })} rows={2} placeholder="Comentário" style={{ ...fieldStyle, marginTop: '8px' }} />
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setQuotes((prev) => [...prev, { id: `sqd-${Date.now()}`, bookId: end.bookId, chapter: end.chapter, verse: end.verse, endVerse: end.verse, quote: '', note: '' }])}
+            style={{ alignSelf: 'flex-start', padding: '8px 12px', borderRadius: '8px', border: 'none', background: 'rgba(245,158,11,0.18)', color: '#fbbf24', fontWeight: 800, cursor: 'pointer' }}
+          >
+            <Plus size={14} /> Adicionar citação
+          </button>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+          <button type="button" onClick={onCancel} style={{ padding: '10px 14px', borderRadius: '10px', border: 'none', background: 'rgba(255,255,255,0.08)', color: '#fff', cursor: 'pointer' }}>Cancelar</button>
+          <button type="submit" style={{ padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#fbbf24', color: '#111', fontWeight: 800, cursor: 'pointer' }}>Salvar alterações</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function QuoteEditor({ quote, onCancel, onSave }) {
+  const [passage, setPassage] = useState({ bookId: quote.bookId, chapter: quote.chapter, verse: quote.verse });
+  const [endVerse, setEndVerse] = useState(quote.endVerse || quote.verse);
+  const [text, setText] = useState(quote.quote || '');
+  const [note, setNote] = useState(quote.note || '');
+  return (
+    <div className="modal-overlay" onMouseDown={(event) => event.stopPropagation()} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!text.trim()) return;
+          const span = normalizedQuoteSpan(passage, endVerse);
+          onSave({ ...span, quote: text.trim(), note: note.trim() });
+        }}
+        className="glass-panel modal-sheet"
+        style={{ width: 'min(720px, 100%)', maxHeight: '92vh', overflowY: 'auto', padding: '24px', borderRadius: '18px' }}
+      >
+        <h3 className="font-cinzel" style={{ color: '#f8fafc', marginBottom: '12px' }}>Editar citação</h3>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <PassageFields label="Referência" {...passage} onChange={(next) => { setPassage(next); setEndVerse(next.verse); }} />
+          <label style={{ minWidth: '120px', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 800 }}>Até o versículo
+            <select value={endVerse} onChange={(event) => setEndVerse(Number(event.target.value))} style={{ ...fieldStyle, marginTop: '6px' }}>
+              {Array.from({ length: Math.max(0, verseCount(getBibleBook(passage.bookId), passage.chapter) - passage.verse + 1) }, (_, i) => passage.verse + i).map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label style={{ display: 'block', marginTop: '10px', color: '#94a3b8', fontSize: '0.78rem', fontWeight: 700 }}>Citação
+          <textarea value={text} onChange={(event) => setText(event.target.value)} rows={4} style={{ ...fieldStyle, marginTop: '4px' }} />
+        </label>
+        <label style={{ display: 'block', marginTop: '8px', color: '#94a3b8', fontSize: '0.78rem', fontWeight: 700 }}>Comentário
+          <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} style={{ ...fieldStyle, marginTop: '4px' }} />
+        </label>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+          <button type="button" onClick={onCancel} style={{ padding: '10px 14px', borderRadius: '10px', border: 'none', background: 'rgba(255,255,255,0.08)', color: '#fff', cursor: 'pointer' }}>Cancelar</button>
+          <button type="submit" style={{ padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#fbbf24', color: '#111', fontWeight: 800, cursor: 'pointer' }}>Salvar citação</button>
+        </div>
+      </form>
     </div>
   );
 }

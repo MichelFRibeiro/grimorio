@@ -124,6 +124,16 @@ export function formatReference(book, chapter, verse) {
   return `${book.abbr} ${ch}:${vs}`;
 }
 
+/** "Ec 2:13-14" quando o trecho fica no mesmo capítulo; senão as duas pontas. */
+export function formatVerseSpan(book, chapter, verse, endVerse) {
+  const start = Number(verse) || 0;
+  const end = Number(endVerse) || start;
+  const single = formatReference(book, chapter, start);
+  if (!book || !start || end <= start) return single;
+  if (end === start + 1) return `${single}-${end}`;
+  return `${single}–${end}`;
+}
+
 export function formatReferenceLong(book, chapter, verse) {
   if (!book) return '';
   const ch = Number(chapter) || 0;

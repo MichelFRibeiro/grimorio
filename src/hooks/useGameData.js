@@ -484,6 +484,15 @@ export function useGameData() {
     fetchState();
   };
 
+  const updateScriptureSession = async (id, sessionData) => {
+    playClick();
+    const result = await mutate(`/api/scripture/sessions/${id}`, { method: 'PUT', body: sessionData, refreshOnSuccess: false });
+    if (!result) return;
+    handleLinkedVictories(result.linkedVictories);
+    fetchState();
+    return result;
+  };
+
   const deleteScriptureSession = async (id) => {
     playClick();
     const result = await mutate(`/api/scripture/sessions/${id}`, { method: 'DELETE', refreshOnSuccess: false });
@@ -498,6 +507,14 @@ export function useGameData() {
     if (!result) return;
     if (result.rewardResult) handleRewardResponse(result.rewardResult, 'Citação guardada nas Escrituras!');
     fetchState();
+  };
+
+  const updateScriptureQuote = async (id, quoteData) => {
+    playClick();
+    const result = await mutate(`/api/scripture/quotes/${id}`, { method: 'PUT', body: quoteData, refreshOnSuccess: false });
+    if (!result) return;
+    fetchState();
+    return result;
   };
 
   const deleteScriptureQuote = async (id) => {
@@ -1284,8 +1301,10 @@ export function useGameData() {
     saveScriptureLiveDraft,
     clearScriptureLiveDraft,
     logScriptureSession,
+    updateScriptureSession,
     deleteScriptureSession,
     addScriptureQuote,
+    updateScriptureQuote,
     deleteScriptureQuote,
     addScriptureReflection,
     deleteScriptureReflection,

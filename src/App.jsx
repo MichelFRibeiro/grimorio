@@ -79,8 +79,10 @@ export function App() {
     saveScriptureLiveDraft,
     clearScriptureLiveDraft,
     logScriptureSession,
+    updateScriptureSession,
     deleteScriptureSession,
     addScriptureQuote,
+    updateScriptureQuote,
     deleteScriptureQuote,
     addScriptureReflection,
     deleteScriptureReflection,
@@ -596,8 +598,10 @@ export function App() {
             onSaveLiveDraft={saveScriptureLiveDraft}
             onClearLiveDraft={clearScriptureLiveDraft}
             onLogSession={logScriptureSession}
+            onUpdateSession={updateScriptureSession}
             onDeleteSession={deleteScriptureSession}
             onAddQuote={addScriptureQuote}
+            onUpdateQuote={updateScriptureQuote}
             onDeleteQuote={deleteScriptureQuote}
             onAddReflection={addScriptureReflection}
             onDeleteReflection={deleteScriptureReflection}

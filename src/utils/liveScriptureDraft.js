@@ -31,6 +31,7 @@ function sanitizeQuote(item) {
   return {
     id: clipText(item.id, 80) || `sqd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     ...sanitizePassage(item),
+    endVerse: clampInt(item.endVerse, 1, verseCount(getBibleBook(item.bookId) || getBibleBook('gn'), clampInt(item.chapter, 1, 150, 1)), Number(item.verse) || 1),
     quote,
     note
   };
@@ -46,6 +47,8 @@ export function emptyScriptureDraft() {
     quotes: [],
     quoteText: '',
     quoteNote: '',
+    quotePassage: { bookId: 'gn', chapter: 1, verse: 1 },
+    quoteEndVerse: 1,
     timer: { accumulatedMs: 0, runStartedAt: null },
     updatedAt: 0
   };
@@ -73,6 +76,13 @@ export function sanitizeScriptureDraft(value, now = Date.now()) {
     quotes,
     quoteText: clipText(value.quoteText),
     quoteNote: clipText(value.quoteNote),
+    quotePassage: sanitizePassage(value.quotePassage || value.end),
+    quoteEndVerse: clampInt(
+      value.quoteEndVerse,
+      1,
+      verseCount(getBibleBook(value.quotePassage?.bookId || value.end?.bookId) || getBibleBook('gn'), clampInt(value.quotePassage?.chapter || value.end?.chapter, 1, 150, 1)),
+      Number(value.quotePassage?.verse || value.end?.verse) || 1
+    ),
     timer: { accumulatedMs, runStartedAt },
     updatedAt: updatedAt || now
   };

@@ -9,8 +9,10 @@ import {
 } from '../src/data/bibleCanon.js';
 import {
   logScriptureSession,
+  updateScriptureSession,
   deleteScriptureSession,
   addScriptureQuote,
+  updateScriptureQuote,
   deleteScriptureQuote,
   addScriptureReflection,
   saveScriptureLiveDraft
@@ -51,6 +53,7 @@ const session = logScriptureSession(live, {
 assert.equal(session.error, undefined, session.error);
 assert.equal(session.session.chaptersRead, 1);
 assert.equal(session.session.quotes[0].reference, 'Jo 3:16');
+const joQuoteId = session.session.quotes[0].id;
 assert.equal(live.scriptureProgress.joa.chaptersRead, 1);
 assert.equal(live.scriptureReflections.length, 1);
 assert.ok(live.userProfile.xp > beforeXp, 'a sessão concede XP');
@@ -104,6 +107,39 @@ const scripture = getScriptureLoadSeries([{ date: '2026-08-10', durationMinutes:
 assert.equal(reading.today.minutes, 40);
 assert.equal(scripture.today.minutes, 25);
 assert.notEqual(reading.today.minutes, scripture.today.minutes, 'os tempos não se misturam');
+
+const editDb = defaultDatabase();
+const editable = logScriptureSession(editDb, {
+  startBookId: 'joa',
+  startChapter: 3,
+  startVerse: 16,
+  endBookId: 'joa',
+  endChapter: 3,
+  endVerse: 16,
+  durationMinutes: 8,
+  quotes: [{ bookId: 'joa', chapter: 3, verse: 16, quote: 'Porque Deus amou o mundo.' }]
+});
+const edited = updateScriptureQuote(editDb, {
+  id: editable.session.quotes[0].id,
+  bookId: 'ec',
+  chapter: 2,
+  verse: 13,
+  endVerse: 14,
+  quote: 'A sabedoria é mais proveitosa.',
+  note: 'Comentário revisado.'
+});
+assert.equal(edited.error, undefined, edited.error);
+assert.equal(edited.quote.reference, 'Ec 2:13-14', 'a edição guarda o intervalo do versículo');
+assert.equal(editDb.scriptureSessions[0].quotes[0].reference, 'Ec 2:13-14');
+
+const sessionEdit = updateScriptureSession(editDb, editable.session.id, {
+  notes: 'Sessão revisada',
+  quotes: [{ bookId: 'ap', chapter: 1, verse: 1, endVerse: 3, quote: 'A revelação de Jesus Cristo.' }]
+});
+assert.equal(sessionEdit.error, undefined, sessionEdit.error);
+assert.equal(sessionEdit.session.notes, 'Sessão revisada');
+assert.equal(sessionEdit.session.quotes[0].reference, 'Ap 1:1–3');
+assert.equal(sessionEdit.session.startBookId, 'joa');
 
 const draftDb = defaultDatabase();
 const startedAt = Date.now() - 90_000;
