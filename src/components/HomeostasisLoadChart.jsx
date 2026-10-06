@@ -34,6 +34,12 @@ const DEFAULT_ZONE_META = {
     color: '#f43f5e',
     glow: 'rgba(244, 63, 94, 0.35)',
     copy: 'Acima da média recente. O treino passou do ritmo que vinha sendo sustentado.'
+  },
+  empty: {
+    label: 'Sem sessão',
+    color: '#64748b',
+    glow: 'rgba(100, 116, 139, 0.25)',
+    copy: 'Nenhum tempo registrado neste dia.'
   }
 };
 
@@ -192,7 +198,7 @@ export function HomeostasisLoadChart({
             if (item.dataset.label !== seriesLabel) return null;
             const point = series?.points?.[item.dataIndex];
             if (!point) return '';
-            const zone = zoneCopy[point.zone] || DEFAULT_ZONE_META[point.zone];
+            const zone = zoneCopy[point.zone] || DEFAULT_ZONE_META[point.zone] || DEFAULT_ZONE_META.empty;
             return `${formatStudyDuration(point.minutes)} · ${zone.label}`;
           },
           filter: (item) => item.dataset.label === seriesLabel
