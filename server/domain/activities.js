@@ -15,6 +15,7 @@ import { grantDestinyChest } from './destinyChest.js';
 import { getSaoPauloDateStr, getSaoPauloHour, getSaoPauloDayOfWeek, calculateHabitStreak } from '../timeUtils.js';
 import { willpowerForDifficulty } from '../../src/utils/activityScale.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, clearLiveActivityTimer } from '../../src/utils/activityDuration.js';
+import { sanitizeScriptureDraft, scriptureDraftsEqual } from '../../src/utils/liveScriptureDraft.js';
 import { sanitizeAguPlan, applyExamToPlan, refreshAguProgress } from '../../src/utils/aguCycle.js';
 import { syncDailyVictoriesFromActivity } from '../dailyVictorySync.js';
 import { markDecisionAccepted, markDecisionCompleted } from '../oracleMemory.js';
@@ -1444,6 +1445,24 @@ function scriptureGrantTitle(span, quotesCount) {
   return `Escritura ${range} (+${span.chaptersRead} cap.${quotesCount ? `, ${quotesCount} citação(ões)` : ''})`;
 }
 
+export function saveScriptureLiveDraft(db, body = {}) {
+  ensureScripture(db);
+  const shouldClear = !body || body.clear === true || body.active === false;
+  if (shouldClear) {
+    const had = db.scriptureLiveDraft != null;
+    db.scriptureLiveDraft = null;
+    return { scriptureLiveDraft: null, unchanged: !had };
+  }
+  const clean = sanitizeScriptureDraft({ ...body, active: true, updatedAt: body.updatedAt || Date.now() });
+  if (!clean) return fail('Rascunho de Escritura inválido.');
+  if (scriptureDraftsEqual(clean, db.scriptureLiveDraft)) {
+    return { scriptureLiveDraft: db.scriptureLiveDraft, unchanged: true };
+  }
+  clean.updatedAt = Date.now();
+  db.scriptureLiveDraft = clean;
+  return { scriptureLiveDraft: clean, unchanged: false };
+}
+
 export function logScriptureSession(db, body = {}) {
   ensureScripture(db);
   let span;
@@ -1519,6 +1538,7 @@ export function logScriptureSession(db, body = {}) {
   });
   attachLog(session, rewardResult);
   const linkedVictories = syncDailyVictoriesFromActivity(db, { syncScripture: true });
+  getDb().scriptureLiveDraft = null;
   return { session, rewardResult, linkedVictories, finishedCanon: span.finishedCanon };
 }
 

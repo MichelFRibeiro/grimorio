@@ -11,6 +11,7 @@ import {
 import { applyLocationDefaults } from './locations.js';
 import { migrateActivityScale } from '../src/utils/activityScale.js';
 import { sanitizeLiveActivityTimers } from '../src/utils/activityDuration.js';
+import { sanitizeScriptureDraft } from '../src/utils/liveScriptureDraft.js';
 import { createDefaultAguPlan } from '../src/data/aguCurriculum.js';
 import { sanitizeAguPlan, ensureCurrentCycle, migrateAguExams } from '../src/utils/aguCycle.js';
 import { sanitizeDailyVictories, sanitizeDailyVictoryBonuses } from '../src/utils/dailyVictories.js';
@@ -397,6 +398,7 @@ export const defaultDatabase = () => {
     scriptureSessions: [],
     scriptureQuotes: [],
     scriptureReflections: [],
+    scriptureLiveDraft: null,
     examQuestions: [],
     processes: [],
     processSteps: [],
@@ -442,6 +444,11 @@ export function sanitizeDb(db) {
   if (!Array.isArray(db.scriptureSessions)) db.scriptureSessions = [];
   if (!Array.isArray(db.scriptureQuotes)) db.scriptureQuotes = [];
   if (!Array.isArray(db.scriptureReflections)) db.scriptureReflections = [];
+  if (!db.scriptureLiveDraft || typeof db.scriptureLiveDraft !== 'object' || Array.isArray(db.scriptureLiveDraft)) {
+    db.scriptureLiveDraft = null;
+  } else {
+    db.scriptureLiveDraft = sanitizeScriptureDraft(db.scriptureLiveDraft) || null;
+  }
   if (!db.examQuestions) db.examQuestions = [];
   if (!db.processes) db.processes = [];
   if (!db.processSteps) db.processSteps = [];

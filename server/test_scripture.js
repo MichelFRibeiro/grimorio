@@ -12,9 +12,11 @@ import {
   deleteScriptureSession,
   addScriptureQuote,
   deleteScriptureQuote,
-  addScriptureReflection
+  addScriptureReflection,
+  saveScriptureLiveDraft
 } from './domain/activities.js';
 import { getReadingLoadSeries, getScriptureLoadSeries } from '../src/utils/homeostasis.js';
+import { mergeScriptureDrafts, sanitizeScriptureDraft } from '../src/utils/liveScriptureDraft.js';
 
 const totals = bibleTotals();
 assert.equal(totals.books, 66, 'cânone protestante tem 66 livros');
@@ -103,4 +105,40 @@ assert.equal(reading.today.minutes, 40);
 assert.equal(scripture.today.minutes, 25);
 assert.notEqual(reading.today.minutes, scripture.today.minutes, 'os tempos não se misturam');
 
-console.log('✅ leitura da Bíblia: cânone, sessão, citação, reflexão e tempo independente');
+const draftDb = defaultDatabase();
+const startedAt = Date.now() - 90_000;
+const saved = saveScriptureLiveDraft(draftDb, {
+  start: { bookId: 'ec', chapter: 2, verse: 13 },
+  end: { bookId: 'ec', chapter: 2, verse: 14 },
+  notes: 'Leitura da manhã',
+  reflection: 'O sábio tem os olhos na cabeça.',
+  quoteText: 'A sabedoria é mais proveitosa',
+  quoteNote: 'Comentário longo\ncom quebra de linha',
+  quotes: [{ bookId: 'ec', chapter: 2, verse: 13, quote: 'Primeira citação', note: 'Nota 1' }],
+  timer: { accumulatedMs: 83_000, runStartedAt: startedAt },
+  updatedAt: Date.now() - 1000
+});
+assert.equal(saved.error, undefined, saved.error);
+assert.equal(saved.scriptureLiveDraft.timer.runStartedAt, startedAt, 'o timer em andamento é persistido');
+assert.equal(saved.scriptureLiveDraft.quoteNote.includes('\n'), true, 'comentário multilinha é preservado');
+assert.equal(saved.scriptureLiveDraft.quotes.length, 1);
+
+const newer = sanitizeScriptureDraft({
+  ...saved.scriptureLiveDraft,
+  notes: 'Atualizado no outro aparelho',
+  timer: { accumulatedMs: 120_000, runStartedAt: startedAt },
+  updatedAt: saved.scriptureLiveDraft.updatedAt + 5000
+});
+const older = sanitizeScriptureDraft({
+  ...saved.scriptureLiveDraft,
+  notes: 'Rascunho velho',
+  updatedAt: saved.scriptureLiveDraft.updatedAt - 5000
+});
+assert.equal(mergeScriptureDrafts(older, newer).notes, 'Atualizado no outro aparelho');
+assert.equal(mergeScriptureDrafts(newer, older).notes, 'Atualizado no outro aparelho');
+
+const cleared = saveScriptureLiveDraft(draftDb, { clear: true });
+assert.equal(cleared.scriptureLiveDraft, null);
+assert.equal(draftDb.scriptureLiveDraft, null);
+
+console.log('✅ leitura da Bíblia: cânone, sessão, citação, reflexão, tempo independente e rascunho vivo');

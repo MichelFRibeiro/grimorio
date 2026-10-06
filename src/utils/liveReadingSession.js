@@ -36,7 +36,18 @@ export function hasLiveReadingSession() {
 }
 
 export function readLiveScriptureSession() {
-  return readLiveReadingSession(LIVE_SCRIPTURE_SESSION_KEY);
+  try {
+    const raw = sessionStorage.getItem(LIVE_SCRIPTURE_SESSION_KEY)
+      || localStorage.getItem(LIVE_SCRIPTURE_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (!parsed.start && !parsed.end && !parsed.bookId) return null;
+    if (parsed.updatedAt && Date.now() - parsed.updatedAt > MAX_AGE_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 export function writeLiveScriptureSession(payload) {

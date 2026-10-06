@@ -84,6 +84,15 @@ export function useStopwatch({
     bump();
   }, [bump]);
 
+  const restore = useCallback((accumulatedMs = 0, runStartedAt = null) => {
+    accumulatedMsRef.current = Math.max(0, Number(accumulatedMs) || 0);
+    runStartedAtRef.current = typeof runStartedAt === 'number' && Number.isFinite(runStartedAt)
+      ? runStartedAt
+      : null;
+    setIsRunning(runStartedAtRef.current != null);
+    bump();
+  }, [bump]);
+
   useEffect(() => {
     if (!isRunning) return undefined;
 
@@ -119,6 +128,7 @@ export function useStopwatch({
     toggle,
     reset,
     restart,
+    restore,
     getSnapshot,
     getElapsedSeconds
   };

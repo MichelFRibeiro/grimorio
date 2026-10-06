@@ -4,6 +4,7 @@ import { useSoundEffects } from './useSoundEffects';
 import { formatBrl } from '../utils/coinExchange.js';
 import { normalizeChestPayload } from '../utils/destinyChest.js';
 import { hydrateLiveActivityTimers, setLiveActivityTimerSync, flushLiveActivityTimers, getLiveActivityTimers } from '../utils/liveActivityTimers.js';
+import { writeLocalScriptureDraft, clearLocalScriptureDraft } from '../utils/liveScriptureDraft.js';
 import { fetchWithRetry, connectionErrorMessage, isTransientHttpStatus, retryDelayMs, getAuthHeaders as buildAuthHeaders } from '../utils/httpClient.js';
 
 const getAuthHeaders = () => buildAuthHeaders({ 'Content-Type': 'application/json' });
@@ -433,10 +434,50 @@ export function useGameData() {
     await mutate(`/api/books/${bookId}/quotes/${quoteId}`, { method: 'DELETE' });
   };
 
+  const applyScriptureDraft = useCallback((draft) => {
+    if (draft) writeLocalScriptureDraft(draft);
+    else clearLocalScriptureDraft();
+    setData((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, scriptureLiveDraft: draft || null };
+      dataRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const saveScriptureLiveDraft = async (draft) => {
+    const local = draft ? { ...draft, active: true, updatedAt: draft.updatedAt || Date.now() } : null;
+    if (local) writeLocalScriptureDraft(local);
+    const res = await fetchWithRetry('/api/scripture/live-draft', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(local || { clear: true })
+    }, { retries: 1 });
+    if (!res.ok) {
+      throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+    }
+    const json = await res.json();
+    // Não substitui o estado da tela: um eco do servidor pode ser mais antigo
+    // do que a frase que o herói acabou de digitar. O próximo /api/state traz
+    // o rascunho mais novo e a tela só aplica se o updatedAt for maior.
+    return json;
+  };
+
+  const clearScriptureLiveDraft = async () => {
+    applyScriptureDraft(null);
+    const res = await fetchWithRetry('/api/scripture/live-draft', {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    }, { retries: 1 });
+    if (!res.ok) return;
+    applyScriptureDraft(null);
+  };
+
   const logScriptureSession = async (sessionData) => {
     playClick();
     const result = await mutate('/api/scripture/sessions', { body: sessionData, refreshOnSuccess: false });
     if (!result) return;
+    applyScriptureDraft(null);
     handleRewardResponse(result.rewardResult, `Escritura: +${result.session.chaptersRead} capítulo(s)!`);
     handleLinkedVictories(result.linkedVictories);
     confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
@@ -1240,6 +1281,8 @@ export function useGameData() {
     addBookQuote,
     updateBookQuote,
     deleteBookQuote,
+    saveScriptureLiveDraft,
+    clearScriptureLiveDraft,
     logScriptureSession,
     deleteScriptureSession,
     addScriptureQuote,

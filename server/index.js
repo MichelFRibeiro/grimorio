@@ -113,6 +113,7 @@ import {
   updateQuote as domainUpdateQuote,
   deleteQuote as domainDeleteQuote,
   deleteBook as domainDeleteBook,
+  saveScriptureLiveDraft as domainSaveScriptureLiveDraft,
   logScriptureSession as domainLogScriptureSession,
   updateScriptureSession as domainUpdateScriptureSession,
   deleteScriptureSession as domainDeleteScriptureSession,
@@ -1418,6 +1419,29 @@ app.delete('/api/books/:id/quotes/:quoteId', (req, res) => {
 // 4.1. ESCRITURAS (LEITURA DA BÍBLIA)
 // Tempo independente da Biblioteca.
 // ==========================================
+app.put('/api/scripture/live-draft', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainSaveScriptureLiveDraft(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    if (!result.unchanged) saveDb(db);
+    res.json({ success: true, scriptureLiveDraft: result.scriptureLiveDraft, unchanged: result.unchanged });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/scripture/live-draft', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainSaveScriptureLiveDraft(db, { clear: true });
+    if (!result.unchanged) saveDb(db);
+    res.json({ success: true, scriptureLiveDraft: null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/scripture/sessions', (req, res) => {
   try {
     const db = getDb();

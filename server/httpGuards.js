@@ -139,6 +139,7 @@ const IMPORTABLE_KEYS = new Set([
   'scriptureSessions',
   'scriptureQuotes',
   'scriptureReflections',
+  'scriptureLiveDraft',
   'examQuestions',
   'processes',
   'processSteps',

@@ -76,6 +76,8 @@ export function App() {
     addBookQuote,
     updateBookQuote,
     deleteBookQuote,
+    saveScriptureLiveDraft,
+    clearScriptureLiveDraft,
     logScriptureSession,
     deleteScriptureSession,
     addScriptureQuote,
@@ -265,6 +267,7 @@ export function App() {
     scriptureSessions,
     scriptureQuotes,
     scriptureReflections,
+    scriptureLiveDraft,
     examQuestions,
     aguPlan,
     processes,
@@ -589,6 +592,9 @@ export function App() {
             scriptureSessions={scriptureSessions}
             scriptureQuotes={scriptureQuotes}
             scriptureReflections={scriptureReflections}
+            scriptureLiveDraft={scriptureLiveDraft}
+            onSaveLiveDraft={saveScriptureLiveDraft}
+            onClearLiveDraft={clearScriptureLiveDraft}
             onLogSession={logScriptureSession}
             onDeleteSession={deleteScriptureSession}
             onAddQuote={addScriptureQuote}
