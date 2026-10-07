@@ -13,6 +13,7 @@ import {
 } from './domain/supplements.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
 import { computeAnalytics } from './analytics.js';
+import { discoverCorrelations } from './correlations.js';
 import { computeCategoryRankings } from './rankings.js';
 import { suggestNextAction, previewNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly } from './oracleSuggest.js';
 import { markDecisionAccepted, markDecisionCompleted } from './oracleMemory.js';
@@ -2354,6 +2355,19 @@ export const toolsDefinition = [
         },
         mindMaps: analytics.mindMaps || []
       }, 'Métricas de leitura e simulados obtidas.');
+    }
+  },
+  {
+    name: 'get_correlations',
+    description: 'Identificar correlações entre atividades, rituais, suplementos, tempo de celular e produtividade. Cruza coocorrência no mesmo dia, efeito no dia seguinte e regressão linear, com correção para múltiplos testes. Correlação não é causa.',
+    schema: {
+      windowDays: z.number().int().min(21).max(365).optional().describe('Janela em dias (padrão: 120)')
+    },
+    handler: async (args) => {
+      const report = discoverCorrelations(getDb(), { windowDays: args.windowDays });
+      return formatSuccess(report, report.ready
+        ? `${report.findings.length} correlação(ões) passaram no corte.`
+        : 'Nenhuma correlação passou no corte de confiança.');
     }
   },
   {

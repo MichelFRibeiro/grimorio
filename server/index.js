@@ -9,6 +9,7 @@ import { runMaintenance } from './domain/maintenance.js';
 import { weekKeyOf } from './domain/bossWeek.js';
 import { listUnacknowledged, acknowledgePenalty, acknowledgeAllPenalties, prepareContest } from './domain/penalties.js';
 import { computeAnalytics } from './analytics.js';
+import { discoverCorrelations } from './correlations.js';
 import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
 import { suggestNextAction, previewNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly, snoozeAndRemember } from './oracleSuggest.js';
 import { openRouterKeyStatus, setStoredOpenRouterKey } from './jevClient.js';
@@ -579,6 +580,7 @@ app.get('/api/state', (req, res) => {
       ...publicDb,
       openRouter: openRouterKeyStatus(),
       analytics,
+      correlations: discoverCorrelations(db),
       nextAction,
       today: buildTodayPayload(db),
       oracleMemory,

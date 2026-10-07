@@ -19,7 +19,7 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { DestinyChestModal } from './components/DestinyChestModal';
 import { JudgmentModal, JudgmentHistory } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone } from 'lucide-react';
+import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare } from 'lucide-react';
 import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
@@ -30,6 +30,7 @@ import { useFocusPlayer } from './hooks/useFocusPlayer';
 import { getSaoPauloDateStr, addDaysToDateStr, getSaoPauloDayOfWeek } from './utils/timeUtils';
 import { summarizePlan, getAguStudyLoadSeries } from './utils/aguCycle';
 import { getReadingLoadSeries, getScriptureLoadSeries } from './utils/homeostasis';
+import { CorrelationsView } from './components/CorrelationsView';
 import { PhoneTimeView } from './components/PhoneTimeView';
 import { PhoneTimePrompt } from './components/PhoneTimePrompt';
 import { needsYesterdayPhonePrompt, yesterdayDateStr } from './utils/phoneTime';
@@ -376,6 +377,7 @@ export function App() {
     { id: 'habits', label: 'Rituais', icon: Flame, badge: habitsDueCount },
     { id: 'supplements', label: 'Suplementos', icon: Pill },
     { id: 'phone', label: 'Celular', icon: Smartphone },
+    { id: 'correlations', label: 'Correlações', icon: GitCompare },
     { id: 'focus', label: 'Foco', icon: Headphones },
     { id: 'rewards', label: 'Taverna', icon: Gift },
     { id: 'agu', label: 'AGU', icon: Scale, badge: aguTodayRemaining },
@@ -712,6 +714,10 @@ export function App() {
             onAddQuestions={addExamQuestions}
             onAddDailyVictory={addDailyVictory}
           />
+        )}
+
+        {activeTab === 'correlations' && (
+          <CorrelationsView report={data?.correlations} />
         )}
 
         {activeTab === 'oracle' && (
