@@ -19,7 +19,7 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { DestinyChestModal } from './components/DestinyChestModal';
 import { JudgmentModal, JudgmentHistory } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill } from 'lucide-react';
+import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone } from 'lucide-react';
 import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
@@ -30,6 +30,9 @@ import { useFocusPlayer } from './hooks/useFocusPlayer';
 import { getSaoPauloDateStr, addDaysToDateStr, getSaoPauloDayOfWeek } from './utils/timeUtils';
 import { summarizePlan, getAguStudyLoadSeries } from './utils/aguCycle';
 import { getReadingLoadSeries, getScriptureLoadSeries } from './utils/homeostasis';
+import { PhoneTimeView } from './components/PhoneTimeView';
+import { PhoneTimePrompt } from './components/PhoneTimePrompt';
+import { needsYesterdayPhonePrompt, yesterdayDateStr } from './utils/phoneTime';
 
 export function App() {
   const [activeTab, setActiveTab] = useState('today');
@@ -162,7 +165,9 @@ export function App() {
     addMindMapCategory,
     updateMindMapCategory,
     deleteMindMapCategory,
-    deleteMindMapImage
+    deleteMindMapImage,
+    savePhoneTime,
+    deletePhoneTime
   } = useGameData();
 
   const [captureOpen, setCaptureOpen] = useState(false);
@@ -173,6 +178,8 @@ export function App() {
   const [weeklyOpen, setWeeklyOpen] = useState(false);
   const [weeklyReview, setWeeklyReview] = useState(null);
   const [lastQuestCategory, setLastQuestCategory] = useState('');
+  const [phonePromptSnoozed, setPhonePromptSnoozed] = useState(false);
+  const [phonePromptBusy, setPhonePromptBusy] = useState(false);
 
   const todayStr = getSaoPauloDateStr();
   const homeostasisFloors = useMemo(() => ({
@@ -368,6 +375,7 @@ export function App() {
     { id: 'processes', label: 'Processos', icon: Layers, badge: activeProcessesCount },
     { id: 'habits', label: 'Rituais', icon: Flame, badge: habitsDueCount },
     { id: 'supplements', label: 'Suplementos', icon: Pill },
+    { id: 'phone', label: 'Celular', icon: Smartphone },
     { id: 'focus', label: 'Foco', icon: Headphones },
     { id: 'rewards', label: 'Taverna', icon: Gift },
     { id: 'agu', label: 'AGU', icon: Scale, badge: aguTodayRemaining },
@@ -643,6 +651,14 @@ export function App() {
           />
         )}
 
+        {activeTab === 'phone' && (
+          <PhoneTimeView
+            data={data}
+            onSave={savePhoneTime}
+            onDelete={deletePhoneTime}
+          />
+        )}
+
         {activeTab === 'supplements' && (
           <SupplementsView
             supplements={supplements}
@@ -710,6 +726,31 @@ export function App() {
 
       {/* Level Up Pop-up Modal */}
       <LevelUpModal data={levelUpData} onClose={closeLevelUpModal} />
+      <PhoneTimePrompt
+        open={Boolean(
+          data
+          && !levelUpData
+          && !(penaltiesPending || []).length
+          && !phonePromptSnoozed
+          && needsYesterdayPhonePrompt(data.phoneTimeLogs, todayStr)
+        )}
+        dateStr={yesterdayDateStr(todayStr)}
+        busy={phonePromptBusy}
+        onLater={() => setPhonePromptSnoozed(true)}
+        onOpenSection={() => {
+          setPhonePromptSnoozed(true);
+          setActiveTab('phone');
+        }}
+        onSubmit={async (entry) => {
+          setPhonePromptBusy(true);
+          try {
+            await savePhoneTime(entry);
+            setPhonePromptSnoozed(true);
+          } finally {
+            setPhonePromptBusy(false);
+          }
+        }}
+      />
       <JudgmentModal
         penalties={penaltiesPending || []}
         onAcknowledge={acknowledgePenalties}

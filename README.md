@@ -78,6 +78,11 @@ O script irá:
 - Registro de anotações específicas em cada processo ou caso analisado.
 - Barra de progresso com marco de 100%.
 
+### 📱 Tempo no Celular
+- Ao abrir o Grimório, pergunta quanto tempo você passou no celular **ontem**. Respondido, não pergunta de novo naquele dia.
+- O registro pode ser corrigido ou excluído depois. Excluir o de ontem faz a pergunta voltar.
+- Gráfico de 14, 30 ou 90 dias com três linhas: tempo no celular, quantidade de atividades realizadas e tempo gasto nelas (missões, rituais, Biblioteca, Escrituras e AGU).
+
 ### 💊 Suplementos
 - Cadastro de suplementos (Omega 3, Creatina) com unidade e dose usual.
 - Registro de cada tomada com data, hora e quantidade.

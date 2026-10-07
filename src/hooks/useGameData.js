@@ -878,6 +878,24 @@ export function useGameData() {
     await mutate(`/api/supplement-logs/${id}`, { method: 'DELETE' });
   };
 
+  const savePhoneTime = async ({ date, minutes, note } = {}) => {
+    playClick();
+    const result = await mutate('/api/phone-time', {
+      method: 'POST',
+      body: { date, minutes, note },
+      toastOnError: false
+    });
+    if (!result || result.__error) {
+      throw new Error(result?.error || 'Não foi possível registrar o tempo no celular.');
+    }
+    return result;
+  };
+
+  const deletePhoneTime = async (id) => {
+    playClick();
+    await mutate(`/api/phone-time/${id}`, { method: 'DELETE' });
+  };
+
   // 5. Rewards Actions
   const addReward = async (rewardData) => {
     playClick();
@@ -1354,6 +1372,8 @@ export function useGameData() {
     logSupplementIntake,
     updateSupplementLog,
     deleteSupplementLog,
+    savePhoneTime,
+    deletePhoneTime,
     addReward,
     spendMoney,
     redeemReward,

@@ -18,6 +18,7 @@ import { sanitizeDailyVictories, sanitizeDailyVictoryBonuses } from '../src/util
 import { sanitizeMindMaps, sanitizeMindMapSessions, sanitizeMindMapCategories, sanitizeMindMapImageLibrary, mergeMindMapImageLibrary } from '../src/utils/mindMaps.js';
 import { ensureOracleMemory } from './oracleMemory.js';
 import { sanitizeDailyReviews, sanitizeWeeklyPlans } from './domain/today.js';
+import { sanitizePhoneTimeLogs } from '../src/utils/phoneTime.js';
 import { setStoredOpenRouterKey } from './jevClient.js';
 import { computeBossDamage, ensureBossWeekFields } from './domain/bossWeek.js';
 import { applyWisdomToStudyXp, attributeEffects } from './domain/attributes.js';
@@ -422,6 +423,7 @@ export const defaultDatabase = () => {
     oracleQuantityReads: [],
     dailyReviews: [],
     weeklyPlans: [],
+    phoneTimeLogs: [],
     penalties: [],
     bossHistory: [],
     destinyChests: [],
@@ -457,6 +459,7 @@ export function sanitizeDb(db) {
   if (!db.habits) db.habits = [];
   if (!Array.isArray(db.supplements)) db.supplements = [];
   if (!Array.isArray(db.supplementLogs)) db.supplementLogs = [];
+  db.phoneTimeLogs = sanitizePhoneTimeLogs(db.phoneTimeLogs);
   if (!db.rewards) db.rewards = [];
   if (!db.rewardRedemptions) db.rewardRedemptions = [];
   if (!db.actionLogs) db.actionLogs = [];

@@ -69,6 +69,8 @@ import {
   deleteSupplementLog
 } from './domain/supplements.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
+import { sanitizePhoneTimeLogs } from '../src/utils/phoneTime.js';
+import { deletePhoneTimeLog, upsertPhoneTimeLog } from './domain/phoneTime.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, mergeLiveActivityTimers, sanitizeLiveActivityTimers, clearLiveActivityTimer, liveTimersEqual } from '../src/utils/activityDuration.js';
 import { AGU_SUBJECTS, createDefaultAguPlan } from '../src/data/aguCurriculum.js';
 import {
@@ -566,6 +568,7 @@ app.get('/api/state', (req, res) => {
         saveDb(db);
       }
     }
+    db.phoneTimeLogs = sanitizePhoneTimeLogs(db.phoneTimeLogs);
     const analytics = computeAnalytics();
     // Mesmo contrato do POST /consult: energia recente, needsEnergy e motivos
     // de recusa. Sem isso o cartão escondia a indicação a cada ação.
@@ -1856,6 +1859,59 @@ app.delete('/api/supplement-logs/:id', (req, res) => {
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 6.5. TEMPO NO CELULAR
+// ==========================================
+app.get('/api/phone-time', (req, res) => {
+  try {
+    const db = getDb();
+    res.json({ success: true, logs: sanitizePhoneTimeLogs(db.phoneTimeLogs) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/phone-time', (req, res) => {
+  try {
+    const db = getDb();
+    const result = upsertPhoneTimeLog(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, log: result.log, created: result.created, logs: db.phoneTimeLogs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/phone-time/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const existing = sanitizePhoneTimeLogs(db.phoneTimeLogs).find((entry) => entry.id === req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Registro de tempo no celular não encontrado.' });
+    const result = upsertPhoneTimeLog(db, {
+      ...(req.body || {}),
+      date: existing.date
+    });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, log: result.log, logs: db.phoneTimeLogs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/phone-time/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = deletePhoneTimeLog(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, logs: db.phoneTimeLogs });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
