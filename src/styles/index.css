@@ -3030,13 +3030,24 @@ kbd {
 .correlations-header h2 {
   font-size: 1.7rem;
   margin: 2px 0 8px;
+  color: var(--text-main);
+}
+
+.correlations-view,
+.correlation-card,
+.correlation-lead,
+.correlations-highlights .glass-panel,
+.correlation-empty {
+  color: var(--text-main);
 }
 
 .correlations-header p,
 .correlation-lead p,
+.correlations-highlights p,
 .correlations-footnote,
-.correlation-empty p {
-  color: #94a3b8;
+.correlation-empty p,
+.correlation-card p {
+  color: var(--text-muted);
   line-height: 1.55;
 }
 
@@ -3061,11 +3072,11 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  color: #c4b5fd;
+  color: var(--accent-purple);
 }
 
 .correlations-kpis strong {
-  color: #f8fafc;
+  color: var(--text-main);
   font-family: var(--font-mono);
   font-size: 1.4rem;
 }
@@ -3073,7 +3084,7 @@ kbd {
 .correlations-kpis span,
 .correlation-card footer,
 .correlation-method {
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 0.78rem;
 }
 
@@ -3113,18 +3124,18 @@ kbd {
 }
 
 .correlations-filters button {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 23, 42, 0.55);
-  color: #cbd5e1;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-main);
   border-radius: 999px;
   padding: 7px 12px;
   cursor: pointer;
 }
 
 .correlations-filters button.is-active {
-  color: #0f172a;
-  background: #c4b5fd;
-  border-color: #c4b5fd;
+  color: #f8fafc;
+  background: #6d28d9;
+  border-color: #6d28d9;
   font-weight: 700;
 }
 
@@ -3141,8 +3152,8 @@ kbd {
 .correlation-card {
   padding: 16px 18px;
   border-radius: 16px;
-  background: rgba(19, 23, 34, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
 }
 
 .correlation-card.is-helpful {
@@ -3171,7 +3182,7 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #34d399;
+  color: var(--accent-emerald);
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -3179,16 +3190,23 @@ kbd {
 }
 
 .correlation-verdict.is-harmful {
-  color: #fb7185;
+  color: var(--accent-rose);
+}
+
+.correlation-pair,
+.correlation-pair strong,
+.correlation-lead h3,
+.correlation-empty h3,
+.correlations-highlights h3 {
+  color: var(--text-main);
 }
 
 .correlation-pair {
-  color: #e2e8f0;
   font-size: 0.86rem;
 }
 
 .correlation-pair em {
-  color: #c4b5fd;
+  color: var(--accent-purple);
   font-style: normal;
   font-size: 0.75rem;
 }
@@ -3201,7 +3219,7 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  color: #c4b5fd;
+  color: var(--accent-purple);
 }
 
 .correlation-empty ul {
@@ -3219,12 +3237,17 @@ kbd {
   gap: 2px;
   padding: 8px 10px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-card-active);
+}
+
+.correlation-empty li span,
+.correlation-empty li strong {
+  color: var(--text-main);
+  font-size: 0.78rem;
 }
 
 .correlation-empty li span {
-  color: #94a3b8;
-  font-size: 0.78rem;
+  color: var(--text-muted);
 }
 
 .correlations-footnote {

@@ -713,3 +713,86 @@ kbd {
 .phone-time-error {
   color: #b91c1c;
 }
+
+/* Correlações nasceram com texto claro de fundo escuro. No papel creme
+   o número branco some; no tema escuro o cartão herdava tinta preta. */
+.correlations-kicker {
+  color: #6b3f86;
+}
+
+.correlations-kpis .glass-panel {
+  color: #6b3f86;
+}
+
+.correlation-card,
+.correlation-lead,
+.correlations-highlights .glass-panel,
+.correlation-empty {
+  background: var(--cat-card);
+  border: 1.5px solid var(--cat-rule);
+  color: var(--cat-ink);
+}
+
+.correlations-header h2,
+.correlations-kpis strong,
+.correlation-pair,
+.correlation-pair strong,
+.correlation-lead h3,
+.correlation-empty h3,
+.correlations-highlights h3,
+.correlation-empty li strong {
+  color: var(--cat-ink);
+}
+
+.correlations-header p,
+.correlation-lead p,
+.correlations-highlights p,
+.correlations-footnote,
+.correlation-empty p,
+.correlation-card p,
+.correlations-kpis span,
+.correlation-card footer,
+.correlation-method,
+.correlation-empty li span {
+  color: var(--cat-ink-soft);
+}
+
+.correlation-verdict {
+  color: #3f7d4e;
+}
+
+.correlation-verdict.is-harmful {
+  color: #b4234a;
+}
+
+.correlation-pair em {
+  color: #6b3f86;
+}
+
+.correlations-kpis strong {
+  color: #1d4e89;
+}
+
+.correlations-filters button {
+  border-color: var(--cat-rule);
+  background: rgba(61, 46, 31, 0.04);
+  color: var(--cat-ink);
+}
+
+.correlations-filters button.is-active {
+  background: #6b3f86;
+  border-color: #6b3f86;
+  color: #fffdf8;
+}
+
+.correlation-card.is-helpful {
+  border-color: rgba(63, 125, 78, 0.45);
+}
+
+.correlation-card.is-harmful {
+  border-color: rgba(180, 35, 74, 0.4);
+}
+
+.correlation-empty li {
+  background: rgba(61, 46, 31, 0.05);
+}
