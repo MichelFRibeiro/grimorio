@@ -621,3 +621,95 @@ kbd {
 .today-line .is-done {
   color: var(--cat-ink-soft);
 }
+
+/* Tempo no Celular nasceu para o fundo escuro. No papel creme o texto claro
+   some: tinta marrom no miolo, teal nos números, carimbo no dia selecionado. */
+.phone-time-title,
+.phone-time-title h2,
+.phone-time-panel h3,
+.phone-time-log strong {
+  color: var(--cat-ink);
+}
+
+.phone-time-header p,
+.phone-time-stats span,
+.phone-time-stats small,
+.phone-time-log small,
+.phone-time-log em,
+.phone-time-empty,
+.phone-time-legend {
+  color: var(--cat-ink-soft);
+}
+
+.phone-time-stats strong,
+.phone-time-log span {
+  color: var(--cat-teal);
+}
+
+.phone-time-stats article,
+.phone-time-panel {
+  background: var(--cat-card);
+  border: 1.5px solid var(--cat-rule);
+}
+
+.phone-time-range button,
+.phone-time-later,
+.phone-time-link {
+  border-color: var(--cat-rule);
+  background: rgba(61, 46, 31, 0.04);
+  color: var(--cat-ink);
+}
+
+.phone-time-range button.is-active {
+  border-color: rgba(15, 110, 107, 0.45);
+  background: rgba(15, 110, 107, 0.12);
+  color: var(--cat-teal);
+}
+
+.phone-time-save {
+  background: var(--cat-teal);
+  color: #fffdf8;
+}
+
+.phone-time-log li {
+  border-bottom-color: var(--cat-rule);
+}
+
+.phone-time-log-actions button,
+.phone-time-close {
+  background: rgba(61, 46, 31, 0.05);
+  color: var(--cat-ink);
+}
+
+.phone-time-modal {
+  background: #fffdf8;
+  border-color: rgba(15, 110, 107, 0.4);
+  color: var(--cat-ink);
+  box-shadow: 0 18px 44px rgba(61, 46, 31, 0.22);
+}
+
+.phone-time-modal h2,
+.phone-time-kicker {
+  color: var(--cat-ink);
+}
+
+.phone-time-lead,
+.phone-time-fields label,
+.phone-time-note {
+  color: var(--cat-ink-soft);
+}
+
+.phone-time-preview {
+  color: var(--cat-teal);
+}
+
+.phone-time-fields input,
+.phone-time-note input {
+  background: #fffdf8;
+  border-color: var(--cat-rule);
+  color: var(--cat-ink);
+}
+
+.phone-time-error {
+  color: #b91c1c;
+}

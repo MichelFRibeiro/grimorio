@@ -14,9 +14,11 @@ import { formatStudyDuration } from '../utils/activityDuration';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
-const PHONE_COLOR = '#38bdf8';
-const COUNT_COLOR = '#fbbf24';
-const WORK_COLOR = '#34d399';
+const PHONE_COLOR = '#0f6e6b';
+const COUNT_COLOR = '#9a3412';
+const WORK_COLOR = '#3f7d4e';
+const AXIS_COLOR = '#6d5d4c';
+const GRID_COLOR = 'rgba(61, 46, 31, 0.12)';
 
 function formatCount(value) {
   const n = Number(value) || 0;
@@ -76,11 +78,11 @@ export function PhoneTimeChart({ series }) {
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: 'rgba(12, 14, 20, 0.94)',
-        borderColor: 'rgba(56, 189, 248, 0.35)',
+        backgroundColor: 'rgba(42, 33, 24, 0.94)',
+        borderColor: 'rgba(15, 110, 107, 0.45)',
         borderWidth: 1,
-        titleColor: '#e0f2fe',
-        bodyColor: '#e2e8f0',
+        titleColor: '#fffdf8',
+        bodyColor: '#f6f1e4',
         padding: 10,
         callbacks: {
           title: (items) => {
@@ -104,17 +106,17 @@ export function PhoneTimeChart({ series }) {
     },
     scales: {
       x: {
-        grid: { color: 'rgba(255, 255, 255, 0.04)' },
-        ticks: { color: '#94a3b8', font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }
+        grid: { color: GRID_COLOR },
+        ticks: { color: AXIS_COLOR, font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }
       },
       minutes: {
         type: 'linear',
         position: 'left',
         min: 0,
-        grid: { color: 'rgba(255, 255, 255, 0.05)' },
-        title: { display: true, text: 'Tempo', color: '#94a3b8', font: { size: 11 } },
+        grid: { color: GRID_COLOR },
+        title: { display: true, text: 'Tempo', color: AXIS_COLOR, font: { size: 11 } },
         ticks: {
-          color: '#94a3b8',
+          color: AXIS_COLOR,
           callback: (value) => formatStudyDuration(value)
         }
       },
@@ -123,9 +125,9 @@ export function PhoneTimeChart({ series }) {
         position: 'right',
         min: 0,
         grid: { drawOnChartArea: false },
-        title: { display: true, text: 'Quantidade', color: '#fbbf24', font: { size: 11 } },
+        title: { display: true, text: 'Quantidade', color: COUNT_COLOR, font: { size: 11 } },
         ticks: {
-          color: '#fbbf24',
+          color: COUNT_COLOR,
           precision: 0,
           stepSize: 1
         }
