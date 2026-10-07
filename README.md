@@ -78,6 +78,12 @@ O script irá:
 - Registro de anotações específicas em cada processo ou caso analisado.
 - Barra de progresso com marco de 100%.
 
+### 💊 Suplementos
+- Cadastro de suplementos (Omega 3, Creatina) com unidade e dose usual.
+- Registro de cada tomada com data, hora e quantidade.
+- Histórico editável; arquivar tira o item da tomada sem apagar o diário. Excluir o suplemento apaga os registros dele.
+- Não concede XP: é um diário de saúde, separado dos rituais.
+
 ### 🔥 Rituais Diários (Hábitos & Streaks)
 - Sequência pela frequência: dias devidos, semanas com a meta batida, ou períodos (quinzena/mês). Um ritual seg/qua/sex não quebra por ter terça vazia.
 - Multiplicador até 2.0x: +0,1 por dia ou +0,2 por semana/período.
@@ -176,7 +182,12 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 #### 5. ⚡ Processos em Lote (`processes`)
 - `list_processes`, `get_process`, `create_process`, `step_process`, `update_process`, `delete_process`.
 
-#### 6. 🔥 Rituais Diários (`habits`)
+#### 6. 💊 Suplementos (`supplements`)
+- `list_supplements`, `create_supplement`, `update_supplement`, `delete_supplement`.
+- `log_supplement_intake`: registra data (`YYYY-MM-DD`), hora (`HH:mm`) e quantidade de um suplemento já cadastrado.
+- `update_supplement_log`, `delete_supplement_log`.
+
+#### 6.1. 🔥 Rituais Diários (`habits`)
 - `list_habits`: Lista hábitos com métricas semanais (`completionsThisWeek`, `targetTimesPerWeek`, `isGoalMet`).
 - `create_habit`: Cria hábito com frequências (`daily`, `weekdays`, `weekly`, `times_per_week` com `targetTimesPerWeek` 1-7, `fortnightly` com `monthDays` [ex: 1 e 16], `monthly` com `monthDay` [ex: 1]), `priority` (dispensavel→critico) e `difficulty` (baixa/media/alta/epica).
 - `toggle_habit`: Marca/desmarca execução diária com cálculo de chamas/streaks.

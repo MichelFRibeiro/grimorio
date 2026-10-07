@@ -60,6 +60,14 @@ import {
   willpowerForDifficulty
 } from '../src/utils/activityScale.js';
 import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';
+import {
+  createSupplement,
+  updateSupplement,
+  deleteSupplement,
+  logSupplementIntake,
+  updateSupplementLog,
+  deleteSupplementLog
+} from './domain/supplements.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, mergeLiveActivityTimers, sanitizeLiveActivityTimers, clearLiveActivityTimer, liveTimersEqual } from '../src/utils/activityDuration.js';
 import { AGU_SUBJECTS, createDefaultAguPlan } from '../src/data/aguCurriculum.js';
@@ -1770,6 +1778,81 @@ app.delete('/api/habits/:id', (req, res) => {
   try {
     const db = getDb();
     const result = domainDeleteHabit(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 6.5. SUPLEMENTOS
+// ==========================================
+app.post('/api/supplements', (req, res) => {
+  try {
+    const db = getDb();
+    const result = createSupplement(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, supplement: result.supplement });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/supplements/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = updateSupplement(db, req.params.id, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, supplement: result.supplement });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/supplements/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = deleteSupplement(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, removedLogs: result.removedLogs.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/supplement-logs', (req, res) => {
+  try {
+    const db = getDb();
+    const result = logSupplementIntake(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, log: result.log, supplement: result.supplement });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/supplement-logs/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = updateSupplementLog(db, req.params.id, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, log: result.log, supplement: result.supplement });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/supplement-logs/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = deleteSupplementLog(db, req.params.id);
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({ success: true });

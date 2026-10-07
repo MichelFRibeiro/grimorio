@@ -848,6 +848,36 @@ export function useGameData() {
     await mutate(`/api/habits/${id}`, { method: 'DELETE' });
   };
 
+  const addSupplement = async (supplementData) => {
+    playClick();
+    await mutate('/api/supplements', { method: 'POST', body: supplementData });
+  };
+
+  const updateSupplement = async (id, supplementData) => {
+    playClick();
+    await mutate(`/api/supplements/${id}`, { method: 'PUT', body: supplementData });
+  };
+
+  const deleteSupplement = async (id) => {
+    playClick();
+    await mutate(`/api/supplements/${id}`, { method: 'DELETE' });
+  };
+
+  const logSupplementIntake = async (logData) => {
+    playClick();
+    await mutate('/api/supplement-logs', { method: 'POST', body: logData });
+  };
+
+  const updateSupplementLog = async (id, logData) => {
+    playClick();
+    await mutate(`/api/supplement-logs/${id}`, { method: 'PUT', body: logData });
+  };
+
+  const deleteSupplementLog = async (id) => {
+    playClick();
+    await mutate(`/api/supplement-logs/${id}`, { method: 'DELETE' });
+  };
+
   // 5. Rewards Actions
   const addReward = async (rewardData) => {
     playClick();
@@ -1318,6 +1348,12 @@ export function useGameData() {
     updateHabit,
     toggleHabit,
     deleteHabit,
+    addSupplement,
+    updateSupplement,
+    deleteSupplement,
+    logSupplementIntake,
+    updateSupplementLog,
+    deleteSupplementLog,
     addReward,
     spendMoney,
     redeemReward,

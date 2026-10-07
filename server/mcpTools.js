@@ -3,6 +3,14 @@ import { getDb, saveDb, rewardPlayer, revertPlayerReward, revertLog, getXpForLev
 import { runMaintenance } from './domain/maintenance.js';
 import { listUnacknowledged, acknowledgePenalty, prepareContest } from './domain/penalties.js';
 import { spendMoney, refundCoinsFromRedemption } from './tavernMoney.js';
+import {
+  createSupplement,
+  updateSupplement,
+  deleteSupplement,
+  logSupplementIntake,
+  updateSupplementLog,
+  deleteSupplementLog
+} from './domain/supplements.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
 import { computeAnalytics } from './analytics.js';
 import { computeCategoryRankings } from './rankings.js';
@@ -1206,6 +1214,147 @@ export const toolsDefinition = [
       if (result.error) return formatError(result.error);
       saveDb(db);
       return formatSuccess(result.removed, `Ritual '${result.removed.title}' excluído.`);
+    }
+  },
+
+  // ==========================================
+  // 6.4. SUPLEMENTOS
+  // ==========================================
+  {
+    name: 'list_supplements',
+    description: 'Listar suplementos cadastrados e, opcionalmente, os registros de consumo (data, hora e quantidade).',
+    schema: {
+      search: z.string().optional().describe('Buscar no nome do suplemento'),
+      includeArchived: z.boolean().optional().describe('Incluir suplementos arquivados'),
+      includeLogs: z.boolean().optional().describe('Incluir registros de consumo'),
+      supplementId: z.string().optional().describe('Filtrar registros por ID do suplemento'),
+      date: z.string().optional().describe('Filtrar registros por data YYYY-MM-DD'),
+      limit: z.number().optional().describe('Limite de registros de consumo')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const search = (args.search || '').toLowerCase().trim();
+      let supplements = [...(db.supplements || [])];
+      if (!args.includeArchived) supplements = supplements.filter(item => !item.archived);
+      if (search) supplements = supplements.filter(item => (item.name || '').toLowerCase().includes(search));
+      let logs = [];
+      if (args.includeLogs) {
+        logs = [...(db.supplementLogs || [])];
+        if (args.supplementId) logs = logs.filter(log => log.supplementId === args.supplementId);
+        if (args.date) logs = logs.filter(log => log.date === args.date);
+        logs.sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`));
+        if (args.limit && args.limit > 0) logs = logs.slice(0, args.limit);
+      }
+      return formatSuccess(
+        { total: supplements.length, supplements, ...(args.includeLogs ? { logs } : {}) },
+        `${supplements.length} suplemento(s) listado(s).`
+      );
+    }
+  },
+  {
+    name: 'create_supplement',
+    description: 'Cadastrar um suplemento (ex: Omega 3, Creatina) com unidade e dose usual.',
+    schema: {
+      name: z.string().describe('Nome do suplemento'),
+      unit: z.string().optional().describe('Unidade da dose (cápsula, g, ml, dose)'),
+      defaultDose: z.number().optional().describe('Dose usual, usada como sugestão ao registrar'),
+      notes: z.string().optional().describe('Marca, horário sugerido ou observação')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = createSupplement(db, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.supplement, `Suplemento '${result.supplement.name}' cadastrado.`);
+    }
+  },
+  {
+    name: 'update_supplement',
+    description: 'Editar nome, unidade, dose usual, notas ou arquivar um suplemento.',
+    schema: {
+      id: z.string().describe('ID do suplemento'),
+      name: z.string().optional().describe('Novo nome'),
+      unit: z.string().optional().describe('Nova unidade'),
+      defaultDose: z.number().nullable().optional().describe('Nova dose usual, ou null para limpar'),
+      notes: z.string().optional().describe('Novas notas'),
+      archived: z.boolean().optional().describe('Arquivar (true) ou reativar (false)')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const { id, ...patch } = args;
+      const result = updateSupplement(db, id, patch);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.supplement, `Suplemento '${result.supplement.name}' atualizado.`);
+    }
+  },
+  {
+    name: 'delete_supplement',
+    description: 'Excluir um suplemento e todos os registros de consumo dele.',
+    schema: {
+      id: z.string().describe('ID do suplemento')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = deleteSupplement(db, args.id);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(
+        { removed: result.removed, removedLogs: result.removedLogs.length },
+        `Suplemento '${result.removed.name}' excluído com ${result.removedLogs.length} registro(s).`
+      );
+    }
+  },
+  {
+    name: 'log_supplement_intake',
+    description: 'Registrar que um suplemento já cadastrado foi tomado, com data, hora e quantidade.',
+    schema: {
+      supplementId: z.string().describe('ID do suplemento cadastrado'),
+      amount: z.number().describe('Quantidade tomada'),
+      date: z.string().describe('Data YYYY-MM-DD'),
+      time: z.string().describe('Hora HH:mm, no fuso de São Paulo'),
+      notes: z.string().optional().describe('Nota da tomada')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = logSupplementIntake(db, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.log, `Consumo de '${result.supplement.name}' registrado.`);
+    }
+  },
+  {
+    name: 'update_supplement_log',
+    description: 'Editar data, hora, quantidade, suplemento ou nota de um registro de consumo.',
+    schema: {
+      id: z.string().describe('ID do registro'),
+      supplementId: z.string().optional().describe('Novo suplemento'),
+      amount: z.number().optional().describe('Nova quantidade'),
+      date: z.string().optional().describe('Nova data YYYY-MM-DD'),
+      time: z.string().optional().describe('Nova hora HH:mm'),
+      notes: z.string().optional().describe('Nova nota')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const { id, ...patch } = args;
+      const result = updateSupplementLog(db, id, patch);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.log, 'Registro de consumo atualizado.');
+    }
+  },
+  {
+    name: 'delete_supplement_log',
+    description: 'Excluir um registro de consumo de suplemento.',
+    schema: {
+      id: z.string().describe('ID do registro')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = deleteSupplementLog(db, args.id);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.removed, 'Registro de consumo excluído.');
     }
   },
 
@@ -2875,6 +3024,7 @@ export const resourcesDefinition = [
             books: (db.books || []).length,
             processes: (db.processes || []).length,
             habits: (db.habits || []).length,
+            supplements: (db.supplements || []).length,
             dailyVictories: (db.dailyVictories || []).length,
             mindMaps: (db.mindMaps || []).length
           }
@@ -2940,6 +3090,23 @@ export const resourcesDefinition = [
         uri: 'grimorio://habits',
         mimeType: 'application/json',
         text: JSON.stringify(habits, null, 2)
+      };
+    }
+  },
+  {
+    uri: 'grimorio://supplements',
+    name: 'Suplementos',
+    description: 'Suplementos cadastrados e registros de consumo com data, hora e quantidade',
+    mimeType: 'application/json',
+    handler: async () => {
+      const db = getDb();
+      return {
+        uri: 'grimorio://supplements',
+        mimeType: 'application/json',
+        text: JSON.stringify({
+          supplements: db.supplements || [],
+          logs: db.supplementLogs || []
+        }, null, 2)
       };
     }
   },

@@ -403,6 +403,8 @@ export const defaultDatabase = () => {
     processes: [],
     processSteps: [],
     habits: [],
+    supplements: [],
+    supplementLogs: [],
     rewards: [],
     rewardRedemptions: [],
     actionLogs: [],
@@ -453,6 +455,8 @@ export function sanitizeDb(db) {
   if (!db.processes) db.processes = [];
   if (!db.processSteps) db.processSteps = [];
   if (!db.habits) db.habits = [];
+  if (!Array.isArray(db.supplements)) db.supplements = [];
+  if (!Array.isArray(db.supplementLogs)) db.supplementLogs = [];
   if (!db.rewards) db.rewards = [];
   if (!db.rewardRedemptions) db.rewardRedemptions = [];
   if (!db.actionLogs) db.actionLogs = [];

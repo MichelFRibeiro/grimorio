@@ -11,6 +11,7 @@ import { BooksView } from './components/BooksView';
 import { ScriptureView } from './components/ScriptureView';
 import { ProcessesView } from './components/ProcessesView';
 import { HabitsView } from './components/HabitsView';
+import { SupplementsView } from './components/SupplementsView';
 import { RewardsShop } from './components/RewardsShop';
 import { OracleAnalytics } from './components/OracleAnalytics';
 import { NextActionCard } from './components/NextActionCard';
@@ -18,7 +19,7 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { DestinyChestModal } from './components/DestinyChestModal';
 import { JudgmentModal, JudgmentHistory } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun } from 'lucide-react';
+import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill } from 'lucide-react';
 import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
@@ -96,6 +97,12 @@ export function App() {
     updateHabit,
     toggleHabit,
     deleteHabit,
+    addSupplement,
+    updateSupplement,
+    deleteSupplement,
+    logSupplementIntake,
+    updateSupplementLog,
+    deleteSupplementLog,
     addReward,
     spendMoney,
     redeemReward,
@@ -275,6 +282,8 @@ export function App() {
     processes,
     processSteps,
     habits,
+    supplements,
+    supplementLogs,
     rewards,
     rewardRedemptions,
     actionLogs,
@@ -358,6 +367,7 @@ export function App() {
     { id: 'maps', label: 'Mapas', icon: Network, badge: dueMindMapsCount },
     { id: 'processes', label: 'Processos', icon: Layers, badge: activeProcessesCount },
     { id: 'habits', label: 'Rituais', icon: Flame, badge: habitsDueCount },
+    { id: 'supplements', label: 'Suplementos', icon: Pill },
     { id: 'focus', label: 'Foco', icon: Headphones },
     { id: 'rewards', label: 'Taverna', icon: Gift },
     { id: 'agu', label: 'AGU', icon: Scale, badge: aguTodayRemaining },
@@ -630,6 +640,19 @@ export function App() {
             onUpdateHabit={updateHabit}
             onToggleHabit={toggleHabit}
             onDeleteHabit={deleteHabit}
+          />
+        )}
+
+        {activeTab === 'supplements' && (
+          <SupplementsView
+            supplements={supplements}
+            supplementLogs={supplementLogs}
+            onAddSupplement={addSupplement}
+            onUpdateSupplement={updateSupplement}
+            onDeleteSupplement={deleteSupplement}
+            onLogIntake={logSupplementIntake}
+            onUpdateLog={updateSupplementLog}
+            onDeleteLog={deleteSupplementLog}
           />
         )}
 
