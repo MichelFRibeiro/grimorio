@@ -643,7 +643,7 @@ kbd {
 
 .phone-time-stats strong,
 .phone-time-log span {
-  color: var(--cat-teal);
+  color: #1d4e89;
 }
 
 .phone-time-stats article,
@@ -661,9 +661,9 @@ kbd {
 }
 
 .phone-time-range button.is-active {
-  border-color: rgba(15, 110, 107, 0.45);
-  background: rgba(15, 110, 107, 0.12);
-  color: var(--cat-teal);
+  border-color: rgba(29, 78, 137, 0.45);
+  background: rgba(29, 78, 137, 0.12);
+  color: #1d4e89;
 }
 
 .phone-time-save {
@@ -700,7 +700,7 @@ kbd {
 }
 
 .phone-time-preview {
-  color: var(--cat-teal);
+  color: #1d4e89;
 }
 
 .phone-time-fields input,

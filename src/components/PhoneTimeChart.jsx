@@ -14,7 +14,7 @@ import { formatStudyDuration } from '../utils/activityDuration';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
-const PHONE_COLOR = '#0f6e6b';
+const PHONE_COLOR = '#1d4e89';
 const COUNT_COLOR = '#9a3412';
 const WORK_COLOR = '#3f7d4e';
 const AXIS_COLOR = '#6d5d4c';
