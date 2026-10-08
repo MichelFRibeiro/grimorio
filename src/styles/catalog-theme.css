@@ -796,3 +796,96 @@ kbd {
 .correlation-empty li {
   background: rgba(61, 46, 31, 0.05);
 }
+
+/* Sala de Bate Papo: o miolo é papel; os balões continuam escuros, com letra clara. */
+.chat-room-title,
+.chat-room-title h2,
+.chat-room-stage-head h3,
+.chat-room-list h3,
+.chat-room-composer h3,
+.chat-room-list > button,
+.chat-room-list > button strong,
+.chat-room-model-list button,
+.chat-room-model-list strong,
+.chat-room-seat button,
+.chat-room-key strong,
+.chat-room-composer-actions,
+.chat-room-add {
+  color: var(--cat-ink);
+}
+
+.chat-room-header p,
+.chat-room-stage-head small,
+.chat-room-key span,
+.chat-room-empty,
+.chat-room-list p,
+.chat-room-list small,
+.chat-room-model-list small,
+.chat-room-add {
+  color: var(--cat-ink-soft);
+}
+
+.chat-room-key {
+  color: var(--cat-stamp);
+}
+
+.chat-room-key button,
+.chat-room-composer-head button,
+.chat-room-composer-actions button,
+.chat-room-list > button,
+.chat-room-model-list button {
+  background: rgba(61, 46, 31, 0.04);
+  border-color: var(--cat-rule);
+  color: var(--cat-ink);
+}
+
+.chat-room-list > button.is-active,
+.chat-room-model-list button.is-on {
+  background: rgba(176, 56, 11, 0.1);
+  border-color: rgba(176, 56, 11, 0.45);
+  color: var(--cat-ink);
+}
+
+.chat-room-primary {
+  background: var(--cat-stamp);
+  color: #fffdf8;
+}
+
+.chat-room-danger,
+.chat-room-seat button + button,
+.chat-room-error {
+  color: #9f1239;
+}
+
+.chat-room-seat {
+  background: color-mix(in srgb, var(--seat) 18%, #fffdf8);
+  border-color: color-mix(in srgb, var(--seat) 46%, var(--cat-rule));
+}
+
+.chat-room-seat button {
+  color: #2a2118;
+}
+
+.chat-room-bubble,
+.chat-room-bubble p,
+.chat-room-bubble header,
+.chat-room-bubble strong {
+  color: #f8fafc;
+}
+
+.chat-room-bubble.is-user,
+.chat-room-bubble.is-user p,
+.chat-room-bubble.is-user header,
+.chat-room-bubble.is-user strong {
+  color: #fff7ed;
+}
+
+.chat-room-bubble header,
+.chat-room-bubble.is-user header {
+  color: #fbbf24;
+}
+
+.chat-room-bubble time,
+.chat-room-bubble em {
+  color: #e2e8f0;
+}
