@@ -335,6 +335,18 @@ export function useGameData() {
     await mutate(`/api/quests/${id}`, { method: 'PUT', body: questData });
   };
 
+  const updateQuestDuration = async (id, durationMinutes) => {
+    playClick();
+    const result = await mutate(`/api/quests/${id}/duration`, {
+      method: 'PUT',
+      body: { durationMinutes },
+      refreshOnSuccess: false
+    });
+    if (!result) return null;
+    fetchState();
+    return result;
+  };
+
   const completeQuest = async (id, extra = {}) => {
     playClick();
     const result = await mutate(`/api/quests/${id}/complete`, { body: extra || {}, refreshOnSuccess: false });
@@ -810,6 +822,18 @@ export function useGameData() {
   const addHabit = async (habitData) => {
     playClick();
     await mutate('/api/habits', { method: 'POST', body: habitData });
+  };
+
+  const updateHabitDuration = async (id, date, durationMinutes) => {
+    playClick();
+    const result = await mutate(`/api/habits/${id}/duration`, {
+      method: 'PUT',
+      body: { ...(date ? { date } : {}), durationMinutes },
+      refreshOnSuccess: false
+    });
+    if (!result) return null;
+    fetchState();
+    return result;
   };
 
   const toggleHabit = async (id, date = null, extra = {}) => {
@@ -1333,6 +1357,7 @@ export function useGameData() {
     addQuest,
     updateQuest,
     completeQuest,
+    updateQuestDuration,
     deleteQuest,
     addQuestCategory,
     updateQuestCategory,
@@ -1365,6 +1390,7 @@ export function useGameData() {
     addHabit,
     updateHabit,
     toggleHabit,
+    updateHabitDuration,
     deleteHabit,
     addSupplement,
     updateSupplement,

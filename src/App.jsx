@@ -68,6 +68,7 @@ export function App() {
     addQuest,
     updateQuest,
     completeQuest,
+    updateQuestDuration,
     deleteQuest,
     addQuestCategory,
     updateQuestCategory,
@@ -100,6 +101,7 @@ export function App() {
     addHabit,
     updateHabit,
     toggleHabit,
+    updateHabitDuration,
     deleteHabit,
     addSupplement,
     updateSupplement,
@@ -540,6 +542,7 @@ export function App() {
             dailyVictories={dailyVictories}
             onAddQuest={addQuest}
             onCompleteQuest={completeQuest}
+            onUpdateQuestDuration={updateQuestDuration}
             onDeleteQuest={deleteQuest}
             onUpdateQuest={updateQuest}
             onAddCategory={addQuestCategory}
@@ -649,6 +652,7 @@ export function App() {
             onAddHabit={addHabit}
             onUpdateHabit={updateHabit}
             onToggleHabit={toggleHabit}
+            onUpdateHabitDuration={updateHabitDuration}
             onDeleteHabit={deleteHabit}
           />
         )}

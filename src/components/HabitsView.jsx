@@ -30,7 +30,7 @@ import { getSaoPauloDateStr, getHabitWeeklyStats, getCurrentWeekDays, addDaysToD
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, inferDifficultyFromRewards, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
 import { getFrequencyLabel, getHabitDueStatus, getHabitPeriodStatus, getHabitWeekDays, isPeriodFrequency, padMonthDay, WEEKDAY_OPTIONS } from '../utils/habitFrequency';
-import { formatDurationLabel, getHabitDurationForDate, sumDurationMap, confirmLongDuration } from '../utils/activityDuration';
+import { formatDurationLabel, getHabitDurationForDate, sumDurationMap, confirmLongDuration, MAX_DURATION_MINUTES } from '../utils/activityDuration';
 import { consumeActivityTimerMinutes, peekActivityTimerMinutes } from '../utils/liveActivityTimers';
 
 const HIDE_SETTLED_STORAGE_KEY = 'grimorio_hide_settled_habits';
@@ -218,6 +218,7 @@ export function HabitsView({
   onAddHabit,
   onUpdateHabit,
   onToggleHabit,
+  onUpdateHabitDuration,
   onDeleteHabit
 }) {
   const defaultCategoryList = [
@@ -335,6 +336,24 @@ export function HabitsView({
     onToggleHabit(habitId, date, extra);
   };
 
+  const handleSaveHabitDuration = (habitId, dateStr, rawValue) => {
+    if (!onUpdateHabitDuration) return;
+    const raw = String(rawValue ?? '').trim();
+    const nextMinutes = raw === '' ? 0 : parseInt(raw, 10);
+    if (!Number.isFinite(nextMinutes) || nextMinutes < 0 || nextMinutes > MAX_DURATION_MINUTES) {
+      window.alert(`A duração precisa ser um número entre 0 e ${MAX_DURATION_MINUTES} minutos.`);
+      return;
+    }
+    const confirmed = confirmLongDuration(nextMinutes);
+    if (confirmed == null) return;
+    onUpdateHabitDuration(habitId, dateStr, confirmed);
+    setDurationDrafts((prev) => {
+      const next = { ...prev };
+      delete next[`${habitId}:${dateStr}`];
+      return next;
+    });
+  };
+
   // Week View & Retroactive Completion State
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState('Todas');
@@ -347,6 +366,7 @@ export function HabitsView({
   });
   const [retroModalHabit, setRetroModalHabit] = useState(null);
   const [customRetroDate, setCustomRetroDate] = useState(yesterdayStr);
+  const [durationDrafts, setDurationDrafts] = useState({});
 
   useEffect(() => {
     try {
@@ -940,10 +960,20 @@ export function HabitsView({
                         <Clock size={12} /> {habit.timeWindow.start}–{habit.timeWindow.end}
                       </span>
                     )}
-                    {getHabitDurationForDate(habit, todayStr) > 0 && (
-                      <span style={{ ...metaChipStyle, color: '#f87171' }} title="Tempo cronometrado hoje">
-                        <Clock size={12} /> {formatDurationLabel(getHabitDurationForDate(habit, todayStr))} hoje
-                      </span>
+                    {habit.history?.includes(todayStr) && onUpdateHabitDuration && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomRetroDate(todayStr);
+                          setRetroModalHabit(habit);
+                        }}
+                        style={{ ...metaChipStyle, color: '#fbbf24', cursor: 'pointer' }}
+                        title={getHabitDurationForDate(habit, todayStr) > 0 ? 'Editar duração de hoje' : 'Registrar duração de hoje'}
+                      >
+                        <Clock size={12} /> {getHabitDurationForDate(habit, todayStr) > 0
+                          ? `${formatDurationLabel(getHabitDurationForDate(habit, todayStr))} hoje`
+                          : 'Registrar tempo de hoje'}
+                      </button>
                     )}
                     {sumDurationMap(habit.durationsByDate) > 0 && (
                       <span style={metaChipStyle} title="Tempo total acumulado neste ritual">
@@ -1079,6 +1109,11 @@ export function HabitsView({
                             }}
                           >
                             <span>{day.shortName}</span>
+                            {dayDuration > 0 && (
+                              <span style={{ fontSize: '0.55rem', color: '#fbbf24', fontWeight: 800, lineHeight: 1 }}>
+                                {dayDuration >= 60 ? `${Math.floor(dayDuration / 60)}h` : `${dayDuration}m`}
+                              </span>
+                            )}
                             <div
                               style={{
                                 width: '6px',
@@ -1986,13 +2021,18 @@ export function HabitsView({
                   <label style={{ fontSize: '0.78rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     📋 Histórico dos Últimos 14 Dias
                   </label>
-                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Clique para alternar</span>
+                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Clique para alternar · min para corrigir o tempo</span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(65px, 1fr))', gap: '6px' }}>
-                  {last14Days.map(item => (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))', gap: '6px' }}>
+                  {last14Days.map(item => {
+                    const draftKey = `${activeHabit.id}:${item.dateStr}`;
+                    const draftValue = Object.prototype.hasOwnProperty.call(durationDrafts, draftKey)
+                      ? durationDrafts[draftKey]
+                      : (item.durationMinutes > 0 ? String(item.durationMinutes) : '');
+                    return (
+                    <div key={item.dateStr} style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
                     <button
-                      key={item.dateStr}
                       type="button"
                       onClick={() => handleToggleHabit(activeHabit.id, item.dateStr)}
                       title={`${item.isDone ? 'Desmarcar' : 'Marcar'} ${item.label} (${item.dateStr})${item.durationMinutes > 0 ? ` · ${formatDurationLabel(item.durationMinutes)}` : ''}`}
@@ -2047,7 +2087,58 @@ export function HabitsView({
                         }}
                       />
                     </button>
-                  ))}
+                    {item.isDone && onUpdateHabitDuration && (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          handleSaveHabitDuration(activeHabit.id, item.dateStr, draftValue);
+                        }}
+                        style={{ display: 'flex', gap: '3px' }}
+                      >
+                        <input
+                          type="number"
+                          min="0"
+                          max={MAX_DURATION_MINUTES}
+                          inputMode="numeric"
+                          aria-label={`Duração de ${item.label} em minutos`}
+                          placeholder="min"
+                          value={draftValue}
+                          onChange={(e) => setDurationDrafts((prev) => ({ ...prev, [draftKey]: e.target.value }))}
+                          style={{
+                            width: '100%',
+                            minWidth: 0,
+                            padding: '4px 4px',
+                            borderRadius: '6px',
+                            background: '#1a2030',
+                            border: '1px solid rgba(251, 191, 36, 0.35)',
+                            color: '#fbbf24',
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            fontFamily: 'var(--font-mono)'
+                          }}
+                        />
+                        <button
+                          type="submit"
+                          title="Salvar duração deste dia"
+                          style={{
+                            flexShrink: 0,
+                            padding: '0 5px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(251, 191, 36, 0.4)',
+                            background: 'rgba(251, 191, 36, 0.12)',
+                            color: '#fbbf24',
+                            fontSize: '0.62rem',
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          OK
+                        </button>
+                      </form>
+                    )}
+                    </div>
+                    );
+                  })}
                 </div>
               </div>
 

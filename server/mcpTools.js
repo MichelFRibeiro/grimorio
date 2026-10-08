@@ -71,10 +71,12 @@ import {
 import { syncDailyVictoriesFromActivity } from './dailyVictorySync.js';
 import {
   completeQuest as domainCompleteQuest,
+  updateQuestDuration as domainUpdateQuestDuration,
   breakDownQuest as domainBreakDownQuest,
   rescheduleQuests as domainRescheduleQuests,
   deleteQuest as domainDeleteQuest,
   toggleHabit as domainToggleHabit,
+  updateHabitDuration as domainUpdateHabitDuration,
   deleteHabit as domainDeleteHabit,
   logReadingSession as domainLogReadingSession,
   updateReadingSession as domainUpdateReadingSession,
@@ -383,6 +385,25 @@ export const toolsDefinition = [
         rewardResult: result.rewardResult,
         linkedVictories: result.linkedVictories
       }, result.willComplete ? `🎉 Missão '${result.quest.title}' concluída! Recompensas concedidas.` : `Missão '${result.quest.title}' desmarcada e recompensas estornadas.`);
+    }
+  },
+  {
+    name: 'update_quest_duration',
+    description: 'Corrigir a duração cronometrada de uma missão já concluída, sem reabrir a missão nem alterar XP ou moedas. 0 remove o tempo registrado.',
+    schema: {
+      id: z.string().describe('ID da missão concluída'),
+      durationMinutes: z.number().describe('Nova duração em minutos (0 a 480). 0 remove o tempo.')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = domainUpdateQuestDuration(db, args.id, args.durationMinutes);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      const label = result.durationMinutes > 0 ? `${result.durationMinutes} min` : 'sem tempo registrado';
+      return formatSuccess({
+        quest: result.quest,
+        durationMinutes: result.durationMinutes
+      }, `Duração da missão '${result.quest.title}' atualizada para ${label}.`);
     }
   },
   {
@@ -1143,6 +1164,30 @@ export const toolsDefinition = [
       }, result.done
         ? `🔥 Ritual '${result.habit.title}' marcado para ${formattedDate}! Sequência: ${result.habit.currentStreak} dias.`
         : `Ritual '${result.habit.title}' desmarcado para ${formattedDate} e recompensas estornadas.`);
+    }
+  },
+  {
+    name: 'update_habit_duration',
+    description: 'Corrigir a duração de um ritual já marcado em uma data, sem desmarcar a execução nem alterar XP, moedas ou sequência. 0 remove o tempo daquele dia.',
+    schema: {
+      id: z.string().describe('ID do ritual/hábito'),
+      date: z.string().optional().describe('Data da execução YYYY-MM-DD (se omitido, usa hoje). Precisa já estar marcada.'),
+      durationMinutes: z.number().describe('Nova duração em minutos (0 a 480). 0 remove o tempo.')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = domainUpdateHabitDuration(db, args.id, {
+        date: args.date,
+        durationMinutes: args.durationMinutes
+      });
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      const label = result.durationMinutes > 0 ? `${result.durationMinutes} min` : 'sem tempo registrado';
+      return formatSuccess({
+        habit: result.habit,
+        targetDate: result.targetDate,
+        durationMinutes: result.durationMinutes
+      }, `Duração de '${result.habit.title}' em ${result.targetDate} atualizada para ${label}.`);
     }
   },
   {

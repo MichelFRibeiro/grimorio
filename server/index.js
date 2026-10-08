@@ -112,10 +112,12 @@ import {
 import { syncDailyVictoriesFromActivity } from './dailyVictorySync.js';
 import {
   completeQuest as domainCompleteQuest,
+  updateQuestDuration as domainUpdateQuestDuration,
   deleteQuest as domainDeleteQuest,
   breakDownQuest as domainBreakDownQuest,
   rescheduleQuests as domainRescheduleQuests,
   toggleHabit as domainToggleHabit,
+  updateHabitDuration as domainUpdateHabitDuration,
   deleteHabit as domainDeleteHabit,
   logReadingSession as domainLogReadingSession,
   updateReadingSession as domainUpdateReadingSession,
@@ -1194,6 +1196,23 @@ app.put('/api/quests/:id', (req, res) => {
   }
 });
 
+app.put('/api/quests/:id/duration', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainUpdateQuestDuration(db, req.params.id, req.body?.durationMinutes);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({
+      success: true,
+      quest: result.quest,
+      durationMinutes: result.durationMinutes,
+      analytics: computeAnalytics()
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 app.post('/api/quests/:id/complete', (req, res) => {
   try {
     const db = getDb();
@@ -1751,6 +1770,27 @@ app.put('/api/habits/:id', (req, res) => {
     res.json({ success: true, habit });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/habits/:id/duration', (req, res) => {
+  try {
+    const db = getDb();
+    const result = domainUpdateHabitDuration(db, req.params.id, {
+      date: req.body?.date,
+      durationMinutes: req.body?.durationMinutes
+    });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({
+      success: true,
+      habit: result.habit,
+      targetDate: result.targetDate,
+      durationMinutes: result.durationMinutes,
+      analytics: computeAnalytics()
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

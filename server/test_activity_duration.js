@@ -1,5 +1,7 @@
 import './testEnv.js';
 import assert from 'assert';
+import { defaultDatabase, getDb, saveDb } from './db.js';
+import { completeQuest, toggleHabit, updateQuestDuration, updateHabitDuration } from './domain/activities.js';
 import {
   parseDurationMinutes,
   secondsToDurationMinutes,
@@ -96,6 +98,73 @@ function run() {
   assert.strictEqual(liveTimersEqual(sameA, sameB, now), true);
   assert.strictEqual(liveTimersEqual(sameA, { ...sameB, 'habit:h1': { accumulatedMs: 1, runStartedAt: null, updatedAt: now } }, now), false);
   console.log('✅ liveTimersEqual detecta snapshots idênticos e evita PUT sem mudança.');
+
+  const db = defaultDatabase();
+  db.quests = [{
+    id: 'q-dur',
+    title: 'Revisar peça',
+    completed: false,
+    xpReward: 40,
+    coinReward: 8,
+    difficulty: 'baixa'
+  }];
+  db.habits = [{
+    id: 'h-dur',
+    title: 'Alongar',
+    history: [],
+    rewardLogs: {},
+    xpReward: 20,
+    coinReward: 4
+  }];
+  saveDb(db);
+
+  const pending = updateQuestDuration(getDb(), 'q-dur', 30);
+  assert.ok(pending.error, 'missão pendente não aceita edição de duração');
+
+  const done = completeQuest(getDb(), { id: 'q-dur', completed: true, durationMinutes: 25 });
+  assert.strictEqual(done.quest.durationMinutes, 25);
+  const xpAfterComplete = getDb().userProfile.xp;
+  const coinsAfterComplete = getDb().userProfile.coins;
+  const logId = getDb().quests.find((quest) => quest.id === 'q-dur').rewardLogId;
+
+  const edited = updateQuestDuration(getDb(), 'q-dur', 90);
+  assert.strictEqual(edited.durationMinutes, 90);
+  assert.strictEqual(getDb().quests.find((quest) => quest.id === 'q-dur').durationMinutes, 90);
+  assert.strictEqual(getDb().quests.find((quest) => quest.id === 'q-dur').completed, true);
+  assert.strictEqual(getDb().userProfile.xp, xpAfterComplete);
+  assert.strictEqual(getDb().userProfile.coins, coinsAfterComplete);
+  assert.strictEqual(getDb().actionLogs.find((log) => log.id === logId).details.durationMinutes, 90);
+
+  const cleared = updateQuestDuration(getDb(), 'q-dur', 0);
+  assert.strictEqual(cleared.quest.durationMinutes, null);
+  assert.strictEqual(getDb().actionLogs.find((log) => log.id === logId).details.durationMinutes, undefined);
+  assert.strictEqual(getDb().userProfile.xp, xpAfterComplete);
+  console.log('✅ updateQuestDuration corrige o tempo da missão concluída sem mexer em XP ou moedas.');
+
+  const unmarked = updateHabitDuration(getDb(), 'h-dur', { date: '2026-09-03', durationMinutes: 15 });
+  assert.ok(unmarked.error, 'dia não marcado não aceita duração');
+
+  const marked = toggleHabit(getDb(), { id: 'h-dur', date: '2026-09-03', durationMinutes: 12 });
+  assert.strictEqual(marked.done, true);
+  const habitXp = getDb().userProfile.xp;
+  const habitLogId = getDb().habits.find((habit) => habit.id === 'h-dur').rewardLogs['2026-09-03'];
+
+  const habitEdited = updateHabitDuration(getDb(), 'h-dur', { date: '2026-09-03', durationMinutes: 48 });
+  assert.strictEqual(habitEdited.durationMinutes, 48);
+  assert.strictEqual(getDb().habits.find((habit) => habit.id === 'h-dur').durationsByDate['2026-09-03'], 48);
+  assert.ok(getDb().habits.find((habit) => habit.id === 'h-dur').history.includes('2026-09-03'));
+  assert.strictEqual(getDb().userProfile.xp, habitXp);
+  assert.strictEqual(getDb().actionLogs.find((log) => log.id === habitLogId).details.durationMinutes, 48);
+
+  const habitCleared = updateHabitDuration(getDb(), 'h-dur', { date: '2026-09-03', durationMinutes: 0 });
+  assert.strictEqual(getDb().habits.find((habit) => habit.id === 'h-dur').durationsByDate, undefined);
+  assert.strictEqual(getDb().actionLogs.find((log) => log.id === habitLogId).details.durationMinutes, undefined);
+  assert.ok(getDb().habits.find((habit) => habit.id === 'h-dur').history.includes('2026-09-03'));
+  console.log('✅ updateHabitDuration corrige o tempo de um dia marcado sem desmarcar o ritual.');
+
+  const tooLong = updateQuestDuration(getDb(), 'q-dur', 481);
+  assert.ok(tooLong.error, 'duração acima de 8h é rejeitada');
+  console.log('✅ Duração editada continua limitada a 480 minutos.');
 
   console.log('\n🎉 TODOS OS TESTES DE DURAÇÃO PASSARAM!');
 }

@@ -1825,4 +1825,69 @@ export function deleteMindMapSession(db, id) {
   return { removed, rewardResult };
 }
 
+function syncRewardLogDuration(db, logId, minutes) {
+  if (!logId) return;
+  const log = (db.actionLogs || []).find((entry) => entry.id === logId);
+  if (!log) return;
+  if (!log.details || typeof log.details !== 'object') log.details = {};
+  if (minutes > 0) log.details.durationMinutes = minutes;
+  else delete log.details.durationMinutes;
+}
+
+/**
+ * Corrige o tempo cronometrado de uma missão já concluída.
+ * Não reabre a missão nem altera XP, moedas ou atributos.
+ */
+export function updateQuestDuration(db, id, rawDuration) {
+  const quest = (db.quests || []).find((item) => item.id === id);
+  if (!quest) return fail('Missão não encontrada', 404);
+  if (!quest.completed) return fail('Só é possível editar a duração de uma missão concluída.');
+
+  let minutes;
+  try {
+    minutes = durationMinutes(rawDuration, { fallback: 0 });
+  } catch (err) {
+    return asError(err);
+  }
+
+  quest.durationMinutes = minutes || null;
+  syncRewardLogDuration(db, quest.rewardLogId, minutes);
+  return { quest, durationMinutes: minutes };
+}
+
+/**
+ * Corrige o tempo de uma execução já marcada do ritual.
+ * A data precisa estar no histórico; 0 apaga o tempo daquele dia.
+ */
+export function updateHabitDuration(db, id, { date, durationMinutes: rawDuration } = {}) {
+  const habit = (db.habits || []).find((item) => item.id === id);
+  if (!habit) return fail('Hábito não encontrado', 404);
+
+  const todayStr = getSaoPauloDateStr();
+  let targetDate = date;
+  if (!targetDate || typeof targetDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+    targetDate = todayStr;
+  }
+  if (targetDate > todayStr) {
+    return fail('Não é permitido registrar duração em datas futuras.');
+  }
+  if (!Array.isArray(habit.history) || !habit.history.includes(targetDate)) {
+    return fail('Só é possível editar a duração de um dia já marcado.');
+  }
+
+  let minutes;
+  try {
+    minutes = durationMinutes(rawDuration, { fallback: 0 });
+  } catch (err) {
+    return asError(err);
+  }
+
+  setHabitDurationForDate(habit, targetDate, minutes);
+  const logId = habit.rewardLogs && typeof habit.rewardLogs === 'object'
+    ? habit.rewardLogs[targetDate]
+    : null;
+  syncRewardLogDuration(db, logId, minutes);
+  return { habit, targetDate, durationMinutes: minutes };
+}
+
 export { DomainError };

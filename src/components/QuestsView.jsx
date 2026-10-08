@@ -27,7 +27,7 @@ import { ActivityTimerBox } from './ActivityTimerBox';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, getPriorityMeta, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
-import { formatDurationLabel, confirmLongDuration } from '../utils/activityDuration';
+import { formatDurationLabel, confirmLongDuration, MAX_DURATION_MINUTES } from '../utils/activityDuration';
 import { consumeActivityTimerMinutes, peekActivityTimerMinutes } from '../utils/liveActivityTimers';
 import { canPlanQuestAsDailyVictory, MAX_DAILY_VICTORIES } from '../utils/dailyVictories';
 
@@ -38,6 +38,7 @@ export function QuestsView({
   dailyVictories = [],
   onAddQuest,
   onCompleteQuest,
+  onUpdateQuestDuration,
   onDeleteQuest,
   onUpdateQuest,
   onAddCategory,
@@ -121,6 +122,7 @@ export function QuestsView({
   const [editWindowStart, setEditWindowStart] = useState('');
   const [editWindowEnd, setEditWindowEnd] = useState('');
   const [editSubtasks, setEditSubtasks] = useState([]);
+  const [editDurationMinutes, setEditDurationMinutes] = useState('');
   const [newSubtaskInputForEdit, setNewSubtaskInputForEdit] = useState('');
 
   // Category Management Form State
@@ -199,6 +201,7 @@ export function QuestsView({
     setEditWindowStart(win.start);
     setEditWindowEnd(win.end);
     setEditSubtasks(Array.isArray(quest.subtasks) ? [...quest.subtasks] : []);
+    setEditDurationMinutes(quest.completed && quest.durationMinutes > 0 ? String(quest.durationMinutes) : '');
     setNewSubtaskInputForEdit('');
   };
 
@@ -227,6 +230,21 @@ export function QuestsView({
   const handleSaveEditQuest = (e) => {
     e.preventDefault();
     if (!editingQuest || !editTitle.trim()) return;
+
+    if (editingQuest.completed && onUpdateQuestDuration) {
+      const raw = String(editDurationMinutes ?? '').trim();
+      const nextMinutes = raw === '' ? 0 : parseInt(raw, 10);
+      if (!Number.isFinite(nextMinutes) || nextMinutes < 0 || nextMinutes > MAX_DURATION_MINUTES) {
+        window.alert(`A duração precisa ser um número entre 0 e ${MAX_DURATION_MINUTES} minutos.`);
+        return;
+      }
+      const currentMinutes = editingQuest.durationMinutes || 0;
+      if (nextMinutes !== currentMinutes) {
+        const confirmed = confirmLongDuration(nextMinutes);
+        if (confirmed == null) return;
+        onUpdateQuestDuration(editingQuest.id, confirmed);
+      }
+    }
 
     let finalSubtasks = [...editSubtasks];
     if (newSubtaskInputForEdit.trim()) {
@@ -680,10 +698,26 @@ export function QuestsView({
                             <Clock size={14} /> {quest.timeWindow.start}–{quest.timeWindow.end}
                           </span>
                         )}
-                        {quest.completed && quest.durationMinutes > 0 && (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#fbbf24', fontWeight: 700 }}>
-                            <Clock size={14} /> {formatDurationLabel(quest.durationMinutes)}
-                          </span>
+                        {quest.completed && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditModal(quest)}
+                            title={quest.durationMinutes > 0 ? 'Editar duração da missão concluída' : 'Registrar duração da missão concluída'}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              color: '#fbbf24',
+                              fontWeight: 700,
+                              background: 'transparent',
+                              border: 'none',
+                              padding: 0,
+                              cursor: 'pointer',
+                              fontSize: '0.78rem'
+                            }}
+                          >
+                            <Clock size={14} /> {quest.durationMinutes > 0 ? formatDurationLabel(quest.durationMinutes) : 'Registrar tempo'}
+                          </button>
                         )}
 
                         {totalSubtasks > 0 && (
@@ -1230,6 +1264,37 @@ export function QuestsView({
                 onWindowStartChange={setEditWindowStart}
                 onWindowEndChange={setEditWindowEnd}
               />
+
+              {editingQuest.completed && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#fbbf24', marginBottom: '4px' }}>
+                    Duração registrada (min)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={MAX_DURATION_MINUTES}
+                    inputMode="numeric"
+                    placeholder="0 = sem tempo"
+                    value={editDurationMinutes}
+                    onChange={(e) => setEditDurationMinutes(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      background: '#1a2030',
+                      border: '1px solid rgba(251, 191, 36, 0.35)',
+                      color: '#fbbf24',
+                      fontWeight: 800,
+                      fontSize: '0.95rem',
+                      fontFamily: 'var(--font-mono)'
+                    }}
+                  />
+                  <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '6px 0 0' }}>
+                    Corrige só o tempo da missão já concluída. XP e moedas não mudam. Vazio ou 0 remove o tempo.
+                  </p>
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div style={{ flex: 1 }}>
