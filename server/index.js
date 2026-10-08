@@ -1049,6 +1049,7 @@ app.post('/api/chat/rooms/:id/speak', async (req, res) => {
     });
   } catch (err) {
     const status = err.status && err.status >= 400 && err.status < 600 ? err.status : 502;
+    console.error(`[chat] ${req.params.id} ${req.body?.modelId || ''}: ${err.message}`);
     res.status(status).json({ error: err.message || 'O modelo não respondeu.' });
   }
 });

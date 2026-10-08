@@ -11,8 +11,11 @@ import { createApp } from './index.js';
 import {
   CHAT_WORD_LIMIT,
   buildChatTranscript,
+  CHAT_MAX_OUTPUT_TOKENS,
+  chatCompletionBody,
   clearChatModelCache,
   countWords,
+  extractCompletionText,
   limitWords,
   sanitizeChatRooms
 } from './chatRoom.js';
@@ -99,6 +102,33 @@ await check('limitWords nunca devolve mais de 60 palavras', () => {
 
   assert.equal(limitWords('  curta   resposta  '), 'curta resposta');
   assert.equal(limitWords(''), '');
+});
+
+await check('a chamada não manda temperature e lê texto mesmo se o raciocínio vier primeiro', () => {
+  const body = chatCompletionBody({ modelId: 'anthropic/claude-haiku-5.5', label: 'Haiku' }, [
+    { role: 'user', content: 'Oi' }
+  ]);
+  assert.equal(body.temperature, undefined);
+  assert.equal(body.max_tokens, CHAT_MAX_OUTPUT_TOKENS);
+  assert.equal(body.reasoning.effort, 'low');
+  assert.equal(body.reasoning.exclude, true);
+
+  const fromBlocks = extractCompletionText({
+    choices: [{
+      message: {
+        content: [
+          { type: 'reasoning', text: 'penso bastante aqui' },
+          { type: 'text', text: 'Resposta curta.' }
+        ]
+      }
+    }]
+  });
+  assert.equal(fromBlocks, 'Resposta curta.');
+
+  const onlyReasoning = extractCompletionText({
+    choices: [{ message: { content: '', reasoning: 'Uma resposta que ficou só no raciocínio.' } }]
+  });
+  assert.equal(onlyReasoning, 'Uma resposta que ficou só no raciocínio.');
 });
 
 await check('o histórico enviado inclui as falas de todos os modelos', () => {
@@ -225,6 +255,8 @@ await check('a sala exige chave, guarda o histórico e corta a resposta do model
     assert.equal(alpha.data.message.label, 'Alpha');
     const alphaCall = calls.filter((item) => String(item.url).includes('/chat/completions')).at(-1);
     assert.equal(alphaCall.body.model, 'alpha/one');
+    assert.equal(alphaCall.body.temperature, undefined);
+    assert.equal(alphaCall.body.max_tokens >= 1024, true);
     assert.match(alphaCall.body.messages.map((item) => item.content).join('\n'), /Qual o próximo passo/);
 
     const beta = await request(port, `/api/chat/rooms/${roomId}/speak`, {

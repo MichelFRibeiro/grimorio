@@ -5,6 +5,9 @@
  */
 
 export const CHAT_WORD_LIMIT = 60;
+/** Folga para o raciocínio. 180 tokens faziam o Haiku 5.5 pensar até o fim e devolver texto vazio. */
+export const CHAT_MAX_OUTPUT_TOKENS = 2048;
+export const CHAT_RETRY_OUTPUT_TOKENS = 8192;
 export const CHAT_MAX_ROOMS = 40;
 export const CHAT_MAX_MESSAGES = 400;
 export const CHAT_MAX_PARTICIPANTS = 24;
@@ -184,14 +187,35 @@ export function buildChatTranscript(messages, participant) {
   ];
 }
 
-export function extractCompletionText(payload) {
-  const choice = payload?.choices?.[0];
-  const content = choice?.message?.content ?? choice?.text ?? '';
-  if (typeof content === 'string') return content;
+function textFromContent(content) {
+  if (typeof content === 'string') return content.trim();
   if (Array.isArray(content)) {
-    return content.map((part) => (typeof part === 'string' ? part : part?.text || '')).join(' ').trim();
+    return content.map((part) => {
+      if (typeof part === 'string') return part;
+      if (!part || typeof part !== 'object') return '';
+      if (part.type === 'reasoning' || part.type === 'thinking') return '';
+      return part.text || part.content || '';
+    }).join(' ').trim();
   }
   return '';
+}
+
+export function extractCompletionText(payload) {
+  const choice = payload?.choices?.[0];
+  const message = choice?.message || {};
+  return textFromContent(message.content ?? choice?.text ?? '')
+    || textFromContent(message.reasoning || message.reasoning_content || '');
+}
+
+export function chatCompletionBody(participant, messages, maxTokens = CHAT_MAX_OUTPUT_TOKENS) {
+  return {
+    model: participant.modelId,
+    messages: buildChatTranscript(messages, participant),
+    max_tokens: maxTokens,
+    // Sem temperature: o Haiku 5.5 recusa qualquer valor diferente de 1.
+    // Esforço baixo deixa espaço para a resposta; exclude não devolve o raciocínio.
+    reasoning: { effort: 'low', exclude: true }
+  };
 }
 
 export function normalizeOpenRouterModel(model) {
@@ -232,7 +256,7 @@ export async function listOpenRouterModels(apiKey, options = {}) {
   return models;
 }
 
-export async function completeChatTurn({ apiKey, participant, messages, timeoutMs = 45000, fetchImpl = fetch }) {
+async function postChatCompletion({ apiKey, body, timeoutMs, fetchImpl }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -244,26 +268,58 @@ export async function completeChatTurn({ apiKey, participant, messages, timeoutM
         'HTTP-Referer': 'https://grimorio.local',
         'X-Title': 'Grimorio Sala de Bate Papo'
       },
-      body: JSON.stringify({
-        model: participant.modelId,
-        messages: buildChatTranscript(messages, participant),
-        temperature: 0.6,
-        max_tokens: 180
-      }),
+      body: JSON.stringify(body),
       signal: controller.signal
     });
     const json = await response.json().catch(() => ({}));
+    return { response, json };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function emptyCompletionError(json) {
+  const reason = json?.choices?.[0]?.finish_reason || json?.choices?.[0]?.native_finish_reason;
+  const error = new Error(
+    reason === 'length'
+      ? 'O modelo gastou o limite pensando e não chegou a responder. Tente de novo.'
+      : 'O modelo não devolveu texto.'
+  );
+  error.status = 502;
+  return error;
+}
+
+export async function completeChatTurn({ apiKey, participant, messages, timeoutMs = 45000, fetchImpl = fetch }) {
+  try {
+    const firstBody = chatCompletionBody(participant, messages);
+    let { response, json } = await postChatCompletion({
+      apiKey,
+      body: firstBody,
+      timeoutMs,
+      fetchImpl
+    });
     if (!response.ok) {
       const error = new Error(json?.error?.message || `OpenRouter respondeu ${response.status}`);
       error.status = response.status;
       throw error;
     }
-    const limited = limitWords(extractCompletionText(json));
-    if (!limited) {
-      const error = new Error('O modelo não devolveu texto.');
-      error.status = 502;
-      throw error;
+    let limited = limitWords(extractCompletionText(json));
+    const spentOnThinking = !limited && (json?.choices?.[0]?.finish_reason === 'length');
+    if (spentOnThinking) {
+      ({ response, json } = await postChatCompletion({
+        apiKey,
+        body: chatCompletionBody(participant, messages, CHAT_RETRY_OUTPUT_TOKENS),
+        timeoutMs,
+        fetchImpl
+      }));
+      if (!response.ok) {
+        const error = new Error(json?.error?.message || `OpenRouter respondeu ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
+      limited = limitWords(extractCompletionText(json));
     }
+    if (!limited) throw emptyCompletionError(json);
     return {
       content: limited,
       wordCount: countWords(limited)
@@ -275,7 +331,5 @@ export async function completeChatTurn({ apiKey, participant, messages, timeoutM
       throw error;
     }
     throw err;
-  } finally {
-    clearTimeout(timer);
   }
 }
