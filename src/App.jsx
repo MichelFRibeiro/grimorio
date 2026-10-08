@@ -19,7 +19,7 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { DestinyChestModal } from './components/DestinyChestModal';
 import { JudgmentModal, JudgmentHistory } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare } from 'lucide-react';
+import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare } from 'lucide-react';
 import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
@@ -32,6 +32,7 @@ import { summarizePlan, getAguStudyLoadSeries } from './utils/aguCycle';
 import { getReadingLoadSeries, getScriptureLoadSeries } from './utils/homeostasis';
 import { CorrelationsView } from './components/CorrelationsView';
 import { PhoneTimeView } from './components/PhoneTimeView';
+import { ChatRoomView } from './components/ChatRoomView';
 import { PhoneTimePrompt } from './components/PhoneTimePrompt';
 import { needsYesterdayPhonePrompt, yesterdayDateStr } from './utils/phoneTime';
 
@@ -122,6 +123,12 @@ export function App() {
     submitOracleEnergy,
     skipOracleEnergy,
     saveOpenRouterKey,
+    listChatModels,
+    createChatRoom,
+    updateChatRoom,
+    deleteChatRoom,
+    sendChatMessage,
+    summonChatModel,
     declineOracleSuggestion,
     breakDownQuest,
     rescheduleQuests,
@@ -383,7 +390,8 @@ export function App() {
     { id: 'focus', label: 'Foco', icon: Headphones },
     { id: 'rewards', label: 'Taverna', icon: Gift },
     { id: 'agu', label: 'AGU', icon: Scale, badge: aguTodayRemaining },
-    { id: 'oracle', label: 'Oráculo', icon: Compass }
+    { id: 'oracle', label: 'Oráculo', icon: Compass },
+    { id: 'chat', label: 'Bate Papo', icon: MessagesSquare }
   ];
 
   const showFocusMini = activeTab !== 'focus' && (focusPlayer.playing || focusPlayer.currentTime >= 1);
@@ -722,6 +730,20 @@ export function App() {
 
         {activeTab === 'correlations' && (
           <CorrelationsView report={data?.correlations} />
+        )}
+
+        {activeTab === 'chat' && (
+          <ChatRoomView
+            rooms={data?.chatRooms || []}
+            openRouter={data?.openRouter}
+            onSaveOpenRouterKey={saveOpenRouterKey}
+            onListModels={listChatModels}
+            onCreateRoom={createChatRoom}
+            onUpdateRoom={updateChatRoom}
+            onDeleteRoom={deleteChatRoom}
+            onSendMessage={sendChatMessage}
+            onSummon={summonChatModel}
+          />
         )}
 
         {activeTab === 'oracle' && (

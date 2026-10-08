@@ -2818,6 +2818,267 @@ kbd {
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
+.chat-room {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chat-room-header,
+.chat-room-title,
+.chat-room-key,
+.chat-room-composer-head,
+.chat-room-composer-actions,
+.chat-room-stage-head,
+.chat-room-summons,
+.chat-room-input,
+.chat-room-bubble header {
+  display: flex;
+  gap: 10px;
+}
+
+.chat-room-header,
+.chat-room-stage-head,
+.chat-room-composer-head,
+.chat-room-composer-actions {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.chat-room-title {
+  align-items: center;
+  color: #fbbf24;
+}
+
+.chat-room-title h2,
+.chat-room-stage-head h3,
+.chat-room-list h3,
+.chat-room-composer h3 {
+  color: #f8fafc;
+}
+
+.chat-room-title h2 { font-size: 1.35rem; }
+
+.chat-room-header p,
+.chat-room-stage-head small,
+.chat-room-key span,
+.chat-room-empty,
+.chat-room-list p {
+  color: #94a3b8;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.chat-room-header p { max-width: 720px; margin-top: 6px; }
+
+.chat-room-primary,
+.chat-room-danger,
+.chat-room-key button,
+.chat-room-composer-head button,
+.chat-room-composer-actions button,
+.chat-room-summons button,
+.chat-room-list > button,
+.chat-room-model-list button {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e2e8f0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.chat-room-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 14px;
+  background: #f59e0b;
+  color: #1c1408;
+  border-color: transparent;
+  font-weight: 800;
+}
+
+.chat-room-primary:disabled,
+.chat-room button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.chat-room-key,
+.chat-room-composer,
+.chat-room-list,
+.chat-room-stage {
+  padding: 14px;
+}
+
+.chat-room-key {
+  align-items: center;
+  color: #fbbf24;
+}
+
+.chat-room-key div { flex: 1; min-width: 180px; }
+.chat-room-key strong,
+.chat-room-key span,
+.chat-room-key em { display: block; }
+.chat-room-key em { color: #86efac; font-style: normal; font-size: 0.78rem; }
+
+.chat-room-key form {
+  display: flex;
+  gap: 8px;
+  flex: 1 1 280px;
+}
+
+.chat-room input,
+.chat-room textarea,
+.chat-room select {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  background: #fbf7ee;
+  color: #2a2118;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.chat-room-key button,
+.chat-room-composer-head button,
+.chat-room-composer-actions button {
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.chat-room-error {
+  margin: 0;
+  color: #fecdd3;
+  font-size: 0.84rem;
+}
+
+.chat-room-composer,
+.chat-room-layout { display: flex; flex-direction: column; gap: 10px; }
+
+.chat-room-model-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.chat-room-model-list button {
+  text-align: left;
+  padding: 8px 10px;
+}
+
+.chat-room-model-list button.is-on {
+  border-color: rgba(245, 158, 11, 0.7);
+  background: rgba(245, 158, 11, 0.16);
+}
+
+.chat-room-model-list strong,
+.chat-room-model-list small,
+.chat-room-list small { display: block; }
+.chat-room-model-list small,
+.chat-room-list small { color: #94a3b8; font-size: 0.72rem; }
+
+.chat-room-composer-actions { align-items: center; color: #cbd5e1; font-size: 0.82rem; }
+
+.chat-room-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.chat-room-list { display: flex; flex-direction: column; gap: 8px; }
+.chat-room-list h3 { display: flex; align-items: center; gap: 6px; font-size: 0.92rem; }
+.chat-room-list > button { text-align: left; padding: 10px; }
+.chat-room-list > button.is-active {
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.chat-room-stage { min-height: 520px; display: flex; flex-direction: column; gap: 12px; }
+.chat-room-stage-head small { display: block; margin-top: 4px; }
+.chat-room-danger {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fda4af;
+}
+
+.chat-room-summons { flex-wrap: wrap; }
+.chat-room-seat {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--seat) 55%, transparent);
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--seat) 14%, transparent);
+}
+.chat-room-seat button {
+  border: 0;
+  background: transparent;
+  color: #f8fafc;
+  min-height: 36px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-weight: 800;
+}
+.chat-room-seat button + button { padding-inline: 8px; color: #fda4af; }
+
+.chat-room-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #94a3b8;
+  font-size: 0.78rem;
+}
+.chat-room-add select { max-width: 320px; }
+
+.chat-room-thread {
+  flex: 1;
+  min-height: 280px;
+  max-height: 560px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.chat-room-bubble {
+  max-width: min(720px, 92%);
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #1c2333;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.chat-room-bubble.is-user { align-self: flex-end; background: #2a2118; border-color: rgba(245, 158, 11, 0.25); }
+.chat-room-bubble header { align-items: baseline; color: #fbbf24; font-size: 0.75rem; }
+.chat-room-bubble time,
+.chat-room-bubble em { color: #94a3b8; font-style: normal; font-weight: 600; }
+.chat-room-bubble p { margin-top: 4px; white-space: pre-wrap; line-height: 1.45; }
+
+.chat-room-input { align-items: flex-end; }
+.chat-room-input textarea { flex: 1; resize: vertical; min-height: 72px; }
+
+@media (max-width: 800px) {
+  .chat-room-header,
+  .chat-room-key,
+  .chat-room-key form,
+  .chat-room-input,
+  .chat-room-composer-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .chat-room-layout { grid-template-columns: 1fr; }
+  .chat-room-primary { width: 100%; }
+}
+
 .phone-time-view {
   display: flex;
   flex-direction: column;

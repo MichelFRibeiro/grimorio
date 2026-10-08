@@ -122,6 +122,11 @@ O script irá:
 - **Ver processo:** mostra exatamente o que foi enviado ao Jev e o que voltou. **Memória do Oráculo:** taxa de aceite, energia e últimos desfechos.
 - O motor local roda em `server/nextAction.js`; o julgamento do Jev, em `server/oracleJev.js`; a memória (energia, quantidades e desfechos), em `server/oracleMemory.js`.
 
+### 💬 Sala de Bate Papo
+- Aba **Bate Papo**. A chave do OpenRouter é a mesma do Oráculo: fica só no servidor e pode ser cadastrada (ou trocada) na própria sala.
+- Abra uma sala, escolha quantos modelos quiser e escreva. Cada modelo tem um botão: ao clicar, ele recebe o histórico inteiro até aquele ponto — inclusive as falas dos outros modelos — e se manifesta.
+- Cada resposta é cortada em no máximo 60 palavras, no servidor, mesmo que o modelo escreva mais.
+
 **Endpoints**
 - `GET /api/next-action` — retrato sem efeitos colaterais (energia vigente, indicação local, motivo).
 - `POST /api/next-action/consult` — consulta de verdade (grava a decisão, pode chamar o Jev).

@@ -20,6 +20,7 @@ import { ensureOracleMemory } from './oracleMemory.js';
 import { sanitizeDailyReviews, sanitizeWeeklyPlans } from './domain/today.js';
 import { sanitizePhoneTimeLogs } from '../src/utils/phoneTime.js';
 import { setStoredOpenRouterKey } from './jevClient.js';
+import { sanitizeChatRooms } from './chatRoom.js';
 import { computeBossDamage, ensureBossWeekFields } from './domain/bossWeek.js';
 import { applyWisdomToStudyXp, attributeEffects } from './domain/attributes.js';
 import { syncHeroStreak } from './domain/streaks.js';
@@ -424,6 +425,7 @@ export const defaultDatabase = () => {
     dailyReviews: [],
     weeklyPlans: [],
     phoneTimeLogs: [],
+    chatRooms: [],
     penalties: [],
     bossHistory: [],
     destinyChests: [],
@@ -460,6 +462,7 @@ export function sanitizeDb(db) {
   if (!Array.isArray(db.supplements)) db.supplements = [];
   if (!Array.isArray(db.supplementLogs)) db.supplementLogs = [];
   db.phoneTimeLogs = sanitizePhoneTimeLogs(db.phoneTimeLogs);
+  db.chatRooms = sanitizeChatRooms(db.chatRooms);
   if (!db.rewards) db.rewards = [];
   if (!db.rewardRedemptions) db.rewardRedemptions = [];
   if (!db.actionLogs) db.actionLogs = [];

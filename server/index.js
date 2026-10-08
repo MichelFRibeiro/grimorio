@@ -12,7 +12,21 @@ import { computeAnalytics } from './analytics.js';
 import { discoverCorrelations } from './correlations.js';
 import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
 import { suggestNextAction, previewNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly, snoozeAndRemember } from './oracleSuggest.js';
-import { openRouterKeyStatus, setStoredOpenRouterKey } from './jevClient.js';
+import { openRouterKeyStatus, setStoredOpenRouterKey, getOpenRouterApiKey } from './jevClient.js';
+import {
+  CHAT_MAX_CONTENT,
+  CHAT_MAX_PARTICIPANTS,
+  CHAT_MAX_ROOMS,
+  CHAT_MAX_TITLE,
+  clearChatModelCache,
+  colorForIndex,
+  completeChatTurn,
+  listOpenRouterModels,
+  modelLabelFromId,
+  publicChatMessage,
+  publicChatRoom,
+  sanitizeChatRooms
+} from './chatRoom.js';
 import {
   markDecisionAccepted,
   markDecisionCompleted,
@@ -849,6 +863,196 @@ app.get('/api/integrations/openrouter', (req, res) => {
   res.json({ success: true, openRouter: openRouterKeyStatus() });
 });
 
+app.get('/api/chat/models', async (req, res) => {
+  try {
+    const apiKey = getOpenRouterApiKey();
+    if (!apiKey) {
+      return res.status(503).json({ error: 'Cadastre a chave do OpenRouter para listar os modelos.' });
+    }
+    const models = await listOpenRouterModels(apiKey, { force: req.query.refresh === '1' });
+    res.json({ success: true, models, openRouter: openRouterKeyStatus() });
+  } catch (err) {
+    const status = err.status && err.status >= 400 && err.status < 600 ? err.status : 502;
+    res.status(status).json({ error: err.message || 'Não foi possível listar os modelos.' });
+  }
+});
+
+app.get('/api/chat/rooms', (req, res) => {
+  const db = getDb();
+  const rooms = sanitizeChatRooms(db.chatRooms).map(publicChatRoom);
+  res.json({ success: true, rooms, openRouter: openRouterKeyStatus() });
+});
+
+app.post('/api/chat/rooms', (req, res) => {
+  try {
+    const db = getDb();
+    db.chatRooms = sanitizeChatRooms(db.chatRooms);
+    if (db.chatRooms.length >= CHAT_MAX_ROOMS) {
+      return res.status(400).json({ error: `O Grimório guarda no máximo ${CHAT_MAX_ROOMS} salas.` });
+    }
+    const title = String(req.body?.title || '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX_TITLE) || 'Nova sala';
+    const incoming = Array.isArray(req.body?.participants) ? req.body.participants : [];
+    const participants = [];
+    const seen = new Set();
+    for (const item of incoming) {
+      const modelId = String(item?.modelId || item || '').trim().slice(0, 160);
+      if (!modelId || seen.has(modelId) || participants.length >= CHAT_MAX_PARTICIPANTS) continue;
+      seen.add(modelId);
+      participants.push({
+        modelId,
+        label: String(item?.label || modelLabelFromId(modelId)).replace(/\s+/g, ' ').trim().slice(0, 60) || modelLabelFromId(modelId),
+        color: colorForIndex(participants.length)
+      });
+    }
+    if (!participants.length) {
+      return res.status(400).json({ error: 'Escolha ao menos um modelo para a sala.' });
+    }
+    const now = new Date().toISOString();
+    const room = {
+      id: uid('chat'),
+      title,
+      participants,
+      messages: [],
+      createdAt: now,
+      updatedAt: now
+    };
+    db.chatRooms.unshift(room);
+    saveDb(db);
+    res.json({ success: true, room: publicChatRoom(room) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/chat/rooms/:id', (req, res) => {
+  try {
+    const db = getDb();
+    db.chatRooms = sanitizeChatRooms(db.chatRooms);
+    const room = db.chatRooms.find((item) => item.id === req.params.id);
+    if (!room) return res.status(404).json({ error: 'Sala não encontrada.' });
+    if (req.body?.title != null) {
+      const title = String(req.body.title).replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX_TITLE);
+      if (title) room.title = title;
+    }
+    if (Array.isArray(req.body?.participants)) {
+      const next = [];
+      const seen = new Set();
+      for (const item of req.body.participants) {
+        const modelId = String(item?.modelId || '').trim().slice(0, 160);
+        if (!modelId || seen.has(modelId) || next.length >= CHAT_MAX_PARTICIPANTS) continue;
+        seen.add(modelId);
+        const previous = room.participants.find((participant) => participant.modelId === modelId);
+        next.push({
+          modelId,
+          label: String(item?.label || previous?.label || modelLabelFromId(modelId)).replace(/\s+/g, ' ').trim().slice(0, 60) || modelLabelFromId(modelId),
+          color: previous?.color || colorForIndex(next.length)
+        });
+      }
+      if (!next.length) return res.status(400).json({ error: 'A sala precisa de ao menos um modelo.' });
+      room.participants = next;
+    }
+    room.updatedAt = new Date().toISOString();
+    saveDb(db);
+    res.json({ success: true, room: publicChatRoom(room) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/chat/rooms/:id', (req, res) => {
+  try {
+    const db = getDb();
+    db.chatRooms = sanitizeChatRooms(db.chatRooms);
+    const index = db.chatRooms.findIndex((item) => item.id === req.params.id);
+    if (index === -1) return res.status(404).json({ error: 'Sala não encontrada.' });
+    const [removed] = db.chatRooms.splice(index, 1);
+    saveDb(db);
+    res.json({ success: true, removed: publicChatRoom(removed) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/chat/rooms/:id/messages', (req, res) => {
+  try {
+    const content = String(req.body?.content || '').trim().slice(0, CHAT_MAX_CONTENT);
+    if (!content) return res.status(400).json({ error: 'Escreva algo antes de enviar.' });
+    const db = getDb();
+    db.chatRooms = sanitizeChatRooms(db.chatRooms);
+    const room = db.chatRooms.find((item) => item.id === req.params.id);
+    if (!room) return res.status(404).json({ error: 'Sala não encontrada.' });
+    const message = {
+      id: uid('msg'),
+      role: 'user',
+      content,
+      modelId: null,
+      label: 'Você',
+      createdAt: new Date().toISOString(),
+      error: null
+    };
+    room.messages.push(message);
+    room.updatedAt = message.createdAt;
+    saveDb(db);
+    res.json({ success: true, message: publicChatMessage(message), room: publicChatRoom(room) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/chat/rooms/:id/speak', async (req, res) => {
+  try {
+    const apiKey = getOpenRouterApiKey();
+    if (!apiKey) {
+      return res.status(503).json({ error: 'Cadastre a chave do OpenRouter para convocar um modelo.' });
+    }
+    const modelId = String(req.body?.modelId || '').trim();
+    if (!modelId) return res.status(400).json({ error: 'Escolha o modelo que deve se manifestar.' });
+    const db = getDb();
+    db.chatRooms = sanitizeChatRooms(db.chatRooms);
+    const room = db.chatRooms.find((item) => item.id === req.params.id);
+    if (!room) return res.status(404).json({ error: 'Sala não encontrada.' });
+    const participant = room.participants.find((item) => item.modelId === modelId);
+    if (!participant) return res.status(404).json({ error: 'Esse modelo não participa desta sala.' });
+    const spoken = room.messages.some((item) => item.role === 'user' && item.content);
+    if (!spoken) return res.status(400).json({ error: 'Escreva a primeira fala antes de convocar um modelo.' });
+
+    const history = room.messages.map((item) => ({ ...item }));
+    const turn = await completeChatTurn({
+      apiKey,
+      participant,
+      messages: history
+    });
+    const message = {
+      id: uid('msg'),
+      role: 'assistant',
+      content: turn.content,
+      modelId: participant.modelId,
+      label: participant.label,
+      createdAt: new Date().toISOString(),
+      error: null
+    };
+    const liveDb = getDb();
+    liveDb.chatRooms = sanitizeChatRooms(liveDb.chatRooms);
+    const live = liveDb.chatRooms.find((item) => item.id === room.id);
+    if (!live) return res.status(404).json({ error: 'A sala foi excluída antes da resposta.' });
+    if (!live.participants.some((item) => item.modelId === participant.modelId)) {
+      return res.status(404).json({ error: 'Esse modelo saiu da sala antes da resposta.' });
+    }
+    live.messages.push(message);
+    live.updatedAt = message.createdAt;
+    saveDb(liveDb);
+    res.json({
+      success: true,
+      message: publicChatMessage(message),
+      room: publicChatRoom(live),
+      wordCount: turn.wordCount
+    });
+  } catch (err) {
+    const status = err.status && err.status >= 400 && err.status < 600 ? err.status : 502;
+    res.status(status).json({ error: err.message || 'O modelo não respondeu.' });
+  }
+});
+
 app.put('/api/integrations/openrouter', (req, res) => {
   try {
     const key = String(req.body?.apiKey || '').trim();
@@ -860,6 +1064,7 @@ app.put('/api/integrations/openrouter', (req, res) => {
     db.integrations.openrouterApiKey = key;
     setStoredOpenRouterKey(key);
     saveDb(db);
+    clearChatModelCache();
     res.json({ success: true, openRouter: openRouterKeyStatus() });
   } catch (err) {
     res.status(500).json({ error: err.message });

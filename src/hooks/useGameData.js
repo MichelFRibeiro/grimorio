@@ -1038,6 +1038,20 @@ export function useGameData() {
     return { ok: true };
   };
 
+  const applyChatRoom = (room) => {
+    if (!room?.id) return;
+    setData((prev) => {
+      if (!prev) return prev;
+      const rooms = Array.isArray(prev.chatRooms) ? prev.chatRooms.slice() : [];
+      const index = rooms.findIndex((item) => item.id === room.id);
+      if (index === -1) rooms.unshift(room);
+      else rooms[index] = room;
+      const next = { ...prev, chatRooms: rooms };
+      dataRef.current = next;
+      return next;
+    });
+  };
+
   const saveOpenRouterKey = async (apiKey) => {
     const json = await mutate('/api/integrations/openrouter', {
       method: 'PUT',
@@ -1048,6 +1062,74 @@ export function useGameData() {
     if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível guardar a chave.' };
     setData(prev => prev ? { ...prev, openRouter: json.openRouter } : prev);
     return { ok: true, openRouter: json.openRouter };
+  };
+
+  const listChatModels = async ({ refresh = false } = {}) => {
+    const res = await fetch(`/api/chat/models${refresh ? '?refresh=1' : ''}`, { headers: getAuthHeaders() });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: json.error || 'Não foi possível listar os modelos.' };
+    return { ok: true, models: json.models || [], openRouter: json.openRouter || null };
+  };
+
+  const createChatRoom = async ({ title, participants } = {}) => {
+    const json = await mutate('/api/chat/rooms', {
+      body: { title, participants },
+      refreshOnSuccess: false,
+      toastOnError: false
+    });
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível abrir a sala.' };
+    applyChatRoom(json.room);
+    return { ok: true, room: json.room };
+  };
+
+  const updateChatRoom = async (id, patch) => {
+    const json = await mutate(`/api/chat/rooms/${id}`, {
+      method: 'PUT',
+      body: patch,
+      refreshOnSuccess: false,
+      toastOnError: false
+    });
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível atualizar a sala.' };
+    applyChatRoom(json.room);
+    return { ok: true, room: json.room };
+  };
+
+  const deleteChatRoom = async (id) => {
+    const json = await mutate(`/api/chat/rooms/${id}`, {
+      method: 'DELETE',
+      refreshOnSuccess: false,
+      toastOnError: false
+    });
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível excluir a sala.' };
+    setData((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, chatRooms: (prev.chatRooms || []).filter((item) => item.id !== id) };
+      dataRef.current = next;
+      return next;
+    });
+    return { ok: true };
+  };
+
+  const sendChatMessage = async (roomId, content) => {
+    const json = await mutate(`/api/chat/rooms/${roomId}/messages`, {
+      body: { content },
+      refreshOnSuccess: false,
+      toastOnError: false
+    });
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível enviar a fala.' };
+    applyChatRoom(json.room);
+    return { ok: true, room: json.room, message: json.message };
+  };
+
+  const summonChatModel = async (roomId, modelId) => {
+    const json = await mutate(`/api/chat/rooms/${roomId}/speak`, {
+      body: { modelId },
+      refreshOnSuccess: false,
+      toastOnError: false
+    });
+    if (!json || json.__error) return { ok: false, error: json?.error || 'O modelo não respondeu.' };
+    applyChatRoom(json.room);
+    return { ok: true, room: json.room, message: json.message, wordCount: json.wordCount };
   };
 
   const submitOracleEnergy = async ({ text, location, snoozedIds } = {}) => {
@@ -1414,6 +1496,12 @@ export function useGameData() {
     submitOracleEnergy,
     skipOracleEnergy,
     saveOpenRouterKey,
+    listChatModels,
+    createChatRoom,
+    updateChatRoom,
+    deleteChatRoom,
+    sendChatMessage,
+    summonChatModel,
     declineOracleSuggestion,
     breakDownQuest,
     rescheduleQuests,
