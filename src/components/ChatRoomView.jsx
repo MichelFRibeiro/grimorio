@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { KeyRound, MessagesSquare, Plus, RefreshCw, Send, Trash2, Users } from 'lucide-react';
+import { KeyRound, MessagesSquare, Plus, RefreshCw, Send, Trash2, Users, X } from 'lucide-react';
 
 const WORD_LIMIT = 60;
 
@@ -24,6 +24,7 @@ export function ChatRoomView({
   onUpdateRoom,
   onDeleteRoom,
   onSendMessage,
+  onDeleteMessage,
   onSummon
 }) {
   const [activeId, setActiveId] = useState(rooms[0]?.id || null);
@@ -132,6 +133,17 @@ export function ChatRoomView({
       return;
     }
     setDraft('');
+  };
+
+  const removeMessage = async (message) => {
+    if (!room || !message?.id || busy) return;
+    const who = message.role === 'user' ? 'sua fala' : (message.label || 'essa resposta');
+    if (!window.confirm(`Tirar ${who} do histórico? As próximas convocações não a recebem.`)) return;
+    setBusy(`del-${message.id}`);
+    setError('');
+    const result = await onDeleteMessage?.(room.id, message.id);
+    setBusy('');
+    if (!result?.ok) setError(result?.error || 'Não foi possível excluir a mensagem.');
   };
 
   const summon = async (modelId) => {
@@ -289,7 +301,7 @@ export function ChatRoomView({
               <div className="chat-room-stage-head">
                 <div>
                   <h3>{room.title}</h3>
-                  <small>O histórico é compartilhado. Convocar um modelo envia tudo até este ponto.</small>
+                  <small>O histórico é compartilhado. O que você apagar deixa de ir nas próximas convocações.</small>
                 </div>
                 <button type="button" className="chat-room-danger" onClick={removeRoom} disabled={busy === 'delete'} aria-label="Excluir sala">
                   <Trash2 size={15} />
@@ -343,6 +355,16 @@ export function ChatRoomView({
                       <strong>{message.role === 'user' ? 'Você' : (message.label || 'Modelo')}</strong>
                       <time>{formatClock(message.createdAt)}</time>
                       {message.role === 'assistant' && <em>{message.wordCount}/{WORD_LIMIT}</em>}
+                      <button
+                        type="button"
+                        className="chat-room-drop"
+                        onClick={() => removeMessage(message)}
+                        disabled={!!busy}
+                        aria-label="Tirar do histórico"
+                        title="Tirar do histórico"
+                      >
+                        <X size={13} />
+                      </button>
                     </header>
                     <p>{message.content}</p>
                   </article>

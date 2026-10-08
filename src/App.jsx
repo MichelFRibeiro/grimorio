@@ -128,6 +128,7 @@ export function App() {
     updateChatRoom,
     deleteChatRoom,
     sendChatMessage,
+    deleteChatMessage,
     summonChatModel,
     declineOracleSuggestion,
     breakDownQuest,
@@ -742,6 +743,7 @@ export function App() {
             onUpdateRoom={updateChatRoom}
             onDeleteRoom={deleteChatRoom}
             onSendMessage={sendChatMessage}
+            onDeleteMessage={deleteChatMessage}
             onSummon={summonChatModel}
           />
         )}

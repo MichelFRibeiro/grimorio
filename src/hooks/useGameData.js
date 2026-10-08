@@ -1121,6 +1121,17 @@ export function useGameData() {
     return { ok: true, room: json.room, message: json.message };
   };
 
+  const deleteChatMessage = async (roomId, messageId) => {
+    const json = await mutate(`/api/chat/rooms/${roomId}/messages/${messageId}`, {
+      method: 'DELETE',
+      refreshOnSuccess: false,
+      toastOnError: false
+    });
+    if (!json || json.__error) return { ok: false, error: json?.error || 'Não foi possível excluir a mensagem.' };
+    applyChatRoom(json.room);
+    return { ok: true, room: json.room };
+  };
+
   const summonChatModel = async (roomId, modelId) => {
     const json = await mutate(`/api/chat/rooms/${roomId}/speak`, {
       body: { modelId },
@@ -1501,6 +1512,7 @@ export function useGameData() {
     updateChatRoom,
     deleteChatRoom,
     sendChatMessage,
+    deleteChatMessage,
     summonChatModel,
     declineOracleSuggestion,
     breakDownQuest,

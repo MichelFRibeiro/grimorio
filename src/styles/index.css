@@ -3072,6 +3072,20 @@ kbd {
   color: #fff7ed;
 }
 .chat-room-bubble header { align-items: baseline; color: #fbbf24; font-size: 0.75rem; }
+.chat-room-drop {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fecdd3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.chat-room-drop:hover { background: rgba(159, 18, 57, 0.85); color: #fff; }
 .chat-room-bubble time,
 .chat-room-bubble em { color: #cbd5e1; font-style: normal; font-weight: 600; }
 .chat-room-bubble p { margin-top: 4px; color: inherit; white-space: pre-wrap; line-height: 1.45; }

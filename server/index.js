@@ -999,6 +999,23 @@ app.post('/api/chat/rooms/:id/messages', (req, res) => {
   }
 });
 
+app.delete('/api/chat/rooms/:id/messages/:messageId', (req, res) => {
+  try {
+    const db = getDb();
+    db.chatRooms = sanitizeChatRooms(db.chatRooms);
+    const room = db.chatRooms.find((item) => item.id === req.params.id);
+    if (!room) return res.status(404).json({ error: 'Sala não encontrada.' });
+    const index = room.messages.findIndex((item) => item.id === req.params.messageId);
+    if (index === -1) return res.status(404).json({ error: 'Mensagem não encontrada.' });
+    const [removed] = room.messages.splice(index, 1);
+    room.updatedAt = new Date().toISOString();
+    saveDb(db);
+    res.json({ success: true, removed: publicChatMessage(removed), room: publicChatRoom(room) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/chat/rooms/:id/speak', async (req, res) => {
   try {
     const apiKey = getOpenRouterApiKey();

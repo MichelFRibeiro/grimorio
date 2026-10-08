@@ -277,6 +277,25 @@ await check('a sala exige chave, guarda o histórico e corta a resposta do model
     assert.equal(state.data.chatRooms[0].messages.length, 3);
     assert.equal(JSON.stringify(state.data).includes('sk-or-test-room-key'), false);
 
+    const useless = await request(port, `/api/chat/rooms/${roomId}/messages`, {
+      method: 'POST',
+      token,
+      body: { content: 'Isso não precisa ir adiante.' }
+    });
+    const dropped = await request(port, `/api/chat/rooms/${roomId}/messages/${useless.data.message.id}`, {
+      method: 'DELETE',
+      token
+    });
+    assert.equal(dropped.status, 200);
+    assert.equal(dropped.data.room.messages.some((item) => item.content === 'Isso não precisa ir adiante.'), false);
+    assert.equal(dropped.data.removed.id, useless.data.message.id);
+
+    const missing = await request(port, `/api/chat/rooms/${roomId}/messages/nao-existe`, {
+      method: 'DELETE',
+      token
+    });
+    assert.equal(missing.status, 404);
+
     const removed = await request(port, `/api/chat/rooms/${roomId}`, { method: 'DELETE', token });
     assert.equal(removed.status, 200);
     const after = await request(port, '/api/chat/rooms', { token });

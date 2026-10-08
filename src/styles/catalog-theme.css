@@ -889,3 +889,8 @@ kbd {
 .chat-room-bubble em {
   color: #e2e8f0;
 }
+
+.chat-room-drop {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fecdd3;
+}

@@ -126,6 +126,7 @@ O script irá:
 - Aba **Bate Papo**. A chave do OpenRouter é a mesma do Oráculo: fica só no servidor e pode ser cadastrada (ou trocada) na própria sala.
 - Abra uma sala, escolha quantos modelos quiser e escreva. Cada modelo tem um botão: ao clicar, ele recebe o histórico inteiro até aquele ponto — inclusive as falas dos outros modelos — e se manifesta.
 - Cada resposta é cortada em no máximo 60 palavras, no servidor, mesmo que o modelo escreva mais.
+- O × de cada fala tira essa mensagem do histórico. As próximas convocações não a recebem.
 
 **Endpoints**
 - `GET /api/next-action` — retrato sem efeitos colaterais (energia vigente, indicação local, motivo).
