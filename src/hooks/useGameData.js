@@ -895,6 +895,10 @@ export function useGameData() {
       refreshOnSuccess: false
     });
     if (!result) return null;
+    if (result.undone) {
+      fetchState();
+      return result;
+    }
     if (result.rewardResult) {
       handleRewardResponse(
         result.rewardResult,

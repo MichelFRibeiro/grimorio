@@ -2112,7 +2112,9 @@ app.post('/api/routines/:id/advance', (req, res) => {
     const result = advanceRoutine(db, req.params.id, {
       habitId: req.body?.habitId,
       durationMinutes: req.body?.durationMinutes,
-      decisionId: req.body?.decisionId
+      count: req.body?.count,
+      decisionId: req.body?.decisionId,
+      undo: req.body?.undo
     });
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
@@ -2124,6 +2126,7 @@ app.post('/api/routines/:id/advance', (req, res) => {
       rewardResult: result.rewardResult,
       progress: result.progress,
       completeToday: result.completeToday,
+      undone: result.undone || false,
       analytics: computeAnalytics()
     });
   } catch (err) {

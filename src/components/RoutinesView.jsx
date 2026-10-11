@@ -6,11 +6,16 @@ import {
   ListOrdered,
   Play,
   Plus,
+  RotateCcw,
   Trash2,
   Pencil
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { ActivityTimerBox } from './ActivityTimerBox';
 import { getFrequencyLabel } from '../utils/habitFrequency';
+import { MAX_HABIT_COUNT, confirmLongDuration } from '../utils/activityDuration';
+import { consumeActivityTimerMinutes, peekActivityTimerMinutes } from '../utils/liveActivityTimers';
+import { habitMeasureLabel, habitTracksCount, habitTracksTime } from '../utils/habitHomeostasis';
 
 const ACCENT = '#38bdf8';
 
@@ -60,6 +65,9 @@ export function RoutinesView({
   const [confirmId, setConfirmId] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
+  const [activeStep, setActiveStep] = useState(null);
+  const [stepCount, setStepCount] = useState('');
+  const [stepError, setStepError] = useState('');
 
   const habitById = useMemo(() => new Map((habits || []).map(habit => [habit.id, habit])), [habits]);
   const available = (habits || []).filter(habit => !form.steps.some(step => step.habitId === habit.id));
@@ -121,11 +129,59 @@ export function RoutinesView({
     setModal(null);
   };
 
-  const advance = async (routine) => {
-    if (!routine.nextHabitId || busyId) return;
+  const openStep = (routine, step) => {
+    if (step.missing) return;
+    setStepError('');
+    setStepCount('');
+    setActiveStep({ routineId: routine.id, habitId: step.habitId });
+  };
+
+  const closeStep = () => {
+    setActiveStep(null);
+    setStepError('');
+  };
+
+  const advance = async (routine, extra = {}) => {
+    if (!routine?.nextHabitId || busyId) return null;
     setBusyId(routine.id);
     try {
-      await onAdvanceRoutine?.(routine.id, { habitId: routine.nextHabitId });
+      return await onAdvanceRoutine?.(routine.id, { habitId: routine.nextHabitId, ...extra });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const finishStep = async (routine, habit) => {
+    if (!routine || !habit || busyId) return;
+    setStepError('');
+    const extra = {};
+    if (habitTracksCount(habit)) {
+      const count = Number(String(stepCount).replace(',', '.'));
+      if (!Number.isFinite(count) || count <= 0 || count > MAX_HABIT_COUNT) {
+        setStepError(`Informe a quantidade (1 a ${MAX_HABIT_COUNT}).`);
+        return;
+      }
+      extra.count = count;
+    }
+    if (habitTracksTime(habit)) {
+      const durationMinutes = confirmLongDuration(peekActivityTimerMinutes('habit', habit.id));
+      if (durationMinutes == null) return;
+      consumeActivityTimerMinutes('habit', habit.id);
+      if (durationMinutes > 0) extra.durationMinutes = durationMinutes;
+    }
+    const result = await advance(routine, extra);
+    if (result) closeStep();
+    else setStepError('Não foi possível registrar o ritual.');
+  };
+
+  const undoStep = async (routine, habitId) => {
+    if (!routine || !habitId || busyId) return;
+    setBusyId(routine.id);
+    setStepError('');
+    try {
+      const result = await onAdvanceRoutine?.(routine.id, { habitId, undo: true });
+      if (result) closeStep();
+      else setStepError('Não foi possível desmarcar.');
     } finally {
       setBusyId(null);
     }
@@ -206,6 +262,7 @@ export function RoutinesView({
                     return (
                       <li
                         key={`${routine.id}-${step.habitId}`}
+                        onClick={() => openStep(routine, step)}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -214,7 +271,8 @@ export function RoutinesView({
                           borderRadius: '10px',
                           background: isNext ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255,255,255,0.03)',
                           border: isNext ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
-                          opacity: step.missing ? 0.55 : 1
+                          opacity: step.missing ? 0.55 : 1,
+                          cursor: step.missing ? 'default' : 'pointer'
                         }}
                       >
                         <span style={{
@@ -249,7 +307,10 @@ export function RoutinesView({
                 <button
                   type="button"
                   disabled={!next || busyId === routine.id}
-                  onClick={() => advance(routine)}
+                  onClick={() => {
+                    const step = (routine.steps || []).find(item => item.habitId === routine.nextHabitId);
+                    if (step) openStep(routine, step);
+                  }}
                   style={{
                     marginTop: '14px',
                     display: 'inline-flex',
@@ -362,6 +423,120 @@ export function RoutinesView({
           </form>
         </div>
       )}
+
+      {activeStep && (() => {
+        const routine = (routines || []).find(item => item.id === activeStep.routineId);
+        const step = (routine?.steps || []).find(item => item.habitId === activeStep.habitId);
+        const habit = habitById.get(activeStep.habitId);
+        if (!routine || !step || !habit) return null;
+        const isNext = routine.nextHabitId === habit.id;
+        const tracksTime = habitTracksTime(habit);
+        const tracksCount = habitTracksCount(habit);
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(2, 6, 23, 0.78)',
+              zIndex: 45,
+              display: 'grid',
+              placeItems: 'center',
+              padding: '20px'
+            }}
+            onClick={closeStep}
+          >
+            <div
+              className="glass-panel"
+              onClick={(event) => event.stopPropagation()}
+              style={{ width: 'min(480px, 100%)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}
+            >
+              <div>
+                <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700 }}>{routine.title}</p>
+                <h3 style={{ margin: '4px 0 0', color: '#f8fafc' }}>{habit.title}</h3>
+                {habit.description ? (
+                  <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: '0.82rem' }}>{habit.description}</p>
+                ) : null}
+                <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: '0.75rem' }}>
+                  {habit.category || 'Pessoal'} · {getFrequencyLabel(habit)}
+                  {step.note ? ` · ${step.note}` : ''}
+                  {habit.currentStreak ? ` · 🔥 ${habit.currentStreak}` : ''}
+                </p>
+              </div>
+
+              {tracksTime && !step.doneToday && (
+                <ActivityTimerBox kind="habit" id={habit.id} label="Cronômetro do ritual" accent={ACCENT} />
+              )}
+
+              {tracksCount && !step.doneToday && (
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={labelStyle}>Quantidade ({habitMeasureLabel(habit, 'count')})</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={MAX_HABIT_COUNT}
+                    inputMode="decimal"
+                    value={stepCount}
+                    onChange={(event) => setStepCount(event.target.value)}
+                    placeholder={`Quantos ${habitMeasureLabel(habit, 'count')}?`}
+                    style={fieldStyle}
+                    autoFocus={!tracksTime}
+                  />
+                </label>
+              )}
+
+              {step.doneToday && (
+                <p style={{ margin: 0, color: '#34d399', fontWeight: 700, fontSize: '0.85rem' }}>
+                  Feito hoje. Desmarcar estorna XP e moedas deste ritual.
+                </p>
+              )}
+              {stepError ? <p style={{ margin: 0, color: '#f87171', fontSize: '0.82rem' }}>{stepError}</p> : null}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
+                <button type="button" onClick={closeStep} style={{ ...iconBtn, width: 'auto', padding: '8px 12px' }}>Fechar</button>
+                {step.doneToday ? (
+                  <button
+                    type="button"
+                    disabled={busyId === routine.id}
+                    onClick={() => undoStep(routine, habit.id)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(248, 113, 113, 0.45)',
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      color: '#f87171',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <RotateCcw size={14} /> Desmarcar
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!isNext || busyId === routine.id}
+                    onClick={() => finishStep(routine, habit)}
+                    title={isNext ? 'Registrar este passo' : 'Faça os passos anteriores primeiro'}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: isNext ? ACCENT : 'rgba(255,255,255,0.08)',
+                      color: isNext ? '#0f172a' : '#64748b',
+                      fontWeight: 800,
+                      cursor: isNext ? 'pointer' : 'not-allowed'
+                    }}
+                  >
+                    {isNext ? 'Registrar' : 'Ainda não é a vez'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <ConfirmModal
         isOpen={!!confirmId}

@@ -1374,11 +1374,13 @@ export const toolsDefinition = [
   },
   {
     name: 'advance_routine',
-    description: 'Marcar o próximo ritual da rotina que ainda não foi feito hoje. Reusa o ritual (streak, XP e moedas). Recusa um passo fora de ordem. Não desmarca — para desfazer, use toggle_habit.',
+    description: 'Marcar o próximo ritual da rotina que ainda não foi feito hoje. Reusa o ritual (streak, XP e moedas). Recusa um passo fora de ordem. Com undo=true, desmarca um passo já feito hoje e estorna as recompensas.',
     schema: {
       id: z.string().describe('ID da rotina'),
-      habitId: z.string().optional().describe('ID do ritual, se já conhecido. Precisa ser o próximo da sequência.'),
-      durationMinutes: z.number().optional().describe('Tempo cronometrado deste passo em minutos')
+      habitId: z.string().optional().describe('ID do ritual. Ao marcar, precisa ser o próximo. Ao desfazer, o passo já feito.'),
+      durationMinutes: z.number().optional().describe('Tempo cronometrado deste passo em minutos'),
+      count: z.number().optional().describe('Quantidade feita neste passo, se o ritual mede quantidade'),
+      undo: z.boolean().optional().describe('true desmarca o passo indicado por habitId')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1392,9 +1394,11 @@ export const toolsDefinition = [
         rewardResult: result.rewardResult,
         progress: result.progress,
         completeToday: result.completeToday
-      }, result.completeToday
-        ? `Sequência concluída hoje. Ritual '${title}' marcado.`
-        : `Próximo passo feito: '${title}'. ${result.progress.done}/${result.progress.total}.`);
+      }, result.undone
+        ? `Passo desfeito: '${title}'. Recompensas estornadas.`
+        : result.completeToday
+          ? `Sequência concluída hoje. Ritual '${title}' marcado.`
+          : `Próximo passo feito: '${title}'. ${result.progress.done}/${result.progress.total}.`);
     }
   },
   {

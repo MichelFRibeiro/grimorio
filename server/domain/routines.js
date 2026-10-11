@@ -66,6 +66,10 @@ export function decorateRoutine(routine, habits, todayStr) {
       title: step.habit?.title || null,
       icon: step.habit?.icon || null,
       frequency: step.habit?.frequency || null,
+      tracking: step.habit?.tracking || 'time',
+      countUnit: step.habit?.countUnit || '',
+      category: step.habit?.category || null,
+      description: step.habit?.description || '',
       missing: step.missing,
       doneToday: step.doneToday,
       currentStreak: step.habit?.currentStreak || 0
@@ -137,9 +141,11 @@ export function deleteRoutine(db, id) {
 
 /**
  * Marca o próximo ritual ainda não feito hoje, ou o passo indicado se for
- * exatamente o próximo. Não desmarca: desfazer continua no ritual.
+ * exatamente o próximo. `undo: true` desmarca um passo já feito hoje —
+ * o estorno de XP e moedas é o do próprio ritual.
  */
-export function advanceRoutine(db, id, { habitId, durationMinutes, decisionId } = {}) {
+export function advanceRoutine(db, id, { habitId, durationMinutes, count, decisionId, undo } = {}) {
+  if (undo) return undoRoutineStep(db, id, { habitId });
   const routines = ensureList(db);
   const routine = routines.find(item => item.id === id);
   if (!routine) return fail('Rotina não encontrada.', 404);
@@ -156,6 +162,7 @@ export function advanceRoutine(db, id, { habitId, durationMinutes, decisionId } 
     id: next.habitId,
     date: todayStr,
     durationMinutes,
+    count,
     decisionId
   });
   if (toggled.error) return toggled;
@@ -170,6 +177,31 @@ export function advanceRoutine(db, id, { habitId, durationMinutes, decisionId } 
     rewardResult: toggled.rewardResult,
     progress,
     completeToday: progress.complete
+  };
+}
+
+export function undoRoutineStep(db, id, { habitId } = {}) {
+  const routines = ensureList(db);
+  const routine = routines.find(item => item.id === id);
+  if (!routine) return fail('Rotina não encontrada.', 404);
+  const todayStr = getSaoPauloDateStr();
+  const resolved = resolveRoutineSteps(routine, db.habits || [], todayStr);
+  const step = resolved.find(item => item.habitId === habitId && !item.missing);
+  if (!step) return fail('Este ritual não faz parte da sequência.');
+  if (!step.doneToday) return fail('Este passo ainda não foi feito hoje.');
+
+  const toggled = toggleHabit(db, { id: habitId, date: todayStr });
+  if (toggled.error) return toggled;
+  if (toggled.done) return fail('Não foi possível desmarcar o ritual.');
+
+  return {
+    routine: decorateRoutine(routine, db.habits || [], todayStr),
+    step: resolveRoutineSteps(routine, db.habits || [], todayStr).find(item => item.habitId === habitId) || null,
+    habit: toggled.habit,
+    rewardResult: toggled.rewardResult,
+    undone: true,
+    progress: routineDayProgress(resolveRoutineSteps(routine, db.habits || [], todayStr)),
+    completeToday: false
   };
 }
 

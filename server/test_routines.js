@@ -102,6 +102,14 @@ async function run() {
     const again = await request(`/api/routines/${routineId}/advance`, { method: 'POST' }, {});
     assert.equal(again.status, 400);
 
+    const undone = await request(`/api/routines/${routineId}/advance`, { method: 'POST' }, { habitId: ids[2], undo: true });
+    assert.equal(undone.status, 200, undone.data?.error);
+    assert.equal(undone.data.undone, true);
+    assert.equal(undone.data.routine.nextHabitId, ids[2], 'desmarcar devolve o passo à sequência');
+    const outOfOrder = await request(`/api/routines/${routineId}/advance`, { method: 'POST' }, { habitId: ids[0], undo: true });
+    assert.equal(outOfOrder.status, 200, 'desmarcar um passo já feito não exige que ele seja o último');
+    assert.equal(outOfOrder.data.routine.steps.find(step => step.habitId === ids[0]).doneToday, false);
+
     await request(`/api/habits/${ids[0]}`, { method: 'DELETE' });
     const afterDelete = await request('/api/state');
     const trimmed = afterDelete.data.routines.find(item => item.id === routineId);
