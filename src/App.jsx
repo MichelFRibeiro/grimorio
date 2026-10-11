@@ -11,6 +11,7 @@ import { BooksView } from './components/BooksView';
 import { ScriptureView } from './components/ScriptureView';
 import { ProcessesView } from './components/ProcessesView';
 import { HabitsView } from './components/HabitsView';
+import { RoutinesView } from './components/RoutinesView';
 import { SupplementsView } from './components/SupplementsView';
 import { RewardsShop } from './components/RewardsShop';
 import { OracleAnalytics } from './components/OracleAnalytics';
@@ -19,7 +20,7 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { DestinyChestModal } from './components/DestinyChestModal';
 import { JudgmentModal, JudgmentHistory } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare } from 'lucide-react';
+import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare, ListOrdered } from 'lucide-react';
 import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
@@ -104,6 +105,10 @@ export function App() {
     toggleHabit,
     updateHabitDuration,
     deleteHabit,
+    addRoutine,
+    updateRoutine,
+    advanceRoutine,
+    deleteRoutine,
     addSupplement,
     updateSupplement,
     deleteSupplement,
@@ -300,6 +305,7 @@ export function App() {
     processes,
     processSteps,
     habits,
+    routines,
     supplements,
     supplementLogs,
     rewards,
@@ -324,6 +330,7 @@ export function App() {
   // O baú espera Level Up e Julgamento fecharem: eles são a notícia maior da ação.
   const chestOnHold = Boolean(levelUpData) || (penaltiesPending || []).length > 0;
 
+  const routinesDueCount = (routines || []).filter(routine => routine.nextHabitId && !routine.completeToday).length;
   const habitsDueCount = (habits || []).filter((habit) => {
     const due = getHabitDueStatus(habit, getHabitWeeklyStats(habit), new Date(), todayStr);
     return due.due && !due.completedToday;
@@ -385,6 +392,7 @@ export function App() {
     { id: 'maps', label: 'Mapas', icon: Network, badge: dueMindMapsCount },
     { id: 'processes', label: 'Processos', icon: Layers, badge: activeProcessesCount },
     { id: 'habits', label: 'Rituais', icon: Flame, badge: habitsDueCount },
+    { id: 'routines', label: 'Rotinas', icon: ListOrdered, badge: routinesDueCount },
     { id: 'supplements', label: 'Suplementos', icon: Pill },
     { id: 'phone', label: 'Celular', icon: Smartphone },
     { id: 'correlations', label: 'Correlações', icon: GitCompare },
@@ -663,6 +671,17 @@ export function App() {
             onToggleHabit={toggleHabit}
             onUpdateHabitDuration={updateHabitDuration}
             onDeleteHabit={deleteHabit}
+          />
+        )}
+
+        {activeTab === 'routines' && (
+          <RoutinesView
+            routines={routines}
+            habits={habits}
+            onAddRoutine={addRoutine}
+            onUpdateRoutine={updateRoutine}
+            onAdvanceRoutine={advanceRoutine}
+            onDeleteRoutine={deleteRoutine}
           />
         )}
 

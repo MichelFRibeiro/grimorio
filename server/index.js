@@ -163,6 +163,14 @@ import {
   revertMindMapSession
 } from './domain/activities.js';
 import {
+  advanceRoutine,
+  createRoutine,
+  deleteRoutine,
+  listRoutines,
+  removeHabitFromRoutines,
+  updateRoutine
+} from './domain/routines.js';
+import {
   createMindMap,
   addMindMapNode,
   updateMindMapNode,
@@ -586,6 +594,7 @@ app.get('/api/state', (req, res) => {
       }
     }
     db.phoneTimeLogs = sanitizePhoneTimeLogs(db.phoneTimeLogs);
+    const routines = listRoutines(db, { todayStr });
     const analytics = computeAnalytics();
     // Mesmo contrato do POST /consult: energia recente, needsEnergy e motivos
     // de recusa. Sem isso o cartão escondia a indicação a cada ação.
@@ -594,6 +603,7 @@ app.get('/api/state', (req, res) => {
     const { integrations, ...publicDb } = db;
     res.json({
       ...publicDb,
+      routines,
       openRouter: openRouterKeyStatus(),
       analytics,
       correlations: discoverCorrelations(db),
@@ -2046,6 +2056,80 @@ app.delete('/api/habits/:id', (req, res) => {
   try {
     const db = getDb();
     const result = domainDeleteHabit(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    removeHabitFromRoutines(db, req.params.id);
+    saveDb(db);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 6.1. ROTINAS (sequência guiada de rituais)
+// ==========================================
+app.get('/api/routines', (req, res) => {
+  try {
+    const db = getDb();
+    res.json({ success: true, routines: listRoutines(db) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/routines', (req, res) => {
+  try {
+    const db = getDb();
+    const result = createRoutine(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, routine: result.routine });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.put('/api/routines/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = updateRoutine(db, req.params.id, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, routine: result.routine });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.post('/api/routines/:id/advance', (req, res) => {
+  try {
+    const db = getDb();
+    const result = advanceRoutine(db, req.params.id, {
+      habitId: req.body?.habitId,
+      durationMinutes: req.body?.durationMinutes,
+      decisionId: req.body?.decisionId
+    });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({
+      success: true,
+      routine: result.routine,
+      step: result.step,
+      habit: result.habit,
+      rewardResult: result.rewardResult,
+      progress: result.progress,
+      completeToday: result.completeToday,
+      analytics: computeAnalytics()
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/routines/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = deleteRoutine(db, req.params.id);
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({ success: true });

@@ -872,6 +872,43 @@ export function useGameData() {
     await mutate(`/api/habits/${id}`, { method: 'DELETE' });
   };
 
+  const addRoutine = async (routineData) => {
+    playClick();
+    const result = await mutate('/api/routines', { method: 'POST', body: routineData });
+    return !!result;
+  };
+
+  const updateRoutine = async (id, routineData) => {
+    playClick();
+    const result = await mutate(`/api/routines/${id}`, { method: 'PUT', body: routineData });
+    return !!result;
+  };
+
+  const advanceRoutine = async (id, extra = {}) => {
+    playClick();
+    const result = await mutate(`/api/routines/${id}/advance`, {
+      body: extra || {},
+      refreshOnSuccess: false
+    });
+    if (!result) return null;
+    if (result.rewardResult) {
+      handleRewardResponse(
+        result.rewardResult,
+        result.completeToday
+          ? `Sequência concluída · ${result.habit?.title || 'ritual'}`
+          : `Passo da rotina: ${result.habit?.title || 'ritual'}`
+      );
+      confetti({ particleCount: result.completeToday ? 70 : 35, spread: 55, origin: { y: 0.7 } });
+    }
+    fetchState();
+    return result;
+  };
+
+  const deleteRoutine = async (id) => {
+    playClick();
+    await mutate(`/api/routines/${id}`, { method: 'DELETE' });
+  };
+
   const addSupplement = async (supplementData) => {
     playClick();
     await mutate('/api/supplements', { method: 'POST', body: supplementData });
@@ -1485,6 +1522,10 @@ export function useGameData() {
     toggleHabit,
     updateHabitDuration,
     deleteHabit,
+    addRoutine,
+    updateRoutine,
+    advanceRoutine,
+    deleteRoutine,
     addSupplement,
     updateSupplement,
     deleteSupplement,

@@ -93,6 +93,11 @@ O script irá:
 - Sequência pela frequência: dias devidos, semanas com a meta batida, ou períodos (quinzena/mês). Um ritual seg/qua/sex não quebra por ter terça vazia.
 - Multiplicador até 2.0x: +0,1 por dia ou +0,2 por semana/período.
 
+### 📋 Rotinas
+- Uma rotina é uma sequência de rituais já cadastrados (mínimo 2, sem repetir o mesmo ritual).
+- O modo guiado marca só o próximo passo ainda não feito hoje. O ritual é quem recebe streak, XP e moedas — a rotina não dá recompensa extra.
+- Marcar o ritual na aba Rituais também avança a rotina. Desfazer continua no ritual. Excluir o ritual tira o passo da sequência.
+
 ### ⚖️ Julgamento
 - Punição preguiçosa, idempotente, só a partir da data de ativação (`penaltiesSince`) — o histórico anterior não é julgado.
 - Missão crítica vencida (dia 1, 3, 7 e depois semanal), semana sem derrubar o chefe, ritual crítico perdido e dia planejado com zero vitórias.
@@ -203,6 +208,11 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 - `create_habit`: Cria hábito com frequências (`daily`, `weekdays`, `weekly`, `times_per_week` com `targetTimesPerWeek` 1-7, `fortnightly` com `monthDays` [ex: 1 e 16], `monthly` com `monthDay` [ex: 1]), `priority` (dispensavel→critico) e `difficulty` (baixa/media/alta/epica).
 - `toggle_habit`: Marca/desmarca execução diária com cálculo de chamas/streaks.
 - `update_habit`, `delete_habit`.
+
+#### 6.2. 📋 Rotinas (`routines`)
+- `list_routines`: Lista as sequências e o progresso de hoje (vem do histórico de cada ritual).
+- `create_routine`, `update_routine`, `delete_routine`: CRUD da ordem. Não concede recompensa.
+- `advance_routine`: Marca o próximo ritual ainda não feito hoje, reusando streak, XP e moedas do ritual. Recusa passo fora de ordem.
 
 #### 7. 🧠 Mapas Mentais (`mindMaps`)
 - `list_mind_maps`, `get_mind_map`, `create_mind_map`, `update_mind_map`.

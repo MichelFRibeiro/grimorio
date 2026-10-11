@@ -106,6 +106,14 @@ import {
   deleteMindMapSession as domainDeleteMindMapSession,
   revertMindMapSession
 } from './domain/activities.js';
+import {
+  advanceRoutine,
+  createRoutine,
+  deleteRoutine,
+  listRoutines,
+  removeHabitFromRoutines,
+  updateRoutine
+} from './domain/routines.js';
 import { markEnergySkip, formatQuantity } from './oracleMemory.js';
 import {
   createMindMap,
@@ -1258,8 +1266,105 @@ export const toolsDefinition = [
       const db = getDb();
       const result = domainDeleteHabit(db, args.id);
       if (result.error) return formatError(result.error);
+      removeHabitFromRoutines(db, args.id);
       saveDb(db);
       return formatSuccess(result.removed, `Ritual '${result.removed.title}' excluído.`);
+    }
+  },
+
+  // ==========================================
+  // 6.2. ROTINAS (sequência guiada de rituais)
+  // ==========================================
+  {
+    name: 'list_routines',
+    description: 'Listar rotinas: sequências ordenadas de rituais. O progresso de hoje vem do histórico de cada ritual. A rotina em si não concede XP nem moedas.',
+    schema: {},
+    handler: async () => {
+      const db = getDb();
+      const routines = listRoutines(db);
+      return formatSuccess({ total: routines.length, routines }, `${routines.length} rotinas listadas.`);
+    }
+  },
+  {
+    name: 'create_routine',
+    description: 'Criar uma rotina: conjunto ordenado de rituais existentes (mínimo 2, sem repetir). Não concede recompensa.',
+    schema: {
+      title: z.string().describe('Nome da rotina (ex: Manhã, Fechamento do escritório)'),
+      description: z.string().optional().describe('Contexto da sequência'),
+      icon: z.string().optional().describe('Ícone Lucide (ex: ListOrdered, Sunrise)'),
+      color: z.string().optional().describe('Cor hex (#38bdf8)'),
+      steps: z.array(z.object({
+        habitId: z.string().describe('ID do ritual'),
+        note: z.string().optional().describe('Lembrete curto deste passo')
+      })).min(2).describe('Rituais na ordem da sequência')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = createRoutine(db, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.routine, `Rotina '${result.routine.title}' criada com ${result.routine.steps.length} passos.`);
+    }
+  },
+  {
+    name: 'update_routine',
+    description: 'Atualizar título, descrição ou a ordem dos rituais de uma rotina. Não altera recompensas.',
+    schema: {
+      id: z.string().describe('ID da rotina'),
+      title: z.string().optional().describe('Novo título'),
+      description: z.string().optional().describe('Nova descrição'),
+      icon: z.string().optional().describe('Novo ícone'),
+      color: z.string().optional().describe('Nova cor hex'),
+      steps: z.array(z.object({
+        habitId: z.string().describe('ID do ritual'),
+        note: z.string().optional().describe('Lembrete curto deste passo')
+      })).min(2).optional().describe('Nova sequência completa')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = updateRoutine(db, args.id, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.routine, `Rotina '${result.routine.title}' atualizada.`);
+    }
+  },
+  {
+    name: 'advance_routine',
+    description: 'Marcar o próximo ritual da rotina que ainda não foi feito hoje. Reusa o ritual (streak, XP e moedas). Recusa um passo fora de ordem. Não desmarca — para desfazer, use toggle_habit.',
+    schema: {
+      id: z.string().describe('ID da rotina'),
+      habitId: z.string().optional().describe('ID do ritual, se já conhecido. Precisa ser o próximo da sequência.'),
+      durationMinutes: z.number().optional().describe('Tempo cronometrado deste passo em minutos')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = advanceRoutine(db, args.id, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      const title = result.habit?.title || 'ritual';
+      return formatSuccess({
+        routine: result.routine,
+        habit: result.habit,
+        rewardResult: result.rewardResult,
+        progress: result.progress,
+        completeToday: result.completeToday
+      }, result.completeToday
+        ? `Sequência concluída hoje. Ritual '${title}' marcado.`
+        : `Próximo passo feito: '${title}'. ${result.progress.done}/${result.progress.total}.`);
+    }
+  },
+  {
+    name: 'delete_routine',
+    description: 'Excluir uma rotina. Os rituais e as recompensas já concedidas permanecem.',
+    schema: {
+      id: z.string().describe('ID da rotina')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = deleteRoutine(db, args.id);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.removed, `Rotina '${result.removed.title}' excluída.`);
     }
   },
 
@@ -3083,6 +3188,7 @@ export const resourcesDefinition = [
             books: (db.books || []).length,
             processes: (db.processes || []).length,
             habits: (db.habits || []).length,
+            routines: (db.routines || []).length,
             supplements: (db.supplements || []).length,
             dailyVictories: (db.dailyVictories || []).length,
             mindMaps: (db.mindMaps || []).length
@@ -3149,6 +3255,20 @@ export const resourcesDefinition = [
         uri: 'grimorio://habits',
         mimeType: 'application/json',
         text: JSON.stringify(habits, null, 2)
+      };
+    }
+  },
+  {
+    uri: 'grimorio://routines',
+    name: 'Rotinas',
+    description: 'Sequências ordenadas de rituais e o progresso de hoje',
+    mimeType: 'application/json',
+    handler: async () => {
+      const db = getDb();
+      return {
+        uri: 'grimorio://routines',
+        mimeType: 'application/json',
+        text: JSON.stringify(listRoutines(db), null, 2)
       };
     }
   },
