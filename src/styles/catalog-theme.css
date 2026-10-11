@@ -894,3 +894,10 @@ kbd {
   background: rgba(255, 255, 255, 0.1);
   color: #fecdd3;
 }
+
+/* A faixa da homeostase na rotina nasce em âmbar claro, que some no papel creme. */
+.routine-band {
+  color: #b45309;
+  font-weight: 700;
+  font-size: 0.78rem;
+}

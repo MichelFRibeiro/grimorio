@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Check,
   ChevronDown,
@@ -13,9 +13,12 @@ import {
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityTimerBox } from './ActivityTimerBox';
 import { getFrequencyLabel } from '../utils/habitFrequency';
-import { MAX_HABIT_COUNT, confirmLongDuration } from '../utils/activityDuration';
-import { consumeActivityTimerMinutes, peekActivityTimerMinutes } from '../utils/liveActivityTimers';
-import { habitMeasureLabel, habitTracksCount, habitTracksTime } from '../utils/habitHomeostasis';
+import { MAX_DURATION_MINUTES, MAX_HABIT_COUNT, confirmLongDuration, getHabitDurationForDate, secondsToDurationMinutes } from '../utils/activityDuration';
+import { consumeActivityTimerMinutes } from '../utils/liveActivityTimers';
+import { useActivityTimer } from '../hooks/useActivityTimer';
+import { formatTimer } from '../hooks/useStopwatch';
+import { getSaoPauloDateStr } from '../utils/timeUtils';
+import { getHabitLoadSeries, habitMeasureLabel, habitTracksCount, habitTracksTime } from '../utils/habitHomeostasis';
 
 const ACCENT = '#38bdf8';
 
@@ -37,6 +40,52 @@ const labelStyle = {
   marginBottom: '4px'
 };
 
+function RoutineDurationField({ habitId, value, edited, onChange, onEdited }) {
+  const { seconds } = useActivityTimer('habit', habitId);
+  useEffect(() => {
+    if (edited) return;
+    const minutes = secondsToDurationMinutes(seconds);
+    onChange(minutes > 0 ? String(minutes) : '');
+  }, [seconds, edited, onChange]);
+
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <span style={labelStyle}>Tempo a registrar (min)</span>
+      <input
+        type="number"
+        min="0"
+        max={MAX_DURATION_MINUTES}
+        inputMode="numeric"
+        value={value}
+        onChange={(event) => {
+          onEdited();
+          onChange(event.target.value);
+        }}
+        placeholder="0"
+        style={fieldStyle}
+      />
+      <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+        Cronômetro em {formatTimer(seconds)}. Altere os minutos se o tempo real for outro. Vazio registra sem tempo.
+      </span>
+    </label>
+  );
+}
+
+function habitBandHint(habit) {
+  if (!habit) return '';
+  const today = getSaoPauloDateStr();
+  const parts = [];
+  const add = (series, unit) => {
+    if (!series?.homeostasisEnabled) return;
+    parts.push(`${series.homeostasisMinMinutes}–${series.homeostasisMaxMinutes} ${unit}`);
+  };
+  if (habitTracksTime(habit)) add(getHabitLoadSeries(habit, today), 'min');
+  if (habitTracksCount(habit)) {
+    add(getHabitLoadSeries(habit, today, { measure: 'count' }), habitMeasureLabel(habit, 'count'));
+  }
+  return parts.join(' · ');
+}
+
 function emptyForm() {
   return { title: '', description: '', steps: [] };
 }
@@ -57,6 +106,7 @@ export function RoutinesView({
   onAddRoutine,
   onUpdateRoutine,
   onAdvanceRoutine,
+  onUpdateHabitDuration,
   onDeleteRoutine
 }) {
   const [modal, setModal] = useState(null);
@@ -67,6 +117,8 @@ export function RoutinesView({
   const [error, setError] = useState('');
   const [activeStep, setActiveStep] = useState(null);
   const [stepCount, setStepCount] = useState('');
+  const [stepMinutes, setStepMinutes] = useState('');
+  const [minutesEdited, setMinutesEdited] = useState(false);
   const [stepError, setStepError] = useState('');
 
   const habitById = useMemo(() => new Map((habits || []).map(habit => [habit.id, habit])), [habits]);
@@ -133,6 +185,10 @@ export function RoutinesView({
     if (step.missing) return;
     setStepError('');
     setStepCount('');
+    setMinutesEdited(false);
+    setStepMinutes(step.doneToday
+      ? String(getHabitDurationForDate(habitById.get(step.habitId), getSaoPauloDateStr()) || '')
+      : '');
     setActiveStep({ routineId: routine.id, habitId: step.habitId });
   };
 
@@ -164,14 +220,35 @@ export function RoutinesView({
       extra.count = count;
     }
     if (habitTracksTime(habit)) {
-      const durationMinutes = confirmLongDuration(peekActivityTimerMinutes('habit', habit.id));
-      if (durationMinutes == null) return;
+      const raw = String(stepMinutes).trim();
+      const nextMinutes = raw === '' ? 0 : parseInt(raw, 10);
+      if (!Number.isFinite(nextMinutes) || nextMinutes < 0 || nextMinutes > MAX_DURATION_MINUTES) {
+        setStepError(`O tempo precisa ser um número entre 0 e ${MAX_DURATION_MINUTES} minutos.`);
+        return;
+      }
+      const confirmed = confirmLongDuration(nextMinutes);
+      if (confirmed == null) return;
       consumeActivityTimerMinutes('habit', habit.id);
-      if (durationMinutes > 0) extra.durationMinutes = durationMinutes;
+      if (confirmed > 0) extra.durationMinutes = confirmed;
     }
     const result = await advance(routine, extra);
     if (result) closeStep();
     else setStepError('Não foi possível registrar o ritual.');
+  };
+
+  const saveDoneMinutes = async (habit) => {
+    if (!habit || !onUpdateHabitDuration) return;
+    const raw = String(stepMinutes).trim();
+    const nextMinutes = raw === '' ? 0 : parseInt(raw, 10);
+    if (!Number.isFinite(nextMinutes) || nextMinutes < 0 || nextMinutes > MAX_DURATION_MINUTES) {
+      setStepError(`O tempo precisa ser um número entre 0 e ${MAX_DURATION_MINUTES} minutos.`);
+      return;
+    }
+    const confirmed = confirmLongDuration(nextMinutes);
+    if (confirmed == null) return;
+    const result = await onUpdateHabitDuration(habit.id, getSaoPauloDateStr(), confirmed);
+    if (result) closeStep();
+    else setStepError('Não foi possível corrigir o tempo.');
   };
 
   const undoStep = async (routine, habitId) => {
@@ -259,6 +336,7 @@ export function RoutinesView({
                 <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {(routine.steps || []).map((step, index) => {
                     const isNext = step.habitId === routine.nextHabitId;
+                    const band = step.missing ? '' : habitBandHint(habitById.get(step.habitId));
                     return (
                       <li
                         key={`${routine.id}-${step.habitId}`}
@@ -291,6 +369,7 @@ export function RoutinesView({
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.9rem' }}>
                             {step.missing ? 'Ritual excluído' : (step.title || 'Ritual')}
+                            {band ? <span className="routine-band"> · faixa {band}</span> : null}
                           </div>
                           <div style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
                             {step.missing
@@ -452,7 +531,12 @@ export function RoutinesView({
             >
               <div>
                 <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700 }}>{routine.title}</p>
-                <h3 style={{ margin: '4px 0 0', color: '#f8fafc' }}>{habit.title}</h3>
+                <h3 style={{ margin: '4px 0 0', color: '#f8fafc' }}>
+                  {habit.title}
+                  {habitBandHint(habit) ? (
+                    <span className="routine-band"> · faixa {habitBandHint(habit)}</span>
+                  ) : null}
+                </h3>
                 {habit.description ? (
                   <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: '0.82rem' }}>{habit.description}</p>
                 ) : null}
@@ -464,7 +548,16 @@ export function RoutinesView({
               </div>
 
               {tracksTime && !step.doneToday && (
-                <ActivityTimerBox kind="habit" id={habit.id} label="Cronômetro do ritual" accent={ACCENT} />
+                <>
+                  <ActivityTimerBox kind="habit" id={habit.id} label="Cronômetro do ritual" accent={ACCENT} />
+                  <RoutineDurationField
+                    habitId={habit.id}
+                    value={stepMinutes}
+                    edited={minutesEdited}
+                    onChange={setStepMinutes}
+                    onEdited={() => setMinutesEdited(true)}
+                  />
+                </>
               )}
 
               {tracksCount && !step.doneToday && (
@@ -489,11 +582,44 @@ export function RoutinesView({
                   Feito hoje. Desmarcar estorna XP e moedas deste ritual.
                 </p>
               )}
+              {step.doneToday && tracksTime && (
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={labelStyle}>Tempo registrado (min)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max={MAX_DURATION_MINUTES}
+                    inputMode="numeric"
+                    value={stepMinutes}
+                    onChange={(event) => setStepMinutes(event.target.value)}
+                    style={fieldStyle}
+                  />
+                </label>
+              )}
               {stepError ? <p style={{ margin: 0, color: '#f87171', fontSize: '0.82rem' }}>{stepError}</p> : null}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
                 <button type="button" onClick={closeStep} style={{ ...iconBtn, width: 'auto', padding: '8px 12px' }}>Fechar</button>
                 {step.doneToday ? (
+                  <>
+                  {tracksTime && (
+                    <button
+                      type="button"
+                      disabled={!onUpdateHabitDuration}
+                      onClick={() => saveDoneMinutes(habit)}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '10px',
+                        border: `1px solid ${ACCENT}`,
+                        background: 'rgba(56, 189, 248, 0.12)',
+                        color: ACCENT,
+                        fontWeight: 800,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Salvar tempo
+                    </button>
+                  )}
                   <button
                     type="button"
                     disabled={busyId === routine.id}
@@ -513,6 +639,7 @@ export function RoutinesView({
                   >
                     <RotateCcw size={14} /> Desmarcar
                   </button>
+                  </>
                 ) : (
                   <button
                     type="button"

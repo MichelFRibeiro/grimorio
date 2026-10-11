@@ -696,6 +696,7 @@ export function App() {
             onAddRoutine={addRoutine}
             onUpdateRoutine={updateRoutine}
             onAdvanceRoutine={advanceRoutine}
+            onUpdateHabitDuration={updateHabitDuration}
             onDeleteRoutine={deleteRoutine}
           />
         )}

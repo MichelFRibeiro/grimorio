@@ -505,17 +505,6 @@ export function HabitsView({
       return (h.history || []).includes(date || todayStr);
     });
     const extra = {};
-    if (!alreadyDone && habit && habitTracksCount(habit)) {
-      const unit = habitMeasureLabel(habit, 'count');
-      const answer = window.prompt(`Quantos ${unit} em ${habit.title}?`, '');
-      if (answer == null) return;
-      const count = Number(String(answer).replace(',', '.'));
-      if (!Number.isFinite(count) || count <= 0 || count > MAX_HABIT_COUNT) {
-        window.alert(`Informe uma quantidade entre 1 e ${MAX_HABIT_COUNT}.`);
-        return;
-      }
-      extra.count = count;
-    }
     if (isToday && habitTracksTime(habit || { tracking: 'time' })) {
       if (!alreadyDone) {
         const durationMinutes = confirmLongDuration(peekActivityTimerMinutes('habit', habitId));
@@ -526,7 +515,30 @@ export function HabitsView({
         consumeActivityTimerMinutes('habit', habitId);
       }
     }
+    if (!alreadyDone && habit && habitTracksCount(habit)) {
+      setCountPromptError('');
+      setCountPromptValue('');
+      setCountPrompt({ habitId, date, extra });
+      return;
+    }
     onToggleHabit(habitId, date, extra);
+  };
+
+  const closeCountPrompt = () => {
+    setCountPrompt(null);
+    setCountPromptValue('');
+    setCountPromptError('');
+  };
+
+  const confirmCountPrompt = () => {
+    if (!countPrompt) return;
+    const count = Number(String(countPromptValue).replace(',', '.'));
+    if (!Number.isFinite(count) || count <= 0 || count > MAX_HABIT_COUNT) {
+      setCountPromptError(`Informe uma quantidade entre 1 e ${MAX_HABIT_COUNT}.`);
+      return;
+    }
+    onToggleHabit(countPrompt.habitId, countPrompt.date, { ...countPrompt.extra, count });
+    closeCountPrompt();
   };
 
   const handleSaveHabitCount = (habitId, dateStr, rawValue) => {
@@ -577,6 +589,9 @@ export function HabitsView({
   const [customRetroDate, setCustomRetroDate] = useState(yesterdayStr);
   const [durationDrafts, setDurationDrafts] = useState({});
   const [countDrafts, setCountDrafts] = useState({});
+  const [countPrompt, setCountPrompt] = useState(null);
+  const [countPromptValue, setCountPromptValue] = useState('');
+  const [countPromptError, setCountPromptError] = useState('');
 
   useEffect(() => {
     try {
@@ -2590,6 +2605,51 @@ export function HabitsView({
       })()}
 
       {/* Reusable Confirm Modal */}
+      {countPrompt && (() => {
+        const habit = (habits || []).find((item) => item.id === countPrompt.habitId);
+        const unit = habitMeasureLabel(habit, 'count');
+        return (
+          <div
+            style={{ position: 'fixed', inset: 0, background: 'rgba(2, 6, 23, 0.78)', zIndex: 50, display: 'grid', placeItems: 'center', padding: '20px' }}
+            onClick={closeCountPrompt}
+          >
+            <form
+              className="glass-panel"
+              onClick={(event) => event.stopPropagation()}
+              onSubmit={(event) => {
+                event.preventDefault();
+                confirmCountPrompt();
+              }}
+              style={{ width: 'min(420px, 100%)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}
+            >
+              <h3 style={{ margin: 0, color: '#f8fafc' }}>{habit?.title || 'Ritual'}</h3>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8' }}>Quantidade ({unit})</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={MAX_HABIT_COUNT}
+                  inputMode="decimal"
+                  autoFocus
+                  value={countPromptValue}
+                  onChange={(event) => {
+                    setCountPromptValue(event.target.value);
+                    setCountPromptError('');
+                  }}
+                  placeholder={`Quantos ${unit}?`}
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '0.95rem' }}
+                />
+              </label>
+              {countPromptError ? <p style={{ margin: 0, color: '#f87171', fontSize: '0.82rem' }}>{countPromptError}</p> : null}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button type="button" onClick={closeCountPrompt} style={{ padding: '8px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', fontWeight: 700, cursor: 'pointer' }}>Cancelar</button>
+                <button type="submit" style={{ padding: '8px 14px', borderRadius: '10px', border: 'none', background: '#38bdf8', color: '#0f172a', fontWeight: 800, cursor: 'pointer' }}>Registrar</button>
+              </div>
+            </form>
+          </div>
+        );
+      })()}
+
       <ConfirmModal
         isOpen={confirmModal.isOpen}
         title={confirmModal.title}
