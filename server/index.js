@@ -133,6 +133,7 @@ import {
   toggleHabit as domainToggleHabit,
   updateHabitDuration as domainUpdateHabitDuration,
   deleteHabit as domainDeleteHabit,
+  applyHabitHomeostasis as domainApplyHabitHomeostasis,
   logReadingSession as domainLogReadingSession,
   updateReadingSession as domainUpdateReadingSession,
   deleteReadingSession as domainDeleteReadingSession,
@@ -1935,7 +1936,7 @@ app.delete('/api/processes/:id', (req, res) => {
 app.post('/api/habits', (req, res) => {
   try {
     const db = getDb();
-    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay, weekDays, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty } = req.body;
+    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay, weekDays, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty, homeostasis, tracking, countUnit } = req.body;
     if (!title) return res.status(400).json({ error: 'Título do hábito é obrigatório' });
 
     const scale = resolveActivityScale({
@@ -1962,6 +1963,7 @@ app.post('/api/habits', (req, res) => {
       if (coinReward !== undefined) newHabit.coinReward = parseInt(coinReward, 10) || 8;
     }
     applyActivityContext(newHabit, { location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes }, db.questCategories);
+    domainApplyHabitHomeostasis(newHabit, homeostasis, { tracking, countUnit });
 
     db.habits.unshift(newHabit);
     saveDb(db);
@@ -1977,7 +1979,7 @@ app.put('/api/habits/:id', (req, res) => {
     const habit = db.habits.find(h => h.id === req.params.id);
     if (!habit) return res.status(404).json({ error: 'Hábito não encontrado' });
 
-    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay, weekDays, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty } = req.body;
+    const { title, description, category, icon, frequency, targetTimesPerWeek, timesPerWeek, monthDays, monthDay, weekDays, xpReward, coinReward, location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes, priority, difficulty, homeostasis, tracking, countUnit } = req.body;
     if (title !== undefined && title.trim()) habit.title = title.trim();
     if (description !== undefined) habit.description = description.trim();
     if (category !== undefined && category.trim()) habit.category = category.trim();
@@ -1998,6 +2000,7 @@ app.put('/api/habits/:id', (req, res) => {
     if (location !== undefined || timeWindow !== undefined || timeWindowStart !== undefined || timeWindowEnd !== undefined || estimatedMinutes !== undefined) {
       applyActivityContext(habit, { location, timeWindow, timeWindowStart, timeWindowEnd, estimatedMinutes }, db.questCategories);
     }
+    domainApplyHabitHomeostasis(habit, homeostasis, { tracking, countUnit });
 
     saveDb(db);
     res.json({ success: true, habit });
@@ -2011,7 +2014,8 @@ app.put('/api/habits/:id/duration', (req, res) => {
     const db = getDb();
     const result = domainUpdateHabitDuration(db, req.params.id, {
       date: req.body?.date,
-      durationMinutes: req.body?.durationMinutes
+      durationMinutes: req.body?.durationMinutes,
+      count: req.body?.count
     });
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
@@ -2034,6 +2038,7 @@ app.post('/api/habits/:id/toggle', (req, res) => {
       id: req.params.id,
       date: req.body?.date,
       durationMinutes: req.body?.durationMinutes,
+      count: req.body?.count,
       decisionId: req.body?.decisionId
     });
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
@@ -2954,6 +2959,7 @@ app.post('/api/daily-victories', (req, res) => {
       category: req.body?.category,
       date: req.body?.date,
       source: req.body?.source,
+      habitId: req.body?.habitId,
       questId: req.body?.questId
     }, { today: todayStr, defaultCategory: defaultCat });
     db.dailyVictories = result.list;

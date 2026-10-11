@@ -92,6 +92,8 @@ O script irá:
 ### 🔥 Rituais Diários (Hábitos & Streaks)
 - Sequência pela frequência: dias devidos, semanas com a meta batida, ou períodos (quinzena/mês). Um ritual seg/qua/sex não quebra por ter terça vazia.
 - Multiplicador até 2.0x: +0,1 por dia ou +0,2 por semana/período.
+- **O que acompanhar**: tempo, quantidade ou os dois. Push-ups medem repetições (`reps`), não o cronômetro. A unidade é livre (reps, páginas, copos).
+- **Homeostase & Alostase** (opt-in, no cadastro): a faixa sobe com a capacidade, como no estudo da AGU, no que o ritual mede. Sobe no máximo 10% por semana se 4 dos últimos 7 dias ficaram na faixa. Tempo: piso 10 min, meta 60. Quantidade: piso 5, meta 50. Com os dois, cada um tem a sua faixa. O chip no cartão abre o gráfico e planeja a vitória do dia no piso.
 
 ### 📋 Rotinas
 - Uma rotina é uma sequência de rituais já cadastrados (mínimo 2, sem repetir o mesmo ritual).

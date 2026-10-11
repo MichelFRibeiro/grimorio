@@ -72,7 +72,9 @@ export function HomeostasisLoadChart({
   seriesLabel = 'Tempo',
   accentColor = '#fbbf24',
   zoneCopy = DEFAULT_ZONE_META,
-  actions = null
+  actions = null,
+  formatValue = formatStudyDuration,
+  unitSuffix = ''
 }) {
   const todayPoint = series?.today;
   const todayZone = zoneCopy[todayPoint?.zone] || zoneCopy['allostasis-under'] || DEFAULT_ZONE_META['allostasis-under'];
@@ -199,7 +201,7 @@ export function HomeostasisLoadChart({
             const point = series?.points?.[item.dataIndex];
             if (!point) return '';
             const zone = zoneCopy[point.zone] || DEFAULT_ZONE_META[point.zone] || DEFAULT_ZONE_META.empty;
-            return `${formatStudyDuration(point.minutes)} · ${zone.label}`;
+            return `${formatValue(point.minutes)}${unitSuffix} · ${zone.label}`;
           },
           filter: (item) => item.dataset.label === seriesLabel
         }
@@ -217,11 +219,11 @@ export function HomeostasisLoadChart({
         ticks: {
           color: '#94a3b8',
           stepSize: step,
-          callback: (value) => formatStudyDuration(value)
+          callback: (value) => `${formatValue(value)}${unitSuffix}`
         }
       }
     }
-  }), [series, yMax, step, seriesLabel, zoneCopy]);
+  }), [series, yMax, step, seriesLabel, zoneCopy, formatValue, unitSuffix]);
 
   if (!series) return null;
 
@@ -258,10 +260,10 @@ export function HomeostasisLoadChart({
             Meta de hoje
           </div>
           <div style={{ fontFamily: 'var(--font-heading)', fontSize: '1.05rem', color: accentColor, lineHeight: 1.2, margin: '4px 0' }}>
-            {formatStudyDuration(series.homeostasisMinMinutes)}–{formatStudyDuration(series.homeostasisMaxMinutes)}
+            {formatValue(series.homeostasisMinMinutes)}–{formatValue(series.homeostasisMaxMinutes)}{unitSuffix}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '4px' }}>
-            setpoint {formatStudyDuration(series.setpointMinutes || series.avgMinutes)}
+            setpoint {formatValue(series.setpointMinutes || series.avgMinutes)}{unitSuffix}
           </div>
           <div style={{ fontSize: '0.78rem', color: todayZone.color, fontWeight: 800 }}>
             {todayZone.label}
@@ -280,7 +282,7 @@ export function HomeostasisLoadChart({
 
       <p style={{ color: '#cbd5e1', fontSize: '0.82rem', marginTop: '12px', lineHeight: 1.45 }}>
         {todayPoint
-          ? `Hoje: ${formatStudyDuration(todayPoint.minutes)}. ${todayZone.copy}`
+          ? `Hoje: ${formatValue(todayPoint.minutes)}${unitSuffix}. ${todayZone.copy}`
           : todayZone.copy}
       </p>
 
@@ -290,7 +292,7 @@ export function HomeostasisLoadChart({
             Média {series.activeDays ?? days}d ativos
           </div>
           <div style={{ fontSize: '1.1rem', fontWeight: 800, color: accentColor, fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
-            {formatStudyDuration(series.avgMinutes)}
+            {formatValue(series.avgMinutes)}{unitSuffix}
           </div>
         </div>
         <div className="rpg-card" style={{ padding: '12px 14px' }}>

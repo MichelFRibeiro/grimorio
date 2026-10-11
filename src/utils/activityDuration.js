@@ -85,6 +85,40 @@ export function clearHabitDurationForDate(habit, dateStr) {
   return setHabitDurationForDate(habit, dateStr, 0);
 }
 
+/** Teto de uma contagem (repetições, páginas, copos). 0 apaga o dia. */
+export const MAX_HABIT_COUNT = 100000;
+
+export function parseHabitCount(value) {
+  if (value == null || value === '') return 0;
+  const n = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(MAX_HABIT_COUNT, Math.round(n * 100) / 100);
+}
+
+export function getHabitCountForDate(habit, dateStr) {
+  if (!habit || !dateStr) return 0;
+  return parseHabitCount(habit.countsByDate?.[dateStr]);
+}
+
+export function setHabitCountForDate(habit, dateStr, count) {
+  if (!habit || !dateStr) return habit;
+  const value = parseHabitCount(count);
+  if (!habit.countsByDate) habit.countsByDate = {};
+  if (value > 0) habit.countsByDate[dateStr] = value;
+  else delete habit.countsByDate[dateStr];
+  if (Object.keys(habit.countsByDate).length === 0) delete habit.countsByDate;
+  return habit;
+}
+
+export function clearHabitCountForDate(habit, dateStr) {
+  return setHabitCountForDate(habit, dateStr, 0);
+}
+
+export function sumCountMap(map) {
+  if (!map || typeof map !== 'object') return 0;
+  return Object.values(map).reduce((acc, value) => acc + parseHabitCount(value), 0);
+}
+
 export function elapsedMsFrom(accumulatedMs, runStartedAt, now = Date.now()) {
   const extra = runStartedAt != null ? Math.max(0, now - runStartedAt) : 0;
   return Math.max(0, (accumulatedMs || 0) + extra);

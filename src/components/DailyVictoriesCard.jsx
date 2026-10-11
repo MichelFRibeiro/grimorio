@@ -58,7 +58,8 @@ export function DailyVictoriesCard({
   onDeleteVictory,
   studyFloorMinutes = null,
   readingFloorMinutes = null,
-  scriptureFloorMinutes = null
+  scriptureFloorMinutes = null,
+  habitFloorMinutes = null
 }) {
   const todayStr = getSaoPauloDateStr();
   const dates = getPlannableDates(todayStr);
@@ -124,7 +125,8 @@ export function DailyVictoriesCard({
   const victoryTitle = (victory) => displayHomeostasisVictoryTitle(victory, {
     studyFloorMinutes,
     readingFloorMinutes,
-    scriptureFloorMinutes
+    scriptureFloorMinutes,
+    habitFloorMinutes
   });
 
   const selectHistoryDate = (date) => {

@@ -31,6 +31,7 @@ import { useFocusPlayer } from './hooks/useFocusPlayer';
 import { getSaoPauloDateStr, addDaysToDateStr, getSaoPauloDayOfWeek } from './utils/timeUtils';
 import { summarizePlan, getAguStudyLoadSeries } from './utils/aguCycle';
 import { getReadingLoadSeries, getScriptureLoadSeries } from './utils/homeostasis';
+import { getHabitLoadSeries, habitHomeostasisEnabled } from './utils/habitHomeostasis';
 import { CorrelationsView } from './components/CorrelationsView';
 import { PhoneTimeView } from './components/PhoneTimeView';
 import { ChatRoomView } from './components/ChatRoomView';
@@ -203,7 +204,19 @@ export function App() {
       mindMapSessions: data?.mindMapSessions || []
     }).homeostasisMinMinutes,
     reading: getReadingLoadSeries(data?.readingSessions || [], todayStr).homeostasisMinMinutes,
-    scripture: getScriptureLoadSeries(data?.scriptureSessions || [], todayStr).homeostasisMinMinutes
+    scripture: getScriptureLoadSeries(data?.scriptureSessions || [], todayStr).homeostasisMinMinutes,
+    habits: Object.fromEntries((data?.habits || []).flatMap((habit) => {
+      const entries = [];
+      if (habitHomeostasisEnabled(habit)) {
+        const minutes = getHabitLoadSeries(habit, todayStr)?.homeostasisMinMinutes;
+        if (minutes != null) entries.push([habit.id, minutes]);
+      }
+      if (habit.homeostasisCount?.enabled) {
+        const amount = getHabitLoadSeries(habit, todayStr, { measure: 'count' })?.homeostasisMinMinutes;
+        if (amount != null) entries.push([`${habit.id}:count`, amount]);
+      }
+      return entries;
+    }))
   }), [data, todayStr]);
 
   // Atalhos de teclado (n / h / ? / Esc). Precisa ficar ACIMA dos returns
@@ -432,6 +445,7 @@ export function App() {
         studyFloorMinutes={homeostasisFloors.study}
         readingFloorMinutes={homeostasisFloors.reading}
         scriptureFloorMinutes={homeostasisFloors.scripture}
+        habitFloorMinutes={homeostasisFloors.habits}
       />
 
       {/* Boss Raid Banner */}
@@ -671,6 +685,7 @@ export function App() {
             onToggleHabit={toggleHabit}
             onUpdateHabitDuration={updateHabitDuration}
             onDeleteHabit={deleteHabit}
+            onAddDailyVictory={addDailyVictory}
           />
         )}
 

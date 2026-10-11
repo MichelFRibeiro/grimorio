@@ -824,11 +824,15 @@ export function useGameData() {
     await mutate('/api/habits', { method: 'POST', body: habitData });
   };
 
-  const updateHabitDuration = async (id, date, durationMinutes) => {
+  const updateHabitDuration = async (id, date, durationMinutes, count) => {
     playClick();
     const result = await mutate(`/api/habits/${id}/duration`, {
       method: 'PUT',
-      body: { ...(date ? { date } : {}), durationMinutes },
+      body: {
+        ...(date ? { date } : {}),
+        ...(durationMinutes !== undefined ? { durationMinutes } : {}),
+        ...(count !== undefined ? { count } : {})
+      },
       refreshOnSuccess: false
     });
     if (!result) return null;

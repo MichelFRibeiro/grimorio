@@ -3,6 +3,7 @@ import { grantDestinyChestSync } from './domain/destinyChest.js';
 import { getSaoPauloDateStr } from './timeUtils.js';
 import { getReadingLoadSeries, getScriptureLoadSeries } from '../src/utils/homeostasis.js';
 import { getAguStudyLoadSeries } from '../src/utils/aguCycle.js';
+import { getHabitLoadSeries, habitHomeostasisEnabled, persistHabitHomeostasis } from '../src/utils/habitHomeostasis.js';
 import {
   DAILY_VICTORY_REWARDS,
   DAILY_VICTORY_TRIPLE_BONUS,
@@ -115,7 +116,9 @@ export function syncDailyVictoriesFromActivity(db, {
   questNote,
   syncReading = false,
   syncStudy = false,
-  syncScripture = false
+  syncScripture = false,
+  syncHabits = false,
+  habitId
 } = {}) {
   const state = {
     list: sanitizeDailyVictories(db.dailyVictories),
@@ -132,6 +135,25 @@ export function syncDailyVictoriesFromActivity(db, {
   const scriptureSeries = syncScripture
     ? getScriptureLoadSeries(db.scriptureSessions || [], today)
     : null;
+  const habitMinutesById = {};
+  const habitTargetMinutesById = {};
+  if (syncHabits) {
+    (db.habits || []).forEach((habit) => {
+      if (!habitHomeostasisEnabled(habit)) return;
+      if (habitId && habit.id !== habitId) return;
+      persistHabitHomeostasis(habit, today);
+      const series = getHabitLoadSeries(habit, today);
+      if (series) {
+        habitMinutesById[habit.id] = series.today?.loggedMinutes || 0;
+        habitTargetMinutesById[habit.id] = series.homeostasisMinMinutes;
+      }
+      const countSeries = getHabitLoadSeries(habit, today, { measure: 'count' });
+      if (countSeries) {
+        habitMinutesById[`${habit.id}:count`] = countSeries.today?.loggedMinutes || 0;
+        habitTargetMinutesById[`${habit.id}:count`] = countSeries.homeostasisMinMinutes;
+      }
+    });
+  }
   const updates = planLinkedDailyVictoryUpdates(state.list, {
     today,
     questId,
@@ -142,7 +164,9 @@ export function syncDailyVictoriesFromActivity(db, {
     readingTargetMinutes: readingSeries ? readingSeries.homeostasisMinMinutes : undefined,
     studyTargetMinutes: studySeries ? studySeries.homeostasisMinMinutes : undefined,
     scriptureMinutes: scriptureSeries ? (scriptureSeries.today?.minutes || 0) : undefined,
-    scriptureTargetMinutes: scriptureSeries ? scriptureSeries.homeostasisMinMinutes : undefined
+    scriptureTargetMinutes: scriptureSeries ? scriptureSeries.homeostasisMinMinutes : undefined,
+    habitMinutesById: syncHabits ? habitMinutesById : undefined,
+    habitTargetMinutesById: syncHabits ? habitTargetMinutesById : undefined
   });
 
   const settled = [];

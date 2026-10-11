@@ -20,7 +20,8 @@ import {
   History,
   RotateCcw,
   Clock,
-  EyeOff
+  EyeOff,
+  Activity
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityContextFields } from './ActivityContextFields';
@@ -30,8 +31,22 @@ import { getSaoPauloDateStr, getHabitWeeklyStats, getCurrentWeekDays, addDaysToD
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, inferDifficultyFromRewards, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
 import { getFrequencyLabel, getHabitDueStatus, getHabitPeriodStatus, getHabitWeekDays, isPeriodFrequency, padMonthDay, WEEKDAY_OPTIONS } from '../utils/habitFrequency';
-import { formatDurationLabel, getHabitDurationForDate, sumDurationMap, confirmLongDuration, MAX_DURATION_MINUTES } from '../utils/activityDuration';
+import { formatDurationLabel, getHabitDurationForDate, getHabitCountForDate, sumDurationMap, sumCountMap, confirmLongDuration, MAX_DURATION_MINUTES, MAX_HABIT_COUNT } from '../utils/activityDuration';
 import { consumeActivityTimerMinutes, peekActivityTimerMinutes } from '../utils/liveActivityTimers';
+import {
+  HABIT_HOMEOSTASIS_FLOOR_COUNT,
+  HABIT_HOMEOSTASIS_FLOOR_MINUTES,
+  HABIT_HOMEOSTASIS_TARGET_COUNT,
+  HABIT_HOMEOSTASIS_TARGET_MINUTES,
+  buildHabitHomeostasisVictory,
+  getHabitLoadSeries,
+  habitHomeostasisEnabled,
+  habitMeasureLabel,
+  habitTracksCount,
+  habitTracksTime,
+  normalizeHabitTracking
+} from '../utils/habitHomeostasis';
+import { HabitLoadChart } from './HabitLoadChart';
 
 const HIDE_SETTLED_STORAGE_KEY = 'grimorio_hide_settled_habits';
 const MONTH_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
@@ -43,6 +58,156 @@ const MONTH_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
 function streakUnitsLabel(unit, value = 0) {
   const singular = unit === 'weeks' ? 'semana' : unit === 'periods' ? 'período' : 'dia';
   return Math.abs(Number(value) || 0) === 1 ? singular : `${singular}s`;
+}
+
+function TrackingFields({
+  tracking,
+  countUnit,
+  onTrackingChange,
+  onCountUnitChange,
+  accent = '#f87171'
+}) {
+  const options = [
+    { id: 'time', label: 'Tempo' },
+    { id: 'count', label: 'Quantidade' },
+    { id: 'both', label: 'Os dois' }
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8' }}>O que acompanhar</span>
+      <div style={{ display: 'flex', gap: '6px' }}>
+        {options.map((option) => {
+          const active = tracking === option.id;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => onTrackingChange(option.id)}
+              style={{
+                flex: 1,
+                padding: '8px 6px',
+                borderRadius: '8px',
+                background: active ? `${accent}33` : 'rgba(255, 255, 255, 0.05)',
+                border: active ? `1px solid ${accent}` : '1px solid rgba(255, 255, 255, 0.1)',
+                color: '#fff',
+                fontWeight: 800,
+                fontSize: '0.78rem',
+                cursor: 'pointer'
+              }}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      {tracking !== 'time' && (
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8' }}>
+          Unidade (ex: reps, páginas, copos)
+          <input
+            type="text"
+            maxLength={24}
+            value={countUnit}
+            placeholder="reps"
+            onChange={(e) => onCountUnitChange(e.target.value)}
+            style={{
+              padding: '8px 10px',
+              borderRadius: '8px',
+              background: 'rgba(255, 255, 255, 0.06)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              color: '#fff',
+              fontSize: '0.85rem'
+            }}
+          />
+        </label>
+      )}
+      <p style={{ fontSize: '0.72rem', color: '#64748b', margin: 0 }}>
+        {tracking === 'count'
+          ? 'A homeostase acompanha a quantidade, não o tempo. Push-ups sobem pelas repetições.'
+          : tracking === 'both'
+            ? 'Tempo e quantidade têm faixas separadas. Marcar pede os dois.'
+            : 'A homeostase, se ligada, acompanha o cronômetro.'}
+      </p>
+    </div>
+  );
+}
+
+function HomeostasisFields({
+  enabled,
+  floor,
+  target,
+  countFloor,
+  countTarget,
+  tracking = 'time',
+  onEnabledChange,
+  onFloorChange,
+  onTargetChange,
+  onCountFloorChange,
+  onCountTargetChange,
+  accent = '#f87171'
+}) {
+  const showTime = tracking !== 'count';
+  const showCount = tracking !== 'time';
+  const numberStyle = {
+    padding: '8px 10px',
+    borderRadius: '8px',
+    background: 'rgba(255, 255, 255, 0.06)',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+    color: '#fff',
+    fontSize: '0.85rem'
+  };
+  return (
+    <div
+      style={{
+        padding: '12px',
+        borderRadius: '10px',
+        background: enabled ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+        border: enabled ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(255, 255, 255, 0.08)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px'
+      }}
+    >
+      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', cursor: 'pointer' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', fontWeight: 800, color: enabled ? '#34d399' : '#94a3b8' }}>
+          <Activity size={14} /> Homeostase & Alostase
+        </span>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => onEnabledChange(e.target.checked)}
+          style={{ width: '16px', height: '16px', accentColor: accent }}
+        />
+      </label>
+      <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0, lineHeight: 1.4 }}>
+        A faixa sobe com a capacidade, como no estudo da AGU: no máximo 10% por semana, se 4 dos últimos 7 dias ficarem nela.
+        {showCount && !showTime ? ' Aqui ela mede a quantidade, não o tempo.' : ''}
+      </p>
+      {enabled && showTime && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8' }}>
+            Piso (min)
+            <input type="number" min={1} max={480} value={floor} onChange={(e) => onFloorChange(e.target.value)} style={numberStyle} />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8' }}>
+            Meta final (min)
+            <input type="number" min={1} max={480} value={target} onChange={(e) => onTargetChange(e.target.value)} style={numberStyle} />
+          </label>
+        </div>
+      )}
+      {enabled && showCount && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8' }}>
+            Piso (quantidade)
+            <input type="number" min={1} max={MAX_HABIT_COUNT} value={countFloor} onChange={(e) => onCountFloorChange(e.target.value)} style={numberStyle} />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8' }}>
+            Meta final (quantidade)
+            <input type="number" min={1} max={MAX_HABIT_COUNT} value={countTarget} onChange={(e) => onCountTargetChange(e.target.value)} style={numberStyle} />
+          </label>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function MonthDaySelect({ value, onChange, accent = '#ef4444' }) {
@@ -219,7 +384,8 @@ export function HabitsView({
   onUpdateHabit,
   onToggleHabit,
   onUpdateHabitDuration,
-  onDeleteHabit
+  onDeleteHabit,
+  onAddDailyVictory
 }) {
   const defaultCategoryList = [
     { id: 'cat-1', name: 'Trabalho', color: '#38bdf8' },
@@ -254,6 +420,13 @@ export function HabitsView({
   const [newLocation, setNewLocation] = useState(defaultLocationForCategory(defaultCatName, activeCategories));
   const [newWindowStart, setNewWindowStart] = useState('');
   const [newWindowEnd, setNewWindowEnd] = useState('');
+  const [newTracking, setNewTracking] = useState('time');
+  const [newCountUnit, setNewCountUnit] = useState('reps');
+  const [newHomeostasis, setNewHomeostasis] = useState(false);
+  const [newHomeostasisFloor, setNewHomeostasisFloor] = useState(HABIT_HOMEOSTASIS_FLOOR_MINUTES);
+  const [newHomeostasisTarget, setNewHomeostasisTarget] = useState(HABIT_HOMEOSTASIS_TARGET_MINUTES);
+  const [newCountFloor, setNewCountFloor] = useState(HABIT_HOMEOSTASIS_FLOOR_COUNT);
+  const [newCountTarget, setNewCountTarget] = useState(HABIT_HOMEOSTASIS_TARGET_COUNT);
 
   // Sync newCategory with activeCategories
   useEffect(() => {
@@ -279,6 +452,14 @@ export function HabitsView({
   const [editLocation, setEditLocation] = useState('anywhere');
   const [editWindowStart, setEditWindowStart] = useState('');
   const [editWindowEnd, setEditWindowEnd] = useState('');
+  const [editTracking, setEditTracking] = useState('time');
+  const [editCountUnit, setEditCountUnit] = useState('reps');
+  const [editHomeostasis, setEditHomeostasis] = useState(false);
+  const [editHomeostasisFloor, setEditHomeostasisFloor] = useState(HABIT_HOMEOSTASIS_FLOOR_MINUTES);
+  const [editHomeostasisTarget, setEditHomeostasisTarget] = useState(HABIT_HOMEOSTASIS_TARGET_MINUTES);
+  const [editCountFloor, setEditCountFloor] = useState(HABIT_HOMEOSTASIS_FLOOR_COUNT);
+  const [editCountTarget, setEditCountTarget] = useState(HABIT_HOMEOSTASIS_TARGET_COUNT);
+  const [loadHabitId, setLoadHabitId] = useState(null);
 
   // Confirm Modal State
   const [confirmModal, setConfirmModal] = useState({
@@ -317,13 +498,25 @@ export function HabitsView({
   const dayBeforeYesterdayStr = addDaysToDateStr(todayStr, -2);
 
   const handleToggleHabit = (habitId, date = null) => {
+    const habit = (habits || []).find((item) => item.id === habitId);
     const isToday = !date || date === todayStr;
     const alreadyDone = (habits || []).some((h) => {
       if (h.id !== habitId) return false;
       return (h.history || []).includes(date || todayStr);
     });
     const extra = {};
-    if (isToday) {
+    if (!alreadyDone && habit && habitTracksCount(habit)) {
+      const unit = habitMeasureLabel(habit, 'count');
+      const answer = window.prompt(`Quantos ${unit} em ${habit.title}?`, '');
+      if (answer == null) return;
+      const count = Number(String(answer).replace(',', '.'));
+      if (!Number.isFinite(count) || count <= 0 || count > MAX_HABIT_COUNT) {
+        window.alert(`Informe uma quantidade entre 1 e ${MAX_HABIT_COUNT}.`);
+        return;
+      }
+      extra.count = count;
+    }
+    if (isToday && habitTracksTime(habit || { tracking: 'time' })) {
       if (!alreadyDone) {
         const durationMinutes = confirmLongDuration(peekActivityTimerMinutes('habit', habitId));
         if (durationMinutes == null) return;
@@ -334,6 +527,22 @@ export function HabitsView({
       }
     }
     onToggleHabit(habitId, date, extra);
+  };
+
+  const handleSaveHabitCount = (habitId, dateStr, rawValue) => {
+    if (!onUpdateHabitDuration) return;
+    const raw = String(rawValue ?? '').trim();
+    const nextCount = raw === '' ? 0 : Number(raw.replace(',', '.'));
+    if (!Number.isFinite(nextCount) || nextCount < 0 || nextCount > MAX_HABIT_COUNT) {
+      window.alert(`A quantidade precisa ser um número entre 0 e ${MAX_HABIT_COUNT}.`);
+      return;
+    }
+    onUpdateHabitDuration(habitId, dateStr, undefined, nextCount);
+    setCountDrafts((prev) => {
+      const next = { ...prev };
+      delete next[`${habitId}:${dateStr}`];
+      return next;
+    });
   };
 
   const handleSaveHabitDuration = (habitId, dateStr, rawValue) => {
@@ -367,6 +576,7 @@ export function HabitsView({
   const [retroModalHabit, setRetroModalHabit] = useState(null);
   const [customRetroDate, setCustomRetroDate] = useState(yesterdayStr);
   const [durationDrafts, setDurationDrafts] = useState({});
+  const [countDrafts, setCountDrafts] = useState({});
 
   useEffect(() => {
     try {
@@ -425,7 +635,17 @@ export function HabitsView({
       priority: newPriority,
       difficulty: newDifficulty,
       location: newLocation,
-      timeWindow: fieldsToTimeWindow(newWindowStart, newWindowEnd)
+      timeWindow: fieldsToTimeWindow(newWindowStart, newWindowEnd),
+      tracking: newTracking,
+      countUnit: newTracking === 'time' ? '' : (newCountUnit.trim() || 'reps'),
+      homeostasis: newHomeostasis ? {
+        enabled: true,
+        tracking: newTracking,
+        floorMinutes: parseInt(newHomeostasisFloor, 10) || HABIT_HOMEOSTASIS_FLOOR_MINUTES,
+        targetMinutes: parseInt(newHomeostasisTarget, 10) || HABIT_HOMEOSTASIS_TARGET_MINUTES,
+        countFloor: parseInt(newCountFloor, 10) || HABIT_HOMEOSTASIS_FLOOR_COUNT,
+        countTarget: parseInt(newCountTarget, 10) || HABIT_HOMEOSTASIS_TARGET_COUNT
+      } : { enabled: false }
     });
 
     setNewTitle('');
@@ -441,6 +661,13 @@ export function HabitsView({
     setNewLocation(defaultLocationForCategory(newCategory, activeCategories));
     setNewWindowStart('');
     setNewWindowEnd('');
+    setNewTracking('time');
+    setNewCountUnit('reps');
+    setNewCountFloor(HABIT_HOMEOSTASIS_FLOOR_COUNT);
+    setNewCountTarget(HABIT_HOMEOSTASIS_TARGET_COUNT);
+    setNewHomeostasis(false);
+    setNewHomeostasisFloor(HABIT_HOMEOSTASIS_FLOOR_MINUTES);
+    setNewHomeostasisTarget(HABIT_HOMEOSTASIS_TARGET_MINUTES);
     setShowAddModal(false);
   };
 
@@ -464,6 +691,13 @@ export function HabitsView({
     const win = windowToFields(habit.timeWindow);
     setEditWindowStart(win.start);
     setEditWindowEnd(win.end);
+    setEditTracking(normalizeHabitTracking(habit.tracking, 'time'));
+    setEditCountUnit(habit.countUnit || 'reps');
+    setEditHomeostasis(habitHomeostasisEnabled(habit) || Boolean(habit.homeostasisCount?.enabled));
+    setEditHomeostasisFloor(habit.homeostasis?.floorMinutes || HABIT_HOMEOSTASIS_FLOOR_MINUTES);
+    setEditHomeostasisTarget(habit.homeostasis?.targetMinutes || HABIT_HOMEOSTASIS_TARGET_MINUTES);
+    setEditCountFloor(habit.homeostasisCount?.floorMinutes || HABIT_HOMEOSTASIS_FLOOR_COUNT);
+    setEditCountTarget(habit.homeostasisCount?.targetMinutes || HABIT_HOMEOSTASIS_TARGET_COUNT);
   };
 
   const handleSaveEditHabit = (e) => {
@@ -488,7 +722,17 @@ export function HabitsView({
         priority: editPriority,
         difficulty: editDifficulty,
         location: editLocation,
-        timeWindow: fieldsToTimeWindow(editWindowStart, editWindowEnd)
+        timeWindow: fieldsToTimeWindow(editWindowStart, editWindowEnd),
+        tracking: editTracking,
+        countUnit: editTracking === 'time' ? '' : (editCountUnit.trim() || 'reps'),
+        homeostasis: editHomeostasis ? {
+          enabled: true,
+          tracking: editTracking,
+          floorMinutes: parseInt(editHomeostasisFloor, 10) || HABIT_HOMEOSTASIS_FLOOR_MINUTES,
+          targetMinutes: parseInt(editHomeostasisTarget, 10) || HABIT_HOMEOSTASIS_TARGET_MINUTES,
+          countFloor: parseInt(editCountFloor, 10) || HABIT_HOMEOSTASIS_FLOOR_COUNT,
+          countTarget: parseInt(editCountTarget, 10) || HABIT_HOMEOSTASIS_TARGET_COUNT
+        } : { enabled: false }
       });
     }
 
@@ -786,6 +1030,8 @@ export function HabitsView({
             const targetRefDate = addDaysToDateStr(todayStr, weekOffset * 7);
             const weeklyStats = getHabitWeeklyStats(habit, targetRefDate);
 
+            const loadSeries = habitHomeostasisEnabled(habit) ? getHabitLoadSeries(habit, todayStr) : null;
+            const countSeries = habit.homeostasisCount?.enabled ? getHabitLoadSeries(habit, todayStr, { measure: 'count' }) : null;
             const locationMeta = habit.location && habit.location !== 'anywhere'
               ? getLocationMeta(habit.location)
               : null;
@@ -975,10 +1221,35 @@ export function HabitsView({
                           : 'Registrar tempo de hoje'}
                       </button>
                     )}
-                    {sumDurationMap(habit.durationsByDate) > 0 && (
+                    {habitTracksTime(habit) && sumDurationMap(habit.durationsByDate) > 0 && (
                       <span style={metaChipStyle} title="Tempo total acumulado neste ritual">
                         <Clock size={12} /> {formatDurationLabel(sumDurationMap(habit.durationsByDate))} no total
                       </span>
+                    )}
+                    {habitTracksCount(habit) && sumCountMap(habit.countsByDate) > 0 && (
+                      <span style={metaChipStyle} title="Quantidade acumulada neste ritual">
+                        {sumCountMap(habit.countsByDate)} {habitMeasureLabel(habit, 'count')}
+                      </span>
+                    )}
+                    {loadSeries && (
+                      <button
+                        type="button"
+                        onClick={() => setLoadHabitId(`${habit.id}:time`)}
+                        style={{ ...metaChipStyle, color: '#34d399', cursor: 'pointer', borderColor: 'rgba(16, 185, 129, 0.35)' }}
+                        title="Faixa de tempo. Abre o gráfico."
+                      >
+                        <Activity size={12} /> {loadSeries.homeostasisMinMinutes}–{loadSeries.homeostasisMaxMinutes} min
+                      </button>
+                    )}
+                    {countSeries && (
+                      <button
+                        type="button"
+                        onClick={() => setLoadHabitId(`${habit.id}:count`)}
+                        style={{ ...metaChipStyle, color: '#38bdf8', cursor: 'pointer', borderColor: 'rgba(56, 189, 248, 0.35)' }}
+                        title="Faixa de quantidade. Abre o gráfico."
+                      >
+                        <Activity size={12} /> {countSeries.homeostasisMinMinutes}–{countSeries.homeostasisMaxMinutes} {habitMeasureLabel(habit, 'count')}
+                      </button>
                     )}
                   </div>
 
@@ -1466,6 +1737,27 @@ export function HabitsView({
                 onWindowEndChange={setNewWindowEnd}
               />
 
+              <TrackingFields
+                tracking={newTracking}
+                countUnit={newCountUnit}
+                onTrackingChange={setNewTracking}
+                onCountUnitChange={setNewCountUnit}
+              />
+
+              <HomeostasisFields
+                enabled={newHomeostasis}
+                tracking={newTracking}
+                floor={newHomeostasisFloor}
+                target={newHomeostasisTarget}
+                countFloor={newCountFloor}
+                countTarget={newCountTarget}
+                onEnabledChange={setNewHomeostasis}
+                onFloorChange={setNewHomeostasisFloor}
+                onTargetChange={setNewHomeostasisTarget}
+                onCountFloorChange={setNewCountFloor}
+                onCountTargetChange={setNewCountTarget}
+              />
+
               <ActivityScaleFields
                 priority={newPriority}
                 difficulty={newDifficulty}
@@ -1743,6 +2035,29 @@ export function HabitsView({
                 onWindowEndChange={setEditWindowEnd}
               />
 
+              <TrackingFields
+                tracking={editTracking}
+                countUnit={editCountUnit}
+                onTrackingChange={setEditTracking}
+                onCountUnitChange={setEditCountUnit}
+                accent="#38bdf8"
+              />
+
+              <HomeostasisFields
+                enabled={editHomeostasis}
+                tracking={editTracking}
+                floor={editHomeostasisFloor}
+                target={editHomeostasisTarget}
+                countFloor={editCountFloor}
+                countTarget={editCountTarget}
+                onEnabledChange={setEditHomeostasis}
+                onFloorChange={setEditHomeostasisFloor}
+                onTargetChange={setEditHomeostasisTarget}
+                onCountFloorChange={setEditCountFloor}
+                onCountTargetChange={setEditCountTarget}
+                accent="#38bdf8"
+              />
+
               <ActivityScaleFields
                 priority={editPriority}
                 difficulty={editDifficulty}
@@ -1786,6 +2101,69 @@ export function HabitsView({
         </div>
       )}
 
+      {loadHabitId && (() => {
+        const [habitId, measure = 'time'] = String(loadHabitId).split(':');
+        const loadHabit = (habits || []).find((item) => item.id === habitId);
+        if (!loadHabit) return null;
+        const victory = buildHabitHomeostasisVictory(loadHabit, todayStr, { measure });
+        return (
+          <div
+            className="modal-overlay"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.82)',
+              backdropFilter: 'blur(8px)',
+              zIndex: 1000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px'
+            }}
+            onClick={() => setLoadHabitId(null)}
+          >
+            <div
+              className="glass-panel modal-sheet"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: '760px',
+                width: '100%',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                padding: '18px',
+                borderRadius: '20px',
+                border: '1px solid rgba(16, 185, 129, 0.35)'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setLoadHabitId(null)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: 'none',
+                    color: '#fff',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    cursor: 'pointer',
+                    fontWeight: 700
+                  }}
+                >
+                  Fechar
+                </button>
+              </div>
+              <HabitLoadChart
+                habit={loadHabit}
+                todayStr={todayStr}
+                victory={victory}
+                onAddDailyVictory={onAddDailyVictory}
+                measure={measure}
+              />
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Modal Conclusão Retroativa & Datas Passadas */}
       {retroModalHabit && (() => {
         const activeHabit = habits?.find(h => h.id === retroModalHabit.id) || retroModalHabit;
@@ -1802,8 +2180,9 @@ export function HabitsView({
           const isToday = dStr === todayStr;
           const isYesterday = dStr === yesterdayStr;
           const durationMinutes = getHabitDurationForDate(activeHabit, dStr);
+          const count = getHabitCountForDate(activeHabit, dStr);
           const label = isToday ? 'Hoje' : isYesterday ? 'Ontem' : `${parts[2]}/${parts[1]}`;
-          return { dateStr: dStr, label, shortDate: `${parts[2]}/${parts[1]}`, isDone, isToday, isYesterday, durationMinutes };
+          return { dateStr: dStr, label, shortDate: `${parts[2]}/${parts[1]}`, isDone, isToday, isYesterday, durationMinutes, count };
         });
 
         return (
@@ -2021,7 +2400,9 @@ export function HabitsView({
                   <label style={{ fontSize: '0.78rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     📋 Histórico dos Últimos 14 Dias
                   </label>
-                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Clique para alternar · min para corrigir o tempo</span>
+                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                    Clique para alternar{habitTracksTime(activeHabit) ? ' · min' : ''}{habitTracksCount(activeHabit) ? ` · ${habitMeasureLabel(activeHabit, 'count')}` : ''}
+                  </span>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))', gap: '6px' }}>
@@ -2087,7 +2468,46 @@ export function HabitsView({
                         }}
                       />
                     </button>
-                    {item.isDone && onUpdateHabitDuration && (
+                    {item.isDone && onUpdateHabitDuration && habitTracksCount(activeHabit) && (() => {
+                      const countKey = `${activeHabit.id}:${item.dateStr}`;
+                      const countValue = Object.prototype.hasOwnProperty.call(countDrafts, countKey)
+                        ? countDrafts[countKey]
+                        : (item.count > 0 ? String(item.count) : '');
+                      return (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            handleSaveHabitCount(activeHabit.id, item.dateStr, countValue);
+                          }}
+                          style={{ display: 'flex', gap: '3px' }}
+                        >
+                          <input
+                            type="number"
+                            min="0"
+                            max={MAX_HABIT_COUNT}
+                            inputMode="decimal"
+                            aria-label={`Quantidade de ${item.label}`}
+                            placeholder={habitMeasureLabel(activeHabit, 'count')}
+                            value={countValue}
+                            onChange={(e) => setCountDrafts((prev) => ({ ...prev, [countKey]: e.target.value }))}
+                            style={{
+                              width: '100%',
+                              minWidth: 0,
+                              padding: '4px 4px',
+                              borderRadius: '6px',
+                              background: '#1a2030',
+                              border: '1px solid rgba(56, 189, 248, 0.35)',
+                              color: '#38bdf8',
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              fontFamily: 'var(--font-mono)'
+                            }}
+                          />
+                          <button type="submit" title="Salvar quantidade deste dia" style={{ flexShrink: 0, padding: '0 5px', borderRadius: '6px', border: '1px solid rgba(56, 189, 248, 0.4)', background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', fontSize: '0.62rem', fontWeight: 800, cursor: 'pointer' }}>OK</button>
+                        </form>
+                      );
+                    })()}
+                    {item.isDone && onUpdateHabitDuration && habitTracksTime(activeHabit) && (
                       <form
                         onSubmit={(e) => {
                           e.preventDefault();

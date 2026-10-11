@@ -6,6 +6,7 @@
  */
 
 import { addDaysToDateStr, getSaoPauloDateStr } from './timeUtils.js';
+import { habitIdFromHomeostasisSource, habitMeasureFromHomeostasisSource, isHabitHomeostasisSource } from './habitHomeostasis.js';
 
 export const MAX_DAILY_VICTORIES = 3;
 export const EXTENDED_MAX_DAILY_VICTORIES = 5;
@@ -17,7 +18,8 @@ export const DAILY_VICTORY_OVERFLOW_SOURCES = {
 };
 
 export function isOverflowDailyVictorySource(source) {
-  return Object.values(DAILY_VICTORY_OVERFLOW_SOURCES).includes(source);
+  return Object.values(DAILY_VICTORY_OVERFLOW_SOURCES).includes(source)
+    || isHabitHomeostasisSource(source);
 }
 
 export function maxDailyVictoriesForSource(source) {
@@ -273,6 +275,8 @@ export function sanitizeDailyVictory(raw) {
   if (isOverflowDailyVictorySource(raw.source)) {
     victory.source = raw.source;
   }
+  const habitId = String(raw.habitId || '').trim() || habitIdFromHomeostasisSource(victory.source);
+  if (habitId) victory.habitId = habitId;
   const questId = String(raw.questId || '').trim();
   if (questId) {
     victory.questId = questId;
@@ -308,9 +312,28 @@ export function listOverflowVictoriesForDate(list = [], dateStr, source) {
  * Título exibido da vitória de homeostase: o número segue o piso vivo da faixa.
  * Vitória manual (sem origem de homeostase) volta intacta.
  */
-export function displayHomeostasisVictoryTitle(victory, { studyFloorMinutes, readingFloorMinutes, scriptureFloorMinutes } = {}) {
+export function displayHomeostasisVictoryTitle(victory, {
+  studyFloorMinutes,
+  readingFloorMinutes,
+  scriptureFloorMinutes,
+  habitFloorMinutes
+} = {}) {
   if (!victory) return '';
   const source = victory.source;
+  if (isHabitHomeostasisSource(source)) {
+    const habitId = victory.habitId || habitIdFromHomeostasisSource(source);
+    const measure = habitMeasureFromHomeostasisSource(source);
+    const key = measure === 'count' ? `${habitId}:count` : habitId;
+    const floor = habitFloorMinutes?.[key];
+    if (floor == null || !Number.isFinite(Number(floor))) return victory.title || '';
+    const amount = Math.max(0, Math.round(Number(floor)));
+    const name = String(victory.title || '').split(':')[0].trim() || 'Ritual';
+    if (measure === 'count') {
+      const unit = (String(victory.title || '').match(/no m[ií]nimo\s+\d+(?:[.,]\d+)?\s+(.+?)\.?$/i) || [])[1] || 'reps';
+      return `${name}: no mínimo ${amount} ${unit}.`;
+    }
+    return `${name}: no mínimo ${amount} minutos.`;
+  }
   const floor = source === DAILY_VICTORY_OVERFLOW_SOURCES.study
     ? studyFloorMinutes
     : source === DAILY_VICTORY_OVERFLOW_SOURCES.reading
@@ -326,7 +349,7 @@ export function displayHomeostasisVictoryTitle(victory, { studyFloorMinutes, rea
 }
 
 export function parseHomeostasisVictoryTargetMinutes(title) {
-  const match = String(title || '').match(/no m[ií]nimo\s+(\d+)\s+minutos?/i);
+  const match = String(title || '').match(/no m[ií]nimo\s+(\d+(?:[.,]\d+)?)/i);
   return match ? Number(match[1]) : null;
 }
 
@@ -367,7 +390,9 @@ export function planLinkedDailyVictoryUpdates(list = [], {
   scriptureMinutes,
   readingTargetMinutes,
   studyTargetMinutes,
-  scriptureTargetMinutes
+  scriptureTargetMinutes,
+  habitMinutesById,
+  habitTargetMinutesById
 } = {}) {
   const updates = [];
   if (questId && questCompleted !== undefined) {
@@ -396,6 +421,26 @@ export function planLinkedDailyVictoryUpdates(list = [], {
       if (!isHomeostasisVictoryFulfilled(victory, scriptureMinutes, scriptureTargetMinutes)) return;
       pushCompletionUpdate(updates, victory, true, `Leitura da Bíblia: ${Number(scriptureMinutes) || 0} min.`);
     });
+  }
+
+  if (habitMinutesById && typeof habitMinutesById === 'object') {
+    listVictoriesForDate(list, today)
+      .filter((item) => isHabitHomeostasisSource(item.source))
+      .forEach((victory) => {
+        const habitId = victory.habitId || habitIdFromHomeostasisSource(victory.source);
+        const measure = habitMeasureFromHomeostasisSource(victory.source);
+        const key = measure === 'count' ? `${habitId}:count` : habitId;
+        if (!habitId || habitMinutesById[key] === undefined) return;
+        const target = habitTargetMinutesById?.[key];
+        if (!isHomeostasisVictoryFulfilled(victory, habitMinutesById[key], target)) return;
+        const unit = measure === 'count' ? 'reps' : 'min';
+        pushCompletionUpdate(
+          updates,
+          victory,
+          true,
+          `Ritual do dia: ${Number(habitMinutesById[key]) || 0} ${unit}.`
+        );
+      });
   }
 
   return updates;
@@ -435,6 +480,7 @@ export function createDailyVictory(list = [], input = {}, { today = getSaoPauloD
 
   const current = sanitizeDailyVictories(list);
   const source = isOverflowDailyVictorySource(input.source) ? input.source : undefined;
+  const habitId = String(input.habitId || '').trim() || habitIdFromHomeostasisSource(source) || undefined;
   const questId = String(input.questId || '').trim() || undefined;
   if (questId && isQuestPlannedForDate(current, questId, date)) {
     throw new Error('Esta missão já está nas vitórias planejadas deste dia.');
@@ -452,6 +498,7 @@ export function createDailyVictory(list = [], input = {}, { today = getSaoPauloD
     title,
     category: input.category || defaultCategory,
     source,
+    habitId,
     questId,
     completed: false,
     completedAt: null,

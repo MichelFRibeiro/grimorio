@@ -53,6 +53,7 @@ import {
 } from './timeUtils.js';
 import { BIBLE_BOOKS, bibleTotals, getBibleBook, formatReference } from '../src/data/bibleCanon.js';
 import { applyHabitFrequency } from '../src/utils/habitFrequency.js';
+import { getHabitLoadSeries, habitHomeostasisEnabled } from '../src/utils/habitHomeostasis.js';
 import {
   MAX_DAILY_VICTORIES,
   EXTENDED_MAX_DAILY_VICTORIES,
@@ -78,6 +79,7 @@ import {
   toggleHabit as domainToggleHabit,
   updateHabitDuration as domainUpdateHabitDuration,
   deleteHabit as domainDeleteHabit,
+  applyHabitHomeostasis as domainApplyHabitHomeostasis,
   logReadingSession as domainLogReadingSession,
   updateReadingSession as domainUpdateReadingSession,
   deleteReadingSession as domainDeleteReadingSession,
@@ -1051,6 +1053,7 @@ export const toolsDefinition = [
         const history = Array.isArray(h.history) ? h.history : [];
         const completedToday = history.includes(todayStr);
 
+        const load = habitHomeostasisEnabled(h) ? getHabitLoadSeries(h, todayStr) : null;
         return {
           id: h.id,
           title: h.title,
@@ -1058,6 +1061,17 @@ export const toolsDefinition = [
           category: h.category,
           icon: h.icon,
           frequency: h.frequency || 'daily',
+          homeostasis: h.homeostasis || null,
+          homeostasisLoad: load ? {
+            setpointMinutes: load.setpointMinutes,
+            todayTargetMinutes: load.todayTargetMinutes,
+            homeostasisMinMinutes: load.homeostasisMinMinutes,
+            homeostasisMaxMinutes: load.homeostasisMaxMinutes,
+            targetMinutes: load.targetMinutes,
+            todayMinutes: load.today?.minutes || 0,
+            zone: load.today?.zone || null,
+            daysToNextExpansion: load.daysToNextExpansion
+          } : null,
           targetTimesPerWeek: weeklyStats.targetTimesPerWeek,
           weekDays: h.weekDays || null,
           monthDays: h.monthDays || null,
@@ -1073,6 +1087,9 @@ export const toolsDefinition = [
           coinReward: h.coinReward || 8,
           location: h.location || 'anywhere',
           timeWindow: h.timeWindow || null,
+          tracking: h.tracking || 'time',
+          countUnit: h.countUnit || '',
+          countsByDate: h.countsByDate || {},
           durationsByDate: h.durationsByDate || {},
           totalDurationMinutes: sumDurationMap(h.durationsByDate),
           createdAt: h.createdAt
@@ -1100,7 +1117,19 @@ export const toolsDefinition = [
       xpReward: z.number().optional().describe('XP concedido por execução (legado; preferir difficulty)'),
       coinReward: z.number().optional().describe('Moedas concedidas por execução (legado; preferir difficulty)'),
       location: locationEnum.optional().describe('Onde o ritual pode ser feito: anywhere, office, home ou gym'),
-      timeWindow: timeWindowSchema.optional().describe('Janela de execução (não é prazo). Null = qualquer hora')
+      timeWindow: timeWindowSchema.optional().describe('Janela de execução (não é prazo). Null = qualquer hora'),
+      tracking: z.enum(['time', 'count', 'both']).optional().describe('O que o ritual mede: time (cronômetro), count (quantidade, ex. repetições) ou both'),
+      countUnit: z.string().optional().describe('Unidade da quantidade (ex: reps, páginas, copos). Padrão: reps'),
+      homeostasis: z.union([
+        z.boolean(),
+        z.object({
+          enabled: z.boolean().optional().describe('Liga a faixa de homeostase deste ritual'),
+          floorMinutes: z.number().optional().describe('Piso da faixa de tempo em minutos (padrão 10)'),
+          targetMinutes: z.number().optional().describe('Meta de longo prazo de tempo em minutos (padrão 60)'),
+          countFloor: z.number().optional().describe('Piso da faixa de quantidade (padrão 5)'),
+          countTarget: z.number().optional().describe('Meta de longo prazo da quantidade (padrão 50). A faixa sobe até aqui, no máximo 10% por semana')
+        })
+      ]).optional().describe('Homeostase & Alostase. Com tracking count, a faixa acompanha a quantidade (ex. repetições de push-up), não o tempo.')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1136,6 +1165,7 @@ export const toolsDefinition = [
         if (args.coinReward !== undefined) newHabit.coinReward = parseInt(args.coinReward, 10) || 8;
       }
       applyActivityContext(newHabit, { location: args.location, timeWindow: args.timeWindow }, db.questCategories);
+      domainApplyHabitHomeostasis(newHabit, args.homeostasis, { tracking: args.tracking, countUnit: args.countUnit });
 
       if (!db.habits) db.habits = [];
       db.habits.unshift(newHabit);
@@ -1149,7 +1179,8 @@ export const toolsDefinition = [
     schema: {
       id: z.string().describe('ID do ritual/hábito'),
       date: z.string().optional().describe('Data da execução YYYY-MM-DD (se omitido, usa a data atual)'),
-      durationMinutes: z.number().optional().describe('Tempo cronometrado do ritual em minutos (igual às sessões de leitura e baterias de questões)')
+      durationMinutes: z.number().optional().describe('Tempo cronometrado do ritual em minutos (igual às sessões de leitura e baterias de questões)'),
+      count: z.number().optional().describe('Quantidade feita neste dia (ex. 20 push-ups). Usado quando o ritual mede quantidade.')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1176,17 +1207,19 @@ export const toolsDefinition = [
   },
   {
     name: 'update_habit_duration',
-    description: 'Corrigir a duração de um ritual já marcado em uma data, sem desmarcar a execução nem alterar XP, moedas ou sequência. 0 remove o tempo daquele dia.',
+    description: 'Corrigir a duração ou a quantidade de um ritual já marcado em uma data, sem desmarcar a execução nem alterar XP, moedas ou sequência. 0 remove o valor daquele dia.',
     schema: {
       id: z.string().describe('ID do ritual/hábito'),
       date: z.string().optional().describe('Data da execução YYYY-MM-DD (se omitido, usa hoje). Precisa já estar marcada.'),
-      durationMinutes: z.number().describe('Nova duração em minutos (0 a 480). 0 remove o tempo.')
+      durationMinutes: z.number().optional().describe('Nova duração em minutos (0 a 480). 0 remove o tempo.'),
+      count: z.number().optional().describe('Nova quantidade do dia (0 remove).')
     },
     handler: async (args) => {
       const db = getDb();
       const result = domainUpdateHabitDuration(db, args.id, {
         date: args.date,
-        durationMinutes: args.durationMinutes
+        durationMinutes: args.durationMinutes,
+        count: args.count
       });
       if (result.error) return formatError(result.error);
       saveDb(db);
@@ -1217,7 +1250,17 @@ export const toolsDefinition = [
       xpReward: z.number().optional().describe('Novo XP (legado; preferir difficulty)'),
       coinReward: z.number().optional().describe('Novas moedas (legado; preferir difficulty)'),
       location: locationEnum.optional().describe('Novo lugar (anywhere, office, home, gym)'),
-      timeWindow: timeWindowSchema.optional().describe('Nova janela de execução (ou null para qualquer hora)')
+      timeWindow: timeWindowSchema.optional().describe('Nova janela de execução (ou null para qualquer hora)'),
+      tracking: z.enum(['time', 'count', 'both']).optional().describe('O que o ritual passa a medir: time, count ou both'),
+      countUnit: z.string().optional().describe('Unidade da quantidade (ex: reps)'),
+      homeostasis: z.union([
+        z.boolean(),
+        z.object({
+          enabled: z.boolean().optional(),
+          floorMinutes: z.number().optional().describe('Piso da faixa em minutos'),
+          targetMinutes: z.number().optional().describe('Meta de longo prazo em minutos')
+        })
+      ]).optional().describe('Liga, desliga ou ajusta a homeostase do ritual. false desliga sem apagar o histórico.')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1251,6 +1294,7 @@ export const toolsDefinition = [
       if (args.location !== undefined || args.timeWindow !== undefined) {
         applyActivityContext(habit, { location: args.location, timeWindow: args.timeWindow }, db.questCategories);
       }
+      domainApplyHabitHomeostasis(habit, args.homeostasis, { tracking: args.tracking, countUnit: args.countUnit });
 
       saveDb(db);
       return formatSuccess(habit, `Ritual '${habit.title}' atualizado com sucesso.`);
@@ -2860,12 +2904,13 @@ export const toolsDefinition = [
   },
   {
     name: 'create_daily_victory',
-    description: 'Cadastrar uma Vitória Planejada para hoje ou amanhã (máximo de 3 manuais por dia). Use source homeostasis-study ou homeostasis-reading para ir até 5.',
+    description: 'Cadastrar uma Vitória Planejada para hoje ou amanhã (máximo de 3 manuais por dia). Use source homeostasis-study, homeostasis-reading, homeostasis-scripture ou homeostasis-habit:<id> para ir até 5.',
     schema: {
       title: z.string().describe('Título da vitória (ex: Finalizar petição, Treinar 40 min)'),
       category: z.string().optional().describe('Categoria (ex: Trabalho, Estudos, Pessoal, Saúde)'),
       date: z.string().optional().describe('Data YYYY-MM-DD (hoje ou amanhã). Padrão: hoje'),
-      source: z.enum(['homeostasis-study', 'homeostasis-reading', 'homeostasis-scripture']).optional().describe('Origem especial que permite ir além de 3 (estudo AGU, leitura ou Bíblia)'),
+      source: z.string().optional().describe('Origem especial que permite ir além de 3: homeostasis-study, homeostasis-reading, homeostasis-scripture ou homeostasis-habit:<id>'),
+      habitId: z.string().optional().describe('ID do ritual, se a vitória veio da homeostase dele'),
       questId: z.string().optional().describe('ID da missão de origem, se a vitória foi planejada a partir de uma missão')
     },
     handler: async (args) => {

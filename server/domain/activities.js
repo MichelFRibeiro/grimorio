@@ -14,10 +14,11 @@ import { runMaintenance } from './maintenance.js';
 import { grantDestinyChest } from './destinyChest.js';
 import { getSaoPauloDateStr, getSaoPauloHour, getSaoPauloDayOfWeek, calculateHabitStreak } from '../timeUtils.js';
 import { willpowerForDifficulty } from '../../src/utils/activityScale.js';
-import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, clearLiveActivityTimer } from '../../src/utils/activityDuration.js';
+import { parseDurationMinutes, parseHabitCount, getHabitDurationForDate, setHabitDurationForDate, setHabitCountForDate, clearHabitDurationForDate, clearHabitCountForDate, clearLiveActivityTimer } from '../../src/utils/activityDuration.js';
 import { sanitizeScriptureDraft, scriptureDraftsEqual } from '../../src/utils/liveScriptureDraft.js';
 import { sanitizeAguPlan, applyExamToPlan, refreshAguProgress } from '../../src/utils/aguCycle.js';
 import { syncDailyVictoriesFromActivity } from '../dailyVictorySync.js';
+import { applyHabitMeasure, applyHabitTracking, persistHabitHomeostasis } from '../../src/utils/habitHomeostasis.js';
 import { markDecisionAccepted, markDecisionCompleted } from '../oracleMemory.js';
 import {
   DAILY_VICTORY_REWARDS,
@@ -237,7 +238,7 @@ export function deleteQuest(db, id) {
 // Hábitos
 // ---------------------------------------------------------------------------
 
-export function toggleHabit(db, { id, date, durationMinutes: rawDuration, decisionId } = {}) {
+export function toggleHabit(db, { id, date, durationMinutes: rawDuration, count: rawCount, decisionId } = {}) {
   const habit = (db.habits || []).find(h => h.id === id);
   if (!habit) return fail('Hábito não encontrado', 404);
 
@@ -261,6 +262,7 @@ export function toggleHabit(db, { id, date, durationMinutes: rawDuration, decisi
   if (isAlreadyDone) {
     habit.history = habit.history.filter(d => d !== targetDate);
     clearHabitDurationForDate(habit, targetDate);
+    clearHabitCountForDate(habit, targetDate);
     const logId = habit.rewardLogs[targetDate];
     delete habit.rewardLogs[targetDate];
     const streakData = calculateFrequencyStreak(habit, refDate);
@@ -289,6 +291,9 @@ export function toggleHabit(db, { id, date, durationMinutes: rawDuration, decisi
       return asError(err);
     }
     setHabitDurationForDate(habit, targetDate, minutes);
+    if (rawCount !== undefined && rawCount !== null && rawCount !== '') {
+      setHabitCountForDate(habit, targetDate, parseHabitCount(rawCount));
+    }
     const streakData = calculateFrequencyStreak(habit, refDate);
     habit.currentStreak = streakData.currentStreak;
     habit.bestStreak = Math.max(habit.bestStreak || 0, streakData.bestStreak);
@@ -309,7 +314,8 @@ export function toggleHabit(db, { id, date, durationMinutes: rawDuration, decisi
         streak: habit.currentStreak,
         date: targetDate,
         location: habit.location || null,
-        durationMinutes: minutes
+        durationMinutes: minutes,
+        count: parseHabitCount(habit.countsByDate?.[targetDate])
       },
       logDate: targetDate
     });
@@ -321,12 +327,20 @@ export function toggleHabit(db, { id, date, durationMinutes: rawDuration, decisi
     }
   }
 
+  persistHabitHomeostasis(habit, todayStr);
+  const linkedVictories = syncDailyVictoriesFromActivity(db, {
+    today: todayStr,
+    syncHabits: true,
+    habitId: habit.id
+  });
+
   return {
     habit,
     targetDate,
     done: !isAlreadyDone,
     doneToday: habit.history.includes(todayStr),
-    rewardResult
+    rewardResult,
+    linkedVictories
   };
 }
 
@@ -1859,7 +1873,7 @@ export function updateQuestDuration(db, id, rawDuration) {
  * Corrige o tempo de uma execução já marcada do ritual.
  * A data precisa estar no histórico; 0 apaga o tempo daquele dia.
  */
-export function updateHabitDuration(db, id, { date, durationMinutes: rawDuration } = {}) {
+export function updateHabitDuration(db, id, { date, durationMinutes: rawDuration, count: rawCount } = {}) {
   const habit = (db.habits || []).find((item) => item.id === id);
   if (!habit) return fail('Hábito não encontrado', 404);
 
@@ -1875,19 +1889,35 @@ export function updateHabitDuration(db, id, { date, durationMinutes: rawDuration
     return fail('Só é possível editar a duração de um dia já marcado.');
   }
 
-  let minutes;
+  if (rawDuration === undefined && rawCount === undefined) {
+    return fail('Informe a duração ou a quantidade.');
+  }
+  let minutes = getHabitDurationForDate(habit, targetDate);
   try {
-    minutes = durationMinutes(rawDuration, { fallback: 0 });
+    if (rawDuration !== undefined) minutes = durationMinutes(rawDuration, { fallback: 0 });
   } catch (err) {
     return asError(err);
   }
-
-  setHabitDurationForDate(habit, targetDate, minutes);
+  if (rawDuration !== undefined) setHabitDurationForDate(habit, targetDate, minutes);
+  if (rawCount !== undefined) setHabitCountForDate(habit, targetDate, parseHabitCount(rawCount));
   const logId = habit.rewardLogs && typeof habit.rewardLogs === 'object'
     ? habit.rewardLogs[targetDate]
     : null;
   syncRewardLogDuration(db, logId, minutes);
-  return { habit, targetDate, durationMinutes: minutes };
+  persistHabitHomeostasis(habit, todayStr);
+  const linkedVictories = syncDailyVictoriesFromActivity(db, {
+    today: todayStr,
+    syncHabits: true,
+    habitId: habit.id
+  });
+  return { habit, targetDate, durationMinutes: minutes, count: parseHabitCount(habit.countsByDate?.[targetDate]), linkedVictories };
+}
+
+export function applyHabitHomeostasis(habit, raw, extra = {}) {
+  if (!habit) return habit;
+  applyHabitTracking(habit, extra);
+  if (raw !== undefined) applyHabitMeasure(habit, { ...(typeof raw === 'object' && raw ? raw : {}), tracking: extra.tracking ?? raw?.tracking ?? habit.tracking });
+  return habit;
 }
 
 export { DomainError };
