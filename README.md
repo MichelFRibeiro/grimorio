@@ -99,6 +99,7 @@ O script irá:
 - Uma rotina é uma sequência de rituais já cadastrados (mínimo 2, sem repetir o mesmo ritual).
 - O modo guiado marca só o próximo passo ainda não feito hoje. O ritual é quem recebe streak, XP e moedas — a rotina não dá recompensa extra.
 - Clicar num passo abre o ritual: cronômetro, quantidade (se o ritual mede) e o registro. Um passo já feito pode ser desmarcado ali — o estorno é o do ritual.
+- Ritual com homeostase mostra a quantidade esperada naquela execução (a faixa viva, ex.: 5–6 min), no passo, no botão “Fazer agora” e no registro. Sem homeostase, nada extra aparece.
 - Marcar o ritual na aba Rituais também avança a rotina. Excluir o ritual tira o passo da sequência.
 
 ### ⚖️ Julgamento

@@ -40,7 +40,7 @@ const labelStyle = {
   marginBottom: '4px'
 };
 
-function RoutineDurationField({ habitId, value, edited, onChange, onEdited }) {
+function RoutineDurationField({ habitId, value, edited, onChange, onEdited, expected = '' }) {
   const { seconds } = useActivityTimer('habit', habitId);
   useEffect(() => {
     if (edited) return;
@@ -50,7 +50,7 @@ function RoutineDurationField({ habitId, value, edited, onChange, onEdited }) {
 
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      <span style={labelStyle}>Tempo a registrar (min)</span>
+      <span style={labelStyle}>Tempo a registrar (min){expected ? ` · esperado ${expected}` : ''}</span>
       <input
         type="number"
         min="0"
@@ -71,19 +71,31 @@ function RoutineDurationField({ habitId, value, edited, onChange, onEdited }) {
   );
 }
 
-function habitBandHint(habit) {
+function formatBand(series, unit) {
+  if (!series) return '';
+  const min = series.homeostasisMinMinutes;
+  const max = series.homeostasisMaxMinutes;
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return '';
+  return min === max ? `${min} ${unit}` : `${min}–${max} ${unit}`;
+}
+
+/**
+ * Quantidade esperada nesta execução, a faixa viva da homeostase.
+ * `getHabitLoadSeries` devolve null sem opt-in — não existe `homeostasisEnabled`
+ * na série; filtrar por esse campo escondia o intervalo (ex.: Bike, 5–6 min).
+ * `measure` limita à unidade do campo (tempo ou quantidade).
+ */
+function habitBandHint(habit, measure) {
   if (!habit) return '';
   const today = getSaoPauloDateStr();
   const parts = [];
-  const add = (series, unit) => {
-    if (!series?.homeostasisEnabled) return;
-    parts.push(`${series.homeostasisMinMinutes}–${series.homeostasisMaxMinutes} ${unit}`);
-  };
-  if (habitTracksTime(habit)) add(getHabitLoadSeries(habit, today), 'min');
-  if (habitTracksCount(habit)) {
-    add(getHabitLoadSeries(habit, today, { measure: 'count' }), habitMeasureLabel(habit, 'count'));
+  const wantTime = measure !== 'count' && habitTracksTime(habit);
+  const wantCount = measure !== 'time' && habitTracksCount(habit);
+  if (wantTime) parts.push(formatBand(getHabitLoadSeries(habit, today), 'min'));
+  if (wantCount) {
+    parts.push(formatBand(getHabitLoadSeries(habit, today, { measure: 'count' }), habitMeasureLabel(habit, 'count')));
   }
-  return parts.join(' · ');
+  return parts.filter(Boolean).join(' · ');
 }
 
 function routineTime(routine, habitById, today) {
@@ -320,6 +332,7 @@ export function RoutinesView({
             const done = routine.progress?.done || 0;
             const ratio = total ? Math.round((done / total) * 100) : 0;
             const next = (routine.steps || []).find(step => step.habitId === routine.nextHabitId);
+            const nextExpected = next ? habitBandHint(habitById.get(next.habitId)) : '';
             const time = routineTime(routine, habitById, getSaoPauloDateStr());
             const todayLabel = formatDurationLabel(time.todayMinutes);
             const totalLabel = formatDurationLabel(time.totalMinutes);
@@ -353,7 +366,8 @@ export function RoutinesView({
                 <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {(routine.steps || []).map((step, index) => {
                     const isNext = step.habitId === routine.nextHabitId;
-                    const band = step.missing ? '' : habitBandHint(habitById.get(step.habitId));
+                    const habit = habitById.get(step.habitId);
+                    const band = step.missing ? '' : habitBandHint(habit);
                     return (
                       <li
                         key={`${routine.id}-${step.habitId}`}
@@ -386,13 +400,15 @@ export function RoutinesView({
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.9rem' }}>
                             {step.missing ? 'Ritual excluído' : (step.title || 'Ritual')}
-                            {band ? <span className="routine-band"> · faixa {band}</span> : null}
                           </div>
                           <div style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
                             {step.missing
                               ? 'Tire este passo ao editar a rotina.'
-                              : `${getFrequencyLabel(habitById.get(step.habitId) || step)}${step.note ? ` · ${step.note}` : ''}`}
+                              : `${getFrequencyLabel(habit || step)}${step.note ? ` · ${step.note}` : ''}`}
                           </div>
+                          {band ? (
+                            <div className="routine-band" style={{ marginTop: '2px' }}>esperado {band}</div>
+                          ) : null}
                         </div>
                         {isNext ? <span style={{ fontSize: '0.72rem', fontWeight: 800, color: ACCENT }}>agora</span> : null}
                       </li>
@@ -422,7 +438,9 @@ export function RoutinesView({
                   }}
                 >
                   <Play size={15} />
-                  {next ? `Fazer agora: ${next.title}` : 'Nada pendente nesta sequência'}
+                  {next
+                    ? `Fazer agora: ${next.title}${nextExpected ? ` · esperado ${nextExpected}` : ''}`
+                    : 'Nada pendente nesta sequência'}
                 </button>
               </article>
             );
@@ -528,6 +546,9 @@ export function RoutinesView({
         const isNext = routine.nextHabitId === habit.id;
         const tracksTime = habitTracksTime(habit);
         const tracksCount = habitTracksCount(habit);
+        const expected = habitBandHint(habit);
+        const expectedTime = habitBandHint(habit, 'time');
+        const expectedCount = habitBandHint(habit, 'count');
         return (
           <div
             style={{
@@ -550,10 +571,12 @@ export function RoutinesView({
                 <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700 }}>{routine.title}</p>
                 <h3 style={{ margin: '4px 0 0', color: '#f8fafc' }}>
                   {habit.title}
-                  {habitBandHint(habit) ? (
-                    <span className="routine-band"> · faixa {habitBandHint(habit)}</span>
-                  ) : null}
                 </h3>
+                {expected ? (
+                  <p className="routine-band" style={{ margin: '4px 0 0' }}>
+                    esperado nesta execução: {expected}
+                  </p>
+                ) : null}
                 {habit.description ? (
                   <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: '0.82rem' }}>{habit.description}</p>
                 ) : null}
@@ -573,13 +596,17 @@ export function RoutinesView({
                     edited={minutesEdited}
                     onChange={setStepMinutes}
                     onEdited={() => setMinutesEdited(true)}
+                    expected={expectedTime}
                   />
                 </>
               )}
 
               {tracksCount && !step.doneToday && (
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={labelStyle}>Quantidade ({habitMeasureLabel(habit, 'count')})</span>
+                  <span style={labelStyle}>
+                    Quantidade ({habitMeasureLabel(habit, 'count')})
+                    {expectedCount ? ` · esperado ${expectedCount}` : ''}
+                  </span>
                   <input
                     type="number"
                     min="1"
