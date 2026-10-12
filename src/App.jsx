@@ -10,7 +10,7 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { DestinyChestModal } from './components/DestinyChestModal';
 import { JudgmentModal } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare, ListOrdered, Settings } from 'lucide-react';
+import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare, ListOrdered } from 'lucide-react';
 import { isFeatureEnabled, isTabEnabled } from './utils/featureSettings';
 import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
 import { getHabitDueStatus } from './utils/habitFrequency';
@@ -446,10 +446,9 @@ export function App() {
     { id: 'rewards', label: 'Taverna', icon: Gift },
     { id: 'agu', label: 'AGU', icon: Scale, badge: aguTodayRemaining },
     { id: 'oracle', label: 'Oráculo', icon: Compass },
-    { id: 'chat', label: 'Bate Papo', icon: MessagesSquare },
-    { id: 'settings', label: 'Configurações', icon: Settings }
+    { id: 'chat', label: 'Bate Papo', icon: MessagesSquare }
   ];
-  const visibleTabs = tabs.filter((tab) => tab.id === 'settings' || isTabEnabled(featureSettings, tab.id));
+  const visibleTabs = tabs.filter((tab) => isTabEnabled(featureSettings, tab.id));
 
   return (
     <div className="app-shell">
@@ -464,6 +463,8 @@ export function App() {
         muted={muted}
         onToggleMute={toggleMute}
         onOpenOracle={() => openTab('oracle')}
+        onOpenSettings={() => setActiveTab('settings')}
+        settingsActive={activeTab === 'settings'}
         penaltiesThisWeek={penaltiesThisWeek}
       />
 

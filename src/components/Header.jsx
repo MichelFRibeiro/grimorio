@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Volume2, VolumeX, Flame, Coins, Shield, Brain, Zap, Swords, Sparkles, LogOut, User, Trophy, Award, ChevronRight, X, AlertTriangle, TrendingUp, Bot } from 'lucide-react';
+import { Volume2, VolumeX, Flame, Coins, Shield, Brain, Zap, Swords, Sparkles, LogOut, User, Trophy, Award, ChevronRight, X, AlertTriangle, TrendingUp, Bot, Settings } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { McpModal } from './McpModal';
 
-export function Header({ profile, currentUser, onLogout, boss, rankings, muted, onToggleMute, onOpenOracle, penaltiesThisWeek = 0 }) {
+export function Header({ profile, currentUser, onLogout, boss, rankings, muted, onToggleMute, onOpenOracle, onOpenSettings, settingsActive = false, penaltiesThisWeek = 0 }) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showRankingsModal, setShowRankingsModal] = useState(false);
   const [showMcpModal, setShowMcpModal] = useState(false);
@@ -306,6 +306,31 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
           >
             {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
           </button>
+
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              aria-pressed={settingsActive}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '10px',
+                background: settingsActive ? 'rgba(245, 158, 11, 0.18)' : 'rgba(255, 255, 255, 0.05)',
+                border: settingsActive ? '1px solid rgba(245, 158, 11, 0.45)' : '1px solid rgba(255, 255, 255, 0.1)',
+                color: settingsActive ? '#fbbf24' : '#cbd5e1',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                transition: 'all 0.2s ease'
+              }}
+              title="Configurações"
+            >
+              <Settings size={16} />
+              <span>Configurações</span>
+            </button>
+          )}
 
           {/* Logout Button */}
           {onLogout && (
