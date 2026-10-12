@@ -11,7 +11,7 @@ import { DestinyChestModal } from './components/DestinyChestModal';
 import { JudgmentModal } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
 import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare, ListOrdered } from 'lucide-react';
-import { firstEnabledTab, isFeatureEnabled, isTabEnabled } from './utils/featureSettings';
+import { isFeatureEnabled, isTabEnabled } from './utils/featureSettings';
 import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
@@ -51,7 +51,7 @@ function TabFallback() {
 }
 
 export function App() {
-  const [activeTab, setActiveTab] = useState('today');
+  const [activeTab, setActiveTab] = useState(null);
   const focusPlayer = useFocusPlayer();
 
   const {
@@ -216,14 +216,11 @@ export function App() {
     if (!focusEnabled) focusPlayer.stop();
   }, [focusEnabled, focusPlayer]);
 
-  // Aba desligada não fica aberta, mas Configurações nunca abre sozinha:
-  // só o clique no cabeçalho chega lá. Sem nenhuma aba ligada, a tela fica
-  // no painel vazio — o botão continua disponível para ligar de novo.
+  // Sem aba no carregamento. Se a que estava aberta for desligada, recolhe
+  // em vez de escolher outra — Configurações só abre no clique do cabeçalho.
   useEffect(() => {
-    if (activeTab === 'settings') return;
-    if (isTabEnabled(data?.userProfile?.featureSettings, activeTab)) return;
-    const fallback = firstEnabledTab(data?.userProfile?.featureSettings);
-    if (fallback) setActiveTab(fallback);
+    if (!activeTab || activeTab === 'settings') return;
+    if (!isTabEnabled(data?.userProfile?.featureSettings, activeTab)) setActiveTab(null);
   }, [activeTab, data?.userProfile?.featureSettings]);
 
   const todayStr = getSaoPauloDateStr();
@@ -266,8 +263,8 @@ export function App() {
       if (event.key === 'n' && isFeatureEnabled(data?.userProfile?.featureSettings, 'quests')) {
         event.preventDefault();
         setCaptureOpen(true);
-      } else if (event.key === 'h' && isTabEnabled(data?.userProfile?.featureSettings, 'today')) {
-        setActiveTab('today');
+      } else if (event.key === 'h') {
+        setActiveTab((current) => (current ? null : current));
       } else if (event.key === '?') {
         setHelpOpen(true);
       }
@@ -465,9 +462,7 @@ export function App() {
         muted={muted}
         onToggleMute={toggleMute}
         onOpenOracle={() => openTab('oracle')}
-        onOpenSettings={() => setActiveTab((current) => (
-          current === 'settings' ? (firstEnabledTab(featureSettings) || 'today') : 'settings'
-        ))}
+        onOpenSettings={() => setActiveTab((current) => (current === 'settings' ? null : 'settings'))}
         settingsActive={activeTab === 'settings'}
         penaltiesThisWeek={penaltiesThisWeek}
       />
@@ -526,7 +521,7 @@ export function App() {
               key={tab.id}
               onClick={() => {
                 playClick();
-                setActiveTab(prev => (tab.id === 'today' ? 'today' : (prev === tab.id ? (firstEnabledTab(featureSettings) || 'today') : tab.id)));
+                setActiveTab(prev => (prev === tab.id ? null : tab.id));
               }}
               aria-pressed={isActive}
               title={isActive ? `Recolher ${tab.label}` : `Abrir ${tab.label}`}
@@ -578,7 +573,7 @@ export function App() {
       {/* Main Tab Views — cada aba chega só quando é aberta. */}
       <main>
         <Suspense fallback={<TabFallback />}>
-        {featureOn('today') && (activeTab === 'today' || activeTab == null) && (
+        {featureOn('today') && activeTab === 'today' && (
           <>
           <TodayView
             features={featureSettings}

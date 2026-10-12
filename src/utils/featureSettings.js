@@ -220,12 +220,6 @@ export function isTabEnabled(settings, tab) {
   return isFeatureEnabled(settings, feature.id);
 }
 
-/** Primeira aba ainda ligada. Null se o herói desligou todas. */
-export function firstEnabledTab(settings) {
-  const feature = FEATURE_SETTINGS.find((item) => item.tab && isFeatureEnabled(settings, item.id));
-  return feature ? feature.tab : null;
-}
-
 export function isNextActionKindEnabled(settings, kind) {
   const featureId = NEXT_ACTION_KIND_FEATURE[kind];
   if (!featureId) return true;
