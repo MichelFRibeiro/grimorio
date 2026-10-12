@@ -29,6 +29,7 @@ import {
   summarizeDay
 } from '../../src/utils/dailyVictories.js';
 import { normalizePriority } from '../../src/utils/activityScale.js';
+import { isFeatureEnabled } from '../../src/utils/featureSettings.js';
 import { parseDurationMinutes } from '../../src/utils/activityDuration.js';
 import { getDb, rewardPlayer, revertLog, findRewardLog, createBossRaid, saveDb } from '../db.js';
 import { runMaintenance } from './maintenance.js';
@@ -294,13 +295,17 @@ export function buildTodayPayload(db, { now = new Date(), location } = {}) {
   const hour = getSaoPauloHour(now);
   const profile = db.userProfile || {};
   const greet = greetingFor(now, profile.name);
-  const victories = listVictoriesForDate(db.dailyVictories || [], todayStr);
-  const summary = summarizeDay(db.dailyVictories || [], todayStr, db.dailyVictoryBonuses || {});
-  const dueHabits = habitsDueToday(db, { now, todayStr });
-  const quests = questsDueAndOverdue(db, todayStr);
-  const agu = aguTodaySnapshot(db, todayStr);
-  const maps = mindMapsDue(db, todayStr);
-  const books = stalledBooks(db, todayStr);
+  const settings = db.userProfile?.featureSettings;
+  const show = (id) => isFeatureEnabled(settings, id);
+  const victories = show('victories') ? listVictoriesForDate(db.dailyVictories || [], todayStr) : [];
+  const summary = show('victories')
+    ? summarizeDay(db.dailyVictories || [], todayStr, db.dailyVictoryBonuses || {})
+    : { plannedCount: 0, completedCount: 0, allComplete: false };
+  const dueHabits = show('habits') ? habitsDueToday(db, { now, todayStr }) : [];
+  const quests = show('quests') ? questsDueAndOverdue(db, todayStr) : [];
+  const agu = show('agu') ? aguTodaySnapshot(db, todayStr) : { started: false, done: 0, remaining: 0, total: 0, blocks: [] };
+  const maps = show('maps') ? mindMapsDue(db, todayStr) : { count: 0, top: null };
+  const books = show('books') ? stalledBooks(db, todayStr) : [];
   const next = previewNextAction(db, { now, location });
   const risk = rankingsAtRisk(db, now);
   const review = (db.dailyReviews || []).find((item) => item && item.date === todayStr) || null;
@@ -314,10 +319,10 @@ export function buildTodayPayload(db, { now = new Date(), location } = {}) {
     phaseLabel: greet.phaseLabel,
     hour,
     planning: {
-      morningOpen: hour < PLAN_DAY_BEFORE_HOUR && victories.length === 0,
+      morningOpen: show('victories') && hour < PLAN_DAY_BEFORE_HOUR && victories.length === 0,
       eveningOpen: hour >= EVENING_REVIEW_HOUR,
-      canPlanTomorrow: hour >= EVENING_REVIEW_HOUR,
-      suggestions: suggestDayPlan(db, { now, todayStr })
+      canPlanTomorrow: show('victories') && hour >= EVENING_REVIEW_HOUR,
+      suggestions: show('victories') ? suggestDayPlan(db, { now, todayStr }) : []
     },
     dailyVictories: {
       items: victories.map((item) => ({
@@ -351,7 +356,7 @@ export function buildTodayPayload(db, { now = new Date(), location } = {}) {
       : null,
     rankingsAtRisk: risk.atRisk,
     weekRemainingDays: risk.daysRemaining,
-    boss: db.bossRaid
+    boss: show('boss') && db.bossRaid
       ? {
         name: db.bossRaid.name,
         level: db.bossRaid.level || 1,
@@ -373,6 +378,7 @@ export function buildTodayPayload(db, { now = new Date(), location } = {}) {
  * Homeostase de estudo usa a fonte de overflow; o restante conta no teto manual.
  */
 export function suggestDayPlan(db, { now = new Date(), todayStr, date } = {}) {
+  if (!isFeatureEnabled(db.userProfile?.featureSettings, 'victories')) return [];
   const today = todayStr || getSaoPauloDateStr(now);
   const targetDate = date || today;
   const existing = listVictoriesForDate(db.dailyVictories || [], targetDate);
@@ -380,12 +386,13 @@ export function suggestDayPlan(db, { now = new Date(), todayStr, date } = {}) {
   const takenQuests = new Set(existing.map((item) => item.questId).filter(Boolean));
   const suggestions = [];
 
-  const homeostasis = buildAguHomeostasisStudyVictory(
+  const settings = db.userProfile?.featureSettings;
+  const homeostasis = isFeatureEnabled(settings, 'agu') ? buildAguHomeostasisStudyVictory(
     db.aguPlan,
     db.examQuestions || [],
     targetDate,
     { mindMapSessions: db.mindMapSessions || [] }
-  );
+  ) : null;
   if (homeostasis?.title && !takenTitles.has(homeostasis.title.toLowerCase())) {
     suggestions.push({
       key: 'homeostasis-study',
@@ -396,7 +403,7 @@ export function suggestDayPlan(db, { now = new Date(), todayStr, date } = {}) {
     });
   }
 
-  const critical = (db.quests || [])
+  const critical = !isFeatureEnabled(settings, 'quests') ? null : (db.quests || [])
     .filter((quest) => quest && !quest.completed && quest.dueDate && quest.dueDate < today)
     .filter((quest) => normalizePriority(quest.priority) === 'critico')
     .filter((quest) => !takenQuests.has(quest.id))
@@ -411,7 +418,9 @@ export function suggestDayPlan(db, { now = new Date(), todayStr, date } = {}) {
     });
   }
 
-  const agu = aguTodaySnapshot(db, targetDate === today ? today : targetDate);
+  const agu = !isFeatureEnabled(settings, 'agu')
+    ? { blocks: [] }
+    : aguTodaySnapshot(db, targetDate === today ? today : targetDate);
   const openBlock = (agu.blocks || []).find((block) => !block.done);
   if (openBlock) {
     const title = `AGU: ${openBlock.subject}${openBlock.label ? ` — ${openBlock.label}` : ''}`;
@@ -425,7 +434,7 @@ export function suggestDayPlan(db, { now = new Date(), todayStr, date } = {}) {
     }
   }
 
-  const criticalHabit = habitsDueToday(db, { now, todayStr: today })
+  const criticalHabit = !isFeatureEnabled(settings, 'habits') ? null : habitsDueToday(db, { now, todayStr: today })
     .find((habit) => habit.priority === 'critico');
   if (criticalHabit && !takenTitles.has(String(criticalHabit.title).toLowerCase())) {
     suggestions.push({
@@ -479,10 +488,17 @@ export function acceptDayPlan(db, { items, date, now = new Date() } = {}) {
 }
 
 function countPending(db, todayStr, now) {
-  const victories = listVictoriesForDate(db.dailyVictories || [], todayStr);
+  const settings = db.userProfile?.featureSettings;
+  const victories = isFeatureEnabled(settings, 'victories')
+    ? listVictoriesForDate(db.dailyVictories || [], todayStr)
+    : [];
   const pendingVictories = victories.filter((item) => !item.completed).length;
-  const pendingQuests = questsDueAndOverdue(db, todayStr).filter((item) => item.dueToday || item.overdue).length;
-  const pendingHabits = habitsDueToday(db, { now, todayStr }).length;
+  const pendingQuests = isFeatureEnabled(settings, 'quests')
+    ? questsDueAndOverdue(db, todayStr).filter((item) => item.dueToday || item.overdue).length
+    : 0;
+  const pendingHabits = isFeatureEnabled(settings, 'habits')
+    ? habitsDueToday(db, { now, todayStr }).length
+    : 0;
   return {
     completedCount: victories.filter((item) => item.completed).length,
     pendingCount: pendingVictories + pendingQuests + pendingHabits
@@ -492,7 +508,10 @@ function countPending(db, todayStr, now) {
 export function buildEveningReview(db, { now = new Date() } = {}) {
   const todayStr = getSaoPauloDateStr(now);
   const tomorrowStr = addDaysToDateStr(todayStr, 1);
-  const victories = listVictoriesForDate(db.dailyVictories || [], todayStr);
+  const settings = db.userProfile?.featureSettings;
+  const victories = isFeatureEnabled(settings, 'victories')
+    ? listVictoriesForDate(db.dailyVictories || [], todayStr)
+    : [];
   const counts = countPending(db, todayStr, now);
   return {
     date: todayStr,
@@ -504,8 +523,10 @@ export function buildEveningReview(db, { now = new Date() } = {}) {
       completed: victories.filter((item) => item.completed).map(compactVictory),
       pending: victories.filter((item) => !item.completed).map(compactVictory)
     },
-    questsDue: questsDueAndOverdue(db, todayStr).filter((item) => item.dueToday),
-    habitsDue: habitsDueToday(db, { now, todayStr }),
+    questsDue: isFeatureEnabled(settings, 'quests')
+      ? questsDueAndOverdue(db, todayStr).filter((item) => item.dueToday)
+      : [],
+    habitsDue: isFeatureEnabled(settings, 'habits') ? habitsDueToday(db, { now, todayStr }) : [],
     oracle: oracleDeclinesToday(db, todayStr),
     ...counts
   };
@@ -674,16 +695,19 @@ export function buildWeeklyReview(db, { weekKey, now = new Date() } = {}) {
     };
   });
 
-  const victories = (db.dailyVictories || []).filter((item) => item && item.date >= start && item.date <= end);
+  const settings = db.userProfile?.featureSettings;
+  const victories = isFeatureEnabled(settings, 'victories')
+    ? (db.dailyVictories || []).filter((item) => item && item.date >= start && item.date <= end)
+    : [];
   const planned = victories.length;
   const completed = victories.filter((item) => item.completed).length;
 
-  const habits = (db.habits || []).filter(Boolean).map((habit) => {
+  const habits = isFeatureEnabled(settings, 'habits') ? (db.habits || []).filter(Boolean).map((habit) => {
     const stats = habitWeekMet(habit, start, end);
     return { id: habit.id, title: habit.title, ...stats };
-  });
+  }) : [];
 
-  const quests = db.quests || [];
+  const quests = isFeatureEnabled(settings, 'quests') ? (db.quests || []) : [];
   const questsCompleted = quests.filter((quest) => {
     const date = String(quest?.completedAt || '').slice(0, 10);
     return quest?.completed && date >= start && date <= end;

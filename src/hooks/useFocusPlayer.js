@@ -180,6 +180,14 @@ export function useFocusPlayer() {
 
   const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 
+  const stop = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    setCurrentTime(0);
+  }, []);
+
   return {
     playing,
     currentTime,
@@ -196,6 +204,7 @@ export function useFocusPlayer() {
     play,
     pause,
     toggle,
+    stop,
     seek,
     skip,
     setVolume,

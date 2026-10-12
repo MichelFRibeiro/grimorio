@@ -22,6 +22,7 @@ import { sanitizePhoneTimeLogs } from '../src/utils/phoneTime.js';
 import { sanitizeRoutines } from '../src/utils/routines.js';
 import { setStoredOpenRouterKey } from './jevClient.js';
 import { sanitizeChatRooms } from './chatRoom.js';
+import { sanitizeFeatureSettings } from '../src/utils/featureSettings.js';
 import { computeBossDamage, ensureBossWeekFields } from './domain/bossWeek.js';
 import { applyWisdomToStudyXp, attributeEffects } from './domain/attributes.js';
 import { syncHeroStreak } from './domain/streaks.js';
@@ -389,7 +390,8 @@ export const defaultDatabase = () => {
       streakShieldLog: [],
       theme: 'dark-fantasy',
       currentLocation: null,
-      locationManual: false
+      locationManual: false,
+      featureSettings: {}
     },
     users: [],
     questCategories: [...defaultQuestCategories],
@@ -532,6 +534,7 @@ export function sanitizeDb(db) {
     if (!Array.isArray(db.userProfile.streakShieldLog)) db.userProfile.streakShieldLog = [];
     if (db.userProfile.streakShields == null) db.userProfile.streakShields = 0;
     db.userProfile.attributeEffects = attributeEffects(db.userProfile.stats || {});
+    db.userProfile.featureSettings = sanitizeFeatureSettings(db.userProfile.featureSettings);
   }
   ensureOracleMemory(db);
   db.dailyReviews = sanitizeDailyReviews(db.dailyReviews);

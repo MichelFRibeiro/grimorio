@@ -10,7 +10,8 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { DestinyChestModal } from './components/DestinyChestModal';
 import { JudgmentModal } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare, ListOrdered } from 'lucide-react';
+import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare, ListOrdered, Settings } from 'lucide-react';
+import { isFeatureEnabled, isTabEnabled } from './utils/featureSettings';
 import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
@@ -39,6 +40,7 @@ const PhoneTimeView = lazy(() => import('./components/PhoneTimeView').then((m) =
 const ChatRoomView = lazy(() => import('./components/ChatRoomView').then((m) => ({ default: m.ChatRoomView })));
 const FocusChamberView = lazy(() => import('./components/FocusPlayer').then((m) => ({ default: m.FocusChamberView })));
 const JudgmentHistory = lazy(() => import('./components/JudgmentHistory').then((m) => ({ default: m.JudgmentHistory })));
+const SettingsView = lazy(() => import('./components/SettingsView').then((m) => ({ default: m.SettingsView })));
 
 function TabFallback() {
   return (
@@ -194,7 +196,8 @@ export function App() {
     deleteMindMapCategory,
     deleteMindMapImage,
     savePhoneTime,
-    deletePhoneTime
+    deletePhoneTime,
+    updateProfile
   } = useGameData();
 
   const [captureOpen, setCaptureOpen] = useState(false);
@@ -207,6 +210,19 @@ export function App() {
   const [lastQuestCategory, setLastQuestCategory] = useState('');
   const [phonePromptSnoozed, setPhonePromptSnoozed] = useState(false);
   const [phonePromptBusy, setPhonePromptBusy] = useState(false);
+
+  const focusEnabled = isFeatureEnabled(data?.userProfile?.featureSettings, 'focus');
+  useEffect(() => {
+    if (!focusEnabled) focusPlayer.stop();
+  }, [focusEnabled, focusPlayer]);
+
+  // Aba de função desligada não pode continuar aberta: a tela ficaria vazia.
+  useEffect(() => {
+    if (activeTab !== 'settings' && !isTabEnabled(data?.userProfile?.featureSettings, activeTab)) {
+      const fallback = isTabEnabled(data?.userProfile?.featureSettings, 'today') ? 'today' : 'settings';
+      setActiveTab(fallback);
+    }
+  }, [activeTab, data?.userProfile?.featureSettings]);
 
   const todayStr = getSaoPauloDateStr();
   const homeostasisFloors = useMemo(() => ({
@@ -245,10 +261,10 @@ export function App() {
         return;
       }
       if (typing) return;
-      if (event.key === 'n') {
+      if (event.key === 'n' && isFeatureEnabled(data?.userProfile?.featureSettings, 'quests')) {
         event.preventDefault();
         setCaptureOpen(true);
-      } else if (event.key === 'h') {
+      } else if (event.key === 'h' && isTabEnabled(data?.userProfile?.featureSettings, 'today')) {
         setActiveTab('today');
       } else if (event.key === '?') {
         setHelpOpen(true);
@@ -256,7 +272,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [data?.userProfile?.featureSettings]);
 
   if (loadingAuth || (isAuthenticated && loading)) {
     return (
@@ -373,10 +389,17 @@ export function App() {
     setWeeklyOpen(true);
   };
 
+  const featureSettings = userProfile?.featureSettings;
+  const featureOn = (id) => isFeatureEnabled(featureSettings, id);
+  const openTab = (tab) => {
+    if (!tab || !isTabEnabled(featureSettings, tab)) return;
+    setActiveTab(tab);
+  };
+
   const handleInsightAction = async (action) => {
     if (!action) return;
     if (action.type === 'plan_victory') {
-      setActiveTab('today');
+      openTab('today');
       window.setTimeout(() => {
         document.getElementById('planejar-o-dia')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
           || document.getElementById('vitorias-do-dia')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -386,11 +409,11 @@ export function App() {
     if (action.type === 'reschedule') {
       const dueDate = addDaysToDateStr(getSaoPauloDateStr(), 1);
       if (action.payload?.ids?.length) await rescheduleQuests(action.payload.ids, dueDate);
-      setActiveTab('quests');
+      openTab('quests');
       return;
     }
     if (action.type === 'open_tab' && action.payload?.tab) {
-      setActiveTab(action.payload.tab === 'today' ? 'today' : action.payload.tab);
+      openTab(action.payload.tab === 'today' ? 'today' : action.payload.tab);
     }
   };
 
@@ -423,8 +446,10 @@ export function App() {
     { id: 'rewards', label: 'Taverna', icon: Gift },
     { id: 'agu', label: 'AGU', icon: Scale, badge: aguTodayRemaining },
     { id: 'oracle', label: 'Oráculo', icon: Compass },
-    { id: 'chat', label: 'Bate Papo', icon: MessagesSquare }
+    { id: 'chat', label: 'Bate Papo', icon: MessagesSquare },
+    { id: 'settings', label: 'Configurações', icon: Settings }
   ];
+  const visibleTabs = tabs.filter((tab) => tab.id === 'settings' || isTabEnabled(featureSettings, tab.id));
 
   return (
     <div className="app-shell">
@@ -438,11 +463,11 @@ export function App() {
         rankings={analytics?.rankings}
         muted={muted}
         onToggleMute={toggleMute}
-        onOpenOracle={() => setActiveTab('oracle')}
+        onOpenOracle={() => openTab('oracle')}
         penaltiesThisWeek={penaltiesThisWeek}
       />
 
-      <DailyVictoriesCard
+      {featureOn('victories') && <DailyVictoriesCard
         dailyVictories={dailyVictories}
         dailyVictoryBonuses={dailyVictoryBonuses}
         questCategories={questCategories}
@@ -454,12 +479,12 @@ export function App() {
         readingFloorMinutes={homeostasisFloors.reading}
         scriptureFloorMinutes={homeostasisFloors.scripture}
         habitFloorMinutes={homeostasisFloors.habits}
-      />
+      />}
 
       {/* Boss Raid Banner */}
-      <BossRaid boss={bossRaid} />
+      {featureOn('boss') && <BossRaid boss={bossRaid} />}
 
-      <NextActionCard
+      {featureOn('oracleCard') && <NextActionCard
         nextAction={nextAction}
         locations={locations}
         currentLocation={userProfile?.currentLocation || nextAction?.context?.location}
@@ -469,9 +494,9 @@ export function App() {
         onToggleHabit={toggleHabit}
         onCompleteVictory={completeDailyVictory}
         quests={quests}
-        onOpenQuests={() => setActiveTab('quests')}
-        onOpenHabits={() => setActiveTab('habits')}
-        onOpenTab={(tab) => setActiveTab(tab)}
+        onOpenQuests={() => openTab('quests')}
+        onOpenHabits={() => openTab('habits')}
+        onOpenTab={openTab}
         onBreakdownQuest={breakDownQuest}
         onRescheduleQuests={rescheduleQuests}
         onRefresh={refreshNextAction}
@@ -483,11 +508,11 @@ export function App() {
         onDeclineSuggestion={declineOracleSuggestion}
         onAcceptDose={acceptOracleDose}
         playClick={playClick}
-      />
+      />}
 
       {/* Navigation Tab Bar */}
       <nav className="glass-panel app-nav">
-        {tabs.map(tab => {
+        {visibleTabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
 
@@ -496,7 +521,7 @@ export function App() {
               key={tab.id}
               onClick={() => {
                 playClick();
-                setActiveTab(prev => (tab.id === 'today' ? 'today' : (prev === tab.id ? 'today' : tab.id)));
+                setActiveTab(prev => (tab.id === 'today' ? 'today' : (prev === tab.id ? (featureOn('today') ? 'today' : 'settings') : tab.id)));
               }}
               aria-pressed={isActive}
               title={isActive ? `Recolher ${tab.label}` : `Abrir ${tab.label}`}
@@ -548,9 +573,10 @@ export function App() {
       {/* Main Tab Views — cada aba chega só quando é aberta. */}
       <main>
         <Suspense fallback={<TabFallback />}>
-        {(activeTab === 'today' || activeTab == null) && (
+        {featureOn('today') && (activeTab === 'today' || activeTab == null) && (
           <>
           <TodayView
+            features={featureSettings}
             today={today}
             dailyVictories={dailyVictories}
             questCategories={questCategories}
@@ -559,7 +585,7 @@ export function App() {
             onCompleteQuest={completeQuest}
             onAddVictory={addDailyVictory}
             onRescheduleQuests={rescheduleQuests}
-            onOpenTab={setActiveTab}
+            onOpenTab={openTab}
             onCloseDay={closeDay}
             onOpenEvening={openEvening}
             onOpenWeekly={openWeekly}
@@ -588,7 +614,7 @@ export function App() {
             onAddCategory={addQuestCategory}
             onUpdateCategory={updateQuestCategory}
             onDeleteCategory={deleteQuestCategory}
-            onAddDailyVictory={addDailyVictory}
+            onAddDailyVictory={featureOn('victories') ? addDailyVictory : null}
           />
         )}
 
@@ -647,7 +673,7 @@ export function App() {
             onAddBookQuote={addBookQuote}
             onUpdateBookQuote={updateBookQuote}
             onDeleteBookQuote={deleteBookQuote}
-            onAddDailyVictory={addDailyVictory}
+            onAddDailyVictory={featureOn('victories') ? addDailyVictory : null}
           />
         )}
 
@@ -668,7 +694,7 @@ export function App() {
             onDeleteQuote={deleteScriptureQuote}
             onAddReflection={addScriptureReflection}
             onDeleteReflection={deleteScriptureReflection}
-            onAddDailyVictory={addDailyVictory}
+            onAddDailyVictory={featureOn('victories') ? addDailyVictory : null}
           />
         )}
 
@@ -694,14 +720,14 @@ export function App() {
             onToggleHabit={toggleHabit}
             onUpdateHabitDuration={updateHabitDuration}
             onDeleteHabit={deleteHabit}
-            onAddDailyVictory={addDailyVictory}
+            onAddDailyVictory={featureOn('victories') ? addDailyVictory : null}
           />
         )}
 
         {activeTab === 'routines' && (
           <RoutinesView
             routines={routines}
-            habits={habits}
+            habits={featureOn('habits') ? habits : []}
             onAddRoutine={addRoutine}
             onUpdateRoutine={updateRoutine}
             onAdvanceRoutine={advanceRoutine}
@@ -767,9 +793,9 @@ export function App() {
             onAddAguError={addAguError}
             onReviewAguError={reviewAguError}
             onDeleteAguError={deleteAguError}
-            onOpenQuestions={() => setActiveTab('questions')}
+            onOpenQuestions={() => openTab('questions')}
             onAddQuestions={addExamQuestions}
-            onAddDailyVictory={addDailyVictory}
+            onAddDailyVictory={featureOn('victories') ? addDailyVictory : null}
           />
         )}
 
@@ -792,6 +818,14 @@ export function App() {
           />
         )}
 
+        {activeTab === 'settings' && (
+          <SettingsView
+            settings={featureSettings}
+            onChange={updateProfile ? (next) => updateProfile({ featureSettings: next }) : undefined}
+            playClick={playClick}
+          />
+        )}
+
         {activeTab === 'oracle' && (
           <OracleAnalytics
             analytics={analytics}
@@ -808,6 +842,7 @@ export function App() {
       <PhoneTimePrompt
         open={Boolean(
           data
+          && featureOn('phone')
           && !levelUpData
           && !(penaltiesPending || []).length
           && !phonePromptSnoozed
@@ -818,7 +853,7 @@ export function App() {
         onLater={() => setPhonePromptSnoozed(true)}
         onOpenSection={() => {
           setPhonePromptSnoozed(true);
-          setActiveTab('phone');
+          openTab('phone');
         }}
         onSubmit={async (entry) => {
           setPhonePromptBusy(true);
@@ -835,9 +870,9 @@ export function App() {
         onAcknowledge={acknowledgePenalties}
         onContest={contestPenalty}
         onAction={(action) => {
-          if (action.id === 'open-rituals') setActiveTab('habits');
-          else if (action.id === 'plan-victory') setActiveTab('today');
-          else if (action.id === 'breakdown' || action.id === 'reschedule') setActiveTab('quests');
+          if (action.id === 'open-rituals') openTab('habits');
+          else if (action.id === 'plan-victory') openTab('today');
+          else if (action.id === 'breakdown' || action.id === 'reschedule') openTab('quests');
           acknowledgePenalties();
         }}
       />
@@ -850,7 +885,7 @@ export function App() {
       {/* Floating XP & Coins Notification Toasts */}
       <FloatingToasts toasts={rewardPopups} />
 
-      <button
+      {featureOn('quests') && <button
         type="button"
         className="quick-capture-fab"
         aria-label="Nova missão"
@@ -861,7 +896,7 @@ export function App() {
         }}
       >
         +
-      </button>
+      </button>}
 
       <QuickCapture
         open={captureOpen}
@@ -877,6 +912,7 @@ export function App() {
       <EveningReviewModal
         open={eveningOpen}
         review={eveningReview}
+        features={featureSettings}
         onClose={() => setEveningOpen(false)}
         onCloseDay={closeDay}
         onReschedule={async (ids) => {
@@ -894,6 +930,7 @@ export function App() {
       <WeeklyReviewModal
         open={weeklyOpen}
         review={weeklyReview}
+        features={featureSettings}
         categories={(questCategories || []).map((item) => (typeof item === 'string' ? item : item.name))}
         onClose={() => setWeeklyOpen(false)}
         onSavePlan={saveWeeklyPlan}

@@ -200,6 +200,7 @@ import {
   stripMindMapImage
 } from '../src/utils/mindMaps.js';
 import { sanitizeMindMapImageUrl } from '../src/utils/mindMapIcons.js';
+import { isFeatureEnabled, sanitizeFeatureSettings } from '../src/utils/featureSettings.js';
 import {
   acceptDayPlan,
   buildEveningReview,
@@ -643,7 +644,7 @@ app.get('/api/rankings', (req, res) => {
 app.post('/api/profile', (req, res) => {
   try {
     const db = getDb();
-    const { name, avatar, title, theme, currentLocation, locationManual } = req.body;
+    const { name, avatar, title, theme, currentLocation, locationManual, featureSettings } = req.body;
     if (name) db.userProfile.name = name;
     if (avatar) db.userProfile.avatar = avatar;
     if (title) db.userProfile.title = title;
@@ -658,6 +659,17 @@ app.post('/api/profile', (req, res) => {
     }
     if (locationManual !== undefined) {
       db.userProfile.locationManual = !!locationManual;
+    }
+    // Interruptor de Configurações: só o que aparece muda. O restante do
+    // perfil (e os dados de cada função) fica intocado.
+    if (featureSettings !== undefined) {
+      if (!featureSettings || typeof featureSettings !== 'object' || Array.isArray(featureSettings)) {
+        return res.status(400).json({ error: 'featureSettings precisa ser um objeto.' });
+      }
+      db.userProfile.featureSettings = sanitizeFeatureSettings({
+        ...sanitizeFeatureSettings(db.userProfile.featureSettings),
+        ...featureSettings
+      });
     }
     saveDb(db);
     res.json({ success: true, userProfile: db.userProfile });
@@ -757,7 +769,10 @@ app.get('/api/today/plan', (req, res) => {
   try {
     const db = getDb();
     const date = req.query.date ? String(req.query.date) : undefined;
-    res.json({ success: true, suggestions: suggestDayPlan(db, { date }) });
+    const suggestions = isFeatureEnabled(db.userProfile?.featureSettings, 'victories')
+      ? suggestDayPlan(db, { date })
+      : [];
+    res.json({ success: true, suggestions });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

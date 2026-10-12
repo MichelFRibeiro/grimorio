@@ -130,6 +130,11 @@ O script irá:
 - **Ver processo:** mostra exatamente o que foi enviado ao Jev e o que voltou. **Memória do Oráculo:** taxa de aceite, energia e últimos desfechos.
 - O motor local roda em `server/nextAction.js`; o julgamento do Jev, em `server/oracleJev.js`; a memória (energia, quantidades e desfechos), em `server/oracleMemory.js`.
 
+### ⚙️ Configurações
+- Aba **Configurações**, sempre visível. Cada função do Grimório tem um interruptor: Vitórias Planejadas, Chefe Ativo, O Oráculo indica, Hoje, Missões, Questões, Biblioteca, Escrituras, Mapas, Processos, Rituais, Rotinas, Suplementos, Celular, Correlações, Foco, Taverna, AGU, Oráculo e Bate Papo.
+- Desligar **só esconde**. Missões, rituais, leituras, moedas e o plano AGU continuam gravados; ligar de novo devolve tudo como estava. O Oráculo deixa de indicar o que estiver desligado, e o painel Hoje deixa de mostrar a seção correspondente.
+- A preferência fica no perfil (`POST /api/profile` com `featureSettings`) e vale em qualquer aparelho da mesma conta.
+
 ### 💬 Sala de Bate Papo
 - Aba **Bate Papo**. A chave do OpenRouter é a mesma do Oráculo: fica só no servidor e pode ser cadastrada (ou trocada) na própria sala.
 - Abra uma sala, escolha quantos modelos quiser e escreva. Cada modelo tem um botão: ao clicar, ele recebe o histórico inteiro até aquele ponto — inclusive as falas dos outros modelos — e se manifesta.
@@ -294,6 +299,7 @@ node server/test_next_action.js    # motor local (lugar, janela, prioridade, pra
 node server/test_oracle_flow.js    # fluxo do Oráculo (energia, pular, abstenção, memória)
 node server/test_oracle_jev.js     # leitura do Jev (energia, quantidade, dose)
 node server/test_daily_victories.js
+node server/test_feature_settings.js # interruptores de Configurações (esconde, não apaga)
 ```
 
 ⚠️ **Atenção:** vários testes antigos usam o banco real (`data/database.json`) e gravam nele

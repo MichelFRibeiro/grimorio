@@ -540,13 +540,13 @@ export function AguCampaignView({
         todayStr={todayStr}
         liveMinutes={liveMinutes}
         mindMapSessions={mindMapSessions}
-        actions={(
+        actions={onAddDailyVictory ? (
           <PlanHomeostasisVictoryButton
             victory={homeostasisVictory}
             onAddDailyVictory={onAddDailyVictory}
             accentColor="#fbbf24"
           />
-        )}
+        ) : null}
       />
 
       {summary.started && onUpdatePlan && (

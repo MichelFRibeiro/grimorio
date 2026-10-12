@@ -367,7 +367,7 @@ export function ScriptureView({
         scriptureSessions={scriptureSessions}
         todayStr={today}
         liveMinutes={sessionOpen ? Math.floor(timer.seconds / 60) : 0}
-        actions={<PlanHomeostasisVictoryButton victory={victory} onAddDailyVictory={onAddDailyVictory} accentColor="#fbbf24" />}
+        actions={onAddDailyVictory ? <PlanHomeostasisVictoryButton victory={victory} onAddDailyVictory={onAddDailyVictory} accentColor="#fbbf24" /> : null}
       />
 
       <div className="glass-panel" style={{ display: 'flex', gap: '8px', padding: '6px', margin: '16px 0', borderRadius: '12px', width: 'fit-content' }}>

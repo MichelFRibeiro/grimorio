@@ -832,13 +832,13 @@ export function BooksView({
           readingSessions={readingSessions}
           todayStr={getSaoPauloDateStr()}
           liveMinutes={activeSessionBook ? Math.floor((timerSeconds || 0) / 60) : 0}
-          actions={(
+          actions={onAddDailyVictory ? (
             <PlanHomeostasisVictoryButton
               victory={readingHomeostasisVictory}
               onAddDailyVictory={onAddDailyVictory}
               accentColor="#34d399"
             />
-          )}
+          ) : null}
         />
       )}
 

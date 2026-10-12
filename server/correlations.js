@@ -23,6 +23,7 @@ import { sessionDateStr } from '../src/utils/homeostasis.js';
 import { collectStudyBlocks } from '../src/utils/aguStudyEngine.js';
 import { subjectIdForMindMap } from '../src/utils/aguHomeostasis.js';
 import { sanitizePhoneTimeLogs } from '../src/utils/phoneTime.js';
+import { isCorrelationKindEnabled } from '../src/utils/featureSettings.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -352,7 +353,10 @@ export function buildCorrelationFrame(db = {}, options = {}) {
   const dateIndex = new Map(dates.map((date, index) => [date, index]));
   const events = new Map();
 
-  (db.quests || []).forEach((quest) => {
+  const settings = db.userProfile?.featureSettings;
+  const allow = (kind) => isCorrelationKindEnabled(settings, kind);
+
+  if (allow('quest')) (db.quests || []).forEach((quest) => {
     const dateStr = questDate(quest);
     if (!dateIndex.has(dateStr)) return;
     const label = shortLabel(quest.title || 'Missão');
@@ -361,7 +365,7 @@ export function buildCorrelationFrame(db = {}, options = {}) {
     if (quest.category) bump(events, dateStr, `cat:${quest.category}`, quest.durationMinutes);
   });
 
-  (db.habits || []).forEach((habit) => {
+  if (allow('habit')) (db.habits || []).forEach((habit) => {
     const history = Array.isArray(habit?.history) ? habit.history : [];
     history.forEach((dateStr) => {
       if (!dateIndex.has(dateStr)) return;
@@ -370,20 +374,20 @@ export function buildCorrelationFrame(db = {}, options = {}) {
     });
   });
 
-  (db.readingSessions || []).forEach((session) => {
+  if (allow('reading')) (db.readingSessions || []).forEach((session) => {
     const dateStr = sessionDateStr(session);
     if (!dateIndex.has(dateStr)) return;
     bump(events, dateStr, `reading:${session.bookId || 'book'}`, session.durationMinutes);
     bump(events, dateStr, 'kind:reading', session.durationMinutes);
   });
 
-  (db.scriptureSessions || []).forEach((session) => {
+  if (allow('scripture')) (db.scriptureSessions || []).forEach((session) => {
     const dateStr = sessionDateStr(session);
     if (!dateIndex.has(dateStr)) return;
     bump(events, dateStr, 'kind:scripture', session.durationMinutes);
   });
 
-  const aguBlocks = collectStudyBlocks(db.aguPlan, db.examQuestions || []);
+  const aguBlocks = allow('agu') ? collectStudyBlocks(db.aguPlan, db.examQuestions || []) : [];
   const aguExamIds = new Set();
   aguBlocks.forEach((block) => {
     (block.examIds || []).forEach((id) => {
@@ -394,7 +398,7 @@ export function buildCorrelationFrame(db = {}, options = {}) {
     bump(events, block.dateStr, 'kind:agu', block.durationMinutes);
   });
 
-  (db.examQuestions || []).forEach((entry) => {
+  if (allow('questions')) (db.examQuestions || []).forEach((entry) => {
     if (entry?.id && aguExamIds.has(entry.id)) return;
     if (entry?.blockKey) return;
     const dateStr = sessionDateStr(entry);
@@ -408,7 +412,7 @@ export function buildCorrelationFrame(db = {}, options = {}) {
   (db.mindMaps || []).forEach((map) => {
     if (map?.id) mapById[map.id] = map;
   });
-  (db.mindMapSessions || []).forEach((session) => {
+  if (allow('mindmap')) (db.mindMapSessions || []).forEach((session) => {
     const map = mapById[session.mapId] || null;
     if (map && subjectIdForMindMap(map)) return;
     const dateStr = sessionDateStr(session);
@@ -417,20 +421,20 @@ export function buildCorrelationFrame(db = {}, options = {}) {
     bump(events, dateStr, 'kind:mindmap', session.durationMinutes);
   });
 
-  (db.processSteps || []).forEach((step) => {
+  if (allow('process')) (db.processSteps || []).forEach((step) => {
     const dateStr = sessionDateStr(step);
     if (!dateIndex.has(dateStr)) return;
     bump(events, dateStr, `process:${step.processId || 'process'}`, step.durationMinutes);
     bump(events, dateStr, 'kind:process', step.durationMinutes);
   });
 
-  (db.dailyVictories || []).forEach((victory) => {
+  if (allow('victory')) (db.dailyVictories || []).forEach((victory) => {
     if (!victory?.completed || !dateIndex.has(victory.date)) return;
     bump(events, victory.date, 'kind:victory');
   });
 
   const supplementNames = new Map((db.supplements || []).map((item) => [item.id, item.name || 'Suplemento']));
-  (db.supplementLogs || []).forEach((log) => {
+  if (allow('supplement')) (db.supplementLogs || []).forEach((log) => {
     if (!dateIndex.has(log.date)) return;
     const name = supplementNames.get(log.supplementId) || 'Suplemento';
     bump(events, log.date, `supplement:${log.supplementId || name}`, 0, { amount: Number(log.amount) || 1 });
@@ -438,7 +442,7 @@ export function buildCorrelationFrame(db = {}, options = {}) {
   });
 
   const phoneByDate = {};
-  sanitizePhoneTimeLogs(db.phoneTimeLogs).forEach((entry) => {
+  if (allow('phone')) sanitizePhoneTimeLogs(db.phoneTimeLogs).forEach((entry) => {
     if (dateIndex.has(entry.date)) phoneByDate[entry.date] = entry.minutes;
   });
 
@@ -458,7 +462,7 @@ export function buildCorrelationFrame(db = {}, options = {}) {
   const accuracyNumer = dates.map(() => 0);
   const accuracyDenom = dates.map(() => 0);
 
-  (db.examQuestions || []).forEach((entry) => {
+  if (allow('questions') || allow('agu')) (db.examQuestions || []).forEach((entry) => {
     const dateStr = sessionDateStr(entry);
     const index = dateIndex.get(dateStr);
     if (index == null) return;
@@ -472,7 +476,7 @@ export function buildCorrelationFrame(db = {}, options = {}) {
   events.forEach((day, dateStr) => {
     const index = dateIndex.get(dateStr);
     day.forEach((value, id) => {
-      if (id.startsWith('kind:') && PRODUCTIVE_KINDS.has(id.slice(5))) {
+      if (id.startsWith('kind:') && PRODUCTIVE_KINDS.has(id.slice(5)) && allow(id.slice(5))) {
         productive[index] += value.minutes;
         activityCount[index] += value.count;
       }
@@ -579,6 +583,7 @@ export function buildCorrelationFrame(db = {}, options = {}) {
     'kind:supplement': ['Algum suplemento', 'Suplementos']
   };
   Object.entries(kindLabels).forEach(([id, [label, group]]) => {
+    if (!allow(id.slice(5))) return;
     const binary = dates.map((date) => (events.get(date)?.has(id) ? 1 : 0));
     addSeries(id, label, id.slice(5), group, binary);
   });

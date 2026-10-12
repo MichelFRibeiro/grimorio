@@ -3,6 +3,7 @@ import { computeMapStats, getStudyQueue } from '../src/utils/mindMaps.js';
 import { MAX_DAILY_VICTORIES, summarizeDay } from '../src/utils/dailyVictories.js';
 import { parseDurationMinutes, sumDurationMap } from '../src/utils/activityDuration.js';
 import { computeCategoryRankings } from './rankings.js';
+import { isInsightEnabled } from '../src/utils/featureSettings.js';
 import {
   getSaoPauloDateStr,
   getSaoPauloMonthStr,
@@ -548,7 +549,8 @@ export function computeAnalytics() {
       };
     }),
     rankings,
-    insights,
+    // Revelação de função desligada some do relatório; o número no resumo fica.
+    insights: insights.filter((insight) => isInsightEnabled(db.userProfile?.featureSettings, insight)),
     summary
   };
 }

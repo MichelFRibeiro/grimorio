@@ -35,6 +35,7 @@ import { summarizePlan } from '../src/utils/aguCycle.js';
 import { getAguSubject } from '../src/data/aguCurriculum.js';
 import { computeMapStats } from '../src/utils/mindMaps.js';
 import { computeOracleStats, hourSuccessTerm } from './oracleMemory.js';
+import { isNextActionKindEnabled } from '../src/utils/featureSettings.js';
 
 const LEGACY_PRIORITY_MAP = {
   epica: 'critico',
@@ -866,6 +867,8 @@ export function computeNextAction(db, options = {}) {
   };
 
   const consider = (kind, item, extra, weeklyStats, completedToday, order = 0) => {
+    // Função desligada em Configurações sai da indicação, mas o dado fica.
+    if (!isNextActionKindEnabled(db.userProfile?.featureSettings, kind)) return;
     if (snoozed.has(item.id)) return;
     const memory = declineMemory.byEntity[item.id];
     if (memory?.excludedLocation && memory.excludedLocation === location && location !== 'anywhere') return;

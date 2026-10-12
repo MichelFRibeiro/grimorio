@@ -42,6 +42,7 @@ function Empty({ children }) {
 }
 
 export function TodayView({
+  features = {},
   today,
   dailyVictories = [],
   questCategories = [],
@@ -64,7 +65,8 @@ export function TodayView({
   const todayStr = payload.date || getSaoPauloDateStr();
   const tomorrowStr = payload.tomorrow || addDaysToDateStr(todayStr, 1);
   const planning = payload.planning || {};
-  const showPlan = planning.morningOpen || (hour >= 18 && (payload.dailyVictories?.planned || 0) === 0);
+  const show = (id) => features[id] !== false;
+  const showPlan = show('victories') && (planning.morningOpen || (hour >= 18 && (payload.dailyVictories?.planned || 0) === 0));
   const day = getSaoPauloDayOfWeek();
   const showWeeklyHint = (day === 0 && hour >= 18) || (day === 1 && hour < 12);
 
@@ -118,7 +120,7 @@ export function TodayView({
           <h2 className="font-cinzel">{payload.greeting || 'Hoje'}</h2>
           <p className="today-meta">
             Sequência de {payload.streak || 0} dia{(payload.streak || 0) === 1 ? '' : 's'}
-            {payload.boss?.name ? ` · ${payload.boss.icon || ''} ${payload.boss.name}` : ''}
+            {show('boss') && payload.boss?.name ? ` · ${payload.boss.icon || ''} ${payload.boss.name}` : ''}
           </p>
         </div>
         <div className="today-hero-actions">
@@ -211,7 +213,7 @@ export function TodayView({
       )}
 
       <div className="today-grid">
-        <Section title="Vitórias" count={`${payload.dailyVictories?.completed || 0}/${payload.dailyVictories?.planned || victories.length}`}>
+        {show('victories') && <Section title="Vitórias" count={`${payload.dailyVictories?.completed || 0}/${payload.dailyVictories?.planned || victories.length}`}>
           {victories.length === 0 && <Empty>Nenhuma vitória planejada.</Empty>}
           {victories.map((item) => (
             <label key={item.id} className="today-line">
@@ -224,9 +226,9 @@ export function TodayView({
               <span className={item.completed ? 'is-done' : ''}>{item.title}</span>
             </label>
           ))}
-        </Section>
+        </Section>}
 
-        <Section title="Rituais devidos" count={payload.habitsDueCount ?? (payload.habitsDue || []).length} action={
+        {show('habits') && <Section title="Rituais devidos" count={payload.habitsDueCount ?? (payload.habitsDue || []).length} action={
           <button type="button" className="today-link" onClick={() => onOpenTab?.('habits')}>ver</button>
         }>
           {(payload.habitsDue || []).length === 0 && <Empty>Nenhum ritual pendente hoje.</Empty>}
@@ -238,9 +240,9 @@ export function TodayView({
               {habit.timeWindow && <em>{habit.timeWindow.start}–{habit.timeWindow.end}</em>}
             </label>
           ))}
-        </Section>
+        </Section>}
 
-        <Section title="Missões de hoje e atrasadas" count={(payload.quests || []).length} action={
+        {show('quests') && <Section title="Missões de hoje e atrasadas" count={(payload.quests || []).length} action={
           <button type="button" className="today-link" onClick={() => onOpenTab?.('quests')}>ver</button>
         }>
           {(payload.quests || []).length === 0 && <Empty>Nada vencendo hoje.</Empty>}
@@ -261,9 +263,9 @@ export function TodayView({
               </button>
             </div>
           ))}
-        </Section>
+        </Section>}
 
-        <Section title="AGU" count={payload.agu?.started ? `${payload.agu.done}/${payload.agu.total}` : '—'} action={
+        {show('agu') && <Section title="AGU" count={payload.agu?.started ? `${payload.agu.done}/${payload.agu.total}` : '—'} action={
           <button type="button" className="today-link" onClick={() => onOpenTab?.('agu')}>abrir</button>
         }>
           {!payload.agu?.started && <Empty>Campanha ainda não iniciada.</Empty>}
@@ -283,9 +285,9 @@ export function TodayView({
               ))}
             </>
           )}
-        </Section>
+        </Section>}
 
-        <Section title="Mapas vencidos" count={payload.mindMaps?.count || 0}>
+        {show('maps') && <Section title="Mapas vencidos" count={payload.mindMaps?.count || 0}>
           {!payload.mindMaps?.top && <Empty>Nenhum ramo vencido.</Empty>}
           {payload.mindMaps?.top && (
             <button type="button" className="today-line today-line-btn" onClick={() => onOpenTab?.('maps')}>
@@ -294,9 +296,9 @@ export function TodayView({
               <em>{payload.mindMaps.top.dueBranches}</em>
             </button>
           )}
-        </Section>
+        </Section>}
 
-        <Section title="Livros parados" count={(payload.stalledBooks || []).length}>
+        {show('books') && <Section title="Livros parados" count={(payload.stalledBooks || []).length}>
           {(payload.stalledBooks || []).length === 0 && <Empty>Nenhum livro parado.</Empty>}
           {(payload.stalledBooks || []).slice(0, 3).map((book) => (
             <button key={book.id} type="button" className="today-line today-line-btn" onClick={() => onOpenTab?.('books')}>
@@ -305,7 +307,7 @@ export function TodayView({
               <em>{book.stalledDays}d</em>
             </button>
           ))}
-        </Section>
+        </Section>}
       </div>
 
       {(payload.rankingsAtRisk || []).length > 0 && (
@@ -329,7 +331,7 @@ export function TodayView({
   );
 }
 
-export function EveningReviewModal({ open, review, onClose, onCloseDay, onReschedule, onPlanTomorrow, playClick }) {
+export function EveningReviewModal({ open, review, features = {}, onClose, onCloseDay, onReschedule, onPlanTomorrow, playClick }) {
   const [note, setNote] = useState('');
   const [mood, setMood] = useState(3);
   const [busy, setBusy] = useState(false);
@@ -358,18 +360,18 @@ export function EveningReviewModal({ open, review, onClose, onCloseDay, onResche
         </header>
         <p className="today-meta">{data.completedCount || 0} concluída(s) · {data.pendingCount || 0} pendente(s)</p>
 
-        <h4>Vitórias pendentes</h4>
-        {(data.victories?.pending || []).length === 0 && <Empty>Nenhuma.</Empty>}
-        {(data.victories?.pending || []).map((item) => (
+        {features.victories !== false && <h4>Vitórias pendentes</h4>}
+        {features.victories !== false && (data.victories?.pending || []).length === 0 && <Empty>Nenhuma.</Empty>}
+        {features.victories !== false && (data.victories?.pending || []).map((item) => (
           <div key={item.id} className="today-line">
             <span>{item.title}</span>
             <button type="button" className="today-link" onClick={() => onPlanTomorrow?.(item)}>amanhã</button>
           </div>
         ))}
 
-        <h4>Missões de hoje</h4>
-        {(data.questsDue || []).length === 0 && <Empty>Nenhuma.</Empty>}
-        {(data.questsDue || []).map((item) => (
+        {features.quests !== false && <h4>Missões de hoje</h4>}
+        {features.quests !== false && (data.questsDue || []).length === 0 && <Empty>Nenhuma.</Empty>}
+        {features.quests !== false && (data.questsDue || []).map((item) => (
           <div key={item.id} className="today-line">
             <span>{item.title}</span>
             <button type="button" className="today-link" onClick={() => onReschedule?.([item.id])}>remarcar</button>
@@ -377,9 +379,9 @@ export function EveningReviewModal({ open, review, onClose, onCloseDay, onResche
           </div>
         ))}
 
-        <h4>Rituais devidos</h4>
-        {(data.habitsDue || []).length === 0 && <Empty>Nenhum.</Empty>}
-        {(data.habitsDue || []).map((item) => (
+        {features.habits !== false && <h4>Rituais devidos</h4>}
+        {features.habits !== false && (data.habitsDue || []).length === 0 && <Empty>Nenhum.</Empty>}
+        {features.habits !== false && (data.habitsDue || []).map((item) => (
           <div key={item.id} className="today-line"><span>{item.title}</span><em>deixar</em></div>
         ))}
 
@@ -415,7 +417,7 @@ export function EveningReviewModal({ open, review, onClose, onCloseDay, onResche
   );
 }
 
-export function WeeklyReviewModal({ open, review, categories = [], onClose, onSavePlan, playClick }) {
+export function WeeklyReviewModal({ open, review, features = {}, categories = [], onClose, onSavePlan, playClick }) {
   const [focuses, setFocuses] = useState([
     { title: '', category: '' },
     { title: '', category: '' },
@@ -455,9 +457,9 @@ export function WeeklyReviewModal({ open, review, categories = [], onClose, onSa
         </header>
         <p className="today-meta">{data.weekLabel}</p>
         <div className="today-stats">
-          <span>Vitórias {data.victories?.completed || 0}/{data.victories?.planned || 0}{data.victories?.rate != null ? ` (${data.victories.rate}%)` : ''}</span>
-          <span>Rituais {data.habits?.met || 0} ok · {data.habits?.missed || 0} abaixo</span>
-          <span>Missões {data.quests?.completed || 0} feitas · {data.quests?.overdue || 0} atrasadas</span>
+          {features.victories !== false && <span>Vitórias {data.victories?.completed || 0}/{data.victories?.planned || 0}{data.victories?.rate != null ? ` (${data.victories.rate}%)` : ''}</span>}
+          {features.habits !== false && <span>Rituais {data.habits?.met || 0} ok · {data.habits?.missed || 0} abaixo</span>}
+          {features.quests !== false && <span>Missões {data.quests?.completed || 0} feitas · {data.quests?.overdue || 0} atrasadas</span>}
           <span>Estudo {data.study?.minutes || 0} min ({(data.study?.delta || 0) >= 0 ? '+' : ''}{data.study?.delta || 0} vs anterior)</span>
           {data.oracle?.bestHour != null && <span>Melhor hora: {data.oracle.bestHour}h</span>}
           {data.oracle?.bestDay && <span>Melhor dia: {data.oracle.bestDay}</span>}
