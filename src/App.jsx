@@ -14,7 +14,6 @@ import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Sca
 import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
-import { FocusMiniPlayer } from './components/FocusMiniPlayer';
 import { useFocusPlayer } from './hooks/useFocusPlayer';
 import { getSaoPauloDateStr, addDaysToDateStr, getSaoPauloDayOfWeek } from './utils/timeUtils';
 import { summarizePlan, getAguStudyLoadSeries } from './utils/aguCycle';
@@ -427,10 +426,8 @@ export function App() {
     { id: 'chat', label: 'Bate Papo', icon: MessagesSquare }
   ];
 
-  const showFocusMini = activeTab !== 'focus' && (focusPlayer.playing || focusPlayer.currentTime >= 1);
-
   return (
-    <div className={`app-shell${showFocusMini ? ' has-focus-mini' : ''}`}>
+    <div className="app-shell">
       
       {/* Top Header */}
       <Header
@@ -902,14 +899,6 @@ export function App() {
         onSavePlan={saveWeeklyPlan}
         playClick={playClick}
       />
-
-      {activeTab !== 'focus' && (
-        <FocusMiniPlayer
-          player={focusPlayer}
-          playClick={playClick}
-          onOpen={() => setActiveTab('focus')}
-        />
-      )}
 
     </div>
   );

@@ -246,7 +246,7 @@ export function FocusChamberView({ player, playClick }) {
           Como usar
         </h3>
         <p style={{ fontSize: '0.88rem', color: '#94a3b8', lineHeight: 1.55, margin: 0 }}>
-          Trilha de cerca de 2 horas. O mini-player aparece no rodapé enquanto a música toca em qualquer outra aba do Grimório.
+          Trilha de cerca de 2 horas. A música continua tocando se você mudar de aba.
         </p>
       </section>
     </div>
