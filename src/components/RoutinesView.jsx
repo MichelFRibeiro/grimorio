@@ -13,7 +13,7 @@ import {
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityTimerBox } from './ActivityTimerBox';
 import { getFrequencyLabel } from '../utils/habitFrequency';
-import { MAX_DURATION_MINUTES, MAX_HABIT_COUNT, confirmLongDuration, getHabitDurationForDate, secondsToDurationMinutes } from '../utils/activityDuration';
+import { MAX_DURATION_MINUTES, MAX_HABIT_COUNT, confirmLongDuration, formatDurationLabel, getHabitDurationForDate, secondsToDurationMinutes, sumDurationMap } from '../utils/activityDuration';
 import { consumeActivityTimerMinutes } from '../utils/liveActivityTimers';
 import { useActivityTimer } from '../hooks/useActivityTimer';
 import { formatTimer } from '../hooks/useStopwatch';
@@ -84,6 +84,19 @@ function habitBandHint(habit) {
     add(getHabitLoadSeries(habit, today, { measure: 'count' }), habitMeasureLabel(habit, 'count'));
   }
   return parts.join(' · ');
+}
+
+function routineTime(routine, habitById, today) {
+  let todayMinutes = 0;
+  let totalMinutes = 0;
+  for (const step of routine?.steps || []) {
+    if (step.missing) continue;
+    const habit = habitById.get(step.habitId);
+    if (!habit) continue;
+    todayMinutes += getHabitDurationForDate(habit, today);
+    totalMinutes += sumDurationMap(habit.durationsByDate);
+  }
+  return { todayMinutes, totalMinutes };
 }
 
 function emptyForm() {
@@ -307,6 +320,9 @@ export function RoutinesView({
             const done = routine.progress?.done || 0;
             const ratio = total ? Math.round((done / total) * 100) : 0;
             const next = (routine.steps || []).find(step => step.habitId === routine.nextHabitId);
+            const time = routineTime(routine, habitById, getSaoPauloDateStr());
+            const todayLabel = formatDurationLabel(time.todayMinutes);
+            const totalLabel = formatDurationLabel(time.totalMinutes);
             return (
               <article key={routine.id} className="glass-panel" style={{ padding: '16px 18px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -331,6 +347,7 @@ export function RoutinesView({
                 </div>
                 <p style={{ margin: '0 0 12px', fontSize: '0.78rem', color: routine.completeToday ? '#34d399' : '#94a3b8', fontWeight: 700 }}>
                   {routine.completeToday ? 'Sequência de hoje concluída' : `${done} de ${total} hoje`}
+                  {` · hoje ${todayLabel || '0 min'} · total ${totalLabel || '0 min'}`}
                 </p>
 
                 <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
