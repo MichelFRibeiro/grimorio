@@ -5,6 +5,8 @@ import {
   Play,
   Repeat,
   RotateCcw,
+  SkipBack,
+  SkipForward,
   Volume2,
   VolumeX,
   Waves
