@@ -1,4 +1,3 @@
-import { getBibleBook, verseCount } from '../data/bibleCanon.js';
 import { LIVE_SCRIPTURE_SESSION_KEY, readLiveScriptureSession } from './liveReadingSession.js';
 
 export const LIVE_SCRIPTURE_DRAFT_KEY = 'grimorio_live_scripture_draft';
@@ -16,11 +15,21 @@ function clipText(value, max = MAX_TEXT) {
   return String(value || '').slice(0, max);
 }
 
+/**
+ * Limite frouxo de propósito: o cliente não carrega o cânone só para gravar
+ * um rascunho. O servidor confere livro, capítulo e versículo de verdade.
+ */
+const DRAFT_MAX_CHAPTER = 150;
+const DRAFT_MAX_VERSE = 200;
+
 export function sanitizePassage(value, fallback = { bookId: 'gn', chapter: 1, verse: 1 }) {
-  const book = getBibleBook(value?.bookId) || getBibleBook(fallback.bookId) || getBibleBook('gn');
-  const chapter = clampInt(value?.chapter, 1, book.chapters.length, 1);
-  const verse = clampInt(value?.verse, 1, verseCount(book, chapter), 1);
-  return { bookId: book.id, chapter, verse };
+  const rawId = String(value?.bookId || fallback.bookId || 'gn').trim().toLowerCase();
+  const bookId = /^[a-z0-9]{1,8}$/.test(rawId) ? rawId : 'gn';
+  return {
+    bookId,
+    chapter: clampInt(value?.chapter, 1, DRAFT_MAX_CHAPTER, 1),
+    verse: clampInt(value?.verse, 1, DRAFT_MAX_VERSE, 1)
+  };
 }
 
 function sanitizeQuote(item) {
@@ -31,7 +40,7 @@ function sanitizeQuote(item) {
   return {
     id: clipText(item.id, 80) || `sqd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     ...sanitizePassage(item),
-    endVerse: clampInt(item.endVerse, 1, verseCount(getBibleBook(item.bookId) || getBibleBook('gn'), clampInt(item.chapter, 1, 150, 1)), Number(item.verse) || 1),
+    endVerse: clampInt(item.endVerse, 1, DRAFT_MAX_VERSE, Number(item.verse) || 1),
     quote,
     note
   };
@@ -80,7 +89,7 @@ export function sanitizeScriptureDraft(value, now = Date.now()) {
     quoteEndVerse: clampInt(
       value.quoteEndVerse,
       1,
-      verseCount(getBibleBook(value.quotePassage?.bookId || value.end?.bookId) || getBibleBook('gn'), clampInt(value.quotePassage?.chapter || value.end?.chapter, 1, 150, 1)),
+      DRAFT_MAX_VERSE,
       Number(value.quotePassage?.verse || value.end?.verse) || 1
     ),
     timer: { accumulatedMs, runStartedAt },

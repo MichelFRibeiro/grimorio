@@ -144,30 +144,3 @@ export function JudgmentModal({
     document.body
   );
 }
-
-export function JudgmentHistory({ penalties = [], onClose }) {
-  if (!penalties) return null;
-  return (
-    <section className="judgment-history glass-panel">
-      <header>
-        <h3><Scale size={16} /> Registro de Julgamentos</h3>
-        {onClose && (
-          <button type="button" onClick={onClose}>fechar</button>
-        )}
-      </header>
-      {penalties.length === 0 ? (
-        <p>Nenhum julgamento ainda. A semana está limpa.</p>
-      ) : (
-        <ul>
-          {penalties.slice(0, 20).map((penalty) => (
-            <li key={penalty.id}>
-              <strong>{penalty.title}</strong>
-              <span>{penalty.date} · {penalty.contestedAt ? 'contestado' : penalty.acknowledgedAt ? 'reconhecido' : 'pendente'}</span>
-              <em>{costLine(penalty.applied || penalty.deltas)}</em>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}

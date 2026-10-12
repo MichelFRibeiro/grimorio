@@ -130,6 +130,13 @@ img, video, canvas {
   white-space: nowrap;
 }
 
+.tab-fallback {
+  padding: 28px 20px;
+  color: #94a3b8;
+  font-weight: 700;
+  text-align: center;
+}
+
 .header-identity {
   min-width: 0;
   flex: 1 1 auto;

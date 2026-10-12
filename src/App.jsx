@@ -1,42 +1,53 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { useGameData } from './hooks/useGameData';
 import { LoginView } from './components/LoginView';
 import { Header } from './components/Header';
 import { BossRaid } from './components/BossRaid';
 import { DailyVictoriesCard } from './components/DailyVictoriesCard';
-import { QuestsView } from './components/QuestsView';
-import { QuestionsView } from './components/QuestionsView';
-import { BooksView } from './components/BooksView';
-import { ScriptureView } from './components/ScriptureView';
-import { ProcessesView } from './components/ProcessesView';
-import { HabitsView } from './components/HabitsView';
-import { RoutinesView } from './components/RoutinesView';
-import { SupplementsView } from './components/SupplementsView';
-import { RewardsShop } from './components/RewardsShop';
-import { OracleAnalytics } from './components/OracleAnalytics';
 import { NextActionCard } from './components/NextActionCard';
 import { LevelUpModal } from './components/LevelUpModal';
 import { DestinyChestModal } from './components/DestinyChestModal';
-import { JudgmentModal, JudgmentHistory } from './components/JudgmentModal';
+import { JudgmentModal } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
 import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare, ListOrdered } from 'lucide-react';
 import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
-import { MindMapsView } from './components/MindMapsView';
-import { AguCampaignView } from './components/AguCampaignView';
-import { FocusChamberView, FocusMiniPlayer } from './components/FocusPlayer';
+import { FocusMiniPlayer } from './components/FocusMiniPlayer';
 import { useFocusPlayer } from './hooks/useFocusPlayer';
 import { getSaoPauloDateStr, addDaysToDateStr, getSaoPauloDayOfWeek } from './utils/timeUtils';
 import { summarizePlan, getAguStudyLoadSeries } from './utils/aguCycle';
 import { getReadingLoadSeries, getScriptureLoadSeries } from './utils/homeostasis';
 import { getHabitLoadSeries, habitHomeostasisEnabled } from './utils/habitHomeostasis';
-import { CorrelationsView } from './components/CorrelationsView';
-import { PhoneTimeView } from './components/PhoneTimeView';
-import { ChatRoomView } from './components/ChatRoomView';
 import { PhoneTimePrompt } from './components/PhoneTimePrompt';
 import { needsYesterdayPhonePrompt, yesterdayDateStr } from './utils/phoneTime';
+
+const QuestsView = lazy(() => import('./components/QuestsView').then((m) => ({ default: m.QuestsView })));
+const QuestionsView = lazy(() => import('./components/QuestionsView').then((m) => ({ default: m.QuestionsView })));
+const BooksView = lazy(() => import('./components/BooksView').then((m) => ({ default: m.BooksView })));
+const ScriptureView = lazy(() => import('./components/ScriptureView').then((m) => ({ default: m.ScriptureView })));
+const ProcessesView = lazy(() => import('./components/ProcessesView').then((m) => ({ default: m.ProcessesView })));
+const HabitsView = lazy(() => import('./components/HabitsView').then((m) => ({ default: m.HabitsView })));
+const RoutinesView = lazy(() => import('./components/RoutinesView').then((m) => ({ default: m.RoutinesView })));
+const SupplementsView = lazy(() => import('./components/SupplementsView').then((m) => ({ default: m.SupplementsView })));
+const RewardsShop = lazy(() => import('./components/RewardsShop').then((m) => ({ default: m.RewardsShop })));
+const OracleAnalytics = lazy(() => import('./components/OracleAnalytics').then((m) => ({ default: m.OracleAnalytics })));
+const MindMapsView = lazy(() => import('./components/MindMapsView').then((m) => ({ default: m.MindMapsView })));
+const AguCampaignView = lazy(() => import('./components/AguCampaignView').then((m) => ({ default: m.AguCampaignView })));
+const CorrelationsView = lazy(() => import('./components/CorrelationsView').then((m) => ({ default: m.CorrelationsView })));
+const PhoneTimeView = lazy(() => import('./components/PhoneTimeView').then((m) => ({ default: m.PhoneTimeView })));
+const ChatRoomView = lazy(() => import('./components/ChatRoomView').then((m) => ({ default: m.ChatRoomView })));
+const FocusChamberView = lazy(() => import('./components/FocusPlayer').then((m) => ({ default: m.FocusChamberView })));
+const JudgmentHistory = lazy(() => import('./components/JudgmentHistory').then((m) => ({ default: m.JudgmentHistory })));
+
+function TabFallback() {
+  return (
+    <div className="glass-panel tab-fallback" role="status">
+      Abrindo…
+    </div>
+  );
+}
 
 export function App() {
   const [activeTab, setActiveTab] = useState('today');
@@ -537,8 +548,9 @@ export function App() {
         })}
       </nav>
 
-      {/* Main Tab Views */}
+      {/* Main Tab Views — cada aba chega só quando é aberta. */}
       <main>
+        <Suspense fallback={<TabFallback />}>
         {(activeTab === 'today' || activeTab == null) && (
           <>
           <TodayView
@@ -791,6 +803,7 @@ export function App() {
             onInsightAction={handleInsightAction}
           />
         )}
+        </Suspense>
       </main>
 
       {/* Level Up Pop-up Modal */}

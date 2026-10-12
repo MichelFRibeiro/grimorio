@@ -1,20 +1,17 @@
-import React, { useMemo, useState } from 'react';
-import { icons as LucideIcons, Trash2, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Trash2, X } from 'lucide-react';
 import {
-  MIND_MAP_ALL_ICONS,
   MIND_MAP_FEATURED_ICONS,
   MIND_MAP_ICON_CATEGORIES,
   sanitizeMindMapIcon,
   sanitizeMindMapImageUrl
 } from '../utils/mindMapIcons';
-
-const FALLBACK_ICON = LucideIcons.Sparkles;
+import { loadMindMapIcon, useMindMapIcon } from '../utils/mindMapIconLoader';
 
 export function MindMapIcon({ name, size = 16, color = 'currentColor', strokeWidth = 2, style }) {
   const iconName = sanitizeMindMapIcon(name);
-  if (!iconName) return null;
-  const Icon = LucideIcons[iconName] || FALLBACK_ICON;
-  if (!Icon) return null;
+  const Icon = useMindMapIcon(iconName);
+  if (!iconName || !Icon) return null;
   return <Icon size={size} color={color} strokeWidth={strokeWidth} style={style} />;
 }
 
@@ -115,20 +112,34 @@ export function MindMapMediaPicker({
   const [error, setError] = useState('');
   const [libraryOpen, setLibraryOpen] = useState(false);
 
+ const [catalog, setCatalog] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import('../utils/mindMapIconCatalog.js').then((mod) => {
+      if (!cancelled) setCatalog(mod.MIND_MAP_ALL_ICONS);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const icons = useMemo(() => {
     const q = query.trim().toLowerCase();
     let pool;
     if (q) {
-      pool = MIND_MAP_ALL_ICONS.filter(name => name.toLowerCase().includes(q));
+      pool = (catalog || MIND_MAP_FEATURED_ICONS).filter(name => name.toLowerCase().includes(q));
     } else if (category === 'Destaques') {
       pool = MIND_MAP_FEATURED_ICONS;
     } else if (category === 'Todos') {
-      pool = MIND_MAP_ALL_ICONS;
+      pool = catalog || MIND_MAP_FEATURED_ICONS;
     } else {
       pool = MIND_MAP_ICON_CATEGORIES[category] || MIND_MAP_FEATURED_ICONS;
     }
     return pool.slice(0, q ? 180 : 240);
-  }, [query, category]);
+  }, [query, category, catalog]);
+
+  useEffect(() => {
+    icons.forEach((name) => { loadMindMapIcon(name); });
+  }, [icons]);
 
   const applyIcon = (name) => {
     setError('');
@@ -182,7 +193,7 @@ export function MindMapMediaPicker({
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder={`Buscar entre ${MIND_MAP_ALL_ICONS.length} ícones...`}
+        placeholder={`Buscar entre ${catalog?.length || '…'} ícones...`}
         style={pickerInputStyle}
       />
       <div className="mindmap-icon-cats">
@@ -214,7 +225,7 @@ export function MindMapMediaPicker({
         })}
       </div>
       <p style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 6 }}>
-        {query ? `${icons.length} resultados` : `${MIND_MAP_ALL_ICONS.length} ícones Lucide disponíveis.`}
+        {query ? `${icons.length} resultados` : `${catalog?.length || '…'} ícones Lucide disponíveis.`}
       </p>
       {allowImage && (
         <>
