@@ -346,47 +346,32 @@ export function RoutinesView({
             const time = routineTime(routine, habitById, getSaoPauloDateStr());
             const todayLabel = formatDurationLabel(time.todayMinutes);
             const totalLabel = formatDurationLabel(time.totalMinutes);
-            const closed = !!routine.completeToday;
-            const expanded = !closed || expandedIds.has(routine.id);
+            const expanded = expandedIds.has(routine.id);
             return (
               <article key={routine.id} className="glass-panel" style={{ padding: expanded ? '16px 18px' : '10px 14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  {closed ? (
-                    <button
-                      type="button"
-                      onClick={() => toggleExpanded(routine.id)}
-                      aria-expanded={expanded}
-                      title={expanded ? 'Recolher rotina' : 'Expandir rotina'}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        flex: '1 1 180px',
-                        minWidth: 0,
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'inherit',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        padding: 0
-                      }}
-                    >
-                      {expanded ? <ChevronUp size={16} color="#34d399" /> : <ChevronDown size={16} color="#34d399" />}
-                      <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.05rem' }}>{routine.title}</h3>
-                      {!expanded ? (
-                        <span style={{ color: '#34d399', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                          concluída
-                        </span>
-                      ) : null}
-                    </button>
-                  ) : (
-                    <div style={{ flex: '1 1 180px', minWidth: 0 }}>
-                      <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.05rem' }}>{routine.title}</h3>
-                      {routine.description ? (
-                        <p style={{ margin: '4px 0 0', color: '#94a3b8', fontSize: '0.82rem' }}>{routine.description}</p>
-                      ) : null}
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => toggleExpanded(routine.id)}
+                    aria-expanded={expanded}
+                    title={expanded ? 'Recolher rotina' : 'Expandir rotina'}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      flex: '1 1 180px',
+                      minWidth: 0,
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      padding: 0
+                    }}
+                  >
+                    {expanded ? <ChevronUp size={16} color="#94a3b8" /> : <ChevronDown size={16} color="#94a3b8" />}
+                    <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.05rem' }}>{routine.title}</h3>
+                  </button>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button type="button" onClick={() => openEdit(routine)} title="Editar" style={iconBtn}>
                       <Pencil size={15} />
@@ -397,7 +382,7 @@ export function RoutinesView({
                   </div>
                 </div>
 
-                {expanded && closed && routine.description ? (
+                {expanded && routine.description ? (
                   <p style={{ margin: '8px 0 0', color: '#94a3b8', fontSize: '0.82rem' }}>{routine.description}</p>
                 ) : null}
 
