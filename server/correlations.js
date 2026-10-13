@@ -77,12 +77,16 @@ function stddev(values) {
   return Math.sqrt(sum / (values.length - 1));
 }
 
-/** ln Γ(n) para n inteiro >= 1, via soma. Suficiente até n de algumas centenas. */
+const logFactCache = [0, 0];
+
+/** ln Γ(n) = ln((n-1)!) para n inteiro >= 1, via tabela acumulada O(1). */
 function logGammaInt(n) {
   if (n <= 2) return 0;
-  let sum = 0;
-  for (let i = 2; i < n; i += 1) sum += Math.log(i);
-  return sum;
+  const target = n - 1;
+  for (let i = logFactCache.length; i <= target; i += 1) {
+    logFactCache[i] = logFactCache[i - 1] + Math.log(i);
+  }
+  return logFactCache[target];
 }
 
 /**

@@ -4,12 +4,52 @@ import { fetchWithRetry, isTransientHttpStatus } from '../utils/httpClient.js';
 const AuthContext = createContext(null);
 
 const TOKEN_STORAGE_KEY = 'grimorio_auth_token';
+const USER_STORAGE_KEY = 'grimorio_auth_user';
+const STATE_CACHE_KEY = 'grimorio_state_cache_v1';
+
+function readStoredUser() {
+  try {
+    if (!localStorage.getItem(TOKEN_STORAGE_KEY)) return null;
+    const raw = localStorage.getItem(USER_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && parsed.id ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredUser(user) {
+  try {
+    if (user && typeof user === 'object') {
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(USER_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+function clearStoredSession() {
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(USER_STORAGE_KEY);
+    localStorage.removeItem(STATE_CACHE_KEY);
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_STORAGE_KEY) || null);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => readStoredUser());
   const [userProfile, setUserProfile] = useState(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [loadingAuth, setLoadingAuth] = useState(() => {
+    const hasToken = Boolean(localStorage.getItem(TOKEN_STORAGE_KEY));
+    if (!hasToken) return false;
+    return !readStoredUser();
+  });
   const [googleClientId, setGoogleClientId] = useState('');
   const [guestEnabled, setGuestEnabled] = useState(true);
   const [emailLoginEnabled, setEmailLoginEnabled] = useState(true);
@@ -48,7 +88,7 @@ export function AuthProvider({ children }) {
         }
         const data = await res.json().catch(() => ({}));
         if (!data.authenticated) {
-          localStorage.removeItem(TOKEN_STORAGE_KEY);
+          clearStoredSession();
           setToken(null);
           setUser(null);
         }
@@ -58,9 +98,10 @@ export function AuthProvider({ children }) {
       if (data.authenticated && data.user) {
         setToken(storedToken);
         setUser(data.user);
+        writeStoredUser(data.user);
         if (data.userProfile) setUserProfile(data.userProfile);
       } else {
-        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        clearStoredSession();
         setToken(null);
         setUser(null);
       }
@@ -95,6 +136,7 @@ export function AuthProvider({ children }) {
     }
 
     localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
+    writeStoredUser(data.user);
     setToken(data.token);
     setUser(data.user);
     if (data.userProfile) setUserProfile(data.userProfile);
@@ -114,6 +156,7 @@ export function AuthProvider({ children }) {
     }
 
     localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
+    writeStoredUser(data.user);
     setToken(data.token);
     setUser(data.user);
     if (data.userProfile) setUserProfile(data.userProfile);
@@ -132,6 +175,7 @@ export function AuthProvider({ children }) {
     }
 
     localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
+    writeStoredUser(data.user);
     setToken(data.token);
     setUser(data.user);
     if (data.userProfile) setUserProfile(data.userProfile);
@@ -149,7 +193,7 @@ export function AuthProvider({ children }) {
         console.warn('Logout notification failed:', e);
       }
     }
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    clearStoredSession();
     setToken(null);
     setUser(null);
     setUserProfile(null);

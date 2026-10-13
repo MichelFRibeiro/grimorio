@@ -140,11 +140,11 @@ async function runRankingsTests() {
       { id: 'cat-est', name: 'Estudos', color: '#a855f7' }
     ],
     quests: [
-      { id: 'q-old', title: 'Missão antiga', category: 'INSS', completed: true, completedAt: '2026-08-19T11:34:22.698Z', xpReward: 80 }
+      { id: 'q-old', title: 'Missão antiga', category: 'INSS', completed: true, completedAt: weeksAgo(2), xpReward: 80 }
     ],
     actionLogs: [
-      { id: 'l-old', type: 'quest_complete', entityId: 'q-old', xp: 80, timestamp: '2026-08-19T11:34:22.698Z', details: { category: 'Trabalho' } },
-      { id: 'l-orphan', type: 'process_step', entityId: 'proc-inexistente', xp: 45, timestamp: '2026-08-24T12:52:33.077Z', details: { category: 'Trabalho' } }
+      { id: 'l-old', type: 'quest_complete', entityId: 'q-old', xp: 80, timestamp: weeksAgo(2), details: { category: 'Trabalho' } },
+      { id: 'l-orphan', type: 'process_step', entityId: 'proc-inexistente', xp: 45, timestamp: weeksAgo(1), details: { category: 'Trabalho' } }
     ]
   };
 

@@ -9,14 +9,54 @@ import { fetchWithRetry, connectionErrorMessage, isTransientHttpStatus, retryDel
 
 const getAuthHeaders = () => buildAuthHeaders({ 'Content-Type': 'application/json' });
 
+const STATE_CACHE_KEY = 'grimorio_state_cache_v1';
+const TOKEN_STORAGE_KEY = 'grimorio_auth_token';
+
+function readCachedState() {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    if (!localStorage.getItem(TOKEN_STORAGE_KEY)) return null;
+    const raw = localStorage.getItem(STATE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && parsed.userProfile ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedState(state) {
+  try {
+    if (typeof localStorage === 'undefined' || !state?.userProfile) return;
+    const compact = {
+      ...state,
+      actionLogs: Array.isArray(state.actionLogs) ? state.actionLogs.slice(0, 200) : [],
+      mindMapImages: []
+    };
+    localStorage.setItem(STATE_CACHE_KEY, JSON.stringify(compact));
+  } catch {
+    // Se exceder a cota do localStorage, segue sem cache local.
+  }
+}
+
+function upsertById(list, item) {
+  const arr = Array.isArray(list) ? list.slice() : [];
+  if (!item?.id) return arr;
+  const idx = arr.findIndex((entry) => entry && entry.id === item.id);
+  if (idx === -1) arr.unshift(item);
+  else arr[idx] = item;
+  return arr;
+}
+
 export function useGameData() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const initialCached = useRef(readCachedState());
+  const [data, setData] = useState(() => initialCached.current);
+  const [loading, setLoading] = useState(() => !initialCached.current);
   const [error, setError] = useState(null);
   const [rewardPopups, setRewardPopups] = useState([]);
   const [levelUpData, setLevelUpData] = useState(null);
   const [chestQueue, setChestQueue] = useState([]);
-  const dataRef = useRef(null);
+  const dataRef = useRef(initialCached.current);
   const fetchGenRef = useRef(0);
   const failCountRef = useRef(0);
   const toastTimersRef = useRef(new Set());
@@ -80,6 +120,7 @@ export function useGameData() {
       if (gen !== fetchGenRef.current) return;
       setData(json);
       dataRef.current = json;
+      writeCachedState(json);
       setError(null);
       failCountRef.current = 0;
       hydrateLiveActivityTimers(json.liveActivityTimers || {}, { sync: true });
@@ -241,6 +282,170 @@ export function useGameData() {
     toastTimersRef.current.clear();
   }, []);
 
+  const applyMutationResult = useCallback((result, { path = '', method = 'POST' } = {}) => {
+    if (!result || typeof result !== 'object' || result.__error) return;
+    setData((prev) => {
+      if (!prev) return prev;
+      let changed = false;
+      const next = { ...prev };
+
+      const profile = result.userProfile || result.bonusRewardResult?.profile || result.rewardResult?.profile || result.profile;
+      if (profile && typeof profile === 'object') {
+        next.userProfile = profile;
+        changed = true;
+      }
+
+      const boss = result.bossRaid || result.bonusRewardResult?.boss || result.rewardResult?.boss;
+      if (boss && typeof boss === 'object') {
+        next.bossRaid = boss;
+        changed = true;
+      }
+
+      if (result.rewardResult?.logEntry) {
+        next.actionLogs = upsertById(next.actionLogs, result.rewardResult.logEntry);
+        changed = true;
+      }
+      if (result.bonusRewardResult?.logEntry) {
+        next.actionLogs = upsertById(next.actionLogs, result.bonusRewardResult.logEntry);
+        changed = true;
+      }
+
+      if (result.analytics) {
+        next.analytics = result.analytics;
+        changed = true;
+      }
+      if (result.today) {
+        next.today = result.today;
+        changed = true;
+      }
+      if (result.quest) {
+        next.quests = upsertById(next.quests, result.quest);
+        changed = true;
+      }
+      if (Array.isArray(result.updated) && path === '/api/quests/reschedule') {
+        const dueById = new Map(result.updated.map((u) => [u.id, u.dueDate]));
+        next.quests = (next.quests || []).map((q) => (
+          dueById.has(q.id) ? { ...q, dueDate: dueById.get(q.id) } : q
+        ));
+        changed = true;
+      }
+      if (Array.isArray(result.categories) && path.startsWith('/api/quest-categories')) {
+        next.questCategories = result.categories;
+        changed = true;
+      }
+      if (result.book) {
+        next.books = upsertById(next.books, result.book);
+        changed = true;
+      }
+      if (result.session && result.session.bookId) {
+        next.readingSessions = upsertById(next.readingSessions, result.session);
+        changed = true;
+      }
+      if (result.deletedSessionId) {
+        next.readingSessions = (next.readingSessions || []).filter((s) => s.id !== result.deletedSessionId);
+        changed = true;
+      }
+      if (result.examQuestion) {
+        next.examQuestions = upsertById(next.examQuestions, result.examQuestion);
+        changed = true;
+      }
+      if (result.process) {
+        next.processes = upsertById(next.processes, result.process);
+        changed = true;
+      }
+      if (result.step && result.step.processId) {
+        next.processSteps = upsertById(next.processSteps, result.step);
+        changed = true;
+      }
+      if (result.habit) {
+        next.habits = upsertById(next.habits, result.habit);
+        changed = true;
+      }
+      if (result.routine) {
+        next.routines = upsertById(next.routines, result.routine);
+        changed = true;
+      }
+      if (result.supplement) {
+        next.supplements = upsertById(next.supplements, result.supplement);
+        changed = true;
+      }
+      if (result.log && result.supplement) {
+        next.supplementLogs = upsertById(next.supplementLogs, result.log);
+        changed = true;
+      }
+      if (Array.isArray(result.logs) && path.startsWith('/api/phone-time')) {
+        next.phoneTimeLogs = result.logs;
+        changed = true;
+      }
+      if (result.reward) {
+        next.rewards = upsertById(next.rewards, result.reward);
+        changed = true;
+      }
+      if (result.redemption) {
+        next.rewardRedemptions = upsertById(next.rewardRedemptions, result.redemption);
+        changed = true;
+      }
+      if (result.redemptionId) {
+        next.rewardRedemptions = (next.rewardRedemptions || []).filter((r) => r.id !== result.redemptionId);
+        changed = true;
+      }
+      if (result.victory) {
+        next.dailyVictories = upsertById(next.dailyVictories, result.victory);
+        changed = true;
+      }
+      if (Array.isArray(result.created) && path === '/api/today/plan') {
+        let list = next.dailyVictories;
+        result.created.forEach((v) => { list = upsertById(list, v); });
+        next.dailyVictories = list;
+        changed = true;
+      }
+      if (Array.isArray(result.linkedVictories) && result.linkedVictories.length > 0) {
+        let list = next.dailyVictories;
+        result.linkedVictories.forEach((item) => {
+          if (item?.victory) list = upsertById(list, item.victory);
+        });
+        next.dailyVictories = list;
+        changed = true;
+      }
+      if (result.plan && path.startsWith('/api/agu-plan')) {
+        next.aguPlan = result.plan;
+        changed = true;
+      }
+      if (Array.isArray(result.pending) && path.startsWith('/api/penalties')) {
+        next.penaltiesPending = result.pending;
+        changed = true;
+      }
+
+      if (method === 'DELETE') {
+        const match = /^\/api\/(quests|books|questions|processes|habits|routines|supplements|supplement-logs|rewards|daily-victories)\/([^/?#]+)$/.exec(path);
+        if (match) {
+          const [, kind, targetId] = match;
+          const fieldMap = {
+            quests: 'quests',
+            books: 'books',
+            questions: 'examQuestions',
+            processes: 'processes',
+            habits: 'habits',
+            routines: 'routines',
+            supplements: 'supplements',
+            'supplement-logs': 'supplementLogs',
+            rewards: 'rewards',
+            'daily-victories': 'dailyVictories'
+          };
+          const key = fieldMap[kind];
+          if (key && Array.isArray(next[key])) {
+            next[key] = next[key].filter((item) => item && item.id !== targetId);
+            changed = true;
+          }
+        }
+      }
+
+      if (!changed) return prev;
+      dataRef.current = next;
+      return next;
+    });
+  }, []);
+
   /**
    * Escrita HTTP. Em !res.ok mostra o {error} do servidor e devolve null.
    * Não usa fetchWithRetry: escrita repetida não é idempotente.
@@ -262,6 +467,7 @@ export function useGameData() {
         return toastOnError ? null : { __error: true, error: message, status: res.status };
       }
       const result = await res.json().catch(() => ({}));
+      applyMutationResult(result, { path, method });
       if (refreshOnSuccess) fetchState();
       return result;
     } catch (err) {
@@ -269,7 +475,7 @@ export function useGameData() {
       if (toastOnError) showErrorToast(message);
       return toastOnError ? null : { __error: true, error: message };
     }
-  }, [fetchState, showErrorToast]);
+  }, [fetchState, showErrorToast, applyMutationResult]);
 
   // Handle generic reward response from API
   const handleRewardResponse = useCallback((rewardResult, fallbackText = 'Atividade Concluída!') => {

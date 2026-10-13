@@ -227,36 +227,50 @@ function findRegisteredFallback(registeredNames, preferred) {
   return null;
 }
 
+function buildEntityCategoryIndexes(db) {
+  const byId = (list) => {
+    const map = new Map();
+    if (!Array.isArray(list)) return map;
+    for (let i = 0; i < list.length; i += 1) {
+      const item = list[i];
+      if (item?.id && item.category) map.set(item.id, item.category);
+    }
+    return map;
+  };
+  return {
+    quests: byId(db.quests),
+    processes: byId(db.processes),
+    habits: byId(db.habits),
+    books: byId(db.books),
+    examQuestions: byId(db.examQuestions),
+    mindMaps: byId(db.mindMaps),
+    dailyVictories: byId(db.dailyVictories)
+  };
+}
+
 /**
  * Extrai a categoria normalizada de um log de ação ou entidade.
  * Prefere a categoria atual da entidade (rename) e só aceita nomes
  * cadastrados em questCategories — evita categorias fantasma como "Trabalho".
  */
-function resolveLogCategory(log, db, registeredNames) {
+function resolveLogCategory(log, indexes, registeredNames) {
   let resolved = null;
 
-  if (log.type === 'quest_complete' && log.entityId && db.quests) {
-    const q = db.quests.find(item => item.id === log.entityId);
-    if (q?.category) resolved = q.category;
-  } else if (log.type === 'process_step' && log.entityId && db.processes) {
-    const p = db.processes.find(item => item.id === log.entityId);
-    if (p?.category) resolved = p.category;
-  } else if ((log.type === 'habit_complete' || log.type === 'habit_toggle') && log.entityId && db.habits) {
-    const h = db.habits.find(item => item.id === log.entityId);
-    if (h?.category) resolved = h.category;
-  } else if ((log.type === 'reading_session' || log.type === 'book_quote') && log.entityId && db.books) {
-    const b = db.books.find(item => item.id === log.entityId);
-    if (b?.category) resolved = b.category;
-  } else if (log.type === 'exam_questions' && log.entityId && db.examQuestions) {
-    const eq = db.examQuestions.find(item => item.id === log.entityId);
-    if (eq?.category) resolved = eq.category;
-  } else if (log.type === 'mind_map_study' && db.mindMaps) {
+  if (log.type === 'quest_complete' && log.entityId) {
+    resolved = indexes.quests.get(log.entityId) || null;
+  } else if (log.type === 'process_step' && log.entityId) {
+    resolved = indexes.processes.get(log.entityId) || null;
+  } else if ((log.type === 'habit_complete' || log.type === 'habit_toggle') && log.entityId) {
+    resolved = indexes.habits.get(log.entityId) || null;
+  } else if ((log.type === 'reading_session' || log.type === 'book_quote') && log.entityId) {
+    resolved = indexes.books.get(log.entityId) || null;
+  } else if (log.type === 'exam_questions' && log.entityId) {
+    resolved = indexes.examQuestions.get(log.entityId) || null;
+  } else if (log.type === 'mind_map_study') {
     const mapId = log.details?.mapId || log.entityId;
-    const mm = db.mindMaps.find(item => item.id === mapId);
-    if (mm?.category) resolved = mm.category;
-  } else if ((log.type === 'daily_victory_complete' || log.type === 'daily_victory_triple_bonus') && log.entityId && db.dailyVictories) {
-    const victory = db.dailyVictories.find(item => item.id === log.entityId);
-    if (victory?.category) resolved = victory.category;
+    resolved = mapId ? (indexes.mindMaps.get(mapId) || null) : null;
+  } else if ((log.type === 'daily_victory_complete' || log.type === 'daily_victory_triple_bonus') && log.entityId) {
+    resolved = indexes.dailyVictories.get(log.entityId) || null;
   }
 
   if (!resolved && log.details?.category) {
@@ -295,6 +309,22 @@ export function calculateWeeklyRankProgress(weeklyXp, nextRankMinXp) {
   return Math.min(100, Math.round((Math.max(0, weeklyXp) / nextRankMinXp) * 100));
 }
 
+const weekKeyByDateCache = new Map();
+
+function weekKeyForDateOrTimestamp(dateStr, timestamp) {
+  const spDate = (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr))
+    ? dateStr
+    : getSaoPauloDateStr(timestamp);
+  let cached = weekKeyByDateCache.get(spDate);
+  if (!cached) {
+    const day = getSaoPauloDayOfWeek(spDate);
+    cached = addDaysToDateStr(spDate, -day);
+    if (weekKeyByDateCache.size >= 2048) weekKeyByDateCache.clear();
+    weekKeyByDateCache.set(spDate, cached);
+  }
+  return cached;
+}
+
 /**
  * Calcula todo o histórico semana a semana e o ranking atual de cada categoria e do usuário
  */
@@ -317,72 +347,78 @@ export function computeCategoryRankings(db = {}) {
   });
 
   const registeredNames = new Set(categoriesMap.keys());
+  const indexes = buildEntityCategoryIndexes(db);
 
   // 2. Coletar todos os eventos de XP com data e categoria
   const xpEvents = [];
   const logs = db.actionLogs || [];
+  const loggedQuestIds = new Set();
+  const loggedStepTimestamps = new Set();
 
   logs.forEach(log => {
+    if (!log) return;
+    if (log.type === 'quest_complete' && log.entityId) loggedQuestIds.add(log.entityId);
+    else if (log.type === 'process_step' && log.timestamp) loggedStepTimestamps.add(log.timestamp);
+
     const xp = parseInt(log.xp, 10) || 0;
     if (xp <= 0) return;
 
     const timestamp = log.timestamp || (log.date ? `${log.date}T12:00:00.000Z` : null);
     if (!timestamp) return;
 
-    const category = resolveLogCategory(log, db, registeredNames);
+    const category = resolveLogCategory(log, indexes, registeredNames);
     if (!category || !registeredNames.has(category)) return;
 
+    const weekKey = weekKeyForDateOrTimestamp(log.date, timestamp);
     xpEvents.push({
       xp,
       category,
-      timestamp: new Date(timestamp)
+      weekKey
     });
   });
 
   // Fallback: se houver missões completadas que não estejam no actionLogs
-  (db.quests || []).filter(q => q.completed && q.completedAt).forEach(q => {
-    const hasLog = logs.some(l => l.entityId === q.id && l.type === 'quest_complete');
-    if (!hasLog) {
+  (db.quests || []).forEach(q => {
+    if (!q?.completed || !q.completedAt) return;
+    if (!loggedQuestIds.has(q.id)) {
       const cat = q.category;
       if (!cat || !registeredNames.has(cat)) return;
       xpEvents.push({
         xp: parseInt(q.xpReward, 10) || 45,
         category: cat,
-        timestamp: new Date(q.completedAt)
+        weekKey: weekKeyForDateOrTimestamp(null, q.completedAt)
       });
     }
   });
 
   // Fallback: etapas de processos completadas
   (db.processSteps || []).forEach(step => {
-    const hasLog = logs.some(l => l.type === 'process_step' && l.timestamp === step.createdAt);
-    if (!hasLog && step.xpEarned && step.createdAt) {
-      const proc = (db.processes || []).find(p => p.id === step.processId);
-      const cat = proc?.category;
+    if (!step?.xpEarned || !step.createdAt) return;
+    if (!loggedStepTimestamps.has(step.createdAt)) {
+      const cat = indexes.processes.get(step.processId);
       if (!cat || !registeredNames.has(cat)) return;
       xpEvents.push({
         xp: parseInt(step.xpEarned, 10) || 20,
         category: cat,
-        timestamp: new Date(step.createdAt)
+        weekKey: weekKeyForDateOrTimestamp(step.date, step.createdAt)
       });
     }
   });
 
   // 3. Determinar o intervalo cronológico de todas as semanas
-  let earliestDate = now;
+  let earliestWeekKey = currentWeekKey;
   xpEvents.forEach(evt => {
-    if (evt.timestamp < earliestDate) {
-      earliestDate = evt.timestamp;
+    if (evt.weekKey && evt.weekKey < earliestWeekKey) {
+      earliestWeekKey = evt.weekKey;
     }
   });
 
   // Gerar a lista de todas as semanas do início até a atual (garante semanas sem atividade)
-  const earliestWeekBounds = getWeekBounds(earliestDate);
-  let iterWeekKey = earliestWeekBounds.weekKey;
+  let iterWeekKey = earliestWeekKey;
 
   const weeksList = [];
   while (iterWeekKey <= currentWeekKey) {
-    const bounds = getWeekBounds(new Date(`${iterWeekKey}T12:00:00-03:00`));
+    const bounds = getWeekBounds(`${iterWeekKey}T12:00:00-03:00`);
     weeksList.push(bounds);
     iterWeekKey = addDaysToDateStr(iterWeekKey, 7);
   }
@@ -399,8 +435,7 @@ export function computeCategoryRankings(db = {}) {
   });
 
   xpEvents.forEach(evt => {
-    const wBounds = getWeekBounds(evt.timestamp);
-    const wKey = wBounds.weekKey;
+    const wKey = evt.weekKey;
     if (!weeklyCategoryXp.has(wKey)) {
       weeklyCategoryXp.set(wKey, new Map());
     }

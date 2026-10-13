@@ -682,13 +682,15 @@ export function generateFortnight(plan, examQuestions, todayStr, options = {}) {
   ranked.forEach((row) => {
     scores[row.subject.id] = row.score;
   });
-  const topicProgress = JSON.parse(JSON.stringify(buildTopicProgress(plan, examQuestions, todayStr)));
-  const historyBlocks = collectStudyBlocks(plan, examQuestions);
+  const historyBlocks = options.studyBlocks || collectStudyBlocks(plan, examQuestions);
+  const baseProgress = options.topicProgress || buildTopicProgress(plan, examQuestions, todayStr, { studyBlocks: historyBlocks });
+  const topicProgress = JSON.parse(JSON.stringify(baseProgress));
   const days = [];
   let previousSubjectId = null;
   const debtQueue = normalizeDebt(plan?.debt || [], todayStr);
+  const daysCount = Math.max(1, Math.min(14, Number(options.daysCount) || 14));
 
-  for (let i = 0; i < 14; i += 1) {
+  for (let i = 0; i < daysCount; i += 1) {
     const dateStr = addDaysToDateStr(start, i);
     const weekday = getSaoPauloDayOfWeek(dateStr);
     const weekIndex = i < 7 ? 0 : 1;

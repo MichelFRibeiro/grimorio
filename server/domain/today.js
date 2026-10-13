@@ -172,9 +172,13 @@ function aguTodaySnapshot(db, todayStr) {
     };
   }
   const summary = summarizePlan(plan, db.examQuestions || [], todayStr);
-  const series = getAguStudyLoadSeries(plan, db.examQuestions || [], todayStr, {
-    mindMapSessions: db.mindMapSessions || []
-  });
+  const mmSessions = db.mindMapSessions || [];
+  const series = mmSessions.length > 0
+    ? getAguStudyLoadSeries(plan, db.examQuestions || [], todayStr, {
+      mindMapSessions: mmSessions,
+      studyBlocks: summary.studyBlocks
+    })
+    : (summary.homeostasis || getAguStudyLoadSeries(plan, db.examQuestions || [], todayStr));
   const blocks = (summary.today?.blocks || []).map((block) => ({
     key: block.key,
     subjectId: block.subjectId,
@@ -215,16 +219,20 @@ function mindMapsDue(db, todayStr) {
 }
 
 function stalledBooks(db, todayStr) {
-  const sessions = db.readingSessions || [];
+  const lastByBook = new Map();
+  (db.readingSessions || []).forEach((session) => {
+    if (!session?.bookId) return;
+    const date = (session.date || session.timestamp || '').slice(0, 10);
+    if (!date) return;
+    const prev = lastByBook.get(session.bookId);
+    if (!prev || date > prev) lastByBook.set(session.bookId, date);
+  });
   return (db.books || [])
     .filter((book) => book && book.status === 'reading')
     .map((book) => {
-      const last = sessions
-        .filter((session) => session.bookId === book.id)
-        .reduce((max, session) => {
-          const date = (session.date || session.timestamp || '').slice(0, 10);
-          return date > max ? date : max;
-        }, (book.updatedAt || book.createdAt || '').slice(0, 10));
+      const fallback = (book.updatedAt || book.createdAt || '').slice(0, 10);
+      const sessionLast = lastByBook.get(book.id) || '';
+      const last = sessionLast > fallback ? sessionLast : fallback;
       const stalledDays = last ? daysBetween(last, todayStr) : STALL_DAYS;
       if (stalledDays == null || stalledDays < STALL_DAYS) return null;
       return {
@@ -240,8 +248,8 @@ function stalledBooks(db, todayStr) {
     .sort((a, b) => b.stalledDays - a.stalledDays);
 }
 
-function rankingsAtRisk(db, now) {
-  const rankings = computeCategoryRankings(db);
+function rankingsAtRisk(db, now, precomputedRankings = null) {
+  const rankings = precomputedRankings || computeCategoryRankings(db);
   const daysRemaining = rankings.currentWeek?.daysRemaining ?? 0;
   const atRisk = (rankings.categoriesList || [])
     .filter((item) => item.status === 'at_risk')
@@ -289,7 +297,7 @@ export function greetingFor(now = new Date(), name = '') {
 /**
  * Payload de GET /api/today. A próxima atividade é só preview (sem decisão gravada).
  */
-export function buildTodayPayload(db, { now = new Date(), location } = {}) {
+export function buildTodayPayload(db, { now = new Date(), location, nextAction: precomputedNextAction, rankings: precomputedRankings } = {}) {
   const todayStr = getSaoPauloDateStr(now);
   const tomorrowStr = addDaysToDateStr(todayStr, 1);
   const hour = getSaoPauloHour(now);
@@ -306,8 +314,8 @@ export function buildTodayPayload(db, { now = new Date(), location } = {}) {
   const agu = show('agu') ? aguTodaySnapshot(db, todayStr) : { started: false, done: 0, remaining: 0, total: 0, blocks: [] };
   const maps = show('maps') ? mindMapsDue(db, todayStr) : { count: 0, top: null };
   const books = show('books') ? stalledBooks(db, todayStr) : [];
-  const next = previewNextAction(db, { now, location });
-  const risk = rankingsAtRisk(db, now);
+  const next = (!location && precomputedNextAction) ? precomputedNextAction : previewNextAction(db, { now, location });
+  const risk = rankingsAtRisk(db, now, precomputedRankings);
   const review = (db.dailyReviews || []).find((item) => item && item.date === todayStr) || null;
   const week = currentWeekPlan(db, now);
 
@@ -322,7 +330,7 @@ export function buildTodayPayload(db, { now = new Date(), location } = {}) {
       morningOpen: show('victories') && hour < PLAN_DAY_BEFORE_HOUR && victories.length === 0,
       eveningOpen: hour >= EVENING_REVIEW_HOUR,
       canPlanTomorrow: show('victories') && hour >= EVENING_REVIEW_HOUR,
-      suggestions: show('victories') ? suggestDayPlan(db, { now, todayStr }) : []
+      suggestions: show('victories') ? suggestDayPlan(db, { now, todayStr, aguSnapshot: agu, dueHabits }) : []
     },
     dailyVictories: {
       items: victories.map((item) => ({
@@ -377,7 +385,7 @@ export function buildTodayPayload(db, { now = new Date(), location } = {}) {
  * Até 3 sugestões para o ritual "Planejar o dia".
  * Homeostase de estudo usa a fonte de overflow; o restante conta no teto manual.
  */
-export function suggestDayPlan(db, { now = new Date(), todayStr, date } = {}) {
+export function suggestDayPlan(db, { now = new Date(), todayStr, date, aguSnapshot, dueHabits } = {}) {
   if (!isFeatureEnabled(db.userProfile?.featureSettings, 'victories')) return [];
   const today = todayStr || getSaoPauloDateStr(now);
   const targetDate = date || today;
@@ -420,7 +428,7 @@ export function suggestDayPlan(db, { now = new Date(), todayStr, date } = {}) {
 
   const agu = !isFeatureEnabled(settings, 'agu')
     ? { blocks: [] }
-    : aguTodaySnapshot(db, targetDate === today ? today : targetDate);
+    : ((targetDate === today && aguSnapshot) ? aguSnapshot : aguTodaySnapshot(db, targetDate === today ? today : targetDate));
   const openBlock = (agu.blocks || []).find((block) => !block.done);
   if (openBlock) {
     const title = `AGU: ${openBlock.subject}${openBlock.label ? ` — ${openBlock.label}` : ''}`;
@@ -434,8 +442,9 @@ export function suggestDayPlan(db, { now = new Date(), todayStr, date } = {}) {
     }
   }
 
-  const criticalHabit = !isFeatureEnabled(settings, 'habits') ? null : habitsDueToday(db, { now, todayStr: today })
-    .find((habit) => habit.priority === 'critico');
+  const criticalHabit = !isFeatureEnabled(settings, 'habits')
+    ? null
+    : (dueHabits || habitsDueToday(db, { now, todayStr: today })).find((habit) => habit.priority === 'critico');
   if (criticalHabit && !takenTitles.has(String(criticalHabit.title).toLowerCase())) {
     suggestions.push({
       key: `habit:${criticalHabit.id}`,

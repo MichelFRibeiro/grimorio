@@ -576,26 +576,37 @@ function maintain(db, now = new Date()) {
   return report;
 }
 
+let lastStateSanitized = { dbRef: null, todayStr: '' };
+
 app.get('/api/state', (req, res) => {
   try {
     const db = getDb();
     const maintenance = maintain(db);
     const todayStr = getSaoPauloDateStr();
-    db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
-    db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
-    db.mindMaps = sanitizeMindMaps(db.mindMaps);
-    db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
-    db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
-    db.mindMapImages = sanitizeMindMapImageLibrary(db.mindMapImages);
-    db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
-    if (db.aguPlan?.startedAt) {
+    if (lastStateSanitized.dbRef !== db || lastStateSanitized.todayStr !== todayStr) {
+      db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+      db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
+      db.mindMaps = sanitizeMindMaps(db.mindMaps);
+      db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
+      db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+      db.mindMapImages = sanitizeMindMapImageLibrary(db.mindMapImages);
+      db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr);
+      if (db.aguPlan?.startedAt) {
+        const next = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);
+        if (next !== db.aguPlan) {
+          db.aguPlan = next;
+          saveDb(db);
+        }
+      }
+      db.phoneTimeLogs = sanitizePhoneTimeLogs(db.phoneTimeLogs);
+      lastStateSanitized = { dbRef: db, todayStr };
+    } else if (db.aguPlan?.startedAt && (!db.aguPlan.currentCycle?.end || todayStr > db.aguPlan.currentCycle.end)) {
       const next = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);
       if (next !== db.aguPlan) {
         db.aguPlan = next;
         saveDb(db);
       }
     }
-    db.phoneTimeLogs = sanitizePhoneTimeLogs(db.phoneTimeLogs);
     const routines = listRoutines(db, { todayStr });
     const analytics = computeAnalytics();
     // Mesmo contrato do POST /consult: energia recente, needsEnergy e motivos
@@ -610,7 +621,7 @@ app.get('/api/state', (req, res) => {
       analytics,
       correlations: discoverCorrelations(db),
       nextAction,
-      today: buildTodayPayload(db),
+      today: buildTodayPayload(db, { nextAction, rankings: analytics.rankings }),
       oracleMemory,
       locations: LOCATIONS,
       user: req.user || null,

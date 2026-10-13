@@ -232,11 +232,24 @@ export function isSlotMarkedDone(plan, block) {
 
 export function collectStudyBlocks(plan, examQuestions = []) {
   const byKey = {};
+  const byDateSubject = new Map();
+
+  const indexRecord = (rec) => {
+    const dsKey = `${rec.dateStr || ''}|${rec.subjectId || ''}`;
+    let bucket = byDateSubject.get(dsKey);
+    if (!bucket) {
+      bucket = [];
+      byDateSubject.set(dsKey, bucket);
+    }
+    bucket.push(rec);
+  };
 
   const ensure = (partial) => {
     if (!partial?.key) return null;
     if (!byKey[partial.key]) {
-      byKey[partial.key] = emptyBlockRecord(partial);
+      const rec = emptyBlockRecord(partial);
+      byKey[partial.key] = rec;
+      indexRecord(rec);
     }
     return byKey[partial.key];
   };
@@ -260,9 +273,15 @@ export function collectStudyBlocks(plan, examQuestions = []) {
   ingestCycle(plan?.currentCycle);
   (plan?.generatedCycles || []).forEach(ingestCycle);
 
-  const findSlot = (partial) => Object.values(byKey).find((rec) => (
-    sameStudySlot(rec, partial) || sameStudySlot(rec, partial, { ignoreKind: true })
-  ));
+  const findSlot = (partial) => {
+    if (partial?.key && byKey[partial.key]) return byKey[partial.key];
+    const slot = canonicalSlot(partial);
+    const bucket = byDateSubject.get(`${slot.dateStr}|${slot.subjectId}`);
+    if (!bucket) return undefined;
+    return bucket.find((rec) => (
+      sameStudySlot(rec, partial) || sameStudySlot(rec, partial, { ignoreKind: true })
+    ));
+  };
 
   Object.keys(plan?.completedBlocks || {}).forEach((key) => {
     if (key.endsWith('|product')) return;
@@ -420,34 +439,10 @@ function applyBlockToTopic(row, block, dateStr) {
   }
 }
 
-export function buildTopicProgress(plan, examQuestions = [], todayStr) {
+export function buildTopicProgress(plan, examQuestions = [], todayStr, options = {}) {
   const today = todayStr || getSaoPauloDateStr();
-  const byKey = {};
-  AGU_SUBJECTS.forEach((subject) => {
-    (subject.topics || []).forEach((topic) => {
-      const key = topicKey(subject.id, topic.id);
-      byKey[key] = emptyTopicProgress(subject, topic);
-      const stored = plan?.topicStatus?.[key];
-      if (stored && typeof stored === 'object') {
-        Object.assign(byKey[key], {
-          status: stored.status || byKey[key].status,
-          initialSolved: Number(stored.initialSolved) || 0,
-          initialCorrect: Number(stored.initialCorrect) || 0,
-          studyBlocks: Number(stored.studyBlocks) || 0,
-          reviewBlocks: Number(stored.reviewBlocks) || 0,
-          lastSessionAccuracy: Number(stored.lastSessionAccuracy) || 0,
-          lastSessionDate: stored.lastSessionDate || null,
-          completedAt: stored.completedAt || null,
-          reviewStep: Number(stored.reviewStep) || 0,
-          nextReviewAt: stored.nextReviewAt || null,
-          lastReviewAt: stored.lastReviewAt || null,
-          theoryMinutes: Number(stored.theoryMinutes) || 0
-        });
-      }
-    });
-  });
-
-  const blocks = collectStudyBlocks(plan, examQuestions)
+  const baseBlocks = options.studyBlocks || collectStudyBlocks(plan, examQuestions);
+  const blocks = baseBlocks
     .slice()
     .sort((a, b) => {
       if (a.dateStr !== b.dateStr) return (a.dateStr || '').localeCompare(b.dateStr || '');
@@ -692,9 +687,10 @@ export function suggestNextBlock(plan, examQuestions, todayStr, options = {}) {
 
 export function overlayLoggedDayBlocks(sourceBlocks, plan, examQuestions, dateStr, options = {}) {
   const cap = Math.min(AGU_DAILY_BLOCKS_MAX, Math.max(1, Number(options.dailyBlocks) || AGU_DAILY_BLOCKS));
-  const pinned = pinExistingTodayBlocks(plan, examQuestions, dateStr, cap);
+  const studyBlocks = options.studyBlocks || collectStudyBlocks(plan, examQuestions);
+  const pinned = pinExistingTodayBlocks(plan, examQuestions, dateStr, cap, studyBlocks);
   const usedTopics = new Set(pinned.map((block) => topicKey(block.subjectId, block.topicId)));
-  const topicProgress = buildTopicProgress(plan, examQuestions, dateStr);
+  const topicProgress = options.topicProgress || buildTopicProgress(plan, examQuestions, dateStr, { studyBlocks });
   const merged = [...pinned];
   (sourceBlocks || []).forEach((raw) => {
     if (merged.length >= cap) return;
@@ -715,9 +711,9 @@ export function overlayLoggedDayBlocks(sourceBlocks, plan, examQuestions, dateSt
   return merged.slice(0, cap);
 }
 
-function pinExistingTodayBlocks(plan, examQuestions, dateStr, cap = AGU_DAILY_BLOCKS) {
+function pinExistingTodayBlocks(plan, examQuestions, dateStr, cap = AGU_DAILY_BLOCKS, precomputedBlocks = null) {
   const seen = new Set();
-  const blocks = collectStudyBlocks(plan, examQuestions)
+  const blocks = (precomputedBlocks || collectStudyBlocks(plan, examQuestions))
     .filter((block) => block.dateStr === dateStr && (block.done || (block.totalQuestions || 0) > 0 || parseDurationMinutes(block.durationMinutes) > 0))
     .sort((a, b) => {
       if (Boolean(b.done) !== Boolean(a.done)) return b.done ? 1 : -1;
@@ -757,8 +753,8 @@ function virtualApply(topicProgress, block, dateStr) {
 }
 
 export function buildDayBlocks(plan, examQuestions, dateStr, options = {}) {
-  const topicProgress = options.topicProgress || buildTopicProgress(plan, examQuestions, dateStr);
   const allBlocks = options.blocks || collectStudyBlocks(plan, examQuestions);
+  const topicProgress = options.topicProgress || buildTopicProgress(plan, examQuestions, dateStr, { studyBlocks: allBlocks });
   const portugueseRequired = isPortugueseRequired(allBlocks, plan);
   const pinExisting = options.pinExisting !== false && options.preview !== true;
   const advanceProgress = options.advanceProgress !== false;
@@ -766,7 +762,7 @@ export function buildDayBlocks(plan, examQuestions, dateStr, options = {}) {
     AGU_DAILY_BLOCKS_MAX,
     Math.max(1, Number(options.dailyBlocks) || Number(plan?.dailyBlocks) || AGU_DAILY_BLOCKS)
   );
-  const pinned = pinExisting ? pinExistingTodayBlocks(plan, examQuestions, dateStr, cap) : [];
+  const pinned = pinExisting ? pinExistingTodayBlocks(plan, examQuestions, dateStr, cap, allBlocks) : [];
   const blocks = [...pinned];
   const usedTopicKeys = new Set(blocks.map((b) => topicKey(b.subjectId, b.topicId)));
   const usedSubjectIds = new Set(blocks.filter((b) => b.kind !== 'revisao').map((b) => b.subjectId).filter(Boolean));
@@ -807,17 +803,26 @@ export function buildDayBlocks(plan, examQuestions, dateStr, options = {}) {
   };
 }
 
-export function buildEditalTable(plan, examQuestions = [], todayStr) {
+export function buildEditalTable(plan, examQuestions = [], todayStr, options = {}) {
   const today = todayStr || getSaoPauloDateStr();
-  const topicProgress = buildTopicProgress(plan, examQuestions, today);
-  const blocks = collectStudyBlocks(plan, examQuestions);
+  const blocks = options.studyBlocks || collectStudyBlocks(plan, examQuestions);
+  const topicProgress = options.topicProgress || buildTopicProgress(plan, examQuestions, today, { studyBlocks: blocks });
+
+  const lastBySubject = {};
+  const lastByTopic = {};
+  blocks.forEach((block) => {
+    if (!block?.subjectId) return;
+    if ((block.totalQuestions || 0) <= 0 && (block.durationMinutes || 0) <= 0) return;
+    if (!lastBySubject[block.subjectId]) lastBySubject[block.subjectId] = block;
+    if (block.topicId != null) {
+      const tKey = `${block.subjectId}/${block.topicId}`;
+      if (!lastByTopic[tKey]) lastByTopic[tKey] = block;
+    }
+  });
 
   const lastBlockFor = (subjectId, topicId = null) => {
-    return blocks.find((block) => (
-      block.subjectId === subjectId
-      && (topicId == null || block.topicId === topicId)
-      && ((block.totalQuestions || 0) > 0 || (block.durationMinutes || 0) > 0)
-    )) || null;
+    if (topicId == null) return lastBySubject[subjectId] || null;
+    return lastByTopic[`${subjectId}/${topicId}`] || null;
   };
 
   const subjects = AGU_SUBJECTS.map((subject) => {

@@ -442,6 +442,26 @@ export const defaultDatabase = () => {
   };
 };
 
+let lastSanitizedMindMaps = { mapsRef: null, catsRef: null, imgsRef: null, sessionsRef: null, sig: '' };
+let lastSanitizedAgu = { planRef: null, examsRef: null, sig: '' };
+
+function mindMapsSanitizeSig(mindMaps, mindMapCategories, mindMapImages, mindMapSessions) {
+  if (!Array.isArray(mindMaps) || !Array.isArray(mindMapCategories) || !Array.isArray(mindMapImages) || !Array.isArray(mindMapSessions)) {
+    return null;
+  }
+  const mapPart = mindMaps.map(m => `${m?.id || ''}:${m?.updatedAt || ''}:${m?.categoryId || ''}:${m?.category || ''}:${m?.nodes?.length || 0}`).join('|');
+  const catPart = mindMapCategories.map(c => `${c?.id || ''}:${c?.name || ''}:${c?.parentId || ''}`).join('|');
+  return `${mapPart}#${catPart}#${mindMapImages.length}#${mindMapSessions.length}`;
+}
+
+function aguSanitizeSig(plan, examQuestions, todayStr) {
+  if (!plan || typeof plan !== 'object' || !Array.isArray(examQuestions)) return null;
+  const completedCount = plan.completedBlocks ? Object.keys(plan.completedBlocks).length : 0;
+  const durationsCount = plan.blockDurations ? Object.keys(plan.blockDurations).length : 0;
+  const firstExam = examQuestions[0];
+  return `${todayStr}|${plan.version || ''}|${plan.updatedAt || ''}|${plan.startedAt || ''}|${plan.phase || ''}|${plan.currentCycle?.start || ''}|${plan.currentCycle?.end || ''}|${plan.homeostasis?.seeded ? 1 : 0}|${plan.homeostasis?.evaluateNow ? 1 : 0}|${completedCount}|${durationsCount}|${examQuestions.length}|${firstExam?.id || ''}:${firstExam?.topicId || ''}`;
+}
+
 export function sanitizeDb(db) {
   if (!db) return defaultDatabase();
   if (!db.quests) db.quests = [];
@@ -479,25 +499,57 @@ export function sanitizeDb(db) {
   if (!Array.isArray(db.ninetyDayGoals)) db.ninetyDayGoals = [];
   db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
   db.dailyVictoryBonuses = sanitizeDailyVictoryBonuses(db.dailyVictoryBonuses);
-  db.mindMaps = sanitizeMindMaps(db.mindMaps);
-  db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
-  db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
-  db.mindMapImages = mergeMindMapImageLibrary(sanitizeMindMapImageLibrary(db.mindMapImages), db.mindMaps);
-  if (db.mindMaps.length && db.mindMapCategories.length) {
-    db.mindMaps = db.mindMaps.map((map) => {
-      if (map.categoryId && db.mindMapCategories.some(c => c.id === map.categoryId)) {
-        const cat = db.mindMapCategories.find(c => c.id === map.categoryId);
-        return { ...map, category: cat?.name || map.category };
-      }
-      const byName = db.mindMapCategories.find(c => c.name.toLowerCase() === String(map.category || '').toLowerCase());
-      if (byName) return { ...map, categoryId: byName.id, category: byName.name };
-      return map;
-    });
+
+  const mmSig = mindMapsSanitizeSig(db.mindMaps, db.mindMapCategories, db.mindMapImages, db.mindMapSessions);
+  if (
+    !mmSig
+    || db.mindMaps !== lastSanitizedMindMaps.mapsRef
+    || db.mindMapCategories !== lastSanitizedMindMaps.catsRef
+    || db.mindMapImages !== lastSanitizedMindMaps.imgsRef
+    || db.mindMapSessions !== lastSanitizedMindMaps.sessionsRef
+    || mmSig !== lastSanitizedMindMaps.sig
+  ) {
+    db.mindMaps = sanitizeMindMaps(db.mindMaps);
+    db.mindMapSessions = sanitizeMindMapSessions(db.mindMapSessions);
+    db.mindMapCategories = sanitizeMindMapCategories(db.mindMapCategories);
+    db.mindMapImages = mergeMindMapImageLibrary(sanitizeMindMapImageLibrary(db.mindMapImages), db.mindMaps);
+    if (db.mindMaps.length && db.mindMapCategories.length) {
+      db.mindMaps = db.mindMaps.map((map) => {
+        if (map.categoryId && db.mindMapCategories.some(c => c.id === map.categoryId)) {
+          const cat = db.mindMapCategories.find(c => c.id === map.categoryId);
+          return { ...map, category: cat?.name || map.category };
+        }
+        const byName = db.mindMapCategories.find(c => c.name.toLowerCase() === String(map.category || '').toLowerCase());
+        if (byName) return { ...map, categoryId: byName.id, category: byName.name };
+        return map;
+      });
+    }
+    lastSanitizedMindMaps = {
+      mapsRef: db.mindMaps,
+      catsRef: db.mindMapCategories,
+      imgsRef: db.mindMapImages,
+      sessionsRef: db.mindMapSessions,
+      sig: mindMapsSanitizeSig(db.mindMaps, db.mindMapCategories, db.mindMapImages, db.mindMapSessions) || ''
+    };
   }
-  db.examQuestions = migrateAguExams(db.examQuestions || []);
-  db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr, db.examQuestions);
-  if (db.aguPlan?.startedAt) {
-    db.aguPlan = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);
+
+  const aguSig = aguSanitizeSig(db.aguPlan, db.examQuestions, todayStr);
+  if (
+    !aguSig
+    || db.aguPlan !== lastSanitizedAgu.planRef
+    || db.examQuestions !== lastSanitizedAgu.examsRef
+    || aguSig !== lastSanitizedAgu.sig
+  ) {
+    db.examQuestions = migrateAguExams(db.examQuestions || []);
+    db.aguPlan = sanitizeAguPlan(db.aguPlan, todayStr, db.examQuestions);
+    if (db.aguPlan?.startedAt) {
+      db.aguPlan = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);
+    }
+    lastSanitizedAgu = {
+      planRef: db.aguPlan,
+      examsRef: db.examQuestions,
+      sig: aguSanitizeSig(db.aguPlan, db.examQuestions, todayStr) || ''
+    };
   }
   if (!db.bossRaid) {
     db.bossRaid = createBossRaid({ level: 1 });

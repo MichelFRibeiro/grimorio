@@ -919,12 +919,40 @@ export function getStudyQueue(map, { today = getSaoPauloDateStr(), mode = 'branc
 
   if (mode === 'fill') return [];
 
+  const nodes = map.nodes || [];
+  const byId = new Map();
+  const byParent = new Map();
+  nodes.forEach((n) => {
+    if (!n) return;
+    byId.set(n.id, n);
+    if (n.parentId) {
+      let kids = byParent.get(n.parentId);
+      if (!kids) {
+        kids = [];
+        byParent.set(n.parentId, kids);
+      }
+      kids.push(n);
+    }
+  });
+
+  const buildPathLabels = (node) => {
+    const path = [];
+    let current = node;
+    const seen = new Set();
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      path.unshift(current.label);
+      current = current.parentId ? byId.get(current.parentId) : null;
+    }
+    return path;
+  };
+
   if (mode === 'cards') {
-    return (map.nodes || [])
+    return nodes
       .filter(n => n.parentId)
       .filter(n => includeNotDue || isNodeDue(n, today))
       .map((node) => {
-        const parent = findNode(map, node.parentId);
+        const parent = byId.get(node.parentId) || null;
         return {
           id: node.id,
           mode: 'cards',
@@ -936,17 +964,17 @@ export function getStudyQueue(map, { today = getSaoPauloDateStr(), mode = 'branc
           answerIcon: node.icon || '',
           answerImageUrl: node.imageUrl || '',
           notes: node.notes || '',
-          path: nodePath(map, node.id).map(n => n.label),
+          path: buildPathLabels(node),
           due: isNodeDue(node, today)
         };
       });
   }
 
-  return (map.nodes || [])
-    .filter(n => childrenOf(map, n.id).length > 0)
+  return nodes
+    .filter(n => (byParent.get(n.id)?.length || 0) > 0)
     .filter(n => includeNotDue || isNodeDue(n, today))
     .map((node) => {
-      const kids = childrenOf(map, node.id);
+      const kids = byParent.get(node.id) || [];
       return {
         id: node.id,
         mode: 'branches',
@@ -957,7 +985,7 @@ export function getStudyQueue(map, { today = getSaoPauloDateStr(), mode = 'branc
         answers: kids.map(k => k.label),
         answerNodes: kids.map(k => ({ label: k.label, icon: k.icon || '', imageUrl: k.imageUrl || '' })),
         notes: node.notes || '',
-        path: nodePath(map, node.id).map(n => n.label),
+        path: buildPathLabels(node),
         due: isNodeDue(node, today)
       };
     });
@@ -1119,10 +1147,25 @@ export function applyStudySession(map, reviews = [], {
 export function computeMapStats(map, { today = getSaoPauloDateStr() } = {}) {
   const nodes = map?.nodes || [];
   const branches = Math.max(0, nodes.length - 1);
-  const withNotes = nodes.filter(n => n.notes).length;
-  const reviewed = nodes.filter(n => (n.reviews || 0) > 0).length;
-  const due = nodes.filter(n => n.parentId && isNodeDue(n, today)).length;
-  const dueBranches = getStudyQueue(map, { today, mode: 'branches' }).length;
+  const parentIds = new Set();
+  for (let i = 0; i < nodes.length; i += 1) {
+    const p = nodes[i]?.parentId;
+    if (p) parentIds.add(p);
+  }
+  let withNotes = 0;
+  let reviewed = 0;
+  let due = 0;
+  let dueBranches = 0;
+  const hasRoot = nodes.length > 0;
+  for (let i = 0; i < nodes.length; i += 1) {
+    const n = nodes[i];
+    if (!n) continue;
+    if (n.notes) withNotes += 1;
+    if ((n.reviews || 0) > 0) reviewed += 1;
+    const nodeDue = isNodeDue(n, today);
+    if (n.parentId && nodeDue) due += 1;
+    if (hasRoot && parentIds.has(n.id) && nodeDue) dueBranches += 1;
+  }
   const mastery = branches === 0 ? 0 : Math.round((reviewed / Math.max(branches, 1)) * 100);
   return {
     nodes: nodes.length,

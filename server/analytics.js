@@ -170,18 +170,25 @@ export function computeAnalytics() {
 
   const getEntryDate = (q) => q.date || (q.timestamp ? getSaoPauloDateStr(q.timestamp) : '');
 
-  const dayQuestions = examQuestions.filter(q => getEntryDate(q) === todayStr);
-  const weekQuestions = examQuestions.filter(q => {
+  const questionsByDate = new Map();
+  const dayQuestions = [];
+  const weekQuestions = [];
+  const monthQuestions = [];
+  const yearQuestions = [];
+
+  examQuestions.forEach(q => {
     const d = getEntryDate(q);
-    return d >= weekStartStr && d <= todayStr;
-  });
-  const monthQuestions = examQuestions.filter(q => {
-    const d = getEntryDate(q);
-    return d && d.startsWith(currentMonthStr);
-  });
-  const yearQuestions = examQuestions.filter(q => {
-    const d = getEntryDate(q);
-    return d && d.startsWith(currentYearStr);
+    if (!d) return;
+    let bucket = questionsByDate.get(d);
+    if (!bucket) {
+      bucket = [];
+      questionsByDate.set(d, bucket);
+    }
+    bucket.push(q);
+    if (d === todayStr) dayQuestions.push(q);
+    if (d >= weekStartStr && d <= todayStr) weekQuestions.push(q);
+    if (d.startsWith(currentMonthStr)) monthQuestions.push(q);
+    if (d.startsWith(currentYearStr)) yearQuestions.push(q);
   });
   const totalQuestionsStats = aggregateQuestions(examQuestions);
 
@@ -229,7 +236,7 @@ export function computeAnalytics() {
     const dateStr = addDaysToDateStr(todayStr, -i);
     const parts = dateStr.split('-');
     const dayLabel = `${parts[2]}/${parts[1]}`;
-    const dayLogs = examQuestions.filter(q => getEntryDate(q) === dateStr);
+    const dayLogs = questionsByDate.get(dateStr) || [];
     const agg = aggregateQuestions(dayLogs);
     questionDailyHistory.push({
       date: dateStr,
@@ -372,20 +379,30 @@ export function computeAnalytics() {
     });
   }
 
-  const dueMindMaps = mindMaps
-    .map(map => ({ map, due: getStudyQueue(map, { today: todayStr, mode: 'branches' }).length }))
+  const mindMapStatsList = mindMaps.map(map => ({
+    map,
+    stats: computeMapStats(map, { today: todayStr })
+  }));
+  const dueMindMaps = mindMapStatsList
+    .map(item => ({ map: item.map, due: item.stats.dueBranches || 0 }))
     .filter(item => item.due > 0)
     .sort((a, b) => b.due - a.due);
+  const lastReadingDateByBook = new Map();
+  (readingSessions || []).forEach(session => {
+    if (!session?.bookId) return;
+    const date = (session.date || session.timestamp || '').slice(0, 10);
+    if (!date) return;
+    const prev = lastReadingDateByBook.get(session.bookId);
+    if (!prev || date > prev) lastReadingDateByBook.set(session.bookId, date);
+  });
+  const stalledCutoff = addDaysToDateStr(todayStr, -7);
   const stalledBooks = books.filter(book => {
     if (!book || book.status !== 'reading') return false;
-    const last = (readingSessions || [])
-      .filter(session => session.bookId === book.id)
-      .reduce((max, session) => {
-        const date = (session.date || session.timestamp || '').slice(0, 10);
-        return date > max ? date : max;
-      }, (book.updatedAt || book.createdAt || '').slice(0, 10));
+    const fallback = (book.updatedAt || book.createdAt || '').slice(0, 10);
+    const sessionLast = lastReadingDateByBook.get(book.id) || '';
+    const last = sessionLast > fallback ? sessionLast : fallback;
     if (!last) return true;
-    return last <= addDaysToDateStr(todayStr, -7);
+    return last <= stalledCutoff;
   });
   if (stalledBooks.length > 0) {
     const lead = stalledBooks[0];
@@ -536,18 +553,15 @@ export function computeAnalytics() {
     totalProcessUnitsCompleted,
     habitStats,
     dailyVictoriesToday: dailyVictorySummary,
-    mindMaps: mindMaps.map(m => {
-      const stats = computeMapStats(m, { today: todayStr });
-      return {
-        id: m.id,
-        title: m.title,
-        category: m.category,
-        branches: stats.branches,
-        due: stats.due,
-        mastery: stats.mastery,
-        lastStudiedAt: stats.lastStudiedAt
-      };
-    }),
+    mindMaps: mindMapStatsList.map(({ map: m, stats }) => ({
+      id: m.id,
+      title: m.title,
+      category: m.category,
+      branches: stats.branches,
+      due: stats.due,
+      mastery: stats.mastery,
+      lastStudiedAt: stats.lastStudiedAt
+    })),
     rankings,
     // Revelação de função desligada some do relatório; o número no resumo fica.
     insights: insights.filter((insight) => isInsightEnabled(db.userProfile?.featureSettings, insight)),

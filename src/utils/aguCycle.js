@@ -138,7 +138,7 @@ export function isAguExamEntry(entry) {
   return String(entry.notes || '').includes('Campanha AGU');
 }
 
-export function getAguStudyTimeTotals(plan, examQuestions = [], todayStr, calendar) {
+export function getAguStudyTimeTotals(plan, examQuestions = [], todayStr, calendar, precomputedStudyBlocks = null) {
   const today = todayStr || getSaoPauloDateStr();
   const weekDays = getCurrentWeekDays(today);
   const weekStart = weekDays[0]?.dateStr || today;
@@ -161,7 +161,7 @@ export function getAguStudyTimeTotals(plan, examQuestions = [], todayStr, calend
     if (dateStr.startsWith(yearPrefix)) totals.year += amount;
   };
 
-  collectStudyBlocks(plan, examQuestions).forEach((block) => {
+  (precomputedStudyBlocks || collectStudyBlocks(plan, examQuestions)).forEach((block) => {
     addMinutes(block.dateStr, block.durationMinutes);
   });
 
@@ -177,7 +177,8 @@ export function getAguStudyLoadSeries(plan, examQuestions = [], todayStr, option
     plan,
     examQuestions,
     options.mindMapSessions || [],
-    options.mindMaps || []
+    options.mindMaps || [],
+    options.studyBlocks || null
   );
   const prepared = plan?.homeostasis?.seeded
     ? plan
@@ -326,13 +327,21 @@ function templateBlocksForDate(plan, dateStr) {
   };
 }
 
-export function getDaySchedule(plan, dateStr, subjectStats = {}, examQuestions = []) {
+export function getDaySchedule(plan, dateStr, subjectStats = {}, examQuestions = [], options = {}) {
   const weekday = getSaoPauloDayOfWeek(dateStr);
-  const topicStats = buildTopicStats(examQuestions, dateStr);
+  const studyBlocks = options.studyBlocks || collectStudyBlocks(plan, examQuestions);
+  const topicProgress = options.topicProgress || buildTopicProgress(plan, examQuestions, dateStr, { studyBlocks });
+  const topicStats = options.topicStats || buildTopicStats(examQuestions, dateStr);
   const generated = (plan?.currentCycle?.days || []).find((day) => day.dateStr === dateStr);
   const fallback = generated
     ? null
-    : generateFortnight(plan, examQuestions, dateStr, { startDate: dateStr, cycleNumber: plan?.cycleNumber || 1 }).days?.[0];
+    : (options.fallbackDay || generateFortnight(plan, examQuestions, dateStr, {
+      startDate: dateStr,
+      cycleNumber: plan?.cycleNumber || 1,
+      daysCount: 1,
+      studyBlocks,
+      topicProgress
+    }).days?.[0]);
   const source = generated
     ? { label: generated.label, cycleIndex: getCycleDayIndex(plan, dateStr), blocks: generated.blocks || [], optional: generated.optional }
     : {
@@ -343,7 +352,11 @@ export function getDaySchedule(plan, dateStr, subjectStats = {}, examQuestions =
     };
 
   const cap = blocksPerDayForSetpoint(plan, weekday, dateStr);
-  const sourceBlocks = overlayLoggedDayBlocks(source.blocks || [], plan, examQuestions, dateStr, { dailyBlocks: cap });
+  const sourceBlocks = overlayLoggedDayBlocks(source.blocks || [], plan, examQuestions, dateStr, {
+    dailyBlocks: cap,
+    studyBlocks,
+    topicProgress
+  });
   const uniqueBlocks = [];
   const usedTopics = new Set();
   sourceBlocks.forEach((block) => {
@@ -353,8 +366,9 @@ export function getDaySchedule(plan, dateStr, subjectStats = {}, examQuestions =
     usedTopics.add(stamp);
     uniqueBlocks.push(block);
   });
+  const examsOnDate = options.examsOnDate || (examQuestions || []).filter((entry) => (entry?.date || '') === dateStr);
   const blocks = uniqueBlocks.map((block, index) => ({
-    ...hydrateBlock(block, dateStr, plan, subjectStats, topicStats, examQuestions),
+    ...hydrateBlock(block, dateStr, plan, subjectStats, topicStats, examsOnDate),
     index
   }));
 
@@ -385,9 +399,34 @@ export function getDaySchedule(plan, dateStr, subjectStats = {}, examQuestions =
   };
 }
 
-export function getCycleCalendar(plan, todayStr, subjectStats = {}, examQuestions = []) {
+function indexExamsByDate(examQuestions = []) {
+  const byDate = new Map();
+  (examQuestions || []).forEach((entry) => {
+    const d = entry?.date || '';
+    if (!d) return;
+    let list = byDate.get(d);
+    if (!list) {
+      list = [];
+      byDate.set(d, list);
+    }
+    list.push(entry);
+  });
+  return byDate;
+}
+
+export function getCycleCalendar(plan, todayStr, subjectStats = {}, examQuestions = [], options = {}) {
+  const studyBlocks = options.studyBlocks || collectStudyBlocks(plan, examQuestions);
+  const topicProgress = options.topicProgress || buildTopicProgress(plan, examQuestions, todayStr, { studyBlocks });
+  const topicStats = options.topicStats || buildTopicStats(examQuestions, todayStr);
+  const examsByDate = options.examsByDate || indexExamsByDate(examQuestions);
+
   if (plan?.currentCycle?.days?.length) {
-    const days = plan.currentCycle.days.map((day) => getDaySchedule(plan, day.dateStr, subjectStats, examQuestions));
+    const days = plan.currentCycle.days.map((day) => getDaySchedule(plan, day.dateStr, subjectStats, examQuestions, {
+      studyBlocks,
+      topicProgress,
+      topicStats,
+      examsOnDate: examsByDate.get(day.dateStr) || []
+    }));
     return {
       cycleNumber: plan.currentCycle.number,
       cycleStart: plan.currentCycle.start,
@@ -401,10 +440,23 @@ export function getCycleCalendar(plan, todayStr, subjectStats = {}, examQuestion
   const start = getCycleStartDate(plan, todayStr);
   const cycleNumber = getCycleNumber(plan, todayStr);
   const cycleStart = addDaysToDateStr(start, (cycleNumber - 1) * AGU_CYCLE_LENGTH);
+  const fallbackCycle = generateFortnight(plan, examQuestions, todayStr, {
+    startDate: cycleStart,
+    cycleNumber,
+    studyBlocks,
+    topicProgress
+  });
+  const fallbackByDate = new Map((fallbackCycle?.days || []).map((d) => [d.dateStr, d]));
   const days = [];
   for (let i = 0; i < AGU_CYCLE_LENGTH; i += 1) {
     const dateStr = addDaysToDateStr(cycleStart, i);
-    days.push(getDaySchedule(plan, dateStr, subjectStats, examQuestions));
+    days.push(getDaySchedule(plan, dateStr, subjectStats, examQuestions, {
+      studyBlocks,
+      topicProgress,
+      topicStats,
+      examsOnDate: examsByDate.get(dateStr) || [],
+      fallbackDay: fallbackByDate.get(dateStr) || null
+    }));
   }
   return {
     cycleNumber,
@@ -427,17 +479,48 @@ export function getTodayQuestionProgress(examQuestions = [], todayStr) {
   }, { solved: 0, correct: 0, sessions: 0, accuracy: 0 });
 }
 
+let summaryCache = { plan: null, exams: null, sig: '', result: null };
+
+function summarizeCacheSignature(plan, examQuestions, today) {
+  const completedKeys = plan?.completedBlocks ? Object.keys(plan.completedBlocks).join(',') : '';
+  const durationKeys = plan?.blockDurations
+    ? Object.entries(plan.blockDurations).map(([k, v]) => `${k}:${v}`).join(',')
+    : '';
+  const firstExam = examQuestions?.[0];
+  const lastExam = examQuestions?.[examQuestions.length - 1];
+  const examSig = `${examQuestions?.length || 0}:${firstExam?.id || ''}:${firstExam?.totalQuestions || 0}:${firstExam?.correctAnswers || 0}:${firstExam?.durationMinutes || 0}:${lastExam?.id || ''}`;
+  return `${today}|${plan?.updatedAt || ''}|${plan?.startedAt || ''}|${plan?.phase || ''}|${plan?.keepPortuguese}|${plan?.editalPublished}|${plan?.homeostasis?.setpointMinutes || 0}|${plan?.homeostasis?.targetMinutes || 0}|${plan?.horizonMonths || 0}|${completedKeys}|${durationKeys}|${(plan?.errorNotebook || []).length}|${(plan?.debt || []).length}|${examSig}`;
+}
+
 export function summarizePlan(plan, examQuestions = [], todayStr) {
   const today = todayStr || getSaoPauloDateStr();
+  const sig = summarizeCacheSignature(plan, examQuestions, today);
+  if (summaryCache.plan === plan && summaryCache.exams === examQuestions && summaryCache.sig === sig && summaryCache.result) {
+    return summaryCache.result;
+  }
+
   const { byId, topicStats } = buildSubjectStatsDetailed(examQuestions, today);
-  const schedule = getDaySchedule(plan, today, byId, examQuestions);
-  const calendar = getCycleCalendar(plan, today, byId, examQuestions);
-  const todayProgress = getTodayQuestionProgress(examQuestions, today);
-  const phase = plan?.phase || calendar.phase || 'fundacao';
-  const edital = buildEditalTable(plan, examQuestions, today);
   const studyBlocks = collectStudyBlocks(plan, examQuestions);
+  const topicProgress = buildTopicProgress(plan, examQuestions, today, { studyBlocks });
+  const examsByDate = indexExamsByDate(examQuestions);
+  const calendar = getCycleCalendar(plan, today, byId, examQuestions, {
+    studyBlocks,
+    topicProgress,
+    topicStats,
+    examsByDate
+  });
+  const schedule = (calendar.days || []).find((d) => d.dateStr === today)
+    || getDaySchedule(plan, today, byId, examQuestions, {
+      studyBlocks,
+      topicProgress,
+      topicStats,
+      examsOnDate: examsByDate.get(today) || []
+    });
+  const todayProgress = getTodayQuestionProgress(examsByDate.get(today) || [], today);
+  const phase = plan?.phase || calendar.phase || 'fundacao';
+  const edital = buildEditalTable(plan, examQuestions, today, { studyBlocks, topicProgress });
   const portugueseRequired = isPortugueseRequired(studyBlocks, plan);
-  const load = getAguStudyLoadSeries(plan, examQuestions, today);
+  const load = getAguStudyLoadSeries(plan, examQuestions, today, { studyBlocks });
   const weeklyBlocks = (calendar.days || []).reduce((sum, day) => sum + (day.totalBlocks || 0), 0) / 2;
   const coverage = coverageProjection(plan, edital.topicProgress, today, weeklyBlocks);
   const nextSuggested = suggestNextBlock(plan, examQuestions, today, {
@@ -475,7 +558,7 @@ export function summarizePlan(plan, examQuestions = [], todayStr) {
   const cycleTotalBlocks = calendar.days.reduce((sum, day) => sum + day.totalBlocks, 0);
   const nextOpen = (schedule.blocks || []).find((b) => !b.done) || nextSuggested;
 
-  return {
+  const result = {
     started: Boolean(plan?.startedAt),
     startedAt: plan?.startedAt || null,
     phase,
@@ -504,7 +587,7 @@ export function summarizePlan(plan, examQuestions = [], todayStr) {
     cycleDoneBlocks,
     cycleTotalBlocks,
     cyclePercent: cycleTotalBlocks > 0 ? Math.round((cycleDoneBlocks / cycleTotalBlocks) * 100) : 0,
-    studyTime: getAguStudyTimeTotals(plan, examQuestions, today, calendar),
+    studyTime: getAguStudyTimeTotals(plan, examQuestions, today, calendar, studyBlocks),
     debt: plan?.debt || [],
     errorNotebook: plan?.errorNotebook || [],
     homeostasis: { ...load, state: plan?.homeostasis || load.state },
@@ -514,6 +597,9 @@ export function summarizePlan(plan, examQuestions = [], todayStr) {
     reasons: calendar.reasons || [],
     warnings: calendar.warnings || []
   };
+
+  summaryCache = { plan, exams: examQuestions, sig, result };
+  return result;
 }
 
 export function toggleCompletedBlock(plan, key) {

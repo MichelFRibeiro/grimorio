@@ -124,13 +124,13 @@ export function migrateCapacityToHomeostasis(plan, minutesByDate = {}, todayStr)
  * `blockKey` também não pode ser somado de novo: a fusão já o absorveu no bloco
  * da mesma data, matéria e tópico.
  */
-export function studyMinutesByDate(plan, examQuestions = [], mindMapSessions = [], mindMaps = []) {
+export function studyMinutesByDate(plan, examQuestions = [], mindMapSessions = [], mindMaps = [], precomputedStudyBlocks = null) {
   const byDate = {};
   const mapById = {};
   (mindMaps || []).forEach((map) => {
     if (map?.id) mapById[map.id] = map;
   });
-  collectStudyBlocks(plan, examQuestions).forEach((block) => {
+  (precomputedStudyBlocks || collectStudyBlocks(plan, examQuestions)).forEach((block) => {
     if (!block?.dateStr) return;
     byDate[block.dateStr] = (byDate[block.dateStr] || 0) + parseDurationMinutes(block.durationMinutes);
   });
@@ -149,7 +149,8 @@ export function aguStudyHomeostasis(plan, examQuestions = [], todayStr, options 
     plan,
     examQuestions,
     options.mindMapSessions || [],
-    options.mindMaps || []
+    options.mindMaps || [],
+    options.studyBlocks || null
   );
   const state = plan?.homeostasis?.seeded
     ? plan.homeostasis

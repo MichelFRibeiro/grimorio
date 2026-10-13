@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { Volume2, VolumeX, Flame, Coins, Shield, Brain, Zap, Swords, Sparkles, LogOut, User, Trophy, Award, ChevronRight, X, AlertTriangle, TrendingUp, Bot, Settings } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
-import { McpModal } from './McpModal';
+
+const McpModal = lazy(() => import('./McpModal').then((m) => ({ default: m.McpModal })));
 
 export function Header({ profile, currentUser, onLogout, boss, rankings, muted, onToggleMute, onOpenOracle, onOpenSettings, settingsActive = false, penaltiesThisWeek = 0 }) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -362,7 +363,11 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
       </div>
 
       {/* Modal de Integração MCP / Agentes IA */}
-      <McpModal isOpen={showMcpModal} onClose={() => setShowMcpModal(false)} />
+      {showMcpModal && (
+        <Suspense fallback={null}>
+          <McpModal isOpen={showMcpModal} onClose={() => setShowMcpModal(false)} />
+        </Suspense>
+      )}
 
       {/* Modal de Detalhes dos Rankings de Categorias */}
       {showRankingsModal && typeof document !== 'undefined' && createPortal(

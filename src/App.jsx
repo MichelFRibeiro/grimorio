@@ -1,7 +1,6 @@
 import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { useGameData } from './hooks/useGameData';
-import { LoginView } from './components/LoginView';
 import { Header } from './components/Header';
 import { BossRaid } from './components/BossRaid';
 import { DailyVictoriesCard } from './components/DailyVictoriesCard';
@@ -12,7 +11,6 @@ import { JudgmentModal } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
 import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare, ListOrdered } from 'lucide-react';
 import { isFeatureEnabled, isTabEnabled } from './utils/featureSettings';
-import { TodayView, EveningReviewModal, WeeklyReviewModal, QuickCapture, ShortcutsHelp } from './components/TodayView';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
 import { useFocusPlayer } from './hooks/useFocusPlayer';
@@ -22,6 +20,13 @@ import { getReadingLoadSeries, getScriptureLoadSeries } from './utils/homeostasi
 import { getHabitLoadSeries, habitHomeostasisEnabled } from './utils/habitHomeostasis';
 import { PhoneTimePrompt } from './components/PhoneTimePrompt';
 import { needsYesterdayPhonePrompt, yesterdayDateStr } from './utils/phoneTime';
+
+const LoginView = lazy(() => import('./components/LoginView').then((m) => ({ default: m.LoginView })));
+const TodayView = lazy(() => import('./components/TodayView').then((m) => ({ default: m.TodayView })));
+const EveningReviewModal = lazy(() => import('./components/TodayView').then((m) => ({ default: m.EveningReviewModal })));
+const WeeklyReviewModal = lazy(() => import('./components/TodayView').then((m) => ({ default: m.WeeklyReviewModal })));
+const QuickCapture = lazy(() => import('./components/TodayView').then((m) => ({ default: m.QuickCapture })));
+const ShortcutsHelp = lazy(() => import('./components/TodayView').then((m) => ({ default: m.ShortcutsHelp })));
 
 const QuestsView = lazy(() => import('./components/QuestsView').then((m) => ({ default: m.QuestsView })));
 const QuestionsView = lazy(() => import('./components/QuestionsView').then((m) => ({ default: m.QuestionsView })));
@@ -242,7 +247,67 @@ export function App() {
       }
       return entries;
     }))
-  }), [data, todayStr]);
+  }), [
+    data?.aguPlan,
+    data?.examQuestions,
+    data?.mindMapSessions,
+    data?.readingSessions,
+    data?.scriptureSessions,
+    data?.habits,
+    todayStr
+  ]);
+
+  const tabBadges = useMemo(() => {
+    const routinesList = data?.routines || [];
+    const habitsList = data?.habits || [];
+    const questsList = data?.quests || [];
+    const questionsList = data?.examQuestions || [];
+    const booksList = data?.books || [];
+    const processesList = data?.processes || [];
+    const mapsList = data?.mindMaps || [];
+    const aguPlanObj = data?.aguPlan;
+    const now = new Date();
+
+    const routinesDueCount = routinesList.filter(routine => routine.nextHabitId && !routine.completeToday).length;
+    const habitsDueCount = habitsList.filter((habit) => {
+      const due = getHabitDueStatus(habit, getHabitWeeklyStats(habit, now), now, todayStr);
+      return due.due && !due.completedToday;
+    }).length;
+    const pendingQuestsCount = questsList.filter(q => !q.completed).length;
+    const todayQuestionsCount = questionsList.filter(q => (
+      (q.date || (q.timestamp ? getSaoPauloDateStr(q.timestamp) : '')) === todayStr
+    )).length;
+    const activeBooksCount = booksList.filter(b => b.status === 'reading').length;
+    const activeProcessesCount = processesList.filter(p => p.status === 'in_progress').length;
+    const aguToday = aguPlanObj?.startedAt
+      ? summarizePlan(aguPlanObj, questionsList, todayStr).today
+      : { totalBlocks: 0, doneCount: 0 };
+    const aguTodayRemaining = Math.max(0, (aguToday.totalBlocks || 0) - (aguToday.doneCount || 0));
+    const dueMindMapsCount = data?.analytics?.summary?.mindMapBranchesDue
+      ?? mapsList.reduce((acc, m) => acc + (m.stats?.dueBranches || 0), 0);
+
+    return {
+      routinesDueCount,
+      habitsDueCount,
+      pendingQuestsCount,
+      todayQuestionsCount,
+      activeBooksCount,
+      activeProcessesCount,
+      aguTodayRemaining,
+      dueMindMapsCount
+    };
+  }, [
+    data?.routines,
+    data?.habits,
+    data?.quests,
+    data?.examQuestions,
+    data?.books,
+    data?.processes,
+    data?.mindMaps,
+    data?.aguPlan,
+    data?.analytics?.summary?.mindMapBranchesDue,
+    todayStr
+  ]);
 
   // Atalhos de teclado (n / h / ? / Esc). Precisa ficar ACIMA dos returns
   // antecipados de carregamento, login e erro: um hook depois deles muda a
@@ -287,14 +352,16 @@ export function App() {
   // If not authenticated, render Login Screen
   if (!isAuthenticated) {
     return (
-      <LoginView
-        onGoogleLogin={loginWithGoogle}
-        onGuestLogin={loginAsGuest}
-        onEmailLogin={loginWithEmail}
-        googleClientId={googleClientId}
-        guestEnabled={guestEnabled}
-        emailLoginEnabled={emailLoginEnabled}
-      />
+      <Suspense fallback={null}>
+        <LoginView
+          onGoogleLogin={loginWithGoogle}
+          onGuestLogin={loginAsGuest}
+          onEmailLogin={loginWithEmail}
+          googleClientId={googleClientId}
+          guestEnabled={guestEnabled}
+          emailLoginEnabled={emailLoginEnabled}
+        />
+      </Suspense>
     );
   }
 
@@ -368,11 +435,16 @@ export function App() {
   // O baú espera Level Up e Julgamento fecharem: eles são a notícia maior da ação.
   const chestOnHold = Boolean(levelUpData) || (penaltiesPending || []).length > 0;
 
-  const routinesDueCount = (routines || []).filter(routine => routine.nextHabitId && !routine.completeToday).length;
-  const habitsDueCount = (habits || []).filter((habit) => {
-    const due = getHabitDueStatus(habit, getHabitWeeklyStats(habit), new Date(), todayStr);
-    return due.due && !due.completedToday;
-  }).length;
+  const {
+    routinesDueCount,
+    habitsDueCount,
+    pendingQuestsCount,
+    todayQuestionsCount,
+    activeBooksCount,
+    activeProcessesCount,
+    aguTodayRemaining,
+    dueMindMapsCount
+  } = tabBadges;
 
   const openEvening = async () => {
     playClick();
@@ -415,18 +487,6 @@ export function App() {
       openTab(action.payload.tab === 'today' ? 'today' : action.payload.tab);
     }
   };
-
-  const pendingQuestsCount = (quests || []).filter(q => !q.completed).length;
-  const todayQuestionsCount = (examQuestions || []).filter(q => {
-    const todayStr = getSaoPauloDateStr();
-    return (q.date || (q.timestamp ? getSaoPauloDateStr(q.timestamp) : '')) === todayStr;
-  }).length;
-  const activeBooksCount = (books || []).filter(b => b.status === 'reading').length;
-  const activeProcessesCount = (processes || []).filter(p => p.status === 'in_progress').length;
-  const aguToday = summarizePlan(aguPlan, examQuestions || [], todayStr).today;
-  const aguTodayRemaining = Math.max(0, (aguToday.totalBlocks || 0) - (aguToday.doneCount || 0));
-  const dueMindMapsCount = analytics?.summary?.mindMapBranchesDue
-    ?? (mindMaps || []).reduce((acc, m) => acc + (m.stats?.dueBranches || 0), 0);
 
   const tabs = [
     { id: 'today', label: 'Hoje', icon: Sun },
@@ -899,44 +959,52 @@ export function App() {
         +
       </button>}
 
-      <QuickCapture
-        open={captureOpen}
-        categories={(questCategories || []).map((item) => (typeof item === 'string' ? item : item.name))}
-        lastCategory={lastQuestCategory}
-        onClose={() => setCaptureOpen(false)}
-        onCreate={async (quest) => {
-          setLastQuestCategory(quest.category);
-          await addQuest(quest);
-        }}
-      />
-      <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
-      <EveningReviewModal
-        open={eveningOpen}
-        review={eveningReview}
-        features={featureSettings}
-        onClose={() => setEveningOpen(false)}
-        onCloseDay={closeDay}
-        onReschedule={async (ids) => {
-          const tomorrow = addDaysToDateStr(getSaoPauloDateStr(), 1);
-          await rescheduleQuests(ids, tomorrow);
-          setEveningReview(await fetchEveningReview());
-        }}
-        onPlanTomorrow={async (item) => {
-          const tomorrow = addDaysToDateStr(getSaoPauloDateStr(), 1);
-          await addDailyVictory({ title: item.title, category: item.category, date: tomorrow, questId: item.questId });
-          setEveningReview(await fetchEveningReview());
-        }}
-        playClick={playClick}
-      />
-      <WeeklyReviewModal
-        open={weeklyOpen}
-        review={weeklyReview}
-        features={featureSettings}
-        categories={(questCategories || []).map((item) => (typeof item === 'string' ? item : item.name))}
-        onClose={() => setWeeklyOpen(false)}
-        onSavePlan={saveWeeklyPlan}
-        playClick={playClick}
-      />
+      <Suspense fallback={null}>
+        {captureOpen && (
+          <QuickCapture
+            open={captureOpen}
+            categories={(questCategories || []).map((item) => (typeof item === 'string' ? item : item.name))}
+            lastCategory={lastQuestCategory}
+            onClose={() => setCaptureOpen(false)}
+            onCreate={async (quest) => {
+              setLastQuestCategory(quest.category);
+              await addQuest(quest);
+            }}
+          />
+        )}
+        {helpOpen && <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />}
+        {eveningOpen && (
+          <EveningReviewModal
+            open={eveningOpen}
+            review={eveningReview}
+            features={featureSettings}
+            onClose={() => setEveningOpen(false)}
+            onCloseDay={closeDay}
+            onReschedule={async (ids) => {
+              const tomorrow = addDaysToDateStr(getSaoPauloDateStr(), 1);
+              await rescheduleQuests(ids, tomorrow);
+              setEveningReview(await fetchEveningReview());
+            }}
+            onPlanTomorrow={async (item) => {
+              const tomorrow = addDaysToDateStr(getSaoPauloDateStr(), 1);
+              await addDailyVictory({ title: item.title, category: item.category, date: tomorrow, questId: item.questId });
+              setEveningReview(await fetchEveningReview());
+            }}
+            playClick={playClick}
+          />
+        )}
+        {weeklyOpen && (
+          <WeeklyReviewModal
+            open={weeklyOpen}
+            review={weeklyReview}
+            features={featureSettings}
+            categories={(questCategories || []).map((item) => (typeof item === 'string' ? item : item.name))}
+            onClose={() => setWeeklyOpen(false)}
+            onSavePlan={saveWeeklyPlan}
+            playClick={playClick}
+          />
+        )}
+      </Suspense>
 
     </div>
   );

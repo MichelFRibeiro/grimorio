@@ -100,32 +100,63 @@ export function matchExamToSubject(entry, subject) {
   return (SUBJECT_ALIASES[subject.id] || []).some((alias) => hasAlias(label, alias));
 }
 
+const resolvedSubjectCache = new WeakMap();
+const resolvedTopicCache = new WeakMap();
+
+function entrySubjectSig(entry) {
+  return `${entry.subjectId || ''}\0${entry.subject || ''}\0${entry.topic || ''}\0${entry.notes || ''}`;
+}
+
+function entryTopicSig(entry, subjectId) {
+  return `${subjectId || ''}\0${entry.topicId || ''}\0${entry.topic || ''}`;
+}
+
 export function resolveExamSubject(entry) {
   if (!entry) return null;
-  if (entry.subjectId) {
-    const byId = getAguSubject(entry.subjectId);
-    if (byId) return byId;
+  if (typeof entry === 'object') {
+    const sig = entrySubjectSig(entry);
+    const cached = resolvedSubjectCache.get(entry);
+    if (cached && cached.sig === sig) return cached.subject;
+    let resolved = null;
+    if (entry.subjectId) {
+      const byId = getAguSubject(entry.subjectId);
+      if (byId) resolved = byId;
+    }
+    if (!resolved) {
+      const label = foldAccents(entry.subject || '');
+      if (!AMBIGUOUS_LABELS.includes(label)) {
+        const hits = AGU_SUBJECTS.filter((subject) => matchExamToSubject(entry, subject));
+        if (hits.length === 1) resolved = hits[0];
+      }
+    }
+    resolvedSubjectCache.set(entry, { sig, subject: resolved });
+    return resolved;
   }
-  const label = foldAccents(entry.subject || '');
-  if (AMBIGUOUS_LABELS.includes(label)) return null;
-  const hits = AGU_SUBJECTS.filter((subject) => matchExamToSubject(entry, subject));
-  if (hits.length !== 1) return null;
-  return hits[0];
+  return null;
 }
 
 export function resolveExamTopic(entry, subject) {
   if (!subject) return null;
-  if (entry?.topicId) {
-    const byId = (subject.topics || []).find((t) => t.id === entry.topicId);
-    if (byId) return byId;
-    return null;
+  if (entry && typeof entry === 'object') {
+    const sig = entryTopicSig(entry, subject.id);
+    const cached = resolvedTopicCache.get(entry);
+    if (cached && cached.sig === sig) return cached.topic;
+    let resolved = null;
+    if (entry.topicId) {
+      resolved = (subject.topics || []).find((t) => t.id === entry.topicId) || null;
+    } else {
+      const hay = foldAccents(entry.topic || '');
+      if (hay) {
+        const hits = (subject.topics || []).filter((topic) => (
+          wordBoundaryIncludes(hay, topic.id) || wordBoundaryIncludes(hay, topic.name)
+        ));
+        resolved = hits.length === 1 ? hits[0] : null;
+      }
+    }
+    resolvedTopicCache.set(entry, { sig, topic: resolved });
+    return resolved;
   }
-  const hay = foldAccents(entry?.topic || '');
-  if (!hay) return null;
-  const hits = (subject.topics || []).filter((topic) => (
-    wordBoundaryIncludes(hay, topic.id) || wordBoundaryIncludes(hay, topic.name)
-  ));
-  return hits.length === 1 ? hits[0] : null;
+  return null;
 }
 
 function topicKey(subjectId, topicId) {
