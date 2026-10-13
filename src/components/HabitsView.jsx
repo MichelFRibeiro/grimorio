@@ -879,7 +879,7 @@ export function HabitsView({
 
       {/* Category Filter Bar — same pattern as QuestsView */}
       <div className="glass-panel" style={{ padding: '12px 16px', marginBottom: '20px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', flex: 1, minWidth: 0 }}>
+        <div className="chip-row" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', flex: '1 1 240px', minWidth: 'min(100%, 240px)' }}>
           {categoryNames.map(catName => {
             const isAll = catName === 'Todas';
             const catRanking = !isAll ? rankings?.categories?.[catName] : null;
@@ -1070,7 +1070,9 @@ export function HabitsView({
               border: 'none',
               color: '#64748b',
               cursor: 'pointer',
-              padding: '4px',
+              padding: '8px',
+              minWidth: '36px',
+              minHeight: '36px',
               borderRadius: '6px',
               display: 'flex',
               alignItems: 'center',
@@ -2420,7 +2422,7 @@ export function HabitsView({
                   </span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))', gap: '6px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 92px), 1fr))', gap: '6px' }}>
                   {last14Days.map(item => {
                     const draftKey = `${activeHabit.id}:${item.dateStr}`;
                     const draftValue = Object.prototype.hasOwnProperty.call(durationDrafts, draftKey)

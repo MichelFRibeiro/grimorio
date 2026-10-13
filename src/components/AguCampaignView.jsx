@@ -82,7 +82,7 @@ function ProgressBar({ percent, color = '#f59e0b' }) {
 
 function StatChip({ label, value, color, sub }) {
   return (
-    <div className="rpg-card" style={{ padding: '14px 16px', flex: '1 1 140px', minWidth: '140px' }}>
+    <div className="rpg-card" style={{ padding: '14px 16px', flex: '1 1 140px', minWidth: 'min(100%, 140px)' }}>
       <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</div>
       <div style={{ fontSize: '1.35rem', fontWeight: 800, color: color || '#fbbf24', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>{value}</div>
       {sub && <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>{sub}</div>}
@@ -250,7 +250,7 @@ function StudyTimeCard({ studyTime, liveMinutes = 0 }) {
         Soma o cronômetro dos blocos da campanha e as sessões lançadas na Arena com matérias AGU.
         {liveMinutes > 0 ? ' Inclui o tempo em andamento agora.' : ''}
       </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 120px), 1fr))', gap: '10px' }}>
         {rows.map((row) => (
           <div key={row.id} className="rpg-card" style={{ padding: '12px 14px' }}>
             <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{row.label}</div>
@@ -576,7 +576,7 @@ export function AguCampaignView({
               {summary.today.weekdayLabel} · {todayStr} · {summary.today.totalBlocks} blocos de {AGU_BLOCK_MINUTES} min · meta {summary.homeostasis?.todayTargetMinutes || 30} min
             </p>
           </div>
-          <div style={{ minWidth: '180px', flex: '1 1 180px', maxWidth: '280px' }}>
+          <div style={{ minWidth: 'min(100%, 180px)', flex: '1 1 180px', maxWidth: '280px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '6px' }}>
               <span>Volume do dia</span>
               <span style={{ color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>{todayPercent}%</span>
@@ -633,7 +633,7 @@ export function AguCampaignView({
             Dívida: {(summary.debt || []).slice(0, 4).map((d) => `${d.subjectId} ${d.kind}${d.remainingQuestions ? ` (${d.remainingQuestions})` : ''}`).join(' · ')}
           </div>
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 150px), 1fr))', gap: '8px' }}>
           {summary.calendar.days.map((day) => {
             const isToday = day.dateStr === todayStr;
             return (
@@ -695,7 +695,7 @@ export function AguCampaignView({
             </span>
           ))}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '10px' }}>
           {summary.subjects.map((subject) => (
             <button
               key={subject.id}
@@ -791,7 +791,7 @@ export function AguCampaignView({
           O guia Tec é <strong style={{ color: '#e2e8f0' }}>Procurador Federal 2023</strong>. O plano usa o guia Tec como currículo e a estrutura Cebraspe do edital como analogia da carreira AGU:
           objetiva por grupos, 50% mínimo por grupo, discursivas (parecer, peça, dissertação) e oral.
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '10px' }}>
           {Object.values(AGU_GROUPS).filter((g) => g.id !== 'extra').map((group) => (
             <div key={group.id} className="rpg-card" style={{ padding: '12px' }}>
               <div style={{ color: group.color, fontWeight: 800, fontSize: '0.85rem' }}>{group.short}</div>

@@ -67,9 +67,9 @@ function PassageFields({ label, bookId, chapter, verse, onChange, accent = '#fbb
   const chapters = chapterCount(book);
   const verses = verseCount(book, chapter);
   return (
-    <div style={{ flex: 1, minWidth: '220px' }}>
+    <div style={{ flex: '1 1 220px', minWidth: 'min(100%, 220px)' }}>
       <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: accent, marginBottom: '6px' }}>{label}</span>
-      <div style={{ display: 'flex', gap: '8px' }}>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <select value={bookId} onChange={(e) => onChange({ bookId: e.target.value, chapter: 1, verse: 1 })} style={{ ...fieldStyle, flex: 2 }}>
           {BIBLE_BOOKS.map((item) => (
             <option key={item.id} value={item.id}>{item.name}</option>
@@ -370,14 +370,14 @@ export function ScriptureView({
         actions={onAddDailyVictory ? <PlanHomeostasisVictoryButton victory={victory} onAddDailyVictory={onAddDailyVictory} accentColor="#fbbf24" /> : null}
       />
 
-      <div className="glass-panel" style={{ display: 'flex', gap: '8px', padding: '6px', margin: '16px 0', borderRadius: '12px', width: 'fit-content' }}>
+      <div className="glass-panel scripture-subnav" style={{ display: 'flex', gap: '8px', padding: '6px', margin: '16px 0', borderRadius: '12px', width: 'fit-content', maxWidth: '100%' }}>
         {[['canon', 'Cânone'], ['sessions', `Sessões (${scriptureSessions.length})`], ['quotes', `Citações (${scriptureQuotes.length})`], ['reflections', `Reflexões (${scriptureReflections.length})`]].map(([id, label]) => (
           <button key={id} type="button" onClick={() => setTab(id)} style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 800, background: tab === id ? 'rgba(245,158,11,0.2)' : 'transparent', color: tab === id ? '#fbbf24' : '#94a3b8' }}>{label}</button>
         ))}
       </div>
 
       {tab === 'canon' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 280px) 1fr', gap: '16px' }}>
+        <div className="scripture-canon" style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 280px) 1fr', gap: '16px' }}>
           <div className="glass-panel" style={{ padding: '12px' }}>
             <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
               {[['ot', 'Antigo'], ['nt', 'Novo']].map(([id, label]) => (
@@ -535,7 +535,7 @@ export function ScriptureView({
               </div>
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '10px', alignItems: 'flex-end' }}>
                 <PassageFields label="Referência da citação" {...quotePassage} onChange={(next) => { setQuotePassage(next); setQuoteEndVerse(next.verse); }} />
-                <label style={{ minWidth: '120px', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 800 }}>Até o versículo
+                <label style={{ minWidth: 'min(100%, 120px)', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 800 }}>Até o versículo
                   <select
                     aria-label="Versículo final da citação"
                     value={quoteEndVerse}
@@ -776,7 +776,7 @@ function SessionEditor({ session, onCancel, onSave }) {
                   verse={item.verse}
                   onChange={(next) => updateQuote(item.id, { ...next, endVerse: next.verse })}
                 />
-                <label style={{ minWidth: '120px', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 800 }}>Até o versículo
+                <label style={{ minWidth: 'min(100%, 120px)', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 800 }}>Até o versículo
                   <select value={item.endVerse || item.verse} onChange={(event) => updateQuote(item.id, { endVerse: Number(event.target.value) })} style={{ ...fieldStyle, marginTop: '6px' }}>
                     {Array.from({ length: Math.max(0, verseCount(getBibleBook(item.bookId), item.chapter) - item.verse + 1) }, (_, i) => item.verse + i).map((n) => (
                       <option key={n} value={n}>{n}</option>
@@ -826,7 +826,7 @@ function QuoteEditor({ quote, onCancel, onSave }) {
         <h3 className="font-cinzel" style={{ color: '#f8fafc', marginBottom: '12px' }}>Editar citação</h3>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <PassageFields label="Referência" {...passage} onChange={(next) => { setPassage(next); setEndVerse(next.verse); }} />
-          <label style={{ minWidth: '120px', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 800 }}>Até o versículo
+          <label style={{ minWidth: 'min(100%, 120px)', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 800 }}>Até o versículo
             <select value={endVerse} onChange={(event) => setEndVerse(Number(event.target.value))} style={{ ...fieldStyle, marginTop: '6px' }}>
               {Array.from({ length: Math.max(0, verseCount(getBibleBook(passage.bookId), passage.chapter) - passage.verse + 1) }, (_, i) => passage.verse + i).map((n) => (
                 <option key={n} value={n}>{n}</option>

@@ -123,7 +123,7 @@ export function RewardsShop({ rewards, userProfile, redemptions, onAddReward, on
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="reward-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
               display: 'flex',

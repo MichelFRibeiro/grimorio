@@ -136,7 +136,7 @@ export function JudgmentModal({
         >
           Entendi, vou melhorar
         </button>
-        <button type="button" className="judgment-close" onClick={() => onAcknowledge?.()} aria-label="Fechar julgamento">
+        <button type="button" className="judgment-close" onClick={() => onAcknowledge?.()} aria-label="Fechar julgamento" title="Fechar julgamento">
           <X size={16} />
         </button>
       </div>

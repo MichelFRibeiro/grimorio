@@ -1193,7 +1193,7 @@ export function BooksView({
           </div>
 
           {/* Book Metrics Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '14px' }}>
             
             {/* Progresso */}
             <div className="glass-panel" style={{ padding: '16px' }}>

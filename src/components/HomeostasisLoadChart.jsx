@@ -250,7 +250,7 @@ export function HomeostasisLoadChart({
           className="rpg-card"
           style={{
             padding: '10px 14px',
-            minWidth: '148px',
+            minWidth: 'min(100%, 148px)',
             textAlign: 'center',
             borderColor: `${todayZone.color}55`,
             boxShadow: `0 0 18px ${todayZone.glow}`
@@ -286,7 +286,7 @@ export function HomeostasisLoadChart({
           : todayZone.copy}
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginTop: '14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: '10px', marginTop: '14px' }}>
         <div className="rpg-card" style={{ padding: '12px 14px' }}>
           <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
             Média {series.activeDays ?? days}d ativos

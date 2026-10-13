@@ -553,6 +553,7 @@ export function App() {
               <span className="nav-tab-label">{tab.label}</span>
               {tab.badge !== undefined && tab.badge > 0 && (
                 <span
+                  className="nav-tab-badge"
                   style={{
                     fontSize: '0.72rem',
                     padding: '2px 6px',

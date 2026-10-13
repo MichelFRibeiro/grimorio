@@ -310,7 +310,7 @@ export function QuestionsView({
       {/* Header */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '20px' }}>
         <div>
-          <h2 className="font-cinzel" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h2 className="font-cinzel" style={{ fontSize: 'clamp(1.15rem, 4.6vw, 1.4rem)', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <span>🎯</span> Arena de Questões & Concursos
           </h2>
           <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
@@ -343,7 +343,7 @@ export function QuestionsView({
       </div>
 
       {/* 5 Horizons Quick Summary KPI Bar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '22px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '12px', marginBottom: '22px' }}>
         
         {/* Hoje */}
         <div className="glass-panel" style={{ padding: '14px 16px', borderTop: '3px solid #38bdf8' }}>

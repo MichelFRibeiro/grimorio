@@ -398,7 +398,7 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
       </div>
 
       {/* Summary KPI Cards Top Bar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '14px', marginBottom: '24px' }}>
         
         {/* Questões de Concurso KPI */}
         <div className="glass-panel" style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -785,13 +785,16 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
 
           {/* 5 Horizons Selector Buttons */}
           <div
+            className="oracle-horizon"
             style={{
               padding: '4px',
               borderRadius: '10px',
               background: 'rgba(0,0,0,0.3)',
               border: '1px solid rgba(255,255,255,0.08)',
               display: 'inline-flex',
-              gap: '4px'
+              flexWrap: 'wrap',
+              gap: '4px',
+              maxWidth: '100%'
             }}
           >
             {[
@@ -826,7 +829,7 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
         </div>
 
         {/* Selected Horizon Metrics Spotlight */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '22px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '14px', marginBottom: '22px' }}>
           
           <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
             <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Questões Feitas ({activeHorizonData.label})</span>
@@ -878,7 +881,7 @@ export function OracleAnalytics({ analytics, actionLogs, onRefresh, onInsightAct
             Comparativo nos 5 Horizontes Temporais (Feitas / Acertadas)
           </span>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: '10px' }}>
             {[
               { key: 'day', label: 'Hoje', data: horizons.day, border: '#38bdf8' },
               { key: 'week', label: 'Semana', data: horizons.week, border: '#10b981' },

@@ -74,17 +74,7 @@ export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleCli
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '16px',
-        position: 'relative',
-        overflow: 'hidden'
-      }}
-    >
+    <div className="login-stage">
       {/* Background magical glow effects */}
       <div
         style={{
@@ -100,20 +90,7 @@ export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleCli
         }}
       />
 
-      <div
-        className="glass-panel"
-        style={{
-          maxWidth: '460px',
-          width: '100%',
-          padding: '28px 20px',
-          borderRadius: '24px',
-          border: '1px solid rgba(245, 158, 11, 0.35)',
-          boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(245, 158, 11, 0.1)',
-          position: 'relative',
-          zIndex: 1,
-          textAlign: 'center'
-        }}
-      >
+      <div className="glass-panel login-card">
         {/* Emblem / Logo */}
         <div
           style={{
@@ -134,16 +111,7 @@ export function LoginView({ onGoogleLogin, onGuestLogin, onEmailLogin, googleCli
         </div>
 
         {/* Title */}
-        <h1
-          className="font-cinzel"
-          style={{
-            fontSize: '1.75rem',
-            fontWeight: 900,
-            color: '#f8fafc',
-            letterSpacing: '0.02em',
-            marginBottom: '6px'
-          }}
-        >
+        <h1 className="font-cinzel">
           Grimório de Missões
         </h1>
         <p style={{ color: '#fbbf24', fontSize: '0.9rem', fontWeight: 600, marginBottom: '24px' }}>

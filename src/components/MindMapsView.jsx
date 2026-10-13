@@ -2898,7 +2898,7 @@ export function MindMapsView({
                     <p style={{ color: '#cbd5e1', fontSize: '0.88rem', fontStyle: 'italic' }}>{currentCard.notes}</p>
                   )}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 120px), 1fr))', gap: '8px' }}>
                   {QUALITY_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}

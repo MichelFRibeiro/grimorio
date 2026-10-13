@@ -208,13 +208,19 @@ export function FocusChamberView({ player, playClick }) {
                 toggleMute();
               }}
               title={muted || volume === 0 ? 'Ativar som' : 'Silenciar'}
+              aria-label={muted || volume === 0 ? 'Ativar som' : 'Silenciar'}
               style={{
                 background: 'transparent',
                 border: 'none',
                 color: muted || volume === 0 ? '#64748b' : '#38bdf8',
                 cursor: 'pointer',
                 display: 'flex',
-                padding: '4px'
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '40px',
+                height: '40px',
+                padding: '8px',
+                flexShrink: 0
               }}
             >
               {muted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}

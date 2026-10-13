@@ -298,7 +298,7 @@ export function SupplementsView({
 
       {subTab === 'log' && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 210px), 1fr))', gap: '10px', marginBottom: '16px' }}>
             {todayBySupplement.length === 0 && (
               <div className="glass-panel" style={{ padding: '16px', color: '#94a3b8' }}>
                 Nenhum suplemento ativo. Cadastre o primeiro para começar o diário.
@@ -333,7 +333,7 @@ export function SupplementsView({
                 style={{ ...fieldStyle, paddingLeft: '34px' }}
               />
             </label>
-            <select value={filterId} onChange={(event) => setFilterId(event.target.value)} style={{ ...fieldStyle, width: 'auto', minWidth: '180px' }}>
+            <select value={filterId} onChange={(event) => setFilterId(event.target.value)} style={{ ...fieldStyle, width: 'auto', minWidth: 'min(100%, 180px)', flex: '1 1 180px' }}>
               <option value="all">Todos os suplementos</option>
               {(supplements || []).map(item => (
                 <option key={item.id} value={item.id}>{item.name}</option>
@@ -384,7 +384,7 @@ export function SupplementsView({
               Nenhum suplemento cadastrado.
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
               {catalog.map(item => (
                 <article key={item.id} className="glass-panel" style={{ padding: '16px', opacity: item.archived ? 0.65 : 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>

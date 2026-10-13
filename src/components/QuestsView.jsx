@@ -473,7 +473,7 @@ export function QuestsView({
       <div className="glass-panel" style={{ padding: '12px 16px', marginBottom: '20px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
         
         {/* Categories Pills */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+        <div className="chip-row" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', flex: '1 1 220px', minWidth: 'min(100%, 220px)' }}>
           {categoryNames.map(catName => {
             const isAll = catName === 'Todas';
             const catRanking = !isAll ? rankings?.categories?.[catName] : null;

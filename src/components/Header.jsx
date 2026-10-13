@@ -115,7 +115,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
         </div>
 
         {/* Stats, Currency and Session Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <div className="header-toolbar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           
           {/* Gold Coins */}
           <div
@@ -193,7 +193,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
           </button>
 
           {/* Character Attributes Pills */}
-          <div style={{ display: 'flex', gap: '6px' }}>
+          <div className="header-attrs" style={{ display: 'flex', gap: '6px' }}>
             <div
               style={{
                 display: 'flex',
@@ -284,7 +284,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
             title="Conectar Agentes de IA via MCP"
           >
             <Bot size={16} />
-            <span>MCP / IA</span>
+            <span className="header-btn-label">MCP / IA</span>
           </button>
 
           {/* Sound Toggle Button */}
@@ -328,7 +328,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
               title="Configurações"
             >
               <Settings size={16} />
-              <span>Configurações</span>
+              <span className="header-btn-label">Configurações</span>
             </button>
           )}
 
@@ -353,7 +353,7 @@ export function Header({ profile, currentUser, onLogout, boss, rankings, muted, 
               title="Encerrar sessão"
             >
               <LogOut size={16} />
-              <span>Sair</span>
+              <span className="header-btn-label">Sair</span>
             </button>
           )}
 

@@ -203,19 +203,21 @@ print("Missão Criada:", nova_missao.json())`;
         {/* Modal Header */}
         <div
           style={{
-            padding: '20px 28px',
+            padding: '16px 16px',
             borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'space-between',
+            gap: '12px',
             background: 'linear-gradient(90deg, rgba(56, 189, 248, 0.1) 0%, rgba(168, 85, 247, 0.05) 100%)'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', minWidth: 0 }}>
             <div
               style={{
                 width: '46px',
                 height: '46px',
+                flexShrink: 0,
                 borderRadius: '14px',
                 background: 'rgba(56, 189, 248, 0.15)',
                 border: '1px solid rgba(56, 189, 248, 0.35)',
@@ -229,7 +231,7 @@ print("Missão Criada:", nova_missao.json())`;
               <Bot size={26} />
             </div>
             <div>
-              <h2 className="font-cinzel" style={{ fontSize: '1.3rem', fontWeight: 800, color: '#38bdf8', margin: 0 }}>
+              <h2 className="font-cinzel" style={{ fontSize: 'clamp(1.05rem, 4.2vw, 1.3rem)', fontWeight: 800, color: '#38bdf8', margin: 0, overflowWrap: 'anywhere' }}>
                 Conexão MCP & Agentes de IA
               </h2>
               <p style={{ fontSize: '0.84rem', color: '#94a3b8', margin: '4px 0 0 0' }}>
@@ -261,7 +263,7 @@ print("Missão Criada:", nova_missao.json())`;
         {/* Modal Body (Scrollable) */}
         <div
           style={{
-            padding: '24px 28px',
+            padding: '16px',
             overflowY: 'auto',
             flex: 1,
             display: 'flex',
@@ -319,7 +321,7 @@ print("Missão Criada:", nova_missao.json())`;
               border: '1px solid rgba(255, 255, 255, 0.08)'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
               <span style={{ fontSize: '0.86rem', color: '#e2e8f0', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Key size={16} color="#fbbf24" /> Seu Bearer Token MCP
               </span>
