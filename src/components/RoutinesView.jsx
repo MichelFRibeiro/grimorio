@@ -397,6 +397,9 @@ export function RoutinesView({
                   >
                     {expanded ? <ChevronUp size={16} color="#94a3b8" /> : <ChevronDown size={16} color="#94a3b8" />}
                     <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.05rem' }}>{routine.title}</h3>
+                    {routine.completeToday ? (
+                      <span title="Concluída hoje" aria-label="Concluída hoje" style={{ fontSize: '0.95rem', lineHeight: 1 }}>✅</span>
+                    ) : null}
                   </button>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button type="button" onClick={() => openEdit(routine)} title="Editar" style={iconBtn}>
