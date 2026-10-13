@@ -186,6 +186,25 @@ export function nextVerse(bookId, chapter, verse) {
   return { bookId: following.id, chapter: 1, verse: 1 };
 }
 
+/**
+ * Ponto em que a sessão de escritura mais recente parou.
+ * A próxima sessão costuma continuar dali (livro, capítulo e versículo).
+ */
+export function continuationFromSessions(sessions = []) {
+  const latest = (sessions || []).reduce((best, session) => {
+    if (!session?.endBookId || !getBibleBook(session.endBookId)) return best;
+    if (!best) return session;
+    const dateDelta = String(session.date || '').localeCompare(String(best.date || ''));
+    if (dateDelta !== 0) return dateDelta > 0 ? session : best;
+    return String(session.timestamp || '') > String(best.timestamp || '') ? session : best;
+  }, null);
+  if (!latest) return null;
+  const book = getBibleBook(latest.endBookId);
+  const chapter = Math.min(Math.max(1, Number(latest.endChapter) || 1), chapterCount(book) || 1);
+  const verse = Math.min(Math.max(1, Number(latest.endVerse) || 1), verseCount(book, chapter) || 1);
+  return { bookId: book.id, chapter, verse };
+}
+
 export function booksByTestament() {
   return {
     ot: BIBLE_BOOKS.filter((book) => book.testament === OT),

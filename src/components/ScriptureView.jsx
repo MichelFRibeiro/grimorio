@@ -26,7 +26,8 @@ import {
   verseCount,
   formatReference,
   formatVerseSpan,
-  getBibleBook
+  getBibleBook,
+  continuationFromSessions
 } from '../data/bibleCanon';
 import {
   readLocalScriptureDraft,
@@ -119,16 +120,17 @@ export function ScriptureView({
   const [tab, setTab] = useState('canon');
   const [testament, setTestament] = useState('ot');
   const [query, setQuery] = useState('');
-  const [selectedId, setSelectedId] = useState(restored?.end?.bookId || 'gn');
+  const lastRead = continuationFromSessions(scriptureSessions);
+  const [selectedId, setSelectedId] = useState(restored?.end?.bookId || lastRead?.bookId || 'gn');
   const [sessionOpen, setSessionOpen] = useState(Boolean(restored?.active));
-  const [start, setStart] = useState(restored?.start || { bookId: 'gn', chapter: 1, verse: 1 });
-  const [end, setEnd] = useState(restored?.end || { bookId: 'gn', chapter: 1, verse: 1 });
+  const [start, setStart] = useState(restored?.start || lastRead || { bookId: 'gn', chapter: 1, verse: 1 });
+  const [end, setEnd] = useState(restored?.end || lastRead || { bookId: 'gn', chapter: 1, verse: 1 });
   const [notes, setNotes] = useState(restored?.notes || '');
   const [reflection, setReflection] = useState(restored?.reflection || '');
   const [quoteText, setQuoteText] = useState(restored?.quoteText || '');
   const [quoteNote, setQuoteNote] = useState(restored?.quoteNote || '');
-  const [quotePassage, setQuotePassage] = useState(restored?.quotePassage || restored?.end || { bookId: 'gn', chapter: 1, verse: 1 });
-  const [quoteEndVerse, setQuoteEndVerse] = useState(restored?.quoteEndVerse || restored?.end?.verse || 1);
+  const [quotePassage, setQuotePassage] = useState(restored?.quotePassage || restored?.end || lastRead || { bookId: 'gn', chapter: 1, verse: 1 });
+  const [quoteEndVerse, setQuoteEndVerse] = useState(restored?.quoteEndVerse || restored?.end?.verse || lastRead?.verse || 1);
   const [quotes, setQuotes] = useState(restored?.quotes || []);
   const [editingSession, setEditingSession] = useState(null);
   const [editingQuote, setEditingQuote] = useState(null);
@@ -264,7 +266,10 @@ export function ScriptureView({
       setTab('canon');
       return;
     }
-    const next = { bookId: book.id, chapter: progress?.chapter || 1, verse: 1 };
+    // Continua do ponto em que a sessão anterior parou. Sem histórico neste
+    // livro, começa no capítulo 1 — não no último capítulo já lido.
+    const resume = lastRead?.bookId === book.id ? lastRead : null;
+    const next = resume || { bookId: book.id, chapter: 1, verse: 1 };
     persistEnabledRef.current = true;
     setStart(next);
     setEnd(next);
@@ -274,7 +279,8 @@ export function ScriptureView({
     setQuoteText('');
     setQuoteNote('');
     setQuotePassage(next);
-    setQuoteEndVerse(1);
+    setQuoteEndVerse(next.verse);
+    setSelectedId(book.id);
     timer.restart();
     setSessionOpen(true);
     setTab('canon');
@@ -358,7 +364,7 @@ export function ScriptureView({
             {totals.books} livros · {totals.chapters} capítulos · {totals.verses.toLocaleString('pt-BR')} versículos. O tempo não entra na Biblioteca.
           </p>
         </div>
-        <button type="button" onClick={() => openSession(selected)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#111', fontWeight: 800, cursor: 'pointer' }}>
+        <button type="button" onClick={() => openSession(lastRead ? getBibleBook(lastRead.bookId) : selected)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#111', fontWeight: 800, cursor: 'pointer' }}>
           <Play size={16} /> Ler agora
         </button>
       </div>

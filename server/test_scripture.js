@@ -5,7 +5,8 @@ import {
   bibleTotals,
   getBibleBook,
   verseCount,
-  isValidPassage
+  isValidPassage,
+  continuationFromSessions
 } from '../src/data/bibleCanon.js';
 import {
   logScriptureSession,
@@ -176,5 +177,25 @@ assert.equal(mergeScriptureDrafts(newer, older).notes, 'Atualizado no outro apar
 const cleared = saveScriptureLiveDraft(draftDb, { clear: true });
 assert.equal(cleared.scriptureLiveDraft, null);
 assert.equal(draftDb.scriptureLiveDraft, null);
+
+assert.equal(continuationFromSessions([]), null, 'sem sessões, não há livro para continuar');
+assert.deepEqual(
+  continuationFromSessions([
+    { endBookId: 'gn', endChapter: 1, endVerse: 1, date: '2026-07-01', timestamp: '2026-07-01T10:00:00.000Z' },
+    { endBookId: 'ec', endChapter: 2, endVerse: 14, date: '2026-07-20', timestamp: '2026-07-20T08:00:00.000Z' },
+    { endBookId: 'sl', endChapter: 23, endVerse: 1, date: '2026-07-10', timestamp: '2026-07-10T08:00:00.000Z' }
+  ]),
+  { bookId: 'ec', chapter: 2, verse: 14 },
+  'a nova sessão continua no livro, capítulo e versículo em que a anterior parou'
+);
+assert.deepEqual(
+  continuationFromSessions([
+    { endBookId: 'mt', endChapter: 5, endVerse: 3, date: '2026-07-20', timestamp: '2026-07-20T08:00:00.000Z' },
+    { endBookId: 'joa', endChapter: 3, endVerse: 16, date: '2026-07-20', timestamp: '2026-07-20T21:00:00.000Z' }
+  ]),
+  { bookId: 'joa', chapter: 3, verse: 16 },
+  'no mesmo dia, vale a sessão mais recente'
+);
+assert.equal(continuationFromSessions([{ endBookId: 'apocrifo', endChapter: 1, endVerse: 1, date: '2026-07-20' }]), null);
 
 console.log('✅ leitura da Bíblia: cânone, sessão, citação, reflexão, tempo independente e rascunho vivo');
