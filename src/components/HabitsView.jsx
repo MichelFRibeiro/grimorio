@@ -17,11 +17,11 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  History,
   RotateCcw,
   Clock,
   EyeOff,
-  Activity
+  Activity,
+  History
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityContextFields } from './ActivityContextFields';
@@ -31,7 +31,7 @@ import { getSaoPauloDateStr, getHabitWeeklyStats, getCurrentWeekDays, addDaysToD
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, inferDifficultyFromRewards, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
 import { getFrequencyLabel, getHabitDueStatus, getHabitPeriodStatus, getHabitWeekDays, isPeriodFrequency, padMonthDay, WEEKDAY_OPTIONS } from '../utils/habitFrequency';
-import { formatDurationLabel, getHabitDurationForDate, getHabitCountForDate, sumDurationMap, sumCountMap, confirmLongDuration, MAX_DURATION_MINUTES, MAX_HABIT_COUNT } from '../utils/activityDuration';
+import { formatDurationLabel, getHabitDurationForDate, getHabitCountForDate, sumDurationMap, sumCountMap, confirmLongDuration, MAX_DURATION_MINUTES, MAX_HABIT_COUNT, MAX_HABIT_NOTE_LENGTH } from '../utils/activityDuration';
 import { consumeActivityTimerMinutes, peekActivityTimerMinutes } from '../utils/liveActivityTimers';
 import {
   HABIT_HOMEOSTASIS_FLOOR_COUNT,
@@ -47,6 +47,7 @@ import {
   normalizeHabitTracking
 } from '../utils/habitHomeostasis';
 import { HabitLoadChart } from './HabitLoadChart';
+import { HabitHistoryModal, habitHistoryButtonStyle } from './HabitHistoryModal';
 
 const HIDE_SETTLED_STORAGE_KEY = 'grimorio_hide_settled_habits';
 const MONTH_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
@@ -518,15 +519,37 @@ export function HabitsView({
     if (!alreadyDone && habit && habitTracksCount(habit)) {
       setCountPromptError('');
       setCountPromptValue('');
+      setCountPromptNote('');
       setCountPrompt({ habitId, date, extra });
+      return;
+    }
+    if (!alreadyDone && isToday) {
+      setNotePromptValue('');
+      setNotePrompt({ habitId, date, extra });
       return;
     }
     onToggleHabit(habitId, date, extra);
   };
 
+  const closeNotePrompt = () => {
+    setNotePrompt(null);
+    setNotePromptValue('');
+  };
+
+  const confirmNotePrompt = () => {
+    if (!notePrompt) return;
+    const note = notePromptValue.trim();
+    onToggleHabit(notePrompt.habitId, notePrompt.date, {
+      ...notePrompt.extra,
+      ...(note ? { note } : {})
+    });
+    closeNotePrompt();
+  };
+
   const closeCountPrompt = () => {
     setCountPrompt(null);
     setCountPromptValue('');
+    setCountPromptNote('');
     setCountPromptError('');
   };
 
@@ -537,7 +560,12 @@ export function HabitsView({
       setCountPromptError(`Informe uma quantidade entre 1 e ${MAX_HABIT_COUNT}.`);
       return;
     }
-    onToggleHabit(countPrompt.habitId, countPrompt.date, { ...countPrompt.extra, count });
+    const note = countPromptNote.trim();
+    onToggleHabit(countPrompt.habitId, countPrompt.date, {
+      ...countPrompt.extra,
+      count,
+      ...(note ? { note } : {})
+    });
     closeCountPrompt();
   };
 
@@ -591,7 +619,11 @@ export function HabitsView({
   const [countDrafts, setCountDrafts] = useState({});
   const [countPrompt, setCountPrompt] = useState(null);
   const [countPromptValue, setCountPromptValue] = useState('');
+  const [countPromptNote, setCountPromptNote] = useState('');
   const [countPromptError, setCountPromptError] = useState('');
+  const [historyHabitId, setHistoryHabitId] = useState(null);
+  const [notePrompt, setNotePrompt] = useState(null);
+  const [notePromptValue, setNotePromptValue] = useState('');
 
   useEffect(() => {
     try {
@@ -1268,6 +1300,15 @@ export function HabitsView({
                         <Activity size={12} /> {countSeries.homeostasisMinMinutes}–{countSeries.homeostasisMaxMinutes} {habitMeasureLabel(habit, 'count')}
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="habit-history-btn"
+                      onClick={() => setHistoryHabitId(habit.id)}
+                      style={habitHistoryButtonStyle()}
+                      title="Histórico de execução deste ritual"
+                    >
+                      <History size={12} /> Histórico
+                    </button>
                   </div>
 
                   {/* Weekly Progress Tracker */}
@@ -2642,6 +2683,17 @@ export function HabitsView({
                   style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '0.95rem' }}
                 />
               </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8' }}>Notas (opcional)</span>
+                <textarea
+                  value={countPromptNote}
+                  maxLength={MAX_HABIT_NOTE_LENGTH}
+                  rows={3}
+                  onChange={(event) => setCountPromptNote(event.target.value)}
+                  placeholder="Como foi esta execução?"
+                  style={{ width: '100%', resize: 'vertical', padding: '10px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '0.95rem', fontFamily: 'inherit' }}
+                />
+              </label>
               {countPromptError ? <p style={{ margin: 0, color: '#f87171', fontSize: '0.82rem' }}>{countPromptError}</p> : null}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <button type="button" onClick={closeCountPrompt} style={{ padding: '8px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', fontWeight: 700, cursor: 'pointer' }}>Cancelar</button>
@@ -2651,6 +2703,54 @@ export function HabitsView({
           </div>
         );
       })()}
+
+      {notePrompt && (() => {
+        const habit = (habits || []).find((item) => item.id === notePrompt.habitId);
+        return (
+          <div
+            style={{ position: 'fixed', inset: 0, background: 'rgba(2, 6, 23, 0.78)', zIndex: 50, display: 'grid', placeItems: 'center', padding: '20px' }}
+            onClick={closeNotePrompt}
+          >
+            <form
+              className="glass-panel"
+              onClick={(event) => event.stopPropagation()}
+              onSubmit={(event) => {
+                event.preventDefault();
+                confirmNotePrompt();
+              }}
+              style={{ width: 'min(420px, 100%)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}
+            >
+              <h3 style={{ margin: 0, color: '#f8fafc' }}>{habit?.title || 'Ritual'}</h3>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8' }}>Notas (opcional)</span>
+                <textarea
+                  value={notePromptValue}
+                  maxLength={MAX_HABIT_NOTE_LENGTH}
+                  rows={3}
+                  autoFocus
+                  onChange={(event) => setNotePromptValue(event.target.value)}
+                  placeholder="Como foi esta execução? Pode deixar em branco."
+                  style={{ width: '100%', resize: 'vertical', padding: '10px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '0.95rem', fontFamily: 'inherit' }}
+                />
+              </label>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button type="button" onClick={closeNotePrompt} style={{ padding: '8px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', fontWeight: 700, cursor: 'pointer' }}>Cancelar</button>
+                <button type="submit" style={{ padding: '8px 14px', borderRadius: '10px', border: 'none', background: '#38bdf8', color: '#0f172a', fontWeight: 800, cursor: 'pointer' }}>Registrar</button>
+              </div>
+            </form>
+          </div>
+        );
+      })()}
+
+      {historyHabitId && (
+        <HabitHistoryModal
+          habit={(habits || []).find((item) => item.id === historyHabitId) || null}
+          onClose={() => setHistoryHabitId(null)}
+          onSaveNote={onUpdateHabitDuration
+            ? (id, date, note) => onUpdateHabitDuration(id, date, undefined, undefined, note)
+            : null}
+        />
+      )}
 
       <ConfirmModal
         isOpen={confirmModal.isOpen}

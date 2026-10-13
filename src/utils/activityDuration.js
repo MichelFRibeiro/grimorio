@@ -114,6 +114,35 @@ export function clearHabitCountForDate(habit, dateStr) {
   return setHabitCountForDate(habit, dateStr, 0);
 }
 
+/** Anotação facultativa de uma execução. Vazio apaga a nota daquele dia. */
+export const MAX_HABIT_NOTE_LENGTH = 500;
+
+export function parseHabitNote(value) {
+  if (value == null) return '';
+  return String(value).replace(/\r\n/g, '\n').trim().slice(0, MAX_HABIT_NOTE_LENGTH);
+}
+
+export function getHabitNoteForDate(habit, dateStr) {
+  if (!habit || !dateStr) return '';
+  return parseHabitNote(habit.notesByDate?.[dateStr]);
+}
+
+export function setHabitNoteForDate(habit, dateStr, note) {
+  if (!habit || !dateStr) return habit;
+  const value = parseHabitNote(note);
+  if (!habit.notesByDate || typeof habit.notesByDate !== 'object' || Array.isArray(habit.notesByDate)) {
+    habit.notesByDate = {};
+  }
+  if (value) habit.notesByDate[dateStr] = value;
+  else delete habit.notesByDate[dateStr];
+  if (Object.keys(habit.notesByDate).length === 0) delete habit.notesByDate;
+  return habit;
+}
+
+export function clearHabitNoteForDate(habit, dateStr) {
+  return setHabitNoteForDate(habit, dateStr, '');
+}
+
 export function sumCountMap(map) {
   if (!map || typeof map !== 'object') return 0;
   return Object.values(map).reduce((acc, value) => acc + parseHabitCount(value), 0);

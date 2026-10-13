@@ -2030,7 +2030,8 @@ app.put('/api/habits/:id/duration', (req, res) => {
     const result = domainUpdateHabitDuration(db, req.params.id, {
       date: req.body?.date,
       durationMinutes: req.body?.durationMinutes,
-      count: req.body?.count
+      count: req.body?.count,
+      note: req.body?.note
     });
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
@@ -2054,6 +2055,7 @@ app.post('/api/habits/:id/toggle', (req, res) => {
       date: req.body?.date,
       durationMinutes: req.body?.durationMinutes,
       count: req.body?.count,
+      note: req.body?.note,
       decisionId: req.body?.decisionId
     });
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
@@ -2128,6 +2130,7 @@ app.post('/api/routines/:id/advance', (req, res) => {
       habitId: req.body?.habitId,
       durationMinutes: req.body?.durationMinutes,
       count: req.body?.count,
+      note: req.body?.note,
       decisionId: req.body?.decisionId,
       undo: req.body?.undo
     });

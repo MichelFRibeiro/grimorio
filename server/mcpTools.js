@@ -1091,6 +1091,7 @@ export const toolsDefinition = [
           countUnit: h.countUnit || '',
           countsByDate: h.countsByDate || {},
           durationsByDate: h.durationsByDate || {},
+          notesByDate: h.notesByDate || {},
           totalDurationMinutes: sumDurationMap(h.durationsByDate),
           createdAt: h.createdAt
         };
@@ -1180,7 +1181,8 @@ export const toolsDefinition = [
       id: z.string().describe('ID do ritual/hábito'),
       date: z.string().optional().describe('Data da execução YYYY-MM-DD (se omitido, usa a data atual)'),
       durationMinutes: z.number().optional().describe('Tempo cronometrado do ritual em minutos (igual às sessões de leitura e baterias de questões)'),
-      count: z.number().optional().describe('Quantidade feita neste dia (ex. 20 push-ups). Usado quando o ritual mede quantidade.')
+      count: z.number().optional().describe('Quantidade feita neste dia (ex. 20 push-ups). Usado quando o ritual mede quantidade.'),
+      note: z.string().optional().describe('Anotação facultativa desta execução. Vazio não grava nota.')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1212,14 +1214,16 @@ export const toolsDefinition = [
       id: z.string().describe('ID do ritual/hábito'),
       date: z.string().optional().describe('Data da execução YYYY-MM-DD (se omitido, usa hoje). Precisa já estar marcada.'),
       durationMinutes: z.number().optional().describe('Nova duração em minutos (0 a 480). 0 remove o tempo.'),
-      count: z.number().optional().describe('Nova quantidade do dia (0 remove).')
+      count: z.number().optional().describe('Nova quantidade do dia (0 remove).'),
+      note: z.string().optional().describe('Anotação desta execução. Vazio remove a nota do dia.')
     },
     handler: async (args) => {
       const db = getDb();
       const result = domainUpdateHabitDuration(db, args.id, {
         date: args.date,
         durationMinutes: args.durationMinutes,
-        count: args.count
+        count: args.count,
+        note: args.note
       });
       if (result.error) return formatError(result.error);
       saveDb(db);
@@ -1380,6 +1384,7 @@ export const toolsDefinition = [
       habitId: z.string().optional().describe('ID do ritual. Ao marcar, precisa ser o próximo. Ao desfazer, o passo já feito.'),
       durationMinutes: z.number().optional().describe('Tempo cronometrado deste passo em minutos'),
       count: z.number().optional().describe('Quantidade feita neste passo, se o ritual mede quantidade'),
+      note: z.string().optional().describe('Anotação facultativa desta execução'),
       undo: z.boolean().optional().describe('true desmarca o passo indicado por habitId')
     },
     handler: async (args) => {

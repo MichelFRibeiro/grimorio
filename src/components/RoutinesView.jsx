@@ -8,17 +8,19 @@ import {
   Plus,
   RotateCcw,
   Trash2,
-  Pencil
+  Pencil,
+  History
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityTimerBox } from './ActivityTimerBox';
 import { getFrequencyLabel } from '../utils/habitFrequency';
-import { MAX_DURATION_MINUTES, MAX_HABIT_COUNT, confirmLongDuration, formatDurationLabel, getHabitDurationForDate, secondsToDurationMinutes, sumDurationMap } from '../utils/activityDuration';
+import { MAX_DURATION_MINUTES, MAX_HABIT_COUNT, MAX_HABIT_NOTE_LENGTH, confirmLongDuration, formatDurationLabel, getHabitDurationForDate, getHabitNoteForDate, secondsToDurationMinutes, sumDurationMap } from '../utils/activityDuration';
 import { consumeActivityTimerMinutes } from '../utils/liveActivityTimers';
 import { useActivityTimer } from '../hooks/useActivityTimer';
 import { formatTimer } from '../hooks/useStopwatch';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import { getHabitLoadSeries, habitMeasureLabel, habitTracksCount, habitTracksTime } from '../utils/habitHomeostasis';
+import { HabitHistoryModal, habitHistoryButtonStyle } from './HabitHistoryModal';
 
 const ACCENT = '#38bdf8';
 
@@ -146,6 +148,8 @@ export function RoutinesView({
   const [stepMinutes, setStepMinutes] = useState('');
   const [minutesEdited, setMinutesEdited] = useState(false);
   const [stepError, setStepError] = useState('');
+  const [stepNote, setStepNote] = useState('');
+  const [historyHabitId, setHistoryHabitId] = useState(null);
 
   const habitById = useMemo(() => new Map((habits || []).map(habit => [habit.id, habit])), [habits]);
   const available = (habits || []).filter(habit => !form.steps.some(step => step.habitId === habit.id));
@@ -220,6 +224,9 @@ export function RoutinesView({
     if (step.missing) return;
     setStepError('');
     setStepCount('');
+    setStepNote(step.doneToday
+      ? getHabitNoteForDate(habitById.get(step.habitId), getSaoPauloDateStr())
+      : '');
     setMinutesEdited(false);
     setStepMinutes(step.doneToday
       ? String(getHabitDurationForDate(habitById.get(step.habitId), getSaoPauloDateStr()) || '')
@@ -266,24 +273,43 @@ export function RoutinesView({
       consumeActivityTimerMinutes('habit', habit.id);
       if (confirmed > 0) extra.durationMinutes = confirmed;
     }
+    const note = stepNote.trim();
+    if (note) extra.note = note;
     const result = await advance(routine, extra);
     if (result) closeStep();
     else setStepError('Não foi possível registrar o ritual.');
   };
 
-  const saveDoneMinutes = async (habit) => {
+  const saveDoneExecution = async (habit) => {
     if (!habit || !onUpdateHabitDuration) return;
-    const raw = String(stepMinutes).trim();
-    const nextMinutes = raw === '' ? 0 : parseInt(raw, 10);
-    if (!Number.isFinite(nextMinutes) || nextMinutes < 0 || nextMinutes > MAX_DURATION_MINUTES) {
-      setStepError(`O tempo precisa ser um número entre 0 e ${MAX_DURATION_MINUTES} minutos.`);
+    setStepError('');
+    const today = getSaoPauloDateStr();
+    const tracksTime = habitTracksTime(habit);
+    let confirmed = undefined;
+    if (tracksTime) {
+      const raw = String(stepMinutes).trim();
+      const nextMinutes = raw === '' ? 0 : parseInt(raw, 10);
+      if (!Number.isFinite(nextMinutes) || nextMinutes < 0 || nextMinutes > MAX_DURATION_MINUTES) {
+        setStepError(`O tempo precisa ser um número entre 0 e ${MAX_DURATION_MINUTES} minutos.`);
+        return;
+      }
+      confirmed = confirmLongDuration(nextMinutes);
+      if (confirmed == null) return;
+    }
+    const noteChanged = stepNote !== getHabitNoteForDate(habit, today);
+    if (confirmed === undefined && !noteChanged) {
+      closeStep();
       return;
     }
-    const confirmed = confirmLongDuration(nextMinutes);
-    if (confirmed == null) return;
-    const result = await onUpdateHabitDuration(habit.id, getSaoPauloDateStr(), confirmed);
+    const result = await onUpdateHabitDuration(
+      habit.id,
+      today,
+      confirmed,
+      undefined,
+      noteChanged ? stepNote : undefined
+    );
     if (result) closeStep();
-    else setStepError('Não foi possível corrigir o tempo.');
+    else setStepError('Não foi possível salvar a execução.');
   };
 
   const undoStep = async (routine, habitId) => {
@@ -434,10 +460,26 @@ export function RoutinesView({
                           <div style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.9rem' }}>
                             {step.missing ? 'Ritual excluído' : (step.title || 'Ritual')}
                           </div>
-                          <div style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
-                            {step.missing
-                              ? 'Tire este passo ao editar a rotina.'
-                              : `${getFrequencyLabel(habit || step)}${step.note ? ` · ${step.note}` : ''}`}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
+                            <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
+                              {step.missing
+                                ? 'Tire este passo ao editar a rotina.'
+                                : `${getFrequencyLabel(habit || step)}${step.note ? ` · ${step.note}` : ''}`}
+                            </span>
+                            {!step.missing && (
+                              <button
+                                type="button"
+                                className="habit-history-btn"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setHistoryHabitId(step.habitId);
+                                }}
+                                style={habitHistoryButtonStyle()}
+                                title="Histórico de execução deste ritual"
+                              >
+                                <History size={12} /> Histórico
+                              </button>
+                            )}
                           </div>
                           {band ? (
                             <div className="routine-band" style={{ marginTop: '2px' }}>esperado {band}</div>
@@ -615,10 +657,21 @@ export function RoutinesView({
                 {habit.description ? (
                   <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: '0.82rem' }}>{habit.description}</p>
                 ) : null}
-                <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: '0.75rem' }}>
-                  {habit.category || 'Pessoal'} · {getFrequencyLabel(habit)}
-                  {step.note ? ` · ${step.note}` : ''}
-                  {habit.currentStreak ? ` · 🔥 ${habit.currentStreak}` : ''}
+                <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span>
+                    {habit.category || 'Pessoal'} · {getFrequencyLabel(habit)}
+                    {step.note ? ` · ${step.note}` : ''}
+                    {habit.currentStreak ? ` · 🔥 ${habit.currentStreak}` : ''}
+                  </span>
+                  <button
+                    type="button"
+                    className="habit-history-btn"
+                    onClick={() => setHistoryHabitId(habit.id)}
+                    style={habitHistoryButtonStyle()}
+                    title="Histórico de execução deste ritual"
+                  >
+                    <History size={12} /> Histórico
+                  </button>
                 </p>
               </div>
 
@@ -656,6 +709,18 @@ export function RoutinesView({
                 </label>
               )}
 
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={labelStyle}>Notas (opcional)</span>
+                <textarea
+                  value={stepNote}
+                  maxLength={MAX_HABIT_NOTE_LENGTH}
+                  rows={3}
+                  onChange={(event) => setStepNote(event.target.value)}
+                  placeholder="Como foi esta execução?"
+                  style={{ ...fieldStyle, resize: 'vertical', fontFamily: 'inherit' }}
+                />
+              </label>
+
               {step.doneToday && (
                 <p style={{ margin: 0, color: '#34d399', fontWeight: 700, fontSize: '0.85rem' }}>
                   Feito hoje. Desmarcar estorna XP e moedas deste ritual.
@@ -681,24 +746,22 @@ export function RoutinesView({
                 <button type="button" onClick={closeStep} style={{ ...iconBtn, width: 'auto', padding: '8px 12px' }}>Fechar</button>
                 {step.doneToday ? (
                   <>
-                  {tracksTime && (
-                    <button
-                      type="button"
-                      disabled={!onUpdateHabitDuration}
-                      onClick={() => saveDoneMinutes(habit)}
-                      style={{
-                        padding: '8px 14px',
-                        borderRadius: '10px',
-                        border: `1px solid ${ACCENT}`,
-                        background: 'rgba(56, 189, 248, 0.12)',
-                        color: ACCENT,
-                        fontWeight: 800,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Salvar tempo
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    disabled={!onUpdateHabitDuration}
+                    onClick={() => saveDoneExecution(habit)}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '10px',
+                      border: `1px solid ${ACCENT}`,
+                      background: 'rgba(56, 189, 248, 0.12)',
+                      color: ACCENT,
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {tracksTime ? 'Salvar' : 'Salvar nota'}
+                  </button>
                   <button
                     type="button"
                     disabled={busyId === routine.id}
@@ -743,6 +806,16 @@ export function RoutinesView({
           </div>
         );
       })()}
+
+      {historyHabitId && (
+        <HabitHistoryModal
+          habit={habitById.get(historyHabitId) || null}
+          onClose={() => setHistoryHabitId(null)}
+          onSaveNote={onUpdateHabitDuration
+            ? (id, date, note) => onUpdateHabitDuration(id, date, undefined, undefined, note)
+            : null}
+        />
+      )}
 
       <ConfirmModal
         isOpen={!!confirmId}

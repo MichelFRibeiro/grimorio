@@ -871,3 +871,9 @@ kbd {
   font-weight: 700;
   font-size: 0.78rem;
 }
+
+/* O botão Histórico nasce em ciano claro, que some no papel creme. */
+.habit-history-btn {
+  color: #1d6f8a;
+  border-color: rgba(29, 111, 138, 0.45);
+}

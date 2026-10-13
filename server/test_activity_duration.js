@@ -11,6 +11,9 @@ import {
   getHabitDurationForDate,
   setHabitDurationForDate,
   clearHabitDurationForDate,
+  getHabitNoteForDate,
+  setHabitNoteForDate,
+  clearHabitNoteForDate,
   mergeLiveActivityTimers,
   clearLiveActivityTimer,
   liveTimersEqual,
@@ -155,6 +158,36 @@ function run() {
   assert.ok(getDb().habits.find((habit) => habit.id === 'h-dur').history.includes('2026-09-03'));
   assert.strictEqual(getDb().userProfile.xp, habitXp);
   assert.strictEqual(getDb().actionLogs.find((log) => log.id === habitLogId).details.durationMinutes, 48);
+
+  const noted = toggleHabit(getDb(), { id: 'h-dur', date: '2026-09-02', note: '  Pegadinha no art. 5º  ' });
+  assert.strictEqual(noted.done, true);
+  assert.strictEqual(getHabitNoteForDate(noted.habit, '2026-09-02'), 'Pegadinha no art. 5º');
+  const noteLogId = noted.habit.rewardLogs['2026-09-02'];
+  assert.strictEqual(getDb().actionLogs.find((log) => log.id === noteLogId).details.note, 'Pegadinha no art. 5º');
+
+  const xpAfterNote = getDb().userProfile.xp;
+  const noteEdited = updateHabitDuration(getDb(), 'h-dur', { date: '2026-09-02', note: 'Revisar novamente' });
+  assert.strictEqual(noteEdited.note, 'Revisar novamente');
+  assert.strictEqual(getHabitNoteForDate(getDb().habits.find((item) => item.id === 'h-dur'), '2026-09-02'), 'Revisar novamente');
+  assert.strictEqual(getDb().userProfile.xp, xpAfterNote, 'editar a anotação não altera XP');
+
+  const noteCleared = updateHabitDuration(getDb(), 'h-dur', { date: '2026-09-02', note: '   ' });
+  assert.strictEqual(noteCleared.note, '');
+  assert.strictEqual(getDb().habits.find((item) => item.id === 'h-dur').notesByDate, undefined);
+  assert.strictEqual(getDb().actionLogs.find((log) => log.id === noteLogId).details.note, undefined);
+
+  const unmarkedNote = updateHabitDuration(getDb(), 'h-dur', { date: '2026-09-01', note: 'não marcada' });
+  assert.ok(unmarkedNote.error, 'dia não marcado não aceita anotação');
+
+  setHabitNoteForDate(habit, '2026-09-03', '  nota avulsa  ');
+  assert.strictEqual(getHabitNoteForDate(habit, '2026-09-03'), 'nota avulsa');
+  clearHabitNoteForDate(habit, '2026-09-03');
+  assert.strictEqual(habit.notesByDate, undefined);
+
+  const undone = toggleHabit(getDb(), { id: 'h-dur', date: '2026-09-02' });
+  assert.strictEqual(undone.done, false);
+  assert.strictEqual(getHabitNoteForDate(undone.habit, '2026-09-02'), '');
+  console.log('✅ A anotação da execução é gravada, editada, removida e estornada ao desmarcar.');
 
   const habitCleared = updateHabitDuration(getDb(), 'h-dur', { date: '2026-09-03', durationMinutes: 0 });
   assert.strictEqual(getDb().habits.find((habit) => habit.id === 'h-dur').durationsByDate, undefined);

@@ -144,7 +144,7 @@ export function deleteRoutine(db, id) {
  * exatamente o próximo. `undo: true` desmarca um passo já feito hoje —
  * o estorno de XP e moedas é o do próprio ritual.
  */
-export function advanceRoutine(db, id, { habitId, durationMinutes, count, decisionId, undo } = {}) {
+export function advanceRoutine(db, id, { habitId, durationMinutes, count, note, decisionId, undo } = {}) {
   if (undo) return undoRoutineStep(db, id, { habitId });
   const routines = ensureList(db);
   const routine = routines.find(item => item.id === id);
@@ -163,6 +163,7 @@ export function advanceRoutine(db, id, { habitId, durationMinutes, count, decisi
     date: todayStr,
     durationMinutes,
     count,
+    note,
     decisionId
   });
   if (toggled.error) return toggled;
