@@ -141,6 +141,7 @@ export function RoutinesView({
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
   const [activeStep, setActiveStep] = useState(null);
+  const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [stepCount, setStepCount] = useState('');
   const [stepMinutes, setStepMinutes] = useState('');
   const [minutesEdited, setMinutesEdited] = useState(false);
@@ -161,6 +162,15 @@ export function RoutinesView({
     setForm(formFromRoutine(routine));
     setPicker('');
     setModal({ mode: 'edit', id: routine.id });
+  };
+
+  const toggleExpanded = (routineId) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(routineId)) next.delete(routineId);
+      else next.add(routineId);
+      return next;
+    });
   };
 
   const addStep = () => {
@@ -336,15 +346,47 @@ export function RoutinesView({
             const time = routineTime(routine, habitById, getSaoPauloDateStr());
             const todayLabel = formatDurationLabel(time.todayMinutes);
             const totalLabel = formatDurationLabel(time.totalMinutes);
+            const closed = !!routine.completeToday;
+            const expanded = !closed || expandedIds.has(routine.id);
             return (
-              <article key={routine.id} className="glass-panel" style={{ padding: '16px 18px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                  <div>
-                    <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.05rem' }}>{routine.title}</h3>
-                    {routine.description ? (
-                      <p style={{ margin: '4px 0 0', color: '#94a3b8', fontSize: '0.82rem' }}>{routine.description}</p>
-                    ) : null}
-                  </div>
+              <article key={routine.id} className="glass-panel" style={{ padding: expanded ? '16px 18px' : '10px 14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {closed ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(routine.id)}
+                      aria-expanded={expanded}
+                      title={expanded ? 'Recolher rotina' : 'Expandir rotina'}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        flex: '1 1 180px',
+                        minWidth: 0,
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'inherit',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        padding: 0
+                      }}
+                    >
+                      {expanded ? <ChevronUp size={16} color="#34d399" /> : <ChevronDown size={16} color="#34d399" />}
+                      <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.05rem' }}>{routine.title}</h3>
+                      {!expanded ? (
+                        <span style={{ color: '#34d399', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          concluída
+                        </span>
+                      ) : null}
+                    </button>
+                  ) : (
+                    <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+                      <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.05rem' }}>{routine.title}</h3>
+                      {routine.description ? (
+                        <p style={{ margin: '4px 0 0', color: '#94a3b8', fontSize: '0.82rem' }}>{routine.description}</p>
+                      ) : null}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button type="button" onClick={() => openEdit(routine)} title="Editar" style={iconBtn}>
                       <Pencil size={15} />
@@ -355,6 +397,12 @@ export function RoutinesView({
                   </div>
                 </div>
 
+                {expanded && closed && routine.description ? (
+                  <p style={{ margin: '8px 0 0', color: '#94a3b8', fontSize: '0.82rem' }}>{routine.description}</p>
+                ) : null}
+
+                {expanded && (
+                <>
                 <div style={{ margin: '12px 0 8px', height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
                   <div style={{ width: `${ratio}%`, height: '100%', background: routine.completeToday ? '#34d399' : ACCENT }} />
                 </div>
@@ -442,6 +490,8 @@ export function RoutinesView({
                     ? `Fazer agora: ${next.title}${nextExpected ? ` · esperado ${nextExpected}` : ''}`
                     : 'Nada pendente nesta sequência'}
                 </button>
+                </>
+                )}
               </article>
             );
           })}
