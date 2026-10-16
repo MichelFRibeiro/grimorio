@@ -48,6 +48,31 @@ function upsertById(list, item) {
   return arr;
 }
 
+/**
+ * Um GET /api/state que saiu antes da escrita (outra aba, poll, cache HTTP)
+ * não pode apagar uma conclusão que o servidor já confirmou. A resposta do
+ * toggle é a fonte da verdade até um GET posterior devolvê-la.
+ */
+function mergeConfirmedHabits(incoming, confirmed) {
+  if (!confirmed?.size || !incoming || typeof incoming !== 'object') return incoming;
+  const habits = Array.isArray(incoming.habits) ? incoming.habits.slice() : [];
+  let changed = false;
+  confirmed.forEach((habit) => {
+    if (!habit?.id) return;
+    const idx = habits.findIndex((entry) => entry && entry.id === habit.id);
+    const current = idx === -1 ? null : habits[idx];
+    const history = Array.isArray(current?.history) ? current.history : [];
+    const confirmedHistory = Array.isArray(habit.history) ? habit.history : [];
+    const missing = confirmedHistory.some((date) => !history.includes(date));
+    if (!missing && idx !== -1) return;
+    if (idx === -1) habits.unshift(habit);
+    else habits[idx] = habit;
+    changed = true;
+  });
+  if (!changed) return incoming;
+  return { ...incoming, habits };
+}
+
 export function useGameData() {
   const initialCached = useRef(readCachedState());
   const [data, setData] = useState(() => initialCached.current);
@@ -58,6 +83,9 @@ export function useGameData() {
   const [chestQueue, setChestQueue] = useState([]);
   const dataRef = useRef(initialCached.current);
   const fetchGenRef = useRef(0);
+  // Rituais cuja conclusão o servidor já confirmou nesta sessão. Um snapshot
+  // antigo (cache do navegador ou GET disparado antes do toggle) não os reabre.
+  const confirmedHabitsRef = useRef(new Map());
   const failCountRef = useRef(0);
   const toastTimersRef = useRef(new Set());
   const [retryNonce, setRetryNonce] = useState(0);
@@ -107,6 +135,7 @@ export function useGameData() {
     try {
       const res = await fetchWithRetry('/api/state', {
         headers: getAuthHeaders(),
+        cache: 'no-store',
         signal: abortSignal
       }, { retries: 2, signal: abortSignal });
       if (gen !== fetchGenRef.current) return;
@@ -118,9 +147,18 @@ export function useGameData() {
       }
       const json = await res.json();
       if (gen !== fetchGenRef.current) return;
-      setData(json);
-      dataRef.current = json;
-      writeCachedState(json);
+      const confirmed = confirmedHabitsRef.current;
+      const habits = Array.isArray(json?.habits) ? json.habits : [];
+      confirmed.forEach((habit, id) => {
+        const fresh = habits.find((entry) => entry && entry.id === id);
+        const history = Array.isArray(fresh?.history) ? fresh.history : [];
+        const confirmedHistory = Array.isArray(habit?.history) ? habit.history : [];
+        if (confirmedHistory.every((date) => history.includes(date))) confirmed.delete(id);
+      });
+      const merged = mergeConfirmedHabits(json, confirmed);
+      setData(merged);
+      dataRef.current = merged;
+      writeCachedState(merged);
       setError(null);
       failCountRef.current = 0;
       hydrateLiveActivityTimers(json.liveActivityTimers || {}, { sync: true });
@@ -359,6 +397,11 @@ export function useGameData() {
       }
       if (result.habit) {
         next.habits = upsertById(next.habits, result.habit);
+        if (result.done && Array.isArray(result.habit.history)) {
+          confirmedHabitsRef.current.set(result.habit.id, result.habit);
+        } else if (result.done === false) {
+          confirmedHabitsRef.current.delete(result.habit.id);
+        }
         changed = true;
       }
       if (result.routine) {
@@ -456,6 +499,7 @@ export function useGameData() {
       const res = await fetch(path, {
         method,
         headers: getAuthHeaders(),
+        cache: 'no-store',
         ...(body !== undefined ? { body: JSON.stringify(body) } : {})
       });
       if (!res.ok) {
@@ -1069,6 +1113,7 @@ export function useGameData() {
           origin: { y: 0.7 }
         });
       }
+      handleLinkedVictories(result.linkedVictories);
       fetchState();
     }
   };

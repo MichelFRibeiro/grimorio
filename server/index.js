@@ -4,7 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, saveDb, initDb, getPool, flushDb, rewardPlayer, revertPlayerReward, revertLog, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG, applyCategoryRename, getDataDir } from './db.js';
+import { getDb, saveDb, initDb, getPool, flushDb, currentWriteSeq, rewardPlayer, revertPlayerReward, revertLog, getXpForLevel, getTitleForLevel, findOrCreateUser, createBossRaid, BOSS_CATALOG, applyCategoryRename, getDataDir } from './db.js';
 import { runMaintenance } from './domain/maintenance.js';
 import { weekKeyOf } from './domain/bossWeek.js';
 import { listUnacknowledged, acknowledgePenalty, acknowledgeAllPenalties, prepareContest } from './domain/penalties.js';
@@ -578,8 +578,22 @@ function maintain(db, now = new Date()) {
 
 let lastStateSanitized = { dbRef: null, todayStr: '' };
 
-app.get('/api/state', (req, res) => {
+app.get('/api/state', async (req, res) => {
   try {
+    // O estado muda a cada conclusão. Sem isto o navegador pode reexibir o
+    // JSON de antes do toggle e o ritual volta a pendente depois do confete.
+    res.setHeader('Cache-Control', 'no-store');
+    // Espera a escrita já enfileirada (toggle de ritual, sync de cronômetro)
+    // antes de serializar. Sem isto um GET disparado no mesmo instante devolve
+    // o snapshot anterior e a tela recoloca o ritual como pendente.
+    const pendingWrite = currentWriteSeq();
+    if (pendingWrite > 0) {
+      await flushDb({ seq: pendingWrite, timeoutMs: 8000 }).catch((err) => {
+        // A memória já tem a conclusão. Falha ou prazo da fila não pode
+        // devolver 500 nem um snapshot anterior ao toggle.
+        console.warn(`⚠️ [Grimório DB] GET /api/state seguiu com o estado em memória: ${err?.message || err}`);
+      });
+    }
     const db = getDb();
     const maintenance = maintain(db);
     const todayStr = getSaoPauloDateStr();
@@ -2078,6 +2092,8 @@ app.post('/api/habits/:id/toggle', (req, res) => {
       done: result.done,
       doneToday: result.doneToday,
       rewardResult: result.rewardResult,
+      linkedVictories: result.linkedVictories,
+      today: buildTodayPayload(db),
       analytics: computeAnalytics()
     });
   } catch (err) {
@@ -2152,10 +2168,12 @@ app.post('/api/routines/:id/advance', (req, res) => {
       routine: result.routine,
       step: result.step,
       habit: result.habit,
+      done: result.undone ? false : true,
       rewardResult: result.rewardResult,
       progress: result.progress,
       completeToday: result.completeToday,
       undone: result.undone || false,
+      today: buildTodayPayload(db),
       analytics: computeAnalytics()
     });
   } catch (err) {
