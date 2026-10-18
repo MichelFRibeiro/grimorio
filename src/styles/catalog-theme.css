@@ -877,3 +877,80 @@ kbd {
   color: #1d6f8a;
   border-color: rgba(29, 111, 138, 0.45);
 }
+
+/* Diário nasceu com texto claro de fundo escuro. No papel creme a tinta
+   some: marrom no miolo, carimbo nos acentos, campo claro para escrever. */
+.journal-title,
+.journal-title h2,
+.journal-stats strong,
+.journal-entry strong,
+.journal-paper,
+.journal-field input,
+.journal-field textarea,
+.journal-paper-top input,
+.journal-search input,
+.journal-list-tools select,
+.journal-moods button,
+.journal-entry-actions button {
+  color: var(--cat-ink);
+}
+
+.journal-header p,
+.journal-empty,
+.journal-editing,
+.journal-stats span,
+.journal-stats small,
+.journal-paper-foot span,
+.journal-entry small,
+.journal-entry span,
+.journal-entry-date,
+.journal-entry-date em,
+.journal-field,
+.journal-paper-top label,
+.journal-search,
+.journal-search svg {
+  color: var(--cat-ink-soft);
+}
+
+.journal-title,
+.journal-editing em,
+.journal-month h3,
+.journal-ghost {
+  color: var(--cat-stamp);
+}
+
+.journal-field input,
+.journal-field textarea,
+.journal-paper-top input,
+.journal-search input,
+.journal-list-tools select {
+  background: #fffdf8;
+  border-color: var(--cat-rule);
+  color-scheme: light;
+}
+
+.journal-field input::placeholder,
+.journal-field textarea::placeholder,
+.journal-search input::placeholder {
+  color: #6d5d4c;
+  opacity: 1;
+}
+
+.journal-moods button {
+  background: #fffdf8;
+  border-color: var(--cat-rule);
+}
+
+.journal-moods button.is-active {
+  background: rgba(176, 56, 11, 0.12);
+  border-color: var(--cat-stamp);
+  color: var(--cat-ink);
+}
+
+.journal-entry-actions button {
+  background: var(--cat-paper-deep);
+}
+
+.journal-error {
+  color: #9f1239;
+}

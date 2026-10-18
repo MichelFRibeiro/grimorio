@@ -3438,13 +3438,13 @@ kbd {
 
 .journal-title {
   align-items: center;
-  color: #e8c98a;
+  color: var(--accent-gold);
 }
 
 .journal-title h2 {
   margin: 0;
   font-size: 1.35rem;
-  color: #f8fafc;
+  color: var(--text-main);
 }
 
 .journal-header p,
@@ -3453,7 +3453,7 @@ kbd {
 .journal-stats small,
 .journal-entry small,
 .journal-entry-date em {
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 0.88rem;
 }
 
@@ -3490,9 +3490,9 @@ kbd {
 }
 
 .journal-ghost {
-  border: 1px solid rgba(232, 201, 138, 0.35);
+  border: 1px solid var(--border-bright);
   background: transparent;
-  color: #e8c98a;
+  color: var(--accent-gold);
   padding: 10px 14px;
 }
 
@@ -3510,7 +3510,7 @@ kbd {
 
 .journal-stats span {
   display: block;
-  color: #cbd5e1;
+  color: var(--text-muted);
   font-size: 0.78rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3519,7 +3519,7 @@ kbd {
 .journal-stats strong {
   display: block;
   margin-top: 4px;
-  color: #f8f1e3;
+  color: var(--text-main);
   font-family: var(--font-mono);
   font-size: 1.35rem;
 }
@@ -3528,9 +3528,8 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background:
-    linear-gradient(180deg, rgba(232, 201, 138, 0.08), rgba(19, 23, 34, 0.2)),
-    rgba(19, 23, 34, 0.85);
+  background: var(--bg-card);
+  color: var(--text-main);
 }
 
 .journal-paper-top,
@@ -3549,7 +3548,7 @@ kbd {
 
 .journal-editing em {
   font-style: normal;
-  color: #e8c98a;
+  color: var(--accent-gold);
 }
 
 .journal-field,
@@ -3558,7 +3557,7 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  color: #cbd5e1;
+  color: var(--text-muted);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -3571,15 +3570,23 @@ kbd {
 .journal-search input,
 .journal-list-tools select {
   width: 100%;
-  border: 1px solid rgba(232, 201, 138, 0.22);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  background: rgba(12, 10, 8, 0.55);
-  color: #f8f1e3;
+  background: var(--bg-card-hover);
+  color: var(--text-main);
+  color-scheme: light;
   padding: 10px 12px;
   text-transform: none;
   letter-spacing: 0;
   font-weight: 500;
   font-size: 1rem;
+}
+
+.journal-field input::placeholder,
+.journal-field textarea::placeholder,
+.journal-search input::placeholder {
+  color: var(--text-dim);
+  opacity: 1;
 }
 
 .journal-field textarea {
@@ -3596,16 +3603,16 @@ kbd {
 }
 
 .journal-moods button {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-  color: #cbd5e1;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card-hover);
+  color: var(--text-main);
   padding: 7px 10px;
 }
 
 .journal-moods button.is-active {
-  border-color: rgba(232, 201, 138, 0.7);
-  background: rgba(232, 201, 138, 0.16);
-  color: #f8f1e3;
+  border-color: var(--accent-gold);
+  background: var(--accent-gold-glow);
+  color: var(--text-main);
 }
 
 .journal-paper-foot {
@@ -3614,13 +3621,13 @@ kbd {
 
 .journal-paper-foot span,
 .journal-entry small {
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 0.8rem;
 }
 
 .journal-error {
   margin: 0;
-  color: #fca5a5;
+  color: var(--accent-rose);
   font-size: 0.88rem;
 }
 
@@ -3639,7 +3646,7 @@ kbd {
   position: absolute;
   left: 12px;
   bottom: 12px;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .journal-search input {
@@ -3653,7 +3660,7 @@ kbd {
 
 .journal-month h3 {
   margin: 0 0 8px;
-  color: #e8c98a;
+  color: var(--accent-gold);
   font-size: 0.95rem;
   font-weight: 700;
 }
@@ -3678,8 +3685,8 @@ kbd {
 }
 
 .journal-month li.is-active {
-  border-color: rgba(232, 201, 138, 0.45);
-  background: rgba(232, 201, 138, 0.06);
+  border-color: var(--border-bright);
+  background: var(--accent-gold-glow);
 }
 
 .journal-entry {
@@ -3695,13 +3702,13 @@ kbd {
 }
 
 .journal-entry strong {
-  color: #f8fafc;
+  color: var(--text-main);
   font-size: 1rem;
 }
 
 .journal-entry span,
 .journal-entry-date {
-  color: #cbd5e1;
+  color: var(--text-muted);
 }
 
 .journal-entry-date {
@@ -3719,8 +3726,8 @@ kbd {
   align-items: center;
   justify-content: center;
   border: 0;
-  background: rgba(255, 255, 255, 0.05);
-  color: #cbd5e1;
+  background: var(--bg-card-active);
+  color: var(--text-main);
 }
 
 .journal-empty {
