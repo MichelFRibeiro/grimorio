@@ -83,6 +83,11 @@ O script irá:
 - O registro pode ser corrigido ou excluído depois. Excluir o de ontem faz a pergunta voltar.
 - Gráfico de 14, 30 ou 90 dias com três linhas: tempo no celular, quantidade de atividades realizadas e tempo gasto nelas (missões, rituais, Biblioteca, Escrituras e AGU).
 
+### 📓 Diário
+- Aba **Diário**: páginas com data, título opcional, texto e humor opcional (sereno, grato, focado, alegre, cansado, inquieto, pesado).
+- Várias páginas no mesmo dia. Dá para corrigir, buscar e apagar. O rascunho não salvo fica no navegador até guardar.
+- Não concede XP, moedas nem dano no chefe. Desligar em Configurações só esconde a aba.
+
 ### 💊 Suplementos
 - Cadastro de suplementos (Omega 3, Creatina) com unidade e dose usual.
 - Registro de cada tomada com data, hora e quantidade.
@@ -132,7 +137,7 @@ O script irá:
 - O motor local roda em `server/nextAction.js`; o julgamento do Jev, em `server/oracleJev.js`; a memória (energia, quantidades e desfechos), em `server/oracleMemory.js`.
 
 ### ⚙️ Configurações
-- Botão **Configurações** no cabeçalho, ao lado de Sair. Cada função do Grimório tem um interruptor: Vitórias Planejadas, Chefe Ativo, O Oráculo indica, Hoje, Missões, Questões, Biblioteca, Escrituras, Mapas, Processos, Rituais, Rotinas, Suplementos, Celular, Correlações, Foco, Taverna, AGU, Oráculo e Bate Papo.
+- Botão **Configurações** no cabeçalho, ao lado de Sair. Cada função do Grimório tem um interruptor: Vitórias Planejadas, Chefe Ativo, O Oráculo indica, Hoje, Missões, Questões, Biblioteca, Escrituras, Mapas, Processos, Rituais, Rotinas, Suplementos, Celular, Diário, Correlações, Foco, Taverna, AGU, Oráculo e Bate Papo.
 - Desligar **só esconde**. Missões, rituais, leituras, moedas e o plano AGU continuam gravados; ligar de novo devolve tudo como estava. O Oráculo deixa de indicar o que estiver desligado, e o painel Hoje deixa de mostrar a seção correspondente.
 - A preferência fica no perfil (`POST /api/profile` com `featureSettings`) e vale em qualquer aparelho da mesma conta.
 
@@ -222,6 +227,10 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 - `list_routines`: Lista as sequências e o progresso de hoje (vem do histórico de cada ritual).
 - `create_routine`, `update_routine`, `delete_routine`: CRUD da ordem. Não concede recompensa.
 - `advance_routine`: Marca o próximo ritual ainda não feito hoje, reusando streak, XP e moedas do ritual. Recusa passo fora de ordem.
+
+#### 6.3. 📓 Diário (`journal`)
+- `list_journal_entries`, `get_journal_entry`, `create_journal_entry`, `update_journal_entry`, `delete_journal_entry`.
+- Não concede XP. Várias páginas no mesmo dia. Data `YYYY-MM-DD`; humor opcional: `sereno`, `grato`, `focado`, `alegre`, `cansado`, `inquieto`, `pesado`.
 
 #### 7. 🧠 Mapas Mentais (`mindMaps`)
 - `list_mind_maps`, `get_mind_map`, `create_mind_map`, `update_mind_map`.

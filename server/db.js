@@ -19,6 +19,7 @@ import { sanitizeMindMaps, sanitizeMindMapSessions, sanitizeMindMapCategories, s
 import { ensureOracleMemory } from './oracleMemory.js';
 import { sanitizeDailyReviews, sanitizeWeeklyPlans } from './domain/today.js';
 import { sanitizePhoneTimeLogs } from '../src/utils/phoneTime.js';
+import { sanitizeJournalEntries } from '../src/utils/journal.js';
 import { sanitizeRoutines } from '../src/utils/routines.js';
 import { setStoredOpenRouterKey } from './jevClient.js';
 import { sanitizeChatRooms } from './chatRoom.js';
@@ -429,6 +430,7 @@ export const defaultDatabase = () => {
     dailyReviews: [],
     weeklyPlans: [],
     phoneTimeLogs: [],
+    journalEntries: [],
     chatRooms: [],
     penalties: [],
     bossHistory: [],
@@ -487,6 +489,7 @@ export function sanitizeDb(db) {
   if (!Array.isArray(db.supplements)) db.supplements = [];
   if (!Array.isArray(db.supplementLogs)) db.supplementLogs = [];
   db.phoneTimeLogs = sanitizePhoneTimeLogs(db.phoneTimeLogs);
+  db.journalEntries = sanitizeJournalEntries(db.journalEntries);
   db.chatRooms = sanitizeChatRooms(db.chatRooms);
   if (!db.rewards) db.rewards = [];
   if (!db.rewardRedemptions) db.rewardRedemptions = [];

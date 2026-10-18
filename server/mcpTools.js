@@ -11,6 +11,13 @@ import {
   updateSupplementLog,
   deleteSupplementLog
 } from './domain/supplements.js';
+import {
+  createJournalEntry,
+  deleteJournalEntry,
+  getJournalEntry,
+  listJournalEntries,
+  updateJournalEntry
+} from './domain/journal.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
 import { computeAnalytics } from './analytics.js';
 import { discoverCorrelations } from './correlations.js';
@@ -1559,6 +1566,96 @@ export const toolsDefinition = [
       if (result.error) return formatError(result.error);
       saveDb(db);
       return formatSuccess(result.removed, 'Registro de consumo excluído.');
+    }
+  },
+
+  // ==========================================
+  // 6.4.1. DIÁRIO
+  // ==========================================
+  {
+    name: 'list_journal_entries',
+    description: 'Listar páginas do diário pessoal. Não concede XP. Por padrão devolve as 50 mais recentes, com título, humor, data e texto.',
+    schema: {
+      search: z.string().optional().describe('Buscar no título ou no texto'),
+      date: z.string().optional().describe('Filtrar por um dia YYYY-MM-DD'),
+      from: z.string().optional().describe('Data inicial YYYY-MM-DD, inclusive'),
+      to: z.string().optional().describe('Data final YYYY-MM-DD, inclusive'),
+      mood: z.string().optional().describe('Humor: sereno, grato, focado, alegre, cansado, inquieto ou pesado'),
+      limit: z.number().optional().describe('Quantidade máxima, de 1 a 200. Padrão: 50')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const requested = Number(args.limit);
+      const limit = Number.isFinite(requested) && requested > 0 ? Math.min(200, requested) : 50;
+      const result = listJournalEntries(db, { ...args, limit });
+      if (result.error) return formatError(result.error);
+      return formatSuccess(
+        { total: db.journalEntries.length, shown: result.entries.length, entries: result.entries },
+        `${result.entries.length} página(s) do diário.`
+      );
+    }
+  },
+  {
+    name: 'get_journal_entry',
+    description: 'Ler uma página do diário pelo ID.',
+    schema: {
+      id: z.string().describe('ID da página')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = getJournalEntry(db, args.id);
+      if (result.error) return formatError(result.error);
+      return formatSuccess(result.entry, 'Página encontrada.');
+    }
+  },
+  {
+    name: 'create_journal_entry',
+    description: 'Escrever uma página no diário. Várias páginas no mesmo dia são permitidas. Não concede XP, moedas nem dano no chefe.',
+    schema: {
+      body: z.string().describe('Texto da página'),
+      date: z.string().optional().describe('Data YYYY-MM-DD. Sem data, usa hoje em America/Sao_Paulo'),
+      title: z.string().optional().describe('Título opcional, até 140 caracteres'),
+      mood: z.string().optional().describe('Humor opcional: sereno, grato, focado, alegre, cansado, inquieto ou pesado')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = createJournalEntry(db, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.entry, 'Página guardada no diário.');
+    }
+  },
+  {
+    name: 'update_journal_entry',
+    description: 'Corrigir data, título, texto ou humor de uma página do diário.',
+    schema: {
+      id: z.string().describe('ID da página'),
+      body: z.string().optional().describe('Novo texto'),
+      date: z.string().optional().describe('Nova data YYYY-MM-DD'),
+      title: z.string().optional().describe('Novo título. Vazio remove o título'),
+      mood: z.string().optional().describe('Novo humor, ou vazio para limpar')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const { id, ...patch } = args;
+      const result = updateJournalEntry(db, id, patch);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.entry, 'Página do diário atualizada.');
+    }
+  },
+  {
+    name: 'delete_journal_entry',
+    description: 'Apagar uma página do diário. O texto não volta.',
+    schema: {
+      id: z.string().describe('ID da página')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = deleteJournalEntry(db, args.id);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.removed, 'Página do diário excluída.');
     }
   },
 
@@ -3323,6 +3420,20 @@ export const resourcesDefinition = [
         uri: 'grimorio://routines',
         mimeType: 'application/json',
         text: JSON.stringify(listRoutines(db), null, 2)
+      };
+    }
+  },
+  {
+    uri: 'grimorio://journal',
+    name: 'Diário',
+    description: 'Páginas do diário pessoal, com data, título, humor e texto',
+    mimeType: 'application/json',
+    handler: async () => {
+      const db = getDb();
+      return {
+        uri: 'grimorio://journal',
+        mimeType: 'application/json',
+        text: JSON.stringify(db.journalEntries || [], null, 2)
       };
     }
   },

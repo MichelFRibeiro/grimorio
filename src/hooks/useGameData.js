@@ -420,6 +420,10 @@ export function useGameData() {
         next.phoneTimeLogs = result.logs;
         changed = true;
       }
+      if (Array.isArray(result.entries) && path.startsWith('/api/journal')) {
+        next.journalEntries = result.entries;
+        changed = true;
+      }
       if (result.reward) {
         next.rewards = upsertById(next.rewards, result.reward);
         changed = true;
@@ -1217,6 +1221,25 @@ export function useGameData() {
     await mutate(`/api/phone-time/${id}`, { method: 'DELETE' });
   };
 
+  const saveJournalEntry = async (entry = {}) => {
+    playClick();
+    const id = entry.id;
+    const result = await mutate(id ? `/api/journal/${id}` : '/api/journal', {
+      method: id ? 'PUT' : 'POST',
+      body: entry,
+      toastOnError: false
+    });
+    if (!result || result.__error) {
+      throw new Error(result?.error || 'Não foi possível guardar a página.');
+    }
+    return result;
+  };
+
+  const deleteJournalEntry = async (id) => {
+    playClick();
+    return mutate(`/api/journal/${id}`, { method: 'DELETE' });
+  };
+
   // 5. Rewards Actions
   const addReward = async (rewardData) => {
     playClick();
@@ -1794,6 +1817,8 @@ export function useGameData() {
     deleteSupplementLog,
     savePhoneTime,
     deletePhoneTime,
+    saveJournalEntry,
+    deleteJournalEntry,
     addReward,
     spendMoney,
     redeemReward,

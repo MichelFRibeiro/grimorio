@@ -9,7 +9,7 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { DestinyChestModal } from './components/DestinyChestModal';
 import { JudgmentModal } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare, ListOrdered } from 'lucide-react';
+import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare, ListOrdered, NotebookPen } from 'lucide-react';
 import { isFeatureEnabled, isTabEnabled } from './utils/featureSettings';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
@@ -42,6 +42,7 @@ const MindMapsView = lazy(() => import('./components/MindMapsView').then((m) => 
 const AguCampaignView = lazy(() => import('./components/AguCampaignView').then((m) => ({ default: m.AguCampaignView })));
 const CorrelationsView = lazy(() => import('./components/CorrelationsView').then((m) => ({ default: m.CorrelationsView })));
 const PhoneTimeView = lazy(() => import('./components/PhoneTimeView').then((m) => ({ default: m.PhoneTimeView })));
+const JournalView = lazy(() => import('./components/JournalView').then((m) => ({ default: m.JournalView })));
 const ChatRoomView = lazy(() => import('./components/ChatRoomView').then((m) => ({ default: m.ChatRoomView })));
 const FocusChamberView = lazy(() => import('./components/FocusPlayer').then((m) => ({ default: m.FocusChamberView })));
 const JudgmentHistory = lazy(() => import('./components/JudgmentHistory').then((m) => ({ default: m.JudgmentHistory })));
@@ -202,6 +203,8 @@ export function App() {
     deleteMindMapImage,
     savePhoneTime,
     deletePhoneTime,
+    saveJournalEntry,
+    deleteJournalEntry,
     updateProfile
   } = useGameData();
 
@@ -285,6 +288,7 @@ export function App() {
     const aguTodayRemaining = Math.max(0, (aguToday.totalBlocks || 0) - (aguToday.doneCount || 0));
     const dueMindMapsCount = data?.analytics?.summary?.mindMapBranchesDue
       ?? mapsList.reduce((acc, m) => acc + (m.stats?.dueBranches || 0), 0);
+    const todayJournalCount = (data?.journalEntries || []).filter((entry) => entry?.date === todayStr).length;
 
     return {
       routinesDueCount,
@@ -294,7 +298,8 @@ export function App() {
       activeBooksCount,
       activeProcessesCount,
       aguTodayRemaining,
-      dueMindMapsCount
+      dueMindMapsCount,
+      todayJournalCount
     };
   }, [
     data?.routines,
@@ -306,6 +311,7 @@ export function App() {
     data?.mindMaps,
     data?.aguPlan,
     data?.analytics?.summary?.mindMapBranchesDue,
+    data?.journalEntries,
     todayStr
   ]);
 
@@ -443,7 +449,8 @@ export function App() {
     activeBooksCount,
     activeProcessesCount,
     aguTodayRemaining,
-    dueMindMapsCount
+    dueMindMapsCount,
+    todayJournalCount
   } = tabBadges;
 
   const openEvening = async () => {
@@ -500,6 +507,7 @@ export function App() {
     { id: 'routines', label: 'Rotinas', icon: ListOrdered, badge: routinesDueCount },
     { id: 'supplements', label: 'Suplementos', icon: Pill },
     { id: 'phone', label: 'Celular', icon: Smartphone },
+    { id: 'journal', label: 'Diário', icon: NotebookPen, badge: todayJournalCount },
     { id: 'correlations', label: 'Correlações', icon: GitCompare },
     { id: 'focus', label: 'Foco', icon: Headphones },
     { id: 'rewards', label: 'Taverna', icon: Gift },
@@ -802,6 +810,14 @@ export function App() {
             data={data}
             onSave={savePhoneTime}
             onDelete={deletePhoneTime}
+          />
+        )}
+
+        {activeTab === 'journal' && (
+          <JournalView
+            entries={data?.journalEntries || []}
+            onSave={saveJournalEntry}
+            onDelete={deleteJournalEntry}
           />
         )}
 

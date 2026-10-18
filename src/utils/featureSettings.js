@@ -103,6 +103,13 @@ export const FEATURE_SETTINGS = [
     group: 'Abas'
   },
   {
+    id: 'journal',
+    label: 'Diário',
+    tab: 'journal',
+    description: 'As páginas do diário. Desligar só esconde; o texto continua gravado.',
+    group: 'Abas'
+  },
+  {
     id: 'correlations',
     label: 'Correlações',
     tab: 'correlations',

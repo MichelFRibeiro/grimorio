@@ -95,7 +95,8 @@ const IMPORT_ARRAY_CAPS = {
   questCategories: 200,
   oracleEnergyReadings: 5000,
   oracleDecisions: 5000,
-  oracleQuantityReads: 5000
+  oracleQuantityReads: 5000,
+  journalEntries: 5000
 };
 
 const PROFILE_NUMBER_BOUNDS = {
@@ -164,7 +165,8 @@ const IMPORTABLE_KEYS = new Set([
   'mindMapImages',
   'oracleEnergyReadings',
   'oracleDecisions',
-  'oracleQuantityReads'
+  'oracleQuantityReads',
+  'journalEntries'
 ]);
 
 /**

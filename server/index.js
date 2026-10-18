@@ -86,6 +86,12 @@ import {
 import { formatBrl } from '../src/utils/coinExchange.js';
 import { sanitizePhoneTimeLogs } from '../src/utils/phoneTime.js';
 import { deletePhoneTimeLog, upsertPhoneTimeLog } from './domain/phoneTime.js';
+import {
+  createJournalEntry,
+  deleteJournalEntry,
+  listJournalEntries,
+  updateJournalEntry
+} from './domain/journal.js';
 import { parseDurationMinutes, setHabitDurationForDate, clearHabitDurationForDate, mergeLiveActivityTimers, sanitizeLiveActivityTimers, clearLiveActivityTimer, liveTimersEqual } from '../src/utils/activityDuration.js';
 import { AGU_SUBJECTS, createDefaultAguPlan } from '../src/data/aguCurriculum.js';
 import {
@@ -2316,6 +2322,56 @@ app.delete('/api/phone-time/:id', (req, res) => {
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({ success: true, logs: db.phoneTimeLogs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 6.6. DIÁRIO
+// ==========================================
+app.get('/api/journal', (req, res) => {
+  try {
+    const db = getDb();
+    const result = listJournalEntries(db, req.query || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    res.json({ success: true, entries: result.entries, total: db.journalEntries.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/journal', (req, res) => {
+  try {
+    const db = getDb();
+    const result = createJournalEntry(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, entry: result.entry, entries: result.entries, created: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/journal/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = updateJournalEntry(db, req.params.id, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, entry: result.entry, entries: result.entries });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/journal/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = deleteJournalEntry(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, removed: result.removed, entries: result.entries });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
