@@ -3452,7 +3452,8 @@ kbd {
 .journal-editing,
 .journal-stats small,
 .journal-entry small,
-.journal-entry-date em {
+.journal-entry-date em,
+.journal-timer-note {
   color: var(--text-muted);
   font-size: 0.88rem;
 }
@@ -3629,6 +3630,10 @@ kbd {
   margin: 0;
   color: var(--accent-rose);
   font-size: 0.88rem;
+}
+
+.journal-timer-note {
+  margin: 0;
 }
 
 .journal-list {

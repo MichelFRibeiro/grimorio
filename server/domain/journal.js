@@ -1,21 +1,36 @@
 /**
  * Diário pessoal. Várias páginas por dia. Não concede XP nem dano no chefe.
+ * O cronômetro só registra o tempo da página.
  */
 
 import { uid } from '../db.js';
 import { getSaoPauloDateStr } from '../timeUtils.js';
+import { clearLiveActivityTimer } from '../../src/utils/activityDuration.js';
 import {
   JOURNAL_BODY_MAX,
+  JOURNAL_DRAFT_TIMER_ID,
   JOURNAL_MAX_ENTRIES,
+  JOURNAL_TIMER_KIND,
   JOURNAL_TITLE_MAX,
   cleanJournalText,
   isJournalDate,
   isJournalMood,
   sanitizeJournalEntries
 } from '../../src/utils/journal.js';
+import { DomainError, durationMinutes } from './validate.js';
 
 function fail(error, status = 400) {
   return { error, status };
+}
+
+function asError(err) {
+  if (err instanceof DomainError) return fail(err.message, err.status || 400);
+  throw err;
+}
+
+function clearJournalTimer(db, id) {
+  if (!db || !id) return;
+  db.liveActivityTimers = clearLiveActivityTimer(db.liveActivityTimers, JOURNAL_TIMER_KIND, id);
 }
 
 export function ensureJournal(db) {
@@ -56,6 +71,14 @@ function readJournalInput(body = {}, { todayStr, partial = false } = {}) {
     const mood = String(body.mood || '').trim();
     if (!isJournalMood(mood)) return fail('Humor inválido.');
     value.mood = mood;
+  }
+
+  if (has('durationMinutes')) {
+    try {
+      value.durationMinutes = durationMinutes(body.durationMinutes, { fallback: 0, label: 'Duração' });
+    } catch (err) {
+      return asError(err);
+    }
   }
 
   return { value };
@@ -118,6 +141,8 @@ export function createJournalEntry(db, body = {}, { now = new Date(), todayStr =
     createdAt: stamp,
     updatedAt: stamp
   };
+  if (parsed.value.durationMinutes > 0) entry.durationMinutes = parsed.value.durationMinutes;
+  clearJournalTimer(db, JOURNAL_DRAFT_TIMER_ID);
   db.journalEntries.unshift(entry);
   db.journalEntries = sanitizeJournalEntries(db.journalEntries);
   return {
@@ -145,6 +170,7 @@ export function updateJournalEntry(db, id, body = {}, { now = new Date() } = {})
   };
   db.journalEntries[index] = next;
   db.journalEntries = sanitizeJournalEntries(db.journalEntries);
+  clearJournalTimer(db, current.id);
   return {
     entry: db.journalEntries.find((item) => item.id === id) || next,
     entries: db.journalEntries
@@ -156,5 +182,6 @@ export function deleteJournalEntry(db, id) {
   const index = db.journalEntries.findIndex((item) => item.id === id);
   if (index === -1) return fail('Página do diário não encontrada.', 404);
   const [removed] = db.journalEntries.splice(index, 1);
+  clearJournalTimer(db, removed.id);
   return { removed, entries: db.journalEntries };
 }

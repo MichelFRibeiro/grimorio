@@ -2,11 +2,18 @@
  * Diário pessoal.
  *
  * Várias páginas no mesmo dia. Não concede XP, não fere o chefe e não entra
- * nas correlações: é registro, não ritual. Bancos antigos simplesmente não
- * têm a lista — a ausência vira [].
+ * nas correlações: é registro, não ritual. O cronômetro guarda o tempo da
+ * página, como o dos rituais, sem recompensa. Bancos antigos simplesmente
+ * não têm a lista — a ausência vira [].
  */
 
+import { capDurationMinutes } from './activityDuration.js';
 import { addDaysToDateStr, getSaoPauloDateStr } from './timeUtils.js';
+
+/** Mesma família dos cronômetros de ritual (`habit`), missão e vitória. */
+export const JOURNAL_TIMER_KIND = 'journal';
+/** Página ainda sem id. Salvar ou descartar encerra este cronômetro. */
+export const JOURNAL_DRAFT_TIMER_ID = 'draft';
 
 export const JOURNAL_TITLE_MAX = 140;
 export const JOURNAL_BODY_MAX = 20000;
@@ -84,6 +91,18 @@ function cleanId(value) {
   return id;
 }
 
+function cleanDuration(value) {
+  if (value == null || value === '') return 0;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return capDurationMinutes(n);
+}
+
+export function journalTimerId(entryId) {
+  const id = cleanId(entryId);
+  return id || JOURNAL_DRAFT_TIMER_ID;
+}
+
 function normalizeStoredEntry(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const id = cleanId(raw.id);
@@ -91,7 +110,8 @@ function normalizeStoredEntry(raw) {
   const body = cleanJournalText(raw.body).slice(0, JOURNAL_BODY_MAX);
   if (!id || !isJournalDate(date) || !body) return null;
   const mood = MOOD_IDS.has(raw.mood) ? raw.mood : '';
-  return {
+  const durationMinutes = cleanDuration(raw.durationMinutes);
+  const entry = {
     id,
     date,
     title: cleanJournalText(raw.title).slice(0, JOURNAL_TITLE_MAX),
@@ -100,6 +120,8 @@ function normalizeStoredEntry(raw) {
     createdAt: raw.createdAt || null,
     updatedAt: raw.updatedAt || raw.createdAt || null
   };
+  if (durationMinutes > 0) entry.durationMinutes = durationMinutes;
+  return entry;
 }
 
 function compareEntries(a, b) {

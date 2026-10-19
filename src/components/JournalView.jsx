@@ -1,17 +1,27 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NotebookPen, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { ActivityTimerBox } from './ActivityTimerBox';
 import { ConfirmModal } from './ConfirmModal';
+import { confirmLongDuration, formatDurationLabel } from '../utils/activityDuration';
+import {
+  consumeActivityTimerMinutes,
+  peekActivityTimerMinutes,
+  resetActivityTimer
+} from '../utils/liveActivityTimers';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import {
   JOURNAL_BODY_MAX,
+  JOURNAL_DRAFT_TIMER_ID,
   JOURNAL_MOODS,
+  JOURNAL_TIMER_KIND,
   JOURNAL_TITLE_MAX,
   countWords,
   formatJournalDate,
   formatJournalMonth,
   journalExcerpt,
   journalMood,
-  journalStats
+  journalStats,
+  journalTimerId
 } from '../utils/journal';
 
 const DRAFT_KEY = 'grimorio.journal.draft';
@@ -89,6 +99,8 @@ export function JournalView({ entries = [], onSave, onDelete }) {
 
   const stats = useMemo(() => journalStats(entries, todayStr), [entries, todayStr]);
   const dirty = isDirty(form, entries);
+  const savedDuration = form.id ? (savedCopy(form, entries)?.durationMinutes || 0) : 0;
+  const timerId = journalTimerId(form.id);
   const words = countWords(form.body);
   const nearLimit = form.body.length > JOURNAL_BODY_MAX * 0.8;
 
@@ -117,7 +129,12 @@ export function JournalView({ entries = [], onSave, onDelete }) {
     setError('');
   };
 
+  const abandonDraftTimer = () => {
+    resetActivityTimer(JOURNAL_TIMER_KIND, JOURNAL_DRAFT_TIMER_ID);
+  };
+
   const startNew = () => {
+    abandonDraftTimer();
     setForm(blankForm(todayStr));
     setError('');
     setPendingLeave(null);
@@ -132,6 +149,7 @@ export function JournalView({ entries = [], onSave, onDelete }) {
       setPendingLeave(next);
       return;
     }
+    if (!form.id && next !== 'new') abandonDraftTimer();
     if (next === 'new') startNew();
     else openEntry(next);
   };
@@ -151,6 +169,7 @@ export function JournalView({ entries = [], onSave, onDelete }) {
 
   const confirmLeave = () => {
     const next = pendingLeave;
+    if (!form.id) abandonDraftTimer();
     if (next === 'new') startNew();
     else if (next) openEntry(next);
   };
@@ -161,6 +180,16 @@ export function JournalView({ entries = [], onSave, onDelete }) {
       setError('Escreva alguma coisa antes de guardar.');
       return;
     }
+    const timerId = journalTimerId(form.id);
+    const sessionMinutes = peekActivityTimerMinutes(JOURNAL_TIMER_KIND, timerId);
+    const already = form.id ? (savedCopy(form, entries)?.durationMinutes || 0) : 0;
+    let durationMinutes;
+    if (sessionMinutes > 0) {
+      const confirmed = confirmLongDuration(already + sessionMinutes);
+      if (confirmed == null) return;
+      durationMinutes = confirmed;
+    }
+
     setBusy(true);
     setError('');
     try {
@@ -169,8 +198,10 @@ export function JournalView({ entries = [], onSave, onDelete }) {
         date: form.date,
         title: form.title,
         body: form.body,
-        mood: form.mood
+        mood: form.mood,
+        ...(durationMinutes ? { durationMinutes } : {})
       });
+      consumeActivityTimerMinutes(JOURNAL_TIMER_KIND, timerId);
       startNew();
     } catch (err) {
       setError(err?.message || 'Não foi possível guardar. O texto continua aqui.');
@@ -235,6 +266,18 @@ export function JournalView({ entries = [], onSave, onDelete }) {
             {dirty && <em>rascunho neste navegador</em>}
           </div>
         </div>
+
+        <ActivityTimerBox
+          kind={JOURNAL_TIMER_KIND}
+          id={timerId}
+          label="Cronômetro do Diário"
+          accent="#e8c98a"
+        />
+        {savedDuration > 0 && (
+          <p className="journal-timer-note">
+            Já guardado nesta página: {formatDurationLabel(savedDuration)}. O cronômetro soma ao salvar.
+          </p>
+        )}
 
         <div className="journal-moods" role="group" aria-label="Humor do dia">
           {JOURNAL_MOODS.map((mood) => (
@@ -339,7 +382,10 @@ export function JournalView({ entries = [], onSave, onDelete }) {
                         </span>
                         <strong>{entry.title || journalExcerpt(entry.body, 72)}</strong>
                         {entry.title && <span>{journalExcerpt(entry.body, 180)}</span>}
-                        <small>{countWords(entry.body)} {countWords(entry.body) === 1 ? 'palavra' : 'palavras'}</small>
+                        <small>
+                          {countWords(entry.body)} {countWords(entry.body) === 1 ? 'palavra' : 'palavras'}
+                          {entry.durationMinutes > 0 ? ` · ${formatDurationLabel(entry.durationMinutes)}` : ''}
+                        </small>
                       </button>
                       <div className="journal-entry-actions">
                         <button type="button" onClick={() => leaveTo(entry)} aria-label={`Editar página de ${formatJournalDate(entry.date)}`}>
@@ -371,7 +417,9 @@ export function JournalView({ entries = [], onSave, onDelete }) {
           setPendingDelete(null);
           if (!id) return;
           const result = await onDelete?.(id);
-          if (result && form.id === id) startNew();
+          if (!result || result.__error) return;
+          resetActivityTimer(JOURNAL_TIMER_KIND, id);
+          if (form.id === id) startNew();
         }}
         onCancel={() => setPendingDelete(null)}
       />

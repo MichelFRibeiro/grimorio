@@ -1610,12 +1610,13 @@ export const toolsDefinition = [
   },
   {
     name: 'create_journal_entry',
-    description: 'Escrever uma página no diário. Várias páginas no mesmo dia são permitidas. Não concede XP, moedas nem dano no chefe.',
+    description: 'Escrever uma página no diário. Várias páginas no mesmo dia são permitidas. Não concede XP, moedas nem dano no chefe. O cronômetro da interface guarda durationMinutes ao salvar.',
     schema: {
       body: z.string().describe('Texto da página'),
       date: z.string().optional().describe('Data YYYY-MM-DD. Sem data, usa hoje em America/Sao_Paulo'),
       title: z.string().optional().describe('Título opcional, até 140 caracteres'),
-      mood: z.string().optional().describe('Humor opcional: sereno, grato, focado, alegre, cansado, inquieto ou pesado')
+      mood: z.string().optional().describe('Humor opcional: sereno, grato, focado, alegre, cansado, inquieto ou pesado'),
+      durationMinutes: z.number().optional().describe('Minutos cronometrados, de 0 a 480. 0 ou ausente não grava tempo')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1627,13 +1628,14 @@ export const toolsDefinition = [
   },
   {
     name: 'update_journal_entry',
-    description: 'Corrigir data, título, texto ou humor de uma página do diário.',
+    description: 'Corrigir data, título, texto, humor ou tempo cronometrado de uma página do diário.',
     schema: {
       id: z.string().describe('ID da página'),
       body: z.string().optional().describe('Novo texto'),
       date: z.string().optional().describe('Nova data YYYY-MM-DD'),
       title: z.string().optional().describe('Novo título. Vazio remove o título'),
-      mood: z.string().optional().describe('Novo humor, ou vazio para limpar')
+      mood: z.string().optional().describe('Novo humor, ou vazio para limpar'),
+      durationMinutes: z.number().optional().describe('Tempo total da página, de 0 a 480. 0 apaga. Sem o campo, mantém o tempo já guardado')
     },
     handler: async (args) => {
       const db = getDb();

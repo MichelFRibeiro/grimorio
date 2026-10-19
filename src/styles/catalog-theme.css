@@ -908,7 +908,8 @@ kbd {
 .journal-field,
 .journal-paper-top label,
 .journal-search,
-.journal-search svg {
+.journal-search svg,
+.journal-timer-note {
   color: var(--cat-ink-soft);
 }
 

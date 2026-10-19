@@ -11,9 +11,12 @@ import {
 import { isFeatureEnabled } from '../src/utils/featureSettings.js';
 import {
   JOURNAL_BODY_MAX,
+  JOURNAL_DRAFT_TIMER_ID,
   JOURNAL_MAX_ENTRIES,
+  JOURNAL_TIMER_KIND,
   countWords,
   journalExcerpt,
+  journalTimerId,
   journalWritingStreak,
   sanitizeJournalEntries
 } from '../src/utils/journal.js';
@@ -94,6 +97,51 @@ assert.equal(journalWritingStreak(db.journalEntries, today), 2);
 assert.equal(journalWritingStreak(db.journalEntries, '2026-10-19'), 2);
 assert.equal(journalWritingStreak([], today), 0);
 assert.equal(journalExcerpt('linha\n\nseguinte com mais texto', 12).endsWith('…'), true);
+
+const draftKey = `${JOURNAL_TIMER_KIND}:${JOURNAL_DRAFT_TIMER_ID}`;
+db.liveActivityTimers = {
+  [draftKey]: { accumulatedMs: 120000, runStartedAt: Date.now(), updatedAt: Date.now() - 1000 }
+};
+const timed = createJournalEntry(db, {
+  body: 'Página cronometrada.',
+  durationMinutes: 12
+}, { todayStr: today, now: new Date('2026-10-18T20:00:00.000Z') });
+assert.equal(timed.error, undefined);
+assert.equal(timed.entry.durationMinutes, 12);
+assert.equal(db.liveActivityTimers[draftKey].cleared, true);
+assert.equal(journalTimerId(null), JOURNAL_DRAFT_TIMER_ID);
+assert.equal(journalTimerId(timed.entry.id), timed.entry.id);
+
+const entryKey = `${JOURNAL_TIMER_KIND}:${timed.entry.id}`;
+db.liveActivityTimers[entryKey] = {
+  accumulatedMs: 60000,
+  runStartedAt: Date.now(),
+  updatedAt: Date.now() - 500
+};
+const keptTime = updateJournalEntry(db, timed.entry.id, { title: 'Com tempo' });
+assert.equal(keptTime.entry.durationMinutes, 12);
+assert.equal(keptTime.entry.title, 'Com tempo');
+assert.equal(db.liveActivityTimers[entryKey].cleared, true);
+
+const replacedTime = updateJournalEntry(db, timed.entry.id, { durationMinutes: 40 });
+assert.equal(replacedTime.entry.durationMinutes, 40);
+const wipedTime = updateJournalEntry(db, timed.entry.id, { durationMinutes: 0 });
+assert.equal(wipedTime.entry.durationMinutes, undefined);
+
+const tooMuchTime = createJournalEntry(db, { body: 'demais', durationMinutes: 481 }, { todayStr: today });
+assert.match(tooMuchTime.error, /maior/i);
+const negativeTime = createJournalEntry(db, { body: 'negativo', durationMinutes: -1 }, { todayStr: today });
+assert.match(negativeTime.error, /menor/i);
+assert.equal(deleteJournalEntry(db, timed.entry.id).error, undefined);
+
+const sanitizedTime = sanitizeJournalEntries([
+  { id: 'tempo', date: today, body: 'cronometrado', durationMinutes: 18.4 },
+  { id: 'zero', date: today, body: 'sem tempo', durationMinutes: 0 },
+  { id: 'lixo', date: today, body: 'lixo', durationMinutes: 'nao' }
+]);
+assert.equal(sanitizedTime.find((entry) => entry.id === 'tempo').durationMinutes, 18);
+assert.equal(sanitizedTime.find((entry) => entry.id === 'zero').durationMinutes, undefined);
+assert.equal(sanitizedTime.find((entry) => entry.id === 'lixo').durationMinutes, undefined);
 
 const sanitized = sanitizeJournalEntries([
   { id: 'a', date: '2026-13-01', body: 'mês inválido' },
