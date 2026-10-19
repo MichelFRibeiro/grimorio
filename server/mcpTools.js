@@ -161,6 +161,11 @@ import {
 } from './domain/today.js';
 
 const locationEnum = z.enum(['anywhere', 'office', 'home', 'gym']);
+const routineStepSchema = z.object({
+  habitId: z.string().optional().describe('ID do ritual, se o passo for um ritual'),
+  routineId: z.string().optional().describe('ID de outra rotina, se o passo for uma sub-rotina'),
+  note: z.string().optional().describe('Lembrete curto deste passo')
+});
 const timeWindowSchema = z.object({
   start: z.string().describe('Início da janela HH:mm'),
   end: z.string().describe('Fim da janela HH:mm')
@@ -1332,7 +1337,7 @@ export const toolsDefinition = [
   // ==========================================
   {
     name: 'list_routines',
-    description: 'Listar rotinas: sequências ordenadas de rituais. O progresso de hoje vem do histórico de cada ritual. A rotina em si não concede XP nem moedas.',
+    description: 'Listar rotinas: sequências ordenadas de rituais e de outras rotinas. O progresso de hoje vem do histórico de cada ritual, inclusive dentro de sub-rotinas. A rotina em si não concede XP nem moedas.',
     schema: {},
     handler: async () => {
       const db = getDb();
@@ -1342,16 +1347,13 @@ export const toolsDefinition = [
   },
   {
     name: 'create_routine',
-    description: 'Criar uma rotina: conjunto ordenado de rituais existentes (mínimo 2, sem repetir). Não concede recompensa.',
+    description: 'Criar uma rotina: sequência de rituais e/ou outras rotinas (mínimo 2, sem repetir, sem ciclo, no máximo 3 níveis de sub-rotina). Não concede recompensa.',
     schema: {
-      title: z.string().describe('Nome da rotina (ex: Manhã, Fechamento do escritório)'),
+      title: z.string().describe('Nome da rotina (ex: Manhã, Dia inteiro)'),
       description: z.string().optional().describe('Contexto da sequência'),
       icon: z.string().optional().describe('Ícone Lucide (ex: ListOrdered, Sunrise)'),
       color: z.string().optional().describe('Cor hex (#38bdf8)'),
-      steps: z.array(z.object({
-        habitId: z.string().describe('ID do ritual'),
-        note: z.string().optional().describe('Lembrete curto deste passo')
-      })).min(2).describe('Rituais na ordem da sequência')
+      steps: z.array(routineStepSchema).min(2).describe('Passos na ordem: ritual (habitId) ou sub-rotina (routineId)')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1363,17 +1365,14 @@ export const toolsDefinition = [
   },
   {
     name: 'update_routine',
-    description: 'Atualizar título, descrição ou a ordem dos rituais de uma rotina. Não altera recompensas.',
+    description: 'Atualizar título, descrição ou a ordem dos passos de uma rotina. Um passo é um ritual (habitId) ou uma sub-rotina (routineId). Não altera recompensas.',
     schema: {
       id: z.string().describe('ID da rotina'),
       title: z.string().optional().describe('Novo título'),
       description: z.string().optional().describe('Nova descrição'),
       icon: z.string().optional().describe('Novo ícone'),
       color: z.string().optional().describe('Nova cor hex'),
-      steps: z.array(z.object({
-        habitId: z.string().describe('ID do ritual'),
-        note: z.string().optional().describe('Lembrete curto deste passo')
-      })).min(2).optional().describe('Nova sequência completa')
+      steps: z.array(routineStepSchema).min(2).optional().describe('Nova sequência completa. Cada passo leva habitId ou routineId')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1385,7 +1384,7 @@ export const toolsDefinition = [
   },
   {
     name: 'advance_routine',
-    description: 'Marcar o próximo ritual da rotina que ainda não foi feito hoje. Reusa o ritual (streak, XP e moedas). Recusa um passo fora de ordem. Com undo=true, desmarca um passo já feito hoje e estorna as recompensas.',
+    description: 'Marcar o próximo ritual da rotina que ainda não foi feito hoje, inclusive dentro de uma sub-rotina. Reusa o ritual (streak, XP e moedas). Recusa um passo fora de ordem. Com undo=true, desmarca um ritual já feito hoje e estorna as recompensas.',
     schema: {
       id: z.string().describe('ID da rotina'),
       habitId: z.string().optional().describe('ID do ritual. Ao marcar, precisa ser o próximo. Ao desfazer, o passo já feito.'),
@@ -1415,7 +1414,7 @@ export const toolsDefinition = [
   },
   {
     name: 'delete_routine',
-    description: 'Excluir uma rotina. Os rituais e as recompensas já concedidas permanecem.',
+    description: 'Excluir uma rotina. Os rituais e as recompensas já concedidas permanecem. Se outras rotinas a usavam como sub-rotina, esse passo é retirado.',
     schema: {
       id: z.string().describe('ID da rotina')
     },
@@ -3414,7 +3413,7 @@ export const resourcesDefinition = [
   {
     uri: 'grimorio://routines',
     name: 'Rotinas',
-    description: 'Sequências ordenadas de rituais e o progresso de hoje',
+    description: 'Sequências de rituais e sub-rotinas, com o progresso de hoje',
     mimeType: 'application/json',
     handler: async () => {
       const db = getDb();

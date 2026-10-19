@@ -1134,14 +1134,16 @@ export function useGameData() {
 
   const addRoutine = async (routineData) => {
     playClick();
-    const result = await mutate('/api/routines', { method: 'POST', body: routineData });
-    return !!result;
+    const result = await mutate('/api/routines', { method: 'POST', body: routineData, toastOnError: false });
+    if (!result || result.__error) return result?.error || 'Não foi possível salvar a rotina.';
+    return true;
   };
 
   const updateRoutine = async (id, routineData) => {
     playClick();
-    const result = await mutate(`/api/routines/${id}`, { method: 'PUT', body: routineData });
-    return !!result;
+    const result = await mutate(`/api/routines/${id}`, { method: 'PUT', body: routineData, toastOnError: false });
+    if (!result || result.__error) return result?.error || 'Não foi possível salvar a rotina.';
+    return true;
   };
 
   const advanceRoutine = async (id, extra = {}) => {

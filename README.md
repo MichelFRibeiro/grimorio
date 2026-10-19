@@ -101,11 +101,12 @@ O script irá:
 - **Homeostase & Alostase** (opt-in, no cadastro): a faixa sobe com a capacidade, como no estudo da AGU, no que o ritual mede. Sobe no máximo 10% por semana se 4 dos últimos 7 dias ficaram na faixa. Tempo: piso 10 min, meta 60. Quantidade: piso 5, meta 50. Com os dois, cada um tem a sua faixa. O chip no cartão abre o gráfico e planeja a vitória do dia no piso.
 
 ### 📋 Rotinas
-- Uma rotina é uma sequência de rituais já cadastrados (mínimo 2, sem repetir o mesmo ritual).
-- O modo guiado marca só o próximo passo ainda não feito hoje. O ritual é quem recebe streak, XP e moedas — a rotina não dá recompensa extra.
+- Uma rotina é uma sequência de rituais já cadastrados e, se quiser, de outras rotinas (mínimo 2 passos, sem repetir o mesmo ritual ou a mesma sub-rotina).
+- Rotina de rotinas: a sub-rotina entra inteira como um passo. O modo guiado faz os rituais dela, na ordem, antes de seguir. Editar a sub-rotina atualiza quem a usa. Não dá para criar um ciclo nem passar de 3 níveis.
+- O modo guiado marca só o próximo ritual ainda não feito hoje, mesmo dentro de uma sub-rotina. O ritual é quem recebe streak, XP e moedas — a rotina não dá recompensa extra.
 - Clicar num passo abre o ritual: cronômetro, quantidade (se o ritual mede) e o registro. Um passo já feito pode ser desmarcado ali — o estorno é o do ritual.
 - Ritual com homeostase mostra a quantidade esperada naquela execução (a faixa viva, ex.: 5–6 min), no passo, no botão “Fazer agora” e no registro. Sem homeostase, nada extra aparece.
-- Marcar o ritual na aba Rituais também avança a rotina. Excluir o ritual tira o passo da sequência.
+- Marcar o ritual na aba Rituais também avança a rotina. Excluir o ritual tira o passo da sequência. Excluir uma sub-rotina tira esse passo das rotinas que a usavam.
 
 ### ⚖️ Julgamento
 - Punição preguiçosa, idempotente, só a partir da data de ativação (`penaltiesSince`) — o histórico anterior não é julgado.
@@ -224,9 +225,9 @@ O token pode ser visualizado ou regenerado no cabeçalho da aplicação clicando
 - `update_habit`, `delete_habit`.
 
 #### 6.2. 📋 Rotinas (`routines`)
-- `list_routines`: Lista as sequências e o progresso de hoje (vem do histórico de cada ritual).
-- `create_routine`, `update_routine`, `delete_routine`: CRUD da ordem. Não concede recompensa.
-- `advance_routine`: Marca o próximo ritual ainda não feito hoje, reusando streak, XP e moedas do ritual. Recusa passo fora de ordem.
+- `list_routines`: Lista as sequências, as sub-rotinas e o progresso de hoje (vem do histórico de cada ritual).
+- `create_routine`, `update_routine`, `delete_routine`: CRUD da ordem. Um passo leva `habitId` ou `routineId`. Não concede recompensa. Recusa ciclo e mais de 3 níveis.
+- `advance_routine`: Marca o próximo ritual ainda não feito hoje, inclusive dentro de uma sub-rotina. Reusa streak, XP e moedas do ritual. Recusa passo fora de ordem.
 
 #### 6.3. 📓 Diário (`journal`)
 - `list_journal_entries`, `get_journal_entry`, `create_journal_entry`, `update_journal_entry`, `delete_journal_entry`.

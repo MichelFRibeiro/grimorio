@@ -1,16 +1,21 @@
 /**
- * Rotinas: playbook ordenado de rituais.
- * Criar/editar não concede recompensa. Avançar um passo chama toggleHabit,
- * que é quem grava streak, XP, moedas e Consistência do ritual.
+ * Rotinas: playbook ordenado de rituais e de outras rotinas.
+ * Criar/editar não concede recompensa. Avançar um passo chama toggleHabit
+ * do próximo ritual ainda não feito hoje — mesmo se ele estiver dentro
+ * de uma sub-rotina. O ritual é quem grava streak, XP, moedas e Consistência.
  */
 
 import { uid } from '../db.js';
 import { getSaoPauloDateStr } from '../timeUtils.js';
 import { toggleHabit } from './activities.js';
 import {
-  MAX_ROUTINE_STEPS,
   detachHabitFromRoutines,
+  detachRoutineFromRoutines,
+  findRoutineHabitStep,
+  flattenRoutineLeaves,
+  nextRoutineLeaf,
   nextRoutineStep,
+  normalizeRoutineSteps,
   resolveRoutineSteps,
   routineDayProgress,
   sanitizeRoutine,
@@ -26,64 +31,74 @@ function ensureList(db) {
   return db.routines;
 }
 
-function normalizeSteps(rawSteps, habits) {
-  if (!Array.isArray(rawSteps)) return fail('Informe a sequência de rituais.');
-  const habitIds = new Set((habits || []).map(h => h.id));
-  const seen = new Set();
-  const steps = [];
-  for (const step of rawSteps) {
-    const habitId = String(step?.habitId || step?.id || '').trim();
-    if (!habitId) continue;
-    if (seen.has(habitId)) return fail('A rotina não pode repetir o mesmo ritual.');
-    if (!habitIds.has(habitId)) return fail('Um dos rituais da sequência não existe.');
-    seen.add(habitId);
-    steps.push({
-      habitId,
-      note: String(step?.note || '').trim().slice(0, 240)
-    });
-    if (steps.length > MAX_ROUTINE_STEPS) {
-      return fail(`Uma rotina tem no máximo ${MAX_ROUTINE_STEPS} passos.`);
-    }
-  }
-  if (steps.length < 2) return fail('Uma rotina precisa de pelo menos 2 rituais em sequência.');
-  return { steps };
+function catalog(db) {
+  const habits = db.habits || [];
+  return {
+    habits,
+    routines: sanitizeRoutines(ensureList(db), habits)
+  };
 }
 
 export function listRoutines(db, { todayStr = getSaoPauloDateStr() } = {}) {
-  const routines = sanitizeRoutines(ensureList(db), db.habits || []);
-  return routines.map(routine => decorateRoutine(routine, db.habits || [], todayStr));
+  const { habits, routines } = catalog(db);
+  return routines.map(routine => decorateRoutine(routine, habits, todayStr, routines));
 }
 
-export function decorateRoutine(routine, habits, todayStr) {
-  const steps = resolveRoutineSteps(routine, habits, todayStr);
-  const progress = routineDayProgress(steps);
-  const next = nextRoutineStep(steps);
+export function decorateRoutine(routine, habits, todayStr, allRoutines = []) {
+  const resolved = resolveRoutineSteps(routine, habits, todayStr, allRoutines);
+  const progress = routineDayProgress(resolved);
+  const next = nextRoutineLeaf(resolved);
   return {
     ...routine,
-    steps: steps.map(step => ({
-      habitId: step.habitId,
-      note: step.note,
-      title: step.habit?.title || null,
-      icon: step.habit?.icon || null,
-      frequency: step.habit?.frequency || null,
-      tracking: step.habit?.tracking || 'time',
-      countUnit: step.habit?.countUnit || '',
-      category: step.habit?.category || null,
-      description: step.habit?.description || '',
-      missing: step.missing,
-      doneToday: step.doneToday,
-      currentStreak: step.habit?.currentStreak || 0
-    })),
+    steps: resolved.map(decorateResolvedStep),
     progress,
     nextHabitId: next?.habitId || null,
     completeToday: progress.complete
   };
 }
 
+function decorateResolvedStep(step) {
+  if (step.kind === 'routine') {
+    const child = step.routine;
+    const next = nextRoutineStep(flattenRoutineLeaves(step.steps));
+    return {
+      kind: 'routine',
+      routineId: step.routineId,
+      note: step.note || '',
+      title: child?.title || null,
+      icon: child?.icon || 'ListOrdered',
+      color: child?.color || '#38bdf8',
+      description: child?.description || '',
+      missing: !!step.missing,
+      doneToday: !!step.doneToday,
+      progress: step.progress || routineDayProgress(step.steps),
+      nextHabitId: next?.habitId || null,
+      steps: (step.steps || []).map(decorateResolvedStep)
+    };
+  }
+  return {
+    kind: 'habit',
+    habitId: step.habitId,
+    note: step.note || '',
+    title: step.habit?.title || null,
+    icon: step.habit?.icon || null,
+    frequency: step.habit?.frequency || null,
+    tracking: step.habit?.tracking || 'time',
+    countUnit: step.habit?.countUnit || '',
+    category: step.habit?.category || null,
+    description: step.habit?.description || '',
+    missing: !!step.missing,
+    doneToday: !!step.doneToday,
+    currentStreak: step.habit?.currentStreak || 0
+  };
+}
+
 export function createRoutine(db, payload = {}) {
   const title = String(payload.title || '').trim();
   if (!title) return fail('Título da rotina é obrigatório.');
-  const normalized = normalizeSteps(payload.steps, db.habits || []);
+  const habits = db.habits || [];
+  const routines = ensureList(db);
+  const normalized = normalizeRoutineSteps(payload.steps, habits, routines, null);
   if (normalized.error) return normalized;
 
   const routine = sanitizeRoutine({
@@ -97,8 +112,9 @@ export function createRoutine(db, payload = {}) {
     updatedAt: null
   });
   if (!routine) return fail('Não foi possível criar a rotina.');
-  ensureList(db).unshift(routine);
-  return { routine: decorateRoutine(routine, db.habits || [], getSaoPauloDateStr()) };
+  routines.unshift(routine);
+  const todayStr = getSaoPauloDateStr();
+  return { routine: decorateRoutine(routine, habits, todayStr, sanitizeRoutines(routines, habits)) };
 }
 
 export function updateRoutine(db, id, payload = {}) {
@@ -112,7 +128,7 @@ export function updateRoutine(db, id, payload = {}) {
 
   let steps = current.steps;
   if (payload.steps !== undefined) {
-    const normalized = normalizeSteps(payload.steps, db.habits || []);
+    const normalized = normalizeRoutineSteps(payload.steps, db.habits || [], routines, id);
     if (normalized.error) return normalized;
     steps = normalized.steps;
   }
@@ -128,7 +144,8 @@ export function updateRoutine(db, id, payload = {}) {
   });
   if (!next) return fail('Não foi possível atualizar a rotina.');
   routines[index] = next;
-  return { routine: decorateRoutine(next, db.habits || [], getSaoPauloDateStr()) };
+  const todayStr = getSaoPauloDateStr();
+  return { routine: decorateRoutine(next, db.habits || [], todayStr, sanitizeRoutines(routines, db.habits || [])) };
 }
 
 export function deleteRoutine(db, id) {
@@ -136,23 +153,25 @@ export function deleteRoutine(db, id) {
   const index = routines.findIndex(item => item.id === id);
   if (index === -1) return fail('Rotina não encontrada.', 404);
   const [removed] = routines.splice(index, 1);
+  db.routines = detachRoutineFromRoutines(routines, id);
   return { removed };
 }
 
 /**
  * Marca o próximo ritual ainda não feito hoje, ou o passo indicado se for
- * exatamente o próximo. `undo: true` desmarca um passo já feito hoje —
- * o estorno de XP e moedas é o do próprio ritual.
+ * exatamente o próximo — inclusive dentro de uma sub-rotina.
+ * `undo: true` desmarca um ritual já feito hoje, em qualquer ramo.
+ * O estorno de XP e moedas é o do próprio ritual.
  */
 export function advanceRoutine(db, id, { habitId, durationMinutes, count, note, decisionId, undo } = {}) {
   if (undo) return undoRoutineStep(db, id, { habitId });
-  const routines = ensureList(db);
+  const { habits, routines } = catalog(db);
   const routine = routines.find(item => item.id === id);
   if (!routine) return fail('Rotina não encontrada.', 404);
 
   const todayStr = getSaoPauloDateStr();
-  const resolved = resolveRoutineSteps(routine, db.habits || [], todayStr);
-  const next = nextRoutineStep(resolved);
+  const resolved = resolveRoutineSteps(routine, habits, todayStr, routines);
+  const next = nextRoutineLeaf(resolved);
   if (!next) return fail('A sequência de hoje já foi concluída.');
   if (habitId && habitId !== next.habitId) {
     return fail('Este passo ainda não é o próximo da sequência.');
@@ -169,11 +188,12 @@ export function advanceRoutine(db, id, { habitId, durationMinutes, count, note, 
   if (toggled.error) return toggled;
   if (!toggled.done) return fail('O próximo ritual já estava marcado hoje.');
 
-  const fresh = resolveRoutineSteps(routine, db.habits || [], todayStr);
+  const freshHabits = db.habits || [];
+  const fresh = resolveRoutineSteps(routine, freshHabits, todayStr, routines);
   const progress = routineDayProgress(fresh);
   return {
-    routine: decorateRoutine(routine, db.habits || [], todayStr),
-    step: fresh.find(step => step.habitId === next.habitId) || null,
+    routine: decorateRoutine(routine, freshHabits, todayStr, routines),
+    step: findRoutineHabitStep(fresh, next.habitId),
     habit: toggled.habit,
     rewardResult: toggled.rewardResult,
     progress,
@@ -182,27 +202,30 @@ export function advanceRoutine(db, id, { habitId, durationMinutes, count, note, 
 }
 
 export function undoRoutineStep(db, id, { habitId } = {}) {
-  const routines = ensureList(db);
+  const { habits, routines } = catalog(db);
   const routine = routines.find(item => item.id === id);
   if (!routine) return fail('Rotina não encontrada.', 404);
   const todayStr = getSaoPauloDateStr();
-  const resolved = resolveRoutineSteps(routine, db.habits || [], todayStr);
-  const step = resolved.find(item => item.habitId === habitId && !item.missing);
-  if (!step) return fail('Este ritual não faz parte da sequência.');
+  const resolved = resolveRoutineSteps(routine, habits, todayStr, routines);
+  const step = findRoutineHabitStep(resolved, habitId);
+  if (!step || step.missing) return fail('Este ritual não faz parte da sequência.');
   if (!step.doneToday) return fail('Este passo ainda não foi feito hoje.');
 
   const toggled = toggleHabit(db, { id: habitId, date: todayStr });
   if (toggled.error) return toggled;
   if (toggled.done) return fail('Não foi possível desmarcar o ritual.');
 
+  const freshHabits = db.habits || [];
+  const fresh = resolveRoutineSteps(routine, freshHabits, todayStr, routines);
+  const progress = routineDayProgress(fresh);
   return {
-    routine: decorateRoutine(routine, db.habits || [], todayStr),
-    step: resolveRoutineSteps(routine, db.habits || [], todayStr).find(item => item.habitId === habitId) || null,
+    routine: decorateRoutine(routine, freshHabits, todayStr, routines),
+    step: findRoutineHabitStep(fresh, habitId),
     habit: toggled.habit,
     rewardResult: toggled.rewardResult,
     undone: true,
-    progress: routineDayProgress(resolveRoutineSteps(routine, db.habits || [], todayStr)),
-    completeToday: false
+    progress,
+    completeToday: progress.complete
   };
 }
 

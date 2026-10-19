@@ -3,6 +3,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Layers,
   ListOrdered,
   Play,
   Plus,
@@ -21,6 +22,15 @@ import { formatTimer } from '../hooks/useStopwatch';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import { getHabitLoadSeries, habitMeasureLabel, habitTracksCount, habitTracksTime } from '../utils/habitHomeostasis';
 import { HabitHistoryModal, habitHistoryButtonStyle } from './HabitHistoryModal';
+import {
+  MAX_ROUTINE_NESTING,
+  collectRoutineHabitIds,
+  findRoutineHabitStep,
+  isRoutineStep,
+  routineHabitPath,
+  routineLinkError,
+  stepContainsHabit
+} from '../utils/routines';
 
 const ACCENT = '#38bdf8';
 
@@ -103,9 +113,8 @@ function habitBandHint(habit, measure) {
 function routineTime(routine, habitById, today) {
   let todayMinutes = 0;
   let totalMinutes = 0;
-  for (const step of routine?.steps || []) {
-    if (step.missing) continue;
-    const habit = habitById.get(step.habitId);
+  for (const habitId of collectRoutineHabitIds(routine?.steps)) {
+    const habit = habitById.get(habitId);
     if (!habit) continue;
     todayMinutes += getHabitDurationForDate(habit, today);
     totalMinutes += sumDurationMap(habit.durationsByDate);
@@ -123,8 +132,189 @@ function formFromRoutine(routine) {
     description: routine?.description || '',
     steps: (routine?.steps || [])
       .filter(step => !step.missing)
-      .map(step => ({ habitId: step.habitId, note: step.note || '' }))
+      .map(step => (
+        isRoutineStep(step)
+          ? { kind: 'routine', routineId: step.routineId, note: step.note || '' }
+          : { kind: 'habit', habitId: step.habitId, note: step.note || '' }
+      ))
   };
+}
+
+function formStepKey(step, index) {
+  return isRoutineStep(step) ? `routine:${step.routineId}:${index}` : `habit:${step.habitId}:${index}`;
+}
+
+function branchKey(ownerId, path, routineId) {
+  return `${ownerId}:${path}:${routineId}`;
+}
+
+function RoutineStepList({
+  steps,
+  routine,
+  habitById,
+  nextHabitId,
+  collapsedBranches,
+  onToggleBranch,
+  onOpen,
+  onHistory,
+  path = ''
+}) {
+  return (
+    <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {(steps || []).map((step, index) => {
+        if (isRoutineStep(step)) {
+          const key = branchKey(routine.id, path, step.routineId);
+          const collapsed = collapsedBranches.has(key);
+          const containsNext = stepContainsHabit(step, nextHabitId);
+          const childDone = step.progress?.done || 0;
+          const childTotal = step.progress?.total || 0;
+          return (
+            <li
+              key={`${routine.id}-${path}-rt-${step.routineId}`}
+              style={{
+                padding: '8px 10px',
+                borderRadius: '10px',
+                background: containsNext ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255,255,255,0.03)',
+                border: containsNext ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
+                opacity: step.missing ? 0.55 : 1
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => onToggleBranch(key)}
+                aria-expanded={!collapsed && !step.missing}
+                title={collapsed ? 'Mostrar a sub-rotina' : 'Recolher a sub-rotina'}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  width: '100%',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'inherit',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  padding: 0
+                }}
+              >
+                <span style={{
+                  width: '22px',
+                  height: '22px',
+                  borderRadius: '50%',
+                  display: 'grid',
+                  placeItems: 'center',
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  background: step.doneToday ? 'rgba(52, 211, 153, 0.2)' : 'rgba(255,255,255,0.06)',
+                  color: step.doneToday ? '#34d399' : '#cbd5e1',
+                  flex: '0 0 auto'
+                }}>
+                  {step.doneToday ? <Check size={13} /> : index + 1}
+                </span>
+                <Layers size={14} color={ACCENT} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.9rem' }}>
+                    {step.missing ? 'Sub-rotina excluída' : (step.title || 'Sub-rotina')}
+                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.72rem', marginTop: '2px' }}>
+                    {step.missing
+                      ? 'Tire este passo ao editar a rotina.'
+                      : `sub-rotina · ${childDone} de ${childTotal}${step.note ? ` · ${step.note}` : ''}`}
+                  </div>
+                </div>
+                {containsNext ? <span style={{ fontSize: '0.72rem', fontWeight: 800, color: ACCENT }}>agora</span> : null}
+                {step.missing ? null : (collapsed ? <ChevronDown size={14} color="#94a3b8" /> : <ChevronUp size={14} color="#94a3b8" />)}
+              </button>
+              {!step.missing && !collapsed && (
+                <div style={{ margin: '8px 0 0 18px', borderLeft: '2px solid rgba(56, 189, 248, 0.35)', paddingLeft: '10px' }}>
+                  {(step.steps || []).length === 0 ? (
+                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.75rem' }}>Sem rituais nesta sub-rotina.</p>
+                  ) : (
+                    <RoutineStepList
+                      steps={step.steps}
+                      routine={routine}
+                      habitById={habitById}
+                      nextHabitId={nextHabitId}
+                      collapsedBranches={collapsedBranches}
+                      onToggleBranch={onToggleBranch}
+                      onOpen={onOpen}
+                      onHistory={onHistory}
+                      path={path ? `${path}/${step.routineId}` : step.routineId}
+                    />
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        }
+
+        const isNext = step.habitId === nextHabitId;
+        const habit = habitById.get(step.habitId);
+        const band = step.missing ? '' : habitBandHint(habit);
+        return (
+          <li
+            key={`${routine.id}-${path}-${step.habitId}`}
+            onClick={() => onOpen(step)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '8px 10px',
+              borderRadius: '10px',
+              background: isNext ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255,255,255,0.03)',
+              border: isNext ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
+              opacity: step.missing ? 0.55 : 1,
+              cursor: step.missing ? 'default' : 'pointer'
+            }}
+          >
+            <span style={{
+              width: '22px',
+              height: '22px',
+              borderRadius: '50%',
+              display: 'grid',
+              placeItems: 'center',
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              background: step.doneToday ? 'rgba(52, 211, 153, 0.2)' : 'rgba(255,255,255,0.06)',
+              color: step.doneToday ? '#34d399' : '#cbd5e1'
+            }}>
+              {step.doneToday ? <Check size={13} /> : index + 1}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.9rem' }}>
+                {step.missing ? 'Ritual excluído' : (step.title || 'Ritual')}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
+                <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
+                  {step.missing
+                    ? 'Tire este passo ao editar a rotina.'
+                    : `${getFrequencyLabel(habit || step)}${step.note ? ` · ${step.note}` : ''}`}
+                </span>
+                {!step.missing && (
+                  <button
+                    type="button"
+                    className="habit-history-btn"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onHistory(step.habitId);
+                    }}
+                    style={habitHistoryButtonStyle()}
+                    title="Histórico de execução deste ritual"
+                  >
+                    <History size={12} /> Histórico
+                  </button>
+                )}
+              </div>
+              {band ? (
+                <div className="routine-band" style={{ marginTop: '2px' }}>esperado {band}</div>
+              ) : null}
+            </div>
+            {isNext ? <span style={{ fontSize: '0.72rem', fontWeight: 800, color: ACCENT }}>agora</span> : null}
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 export function RoutinesView({
@@ -139,11 +329,13 @@ export function RoutinesView({
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [picker, setPicker] = useState('');
+  const [routinePicker, setRoutinePicker] = useState('');
   const [confirmId, setConfirmId] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
   const [activeStep, setActiveStep] = useState(null);
   const [expandedIds, setExpandedIds] = useState(() => new Set());
+  const [collapsedBranches, setCollapsedBranches] = useState(() => new Set());
   const [stepCount, setStepCount] = useState('');
   const [stepMinutes, setStepMinutes] = useState('');
   const [minutesEdited, setMinutesEdited] = useState(false);
@@ -152,12 +344,23 @@ export function RoutinesView({
   const [historyHabitId, setHistoryHabitId] = useState(null);
 
   const habitById = useMemo(() => new Map((habits || []).map(habit => [habit.id, habit])), [habits]);
-  const available = (habits || []).filter(habit => !form.steps.some(step => step.habitId === habit.id));
+  const routineById = useMemo(() => new Map((routines || []).map(item => [item.id, item])), [routines]);
+  const available = (habits || []).filter(habit => !form.steps.some(step => step.kind !== 'routine' && step.habitId === habit.id));
+  const otherRoutines = (routines || []).filter(item => item?.id && item.id !== modal?.id);
+  const selectableRoutines = otherRoutines.filter(item => {
+    if (form.steps.some(step => step.kind === 'routine' && step.routineId === item.id)) return false;
+    return !routineLinkError(routines, modal?.id || null, [...form.steps, { kind: 'routine', routineId: item.id }]);
+  });
+
+  const parentTitles = (routineId) => (routines || [])
+    .filter(item => item.id !== routineId && (item.steps || []).some(step => isRoutineStep(step) && step.routineId === routineId))
+    .map(item => item.title);
 
   const openCreate = () => {
     setError('');
     setForm(emptyForm());
     setPicker('');
+    setRoutinePicker('');
     setModal({ mode: 'create' });
   };
 
@@ -165,6 +368,7 @@ export function RoutinesView({
     setError('');
     setForm(formFromRoutine(routine));
     setPicker('');
+    setRoutinePicker('');
     setModal({ mode: 'edit', id: routine.id });
   };
 
@@ -179,8 +383,23 @@ export function RoutinesView({
 
   const addStep = () => {
     if (!picker) return;
-    setForm(prev => ({ ...prev, steps: [...prev.steps, { habitId: picker, note: '' }] }));
+    setForm(prev => ({ ...prev, steps: [...prev.steps, { kind: 'habit', habitId: picker, note: '' }] }));
     setPicker('');
+  };
+
+  const addRoutineStep = () => {
+    if (!routinePicker) return;
+    setForm(prev => ({ ...prev, steps: [...prev.steps, { kind: 'routine', routineId: routinePicker, note: '' }] }));
+    setRoutinePicker('');
+  };
+
+  const toggleBranch = (key) => {
+    setCollapsedBranches(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
 
   const moveStep = (index, delta) => {
@@ -202,19 +421,23 @@ export function RoutinesView({
       return;
     }
     if (form.steps.length < 2) {
-      setError('Escolha pelo menos dois rituais, na ordem.');
+      setError('Escolha pelo menos dois passos, na ordem. Pode ser ritual ou rotina.');
       return;
     }
     const payload = {
       title: form.title.trim(),
       description: form.description.trim(),
-      steps: form.steps
+      steps: form.steps.map(step => (
+        step.kind === 'routine'
+          ? { kind: 'routine', routineId: step.routineId, note: step.note || '' }
+          : { kind: 'habit', habitId: step.habitId, note: step.note || '' }
+      ))
     };
     const ok = modal?.mode === 'edit'
       ? await onUpdateRoutine?.(modal.id, payload)
       : await onAddRoutine?.(payload);
-    if (ok === false) {
-      setError('Não foi possível salvar a rotina.');
+    if (ok !== true) {
+      setError(typeof ok === 'string' ? ok : 'Não foi possível salvar a rotina.');
       return;
     }
     setModal(null);
@@ -333,7 +556,7 @@ export function RoutinesView({
             <ListOrdered size={22} color={ACCENT} /> Rotinas
           </h2>
           <p style={{ color: '#94a3b8', fontSize: '0.85rem', maxWidth: '640px' }}>
-            Uma sequência de rituais feita na ordem. Cada passo marca o ritual — a sequência, o XP e as moedas continuam sendo dele.
+            Uma sequência feita na ordem: rituais, ou rotinas inteiras como passos. Cada ritual marcado leva a sequência, o XP e as moedas — a rotina não dá recompensa extra.
           </p>
         </div>
         <button
@@ -359,7 +582,7 @@ export function RoutinesView({
 
       {(routines || []).length === 0 ? (
         <div className="glass-panel" style={{ padding: '28px', textAlign: 'center', color: '#94a3b8' }}>
-          Nenhuma rotina ainda. Monte uma sequência com os rituais que você já faz em ordem — manhã, treino, fechamento do dia.
+          Nenhuma rotina ainda. Monte uma sequência com os rituais que você já faz em ordem — manhã, treino, fechamento do dia. Depois, se quiser, junte essas rotinas numa rotina maior.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -367,8 +590,10 @@ export function RoutinesView({
             const total = routine.progress?.total || 0;
             const done = routine.progress?.done || 0;
             const ratio = total ? Math.round((done / total) * 100) : 0;
-            const next = (routine.steps || []).find(step => step.habitId === routine.nextHabitId);
+            const next = findRoutineHabitStep(routine.steps, routine.nextHabitId);
             const nextExpected = next ? habitBandHint(habitById.get(next.habitId)) : '';
+            const subCount = (routine.steps || []).filter(step => isRoutineStep(step) && !step.missing).length;
+            const parents = parentTitles(routine.id);
             const time = routineTime(routine, habitById, getSaoPauloDateStr());
             const todayLabel = formatDurationLabel(time.todayMinutes);
             const totalLabel = formatDurationLabel(time.totalMinutes);
@@ -387,6 +612,7 @@ export function RoutinesView({
                       gap: '8px',
                       flex: '1 1 180px',
                       minWidth: 0,
+                      flexWrap: 'wrap',
                       background: 'transparent',
                       border: 'none',
                       color: 'inherit',
@@ -399,6 +625,16 @@ export function RoutinesView({
                     <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.05rem' }}>{routine.title}</h3>
                     {routine.completeToday ? (
                       <span title="Concluída hoje" aria-label="Concluída hoje" style={{ fontSize: '0.95rem', lineHeight: 1 }}>✅</span>
+                    ) : null}
+                    {subCount > 0 ? (
+                      <span style={{ fontSize: '0.68rem', fontWeight: 800, color: ACCENT }}>
+                        {subCount} sub-rotina{subCount === 1 ? '' : 's'}
+                      </span>
+                    ) : null}
+                    {parents.length > 0 ? (
+                      <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#94a3b8' }}>
+                        entra em {parents.join(', ')}
+                      </span>
                     ) : null}
                   </button>
                   <div style={{ display: 'flex', gap: '8px' }}>
@@ -422,83 +658,26 @@ export function RoutinesView({
                 </div>
                 <p style={{ margin: '0 0 12px', fontSize: '0.78rem', color: routine.completeToday ? '#34d399' : '#94a3b8', fontWeight: 700 }}>
                   {routine.completeToday ? 'Sequência de hoje concluída' : `${done} de ${total} hoje`}
+                  {subCount ? ` · ${subCount} sub-rotina${subCount === 1 ? '' : 's'}` : ''}
                   {` · hoje ${todayLabel || '0 min'} · total ${totalLabel || '0 min'}`}
                 </p>
 
-                <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {(routine.steps || []).map((step, index) => {
-                    const isNext = step.habitId === routine.nextHabitId;
-                    const habit = habitById.get(step.habitId);
-                    const band = step.missing ? '' : habitBandHint(habit);
-                    return (
-                      <li
-                        key={`${routine.id}-${step.habitId}`}
-                        onClick={() => openStep(routine, step)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '10px',
-                          padding: '8px 10px',
-                          borderRadius: '10px',
-                          background: isNext ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255,255,255,0.03)',
-                          border: isNext ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
-                          opacity: step.missing ? 0.55 : 1,
-                          cursor: step.missing ? 'default' : 'pointer'
-                        }}
-                      >
-                        <span style={{
-                          width: '22px',
-                          height: '22px',
-                          borderRadius: '50%',
-                          display: 'grid',
-                          placeItems: 'center',
-                          fontSize: '0.72rem',
-                          fontWeight: 800,
-                          background: step.doneToday ? 'rgba(52, 211, 153, 0.2)' : 'rgba(255,255,255,0.06)',
-                          color: step.doneToday ? '#34d399' : '#cbd5e1'
-                        }}>
-                          {step.doneToday ? <Check size={13} /> : index + 1}
-                        </span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.9rem' }}>
-                            {step.missing ? 'Ritual excluído' : (step.title || 'Ritual')}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
-                            <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
-                              {step.missing
-                                ? 'Tire este passo ao editar a rotina.'
-                                : `${getFrequencyLabel(habit || step)}${step.note ? ` · ${step.note}` : ''}`}
-                            </span>
-                            {!step.missing && (
-                              <button
-                                type="button"
-                                className="habit-history-btn"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setHistoryHabitId(step.habitId);
-                                }}
-                                style={habitHistoryButtonStyle()}
-                                title="Histórico de execução deste ritual"
-                              >
-                                <History size={12} /> Histórico
-                              </button>
-                            )}
-                          </div>
-                          {band ? (
-                            <div className="routine-band" style={{ marginTop: '2px' }}>esperado {band}</div>
-                          ) : null}
-                        </div>
-                        {isNext ? <span style={{ fontSize: '0.72rem', fontWeight: 800, color: ACCENT }}>agora</span> : null}
-                      </li>
-                    );
-                  })}
-                </ol>
+                <RoutineStepList
+                  steps={routine.steps}
+                  routine={routine}
+                  habitById={habitById}
+                  nextHabitId={routine.nextHabitId}
+                  collapsedBranches={collapsedBranches}
+                  onToggleBranch={toggleBranch}
+                  onOpen={(step) => openStep(routine, step)}
+                  onHistory={setHistoryHabitId}
+                />
 
                 <button
                   type="button"
                   disabled={!next || busyId === routine.id}
                   onClick={() => {
-                    const step = (routine.steps || []).find(item => item.habitId === routine.nextHabitId);
+                    const step = findRoutineHabitStep(routine.steps, routine.nextHabitId);
                     if (step) openStep(routine, step);
                   }}
                   style={{
@@ -581,23 +760,59 @@ export function RoutinesView({
                 </button>
               </div>
             </div>
+            <div>
+              <label style={labelStyle}>Adicionar sub-rotina</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <select value={routinePicker} onChange={(event) => setRoutinePicker(event.target.value)} style={{ ...fieldStyle, flex: 1 }}>
+                  <option value="">{otherRoutines.length ? 'Escolha uma rotina' : 'Nenhuma outra rotina ainda'}</option>
+                  {selectableRoutines.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.title} ({item.progress?.total || 0} rituais)
+                    </option>
+                  ))}
+                </select>
+                <button type="button" onClick={addRoutineStep} disabled={!routinePicker} style={{ ...iconBtn, width: '42px' }} title="Adicionar sub-rotina">
+                  <Layers size={16} />
+                </button>
+              </div>
+              <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: '0.72rem' }}>
+                {otherRoutines.length === 0
+                  ? 'Crie outra rotina antes para usá-la como sub-rotina.'
+                  : selectableRoutines.length === 0
+                    ? (form.steps.filter(step => step.kind === 'routine').length >= otherRoutines.length
+                      ? 'Todas as rotinas já estão nesta sequência.'
+                      : `As rotinas restantes criariam um ciclo ou passariam de ${MAX_ROUTINE_NESTING} níveis.`)
+                    : 'A sub-rotina entra inteira nesta posição. O modo guiado faz os rituais dela antes de seguir. Editar a sub-rotina atualiza esta sequência.'}
+              </p>
+            </div>
             <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {form.steps.map((step, index) => (
-                <li key={step.habitId} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ width: '18px', color: '#94a3b8', fontWeight: 800 }}>{index + 1}</span>
-                  <span style={{ flex: 1, color: '#f8fafc' }}>{habitById.get(step.habitId)?.title || step.habitId}</span>
-                  <button type="button" onClick={() => moveStep(index, -1)} style={iconBtn} title="Subir"><ChevronUp size={14} /></button>
-                  <button type="button" onClick={() => moveStep(index, 1)} style={iconBtn} title="Descer"><ChevronDown size={14} /></button>
-                  <button
-                    type="button"
-                    onClick={() => setForm(prev => ({ ...prev, steps: prev.steps.filter(item => item.habitId !== step.habitId) }))}
-                    style={iconBtn}
-                    title="Tirar"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </li>
-              ))}
+              {form.steps.map((step, index) => {
+                const nested = step.kind === 'routine';
+                const child = nested ? routineById.get(step.routineId) : null;
+                const label = nested
+                  ? (child?.title || 'Sub-rotina')
+                  : (habitById.get(step.habitId)?.title || step.habitId);
+                return (
+                  <li key={formStepKey(step, index)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ width: '18px', color: '#94a3b8', fontWeight: 800 }}>{index + 1}</span>
+                    {nested ? <Layers size={14} color={ACCENT} /> : null}
+                    <span style={{ flex: 1, color: '#f8fafc' }}>
+                      {label}
+                      {nested ? <span style={{ color: ACCENT, fontSize: '0.72rem', fontWeight: 800 }}> · sub-rotina</span> : null}
+                    </span>
+                    <button type="button" onClick={() => moveStep(index, -1)} style={iconBtn} title="Subir"><ChevronUp size={14} /></button>
+                    <button type="button" onClick={() => moveStep(index, 1)} style={iconBtn} title="Descer"><ChevronDown size={14} /></button>
+                    <button
+                      type="button"
+                      onClick={() => setForm(prev => ({ ...prev, steps: prev.steps.filter((_, itemIndex) => itemIndex !== index) }))}
+                      style={iconBtn}
+                      title="Tirar"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </li>
+                );
+              })}
             </ol>
             {error ? <p style={{ margin: 0, color: '#f87171', fontSize: '0.82rem' }}>{error}</p> : null}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
@@ -620,10 +835,11 @@ export function RoutinesView({
 
       {activeStep && (() => {
         const routine = (routines || []).find(item => item.id === activeStep.routineId);
-        const step = (routine?.steps || []).find(item => item.habitId === activeStep.habitId);
+        const step = findRoutineHabitStep(routine?.steps, activeStep.habitId);
         const habit = habitById.get(activeStep.habitId);
         if (!routine || !step || !habit) return null;
         const isNext = routine.nextHabitId === habit.id;
+        const trail = routineHabitPath(routine.steps, habit.id) || [];
         const tracksTime = habitTracksTime(habit);
         const tracksCount = habitTracksCount(habit);
         const expected = habitBandHint(habit);
@@ -648,7 +864,9 @@ export function RoutinesView({
               style={{ width: 'min(480px, 100%)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}
             >
               <div>
-                <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700 }}>{routine.title}</p>
+                <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700 }}>
+                  {[routine.title, ...trail].join(' · ')}
+                </p>
                 <h3 style={{ margin: '4px 0 0', color: '#f8fafc' }}>
                   {habit.title}
                 </h3>
@@ -823,7 +1041,13 @@ export function RoutinesView({
       <ConfirmModal
         isOpen={!!confirmId}
         title="Excluir rotina"
-        message="A sequência some. Os rituais e as recompensas já recebidas ficam."
+        message={(() => {
+          const parents = confirmId ? parentTitles(confirmId) : [];
+          if (parents.length) {
+            return `A sequência some e deixa de ser passo de: ${parents.join(', ')}. Os rituais e as recompensas já recebidas ficam.`;
+          }
+          return 'A sequência some. Os rituais e as recompensas já recebidas ficam.';
+        })()}
         confirmText="Excluir"
         confirmVariant="danger"
         onCancel={() => setConfirmId(null)}

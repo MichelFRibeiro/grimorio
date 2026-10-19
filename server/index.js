@@ -2121,7 +2121,7 @@ app.delete('/api/habits/:id', (req, res) => {
 });
 
 // ==========================================
-// 6.1. ROTINAS (sequência guiada de rituais)
+// 6.1. ROTINAS (sequência guiada de rituais e sub-rotinas)
 // ==========================================
 app.get('/api/routines', (req, res) => {
   try {
