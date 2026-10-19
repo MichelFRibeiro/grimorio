@@ -1,8 +1,9 @@
 /**
  * Rotinas: sequência ordenada de rituais, atividades e outras rotinas.
  * A rotina não concede XP nem moedas. O ritual é marcado pelo toggle
- * já existente. Biblioteca, Escrituras, AGU e Diário não são marcados
- * aqui: a rotina só reconhece o que o dia já registrou.
+ * já existente. Biblioteca, Escrituras, AGU, Diário e Review de
+ * Suplementos não são marcados aqui: a rotina só reconhece o que o dia
+ * já registrou.
  *
  * Uma sub-rotina é referência, não cópia. Ciclo é recusado.
  * No máximo MAX_ROUTINE_NESTING elos.

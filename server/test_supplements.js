@@ -7,7 +7,8 @@ import {
   deleteSupplement,
   logSupplementIntake,
   updateSupplementLog,
-  deleteSupplementLog
+  deleteSupplementLog,
+  completeSupplementReview
 } from './domain/supplements.js';
 
 await initDb();
@@ -111,5 +112,35 @@ saveDb(db);
 const reloaded = getDb();
 assert.equal(reloaded.supplements.length, 1);
 assert.equal(reloaded.supplements[0].name, 'Creatina monohidratada');
+
+const emptyReview = completeSupplementReview(db, { date: '2026-10-06', answers: [] });
+assert.equal(emptyReview.status, 400);
+
+const missingReview = completeSupplementReview(db, {
+  date: '2026-10-06',
+  answers: [{ supplementId: 'sup-nope', taken: true }]
+});
+assert.equal(missingReview.status, 404);
+
+const reviewed = completeSupplementReview(db, {
+  date: '2026-10-06',
+  answers: [
+    { supplementId: creatina.supplement.id, taken: false },
+    { supplementId: creatina.supplement.id, taken: true }
+  ]
+});
+assert.equal(reviewed.error, undefined);
+assert.equal(reviewed.review.answers.length, 1);
+assert.equal(reviewed.review.answers[0].taken, false);
+assert.equal(db.supplementReviews.length, 1);
+
+const replaced = completeSupplementReview(db, {
+  date: '2026-10-06',
+  answers: [{ supplementId: creatina.supplement.id, taken: true }]
+});
+assert.equal(replaced.error, undefined);
+assert.equal(db.supplementReviews.length, 1, 'o mesmo dia substitui o review anterior');
+assert.equal(db.supplementReviews[0].answers[0].taken, true);
+assert.equal(db.supplementLogs.length, 0, 'o review não cria registro de consumo');
 
 console.log('Suplementos: cadastro, tomada, edição e exclusão ok.');

@@ -412,6 +412,7 @@ export const defaultDatabase = () => {
     routines: [],
     supplements: [],
     supplementLogs: [],
+    supplementReviews: [],
     rewards: [],
     rewardRedemptions: [],
     actionLogs: [],
@@ -488,6 +489,7 @@ export function sanitizeDb(db) {
   db.routines = sanitizeRoutines(db.routines, db.habits);
   if (!Array.isArray(db.supplements)) db.supplements = [];
   if (!Array.isArray(db.supplementLogs)) db.supplementLogs = [];
+  if (!Array.isArray(db.supplementReviews)) db.supplementReviews = [];
   db.phoneTimeLogs = sanitizePhoneTimeLogs(db.phoneTimeLogs);
   db.journalEntries = sanitizeJournalEntries(db.journalEntries);
   db.chatRooms = sanitizeChatRooms(db.chatRooms);

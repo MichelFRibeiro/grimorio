@@ -14,6 +14,7 @@ import {
   routineLinkError
 } from '../src/utils/routines.js';
 import { routineActivitySnapshot } from '../src/utils/routineActivities.js';
+import { getSaoPauloDateStr } from './timeUtils.js';
 
 const PORT = Number(process.env.TEST_PORT || process.env.PORT);
 let authToken = null;
@@ -108,6 +109,19 @@ function assertModel() {
   assert.equal(met.journal.done, true, met.journal.detail);
   assert.equal(met.journal.detail, '1 página hoje');
   assert.equal(met.agu.done, true, met.agu.detail);
+  assert.equal(met['supplement-review'].done, false, 'review ausente não conclui');
+  assert.equal(met['supplement-review'].label, 'Review de Suplementos');
+
+  const reviewed = routineActivitySnapshot({
+    supplements: [{ id: 's1', name: 'Omega 3', archived: false }],
+    supplementReviews: [{
+      date: today,
+      answers: [{ supplementId: 's1', taken: false }]
+    }]
+  }, today);
+  assert.equal(reviewed['supplement-review'].done, true, reviewed['supplement-review'].detail);
+  assert.equal(reviewed['supplement-review'].detail, '0 sim · 1 não');
+  assert.equal(reviewed['supplement-review'].tab, 'supplements');
 }
 
 async function run() {
@@ -441,6 +455,31 @@ async function run() {
     assert.equal(finished.completeToday, true);
     assert.equal(finished.nextActivityId, null);
     assert.equal(finished.nextHabitId, null);
+
+    const omega = await request('/api/supplements', { method: 'POST' }, { name: 'Omega Review', defaultDose: 1 });
+    assert.equal(omega.status, 200, omega.data?.error);
+    const reviewRoutine = await request('/api/routines', { method: 'POST' }, {
+      title: 'Review do dia',
+      steps: [{ activityId: 'journal' }, { activityId: 'supplement-review' }]
+    });
+    assert.equal(reviewRoutine.status, 200, reviewRoutine.data?.error);
+    const reviewRoutineId = reviewRoutine.data.routine.id;
+    assert.equal(reviewRoutine.data.routine.nextActivityId, 'supplement-review');
+    assert.equal(
+      reviewRoutine.data.routine.steps.find(step => step.activityId === 'supplement-review').doneToday,
+      false
+    );
+
+    const reviewedDay = await request('/api/supplement-reviews', { method: 'POST' }, {
+      date: getSaoPauloDateStr(),
+      answers: [{ supplementId: omega.data.supplement.id, taken: false }]
+    });
+    assert.equal(reviewedDay.status, 200, reviewedDay.data?.error);
+    const afterReview = await request('/api/state');
+    const reviewDone = afterReview.data.routines.find(item => item.id === reviewRoutineId);
+    assert.equal(reviewDone.steps.find(step => step.activityId === 'supplement-review').doneToday, true);
+    assert.equal(reviewDone.completeToday, true);
+    assert.equal(reviewDone.nextActivityId, null);
 
     console.log('Rotinas: sequência guiada e sub-rotinas ok');
   } finally {

@@ -1205,6 +1205,11 @@ export function useGameData() {
     await mutate(`/api/supplement-logs/${id}`, { method: 'DELETE' });
   };
 
+  const completeSupplementReview = async (reviewData) => {
+    playClick();
+    return mutate('/api/supplement-reviews', { method: 'POST', body: reviewData });
+  };
+
   const savePhoneTime = async ({ date, minutes, note } = {}) => {
     playClick();
     const result = await mutate('/api/phone-time', {
@@ -1817,6 +1822,7 @@ export function useGameData() {
     logSupplementIntake,
     updateSupplementLog,
     deleteSupplementLog,
+    completeSupplementReview,
     savePhoneTime,
     deletePhoneTime,
     saveJournalEntry,

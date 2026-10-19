@@ -81,7 +81,8 @@ import {
   deleteSupplement,
   logSupplementIntake,
   updateSupplementLog,
-  deleteSupplementLog
+  deleteSupplementLog,
+  completeSupplementReview
 } from './domain/supplements.js';
 import { formatBrl } from '../src/utils/coinExchange.js';
 import { sanitizePhoneTimeLogs } from '../src/utils/phoneTime.js';
@@ -2233,6 +2234,18 @@ app.delete('/api/supplements/:id', (req, res) => {
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({ success: true, removedLogs: result.removedLogs.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/supplement-reviews', (req, res) => {
+  try {
+    const db = getDb();
+    const result = completeSupplementReview(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, review: result.review });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

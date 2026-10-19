@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pill,
   Plus,
@@ -10,7 +10,8 @@ import {
   Calendar,
   Search,
   AlertCircle,
-  Check
+  Check,
+  ClipboardCheck
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { getSaoPauloDateStr, getSaoPauloNowDateTimeLocal } from '../utils/timeUtils';
@@ -68,7 +69,10 @@ export function SupplementsView({
   onDeleteSupplement,
   onLogIntake,
   onUpdateLog,
-  onDeleteLog
+  onDeleteLog,
+  onCompleteReview,
+  autoStartReview = false,
+  onAutoStartConsumed
 }) {
   const [subTab, setSubTab] = useState('log');
   const [search, setSearch] = useState('');
@@ -76,6 +80,11 @@ export function SupplementsView({
   const [showArchived, setShowArchived] = useState(false);
   const [supplementModal, setSupplementModal] = useState(null);
   const [intakeModal, setIntakeModal] = useState(null);
+  const [review, setReview] = useState(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewError, setReviewError] = useState(false);
+  const pendingAnswersRef = useRef(null);
+  const answeredIndexRef = useRef(-1);
   const [form, setForm] = useState(emptySupplement());
   const [intake, setIntake] = useState({ supplementId: '', amount: '1', date: '', time: '', notes: '' });
   const [confirmModal, setConfirmModal] = useState({
@@ -147,7 +156,7 @@ export function SupplementsView({
     setSupplementModal({ mode: 'edit', id: item.id });
   };
 
-  const openIntake = (preset) => {
+  const openIntake = (preset, options = {}) => {
     const parts = nowParts();
     const supplement = preset || active[0];
     setIntake({
@@ -157,7 +166,79 @@ export function SupplementsView({
       time: parts.time,
       notes: ''
     });
-    setIntakeModal({ mode: 'create' });
+    setIntakeModal({ mode: 'create', fromReview: !!options.fromReview });
+  };
+
+  const reviewItems = () => (supplements || [])
+    .filter(item => item && !item.archived)
+    .slice()
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'))
+    .map(item => ({
+      id: item.id,
+      name: item.name || 'Suplemento',
+      unit: item.unit || 'dose',
+      defaultDose: item.defaultDose
+    }));
+
+  const openReview = () => {
+    const items = reviewItems();
+    if (items.length === 0) {
+      alert('Nenhum suplemento', 'Cadastre um suplemento ativo antes de revisar.');
+      return;
+    }
+    pendingAnswersRef.current = null;
+    answeredIndexRef.current = -1;
+    setReviewError(false);
+    setReview({ index: 0, items, answers: [] });
+  };
+
+  useEffect(() => {
+    if (!autoStartReview) return;
+    onAutoStartConsumed?.();
+    openReview();
+    // O pedido da rotina só deve abrir o review uma vez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStartReview]);
+
+  const persistReview = async (answers) => {
+    pendingAnswersRef.current = answers;
+    setReviewBusy(true);
+    setReviewError(false);
+    try {
+      if (onCompleteReview) {
+        const result = await onCompleteReview({ date: getSaoPauloDateStr(), answers });
+        if (!result) {
+          setReviewError(true);
+          return;
+        }
+      }
+      pendingAnswersRef.current = null;
+      setReview(null);
+    } finally {
+      setReviewBusy(false);
+    }
+  };
+
+  const advanceReview = (taken) => {
+    if (!review || reviewBusy || answeredIndexRef.current === review.index) return;
+    const item = review.items[review.index];
+    if (!item) return;
+    answeredIndexRef.current = review.index;
+    const answers = [...review.answers, { supplementId: item.id, taken: !!taken }];
+    if (review.index + 1 < review.items.length) {
+      setReviewError(false);
+      setReview({ ...review, index: review.index + 1, answers });
+      return;
+    }
+    setReview({ ...review, answers });
+    persistReview(answers);
+  };
+
+  const answerYes = () => {
+    const item = review?.items[review.index];
+    if (!item || reviewBusy) return;
+    const live = (supplements || []).find(entry => entry.id === item.id) || item;
+    openIntake(live, { fromReview: true });
   };
 
   const openEditLog = (log) => {
@@ -188,7 +269,7 @@ export function SupplementsView({
     setSupplementModal(null);
   };
 
-  const saveIntake = (event) => {
+  const saveIntake = async (event) => {
     event.preventDefault();
     const amount = Number(String(intake.amount).replace(',', '.'));
     if (!intake.supplementId) {
@@ -210,9 +291,16 @@ export function SupplementsView({
       time: intake.time,
       notes: intake.notes.trim()
     };
-    if (intakeModal?.mode === 'edit') onUpdateLog?.(intakeModal.id, payload);
-    else onLogIntake?.(payload);
+    const fromReview = !!intakeModal?.fromReview;
+    if (intakeModal?.mode === 'edit') {
+      const saved = await onUpdateLog?.(intakeModal.id, payload);
+      if (onUpdateLog && !saved) return;
+    } else {
+      const saved = await onLogIntake?.(payload);
+      if (onLogIntake && !saved) return;
+    }
     setIntakeModal(null);
+    if (fromReview) advanceReview(true);
   };
 
   const askDeleteSupplement = (item) => {
@@ -265,6 +353,9 @@ export function SupplementsView({
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button type="button" onClick={openCreate} style={ghostButton}>
             <Plus size={16} /> Novo suplemento
+          </button>
+          <button type="button" onClick={openReview} disabled={active.length === 0} style={reviewButton(active.length === 0)}>
+            <ClipboardCheck size={16} /> Review
           </button>
           <button type="button" onClick={() => openIntake()} disabled={active.length === 0} style={primaryButton(active.length === 0)}>
             <Check size={16} /> Registrar tomada
@@ -438,12 +529,33 @@ export function SupplementsView({
         </Modal>
       )}
 
+      {review && !intakeModal && (
+        <ReviewModal
+          review={review}
+          busy={reviewBusy}
+          failed={reviewError}
+          takenToday={todayLogs
+            .filter(log => log.supplementId === review.items[review.index]?.id)
+            .reduce((sum, log) => sum + (Number(log.amount) || 0), 0)}
+          onNo={() => advanceReview(false)}
+          onYes={answerYes}
+          onRetry={() => pendingAnswersRef.current && persistReview(pendingAnswersRef.current)}
+          onClose={() => {
+            if (reviewBusy) return;
+            pendingAnswersRef.current = null;
+            setReviewError(false);
+            setReview(null);
+          }}
+        />
+      )}
+
       {intakeModal && (
         <Modal title={intakeModal.mode === 'edit' ? 'Editar registro' : 'Registrar tomada'}>
           <form onSubmit={saveIntake} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <Field label="Suplemento *">
               <select
                 required
+                disabled={!!intakeModal?.fromReview}
                 value={intake.supplementId}
                 onChange={(event) => {
                   const next = (supplements || []).find(item => item.id === event.target.value);
@@ -508,6 +620,56 @@ function Modal({ title, children }) {
   );
 }
 
+function ReviewModal({ review, busy, failed, takenToday, onNo, onYes, onRetry, onClose }) {
+  const item = review.items[review.index];
+  const question = item ? `Hoje você tomou '${item.name}'?` : 'Review de suplementos';
+  return (
+    <Modal title="Review">
+      <p style={{ color: '#e2e8f0', fontSize: '1.08rem', fontWeight: 800, lineHeight: 1.45, margin: 0 }}>
+        {question}
+      </p>
+      {item ? (
+        <p style={{ color: '#64748b', fontSize: '0.8rem', margin: '8px 0 0' }}>
+          {review.index + 1} de {review.items.length}
+          {takenToday > 0 ? ` · já registrado ${formatAmount(takenToday)} ${item.unit} hoje` : ''}
+        </p>
+      ) : null}
+      {busy ? (
+        <p style={{ color: ACCENT, fontSize: '0.85rem', margin: '18px 0 0' }}>Salvando o review…</p>
+      ) : failed ? (
+        <div style={{ marginTop: '18px' }}>
+          <p style={{ color: '#fda4af', fontSize: '0.88rem', margin: '0 0 12px' }}>
+            Não foi possível guardar o review. As respostas continuam aqui.
+          </p>
+          <button type="button" onClick={onRetry} style={yesButton}>Tentar de novo</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: '10px', marginTop: '22px' }}>
+          <button type="button" onClick={onNo} style={noButton}>Não</button>
+          <button type="button" onClick={onYes} style={yesButton}>Sim</button>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onClose}
+        disabled={busy}
+        style={{
+          marginTop: '14px',
+          padding: 0,
+          background: 'none',
+          border: 'none',
+          color: '#94a3b8',
+          cursor: busy ? 'default' : 'pointer',
+          fontWeight: 700,
+          fontSize: '0.82rem'
+        }}
+      >
+        Depois
+      </button>
+    </Modal>
+  );
+}
+
 function ModalActions({ onCancel, submitLabel }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
@@ -557,6 +719,43 @@ const ghostButton = {
   border: '1px solid rgba(255,255,255,0.08)',
   cursor: 'pointer',
   fontWeight: 700
+};
+
+const reviewButton = (disabled) => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  padding: '10px 14px',
+  borderRadius: '12px',
+  background: disabled ? 'rgba(255,255,255,0.04)' : 'rgba(45, 212, 191, 0.12)',
+  color: disabled ? '#64748b' : ACCENT,
+  border: '1px solid rgba(45, 212, 191, 0.35)',
+  cursor: disabled ? 'not-allowed' : 'pointer',
+  fontWeight: 800
+});
+
+const yesButton = {
+  flex: 1,
+  padding: '12px 16px',
+  borderRadius: '12px',
+  background: '#22c55e',
+  color: '#052e16',
+  fontWeight: 800,
+  border: 'none',
+  cursor: 'pointer',
+  fontSize: '1rem'
+};
+
+const noButton = {
+  flex: 1,
+  padding: '12px 16px',
+  borderRadius: '12px',
+  background: '#ef4444',
+  color: '#fff',
+  fontWeight: 800,
+  border: 'none',
+  cursor: 'pointer',
+  fontSize: '1rem'
 };
 
 const primaryButton = (disabled) => ({

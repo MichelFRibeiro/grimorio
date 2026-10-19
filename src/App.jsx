@@ -58,6 +58,7 @@ function TabFallback() {
 
 export function App() {
   const [activeTab, setActiveTab] = useState(null);
+  const [pendingSupplementReview, setPendingSupplementReview] = useState(false);
   const focusPlayer = useFocusPlayer();
 
   const {
@@ -134,6 +135,7 @@ export function App() {
     logSupplementIntake,
     updateSupplementLog,
     deleteSupplementLog,
+    completeSupplementReview,
     addReward,
     spendMoney,
     redeemReward,
@@ -804,7 +806,12 @@ export function App() {
             onAdvanceRoutine={advanceRoutine}
             onUpdateHabitDuration={updateHabitDuration}
             onDeleteRoutine={deleteRoutine}
-            onOpenActivity={(step) => openTab(step?.tab)}
+            onOpenActivity={(step) => {
+              if (step?.activityId === 'supplement-review' && isTabEnabled(featureSettings, step.tab)) {
+                setPendingSupplementReview(true);
+              }
+              openTab(step?.tab);
+            }}
           />
         )}
 
@@ -834,6 +841,9 @@ export function App() {
             onLogIntake={logSupplementIntake}
             onUpdateLog={updateSupplementLog}
             onDeleteLog={deleteSupplementLog}
+            onCompleteReview={completeSupplementReview}
+            autoStartReview={pendingSupplementReview}
+            onAutoStartConsumed={() => setPendingSupplementReview(false)}
           />
         )}
 

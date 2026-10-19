@@ -10,6 +10,7 @@ import {
   ListOrdered,
   NotebookPen,
   Pencil,
+  Pill,
   Play,
   Plus,
   RotateCcw,
@@ -43,7 +44,8 @@ const ACTIVITY_ICONS = {
   reading: BookOpen,
   scripture: BookMarked,
   journal: NotebookPen,
-  agu: Scale
+  agu: Scale,
+  'supplement-review': Pill
 };
 
 function activityIcon(activityId) {
@@ -51,7 +53,9 @@ function activityIcon(activityId) {
 }
 
 function activityHint(item) {
-  return item?.rule === 'entry' ? 'qualquer página hoje' : 'no setpoint';
+  if (item?.rule === 'entry') return 'qualquer página hoje';
+  if (item?.rule === 'review') return 'ao concluir o review';
+  return 'no setpoint';
 }
 
 function findActivityStep(steps, activityId) {
@@ -289,7 +293,7 @@ function RoutineStepList({
         if (isActivityStep(step)) {
           const isNext = routineLeafKey(step) === nextLeafKey;
           const Icon = activityIcon(step.activityId);
-          const hint = step.detail || (step.rule === 'entry' ? 'qualquer página hoje' : 'no setpoint');
+          const hint = step.detail || activityHint(step);
           return (
             <li
               key={`${routine.id}-${path}-act-${step.activityId}`}
@@ -654,7 +658,7 @@ export function RoutinesView({
             <ListOrdered size={22} color={ACCENT} /> Rotinas
           </h2>
           <p style={{ color: '#94a3b8', fontSize: '0.85rem', maxWidth: '640px' }}>
-            Uma sequência feita na ordem: rituais, atividades ou rotinas inteiras. Biblioteca, Escrituras e AGU fecham no setpoint; o Diário, com qualquer página. O ritual é quem leva XP e moedas.
+            Uma sequência feita na ordem: rituais, atividades ou rotinas inteiras. Biblioteca, Escrituras e AGU fecham no setpoint; o Diário, com qualquer página; o Review de Suplementos, ao concluir o review. O ritual é quem leva XP e moedas.
           </p>
         </div>
         <button
@@ -909,7 +913,7 @@ export function RoutinesView({
                 </button>
               </div>
               <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: '0.72rem' }}>
-                Biblioteca, Escrituras e AGU contam quando o tempo do dia chega no setpoint. O Diário conta se houver qualquer página hoje. A rotina não marca no lugar delas.
+                Biblioteca, Escrituras e AGU contam quando o tempo do dia chega no setpoint. O Diário conta se houver qualquer página hoje. O Review de Suplementos conta quando o review do dia for concluído. A rotina não marca no lugar delas.
               </p>
             </div>
             <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>

@@ -19,6 +19,7 @@ export function ensureSupplements(db) {
   if (!db) return db;
   if (!Array.isArray(db.supplements)) db.supplements = [];
   if (!Array.isArray(db.supplementLogs)) db.supplementLogs = [];
+  if (!Array.isArray(db.supplementReviews)) db.supplementReviews = [];
   return db;
 }
 
@@ -182,6 +183,44 @@ export function updateSupplementLog(db, id, body = {}) {
   if (current) log.unit = current.unit;
   log.updatedAt = new Date().toISOString();
   return { log, supplement: current || null };
+}
+
+const REVIEW_ANSWER_MAX = 200;
+
+/**
+ * Um review do dia: cada suplemento ativo foi respondido com sim ou não.
+ * O mesmo dia substitui o anterior. Não cria registro de consumo — o sim
+ * só vira tomada quando o usuário preenche "Registrar tomada".
+ */
+export function completeSupplementReview(db, body = {}) {
+  ensureSupplements(db);
+  const date = parseDate(body.date);
+  if (!date) return fail('Informe a data no formato YYYY-MM-DD.');
+  const rawAnswers = Array.isArray(body.answers) ? body.answers : [];
+  if (rawAnswers.length === 0) return fail('O review precisa de pelo menos um suplemento.');
+  if (rawAnswers.length > REVIEW_ANSWER_MAX) return fail('O review tem suplementos demais.');
+
+  const seen = new Set();
+  const answers = [];
+  for (const item of rawAnswers) {
+    const supplementId = String(item?.supplementId || '').trim();
+    if (!supplementId || seen.has(supplementId)) continue;
+    const supplement = db.supplements.find(entry => entry.id === supplementId);
+    if (!supplement) return fail('Suplemento não encontrado.', 404);
+    seen.add(supplementId);
+    answers.push({ supplementId, taken: !!item?.taken });
+  }
+  if (answers.length === 0) return fail('O review precisa de pelo menos um suplemento.');
+
+  const review = {
+    id: uid('suprev'),
+    date,
+    answers,
+    completedAt: new Date().toISOString()
+  };
+  db.supplementReviews = db.supplementReviews.filter(item => item?.date !== date);
+  db.supplementReviews.unshift(review);
+  return { review };
 }
 
 export function deleteSupplementLog(db, id) {

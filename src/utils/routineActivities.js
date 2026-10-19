@@ -3,6 +3,7 @@
  * A rotina não marca nem recompensa: reconhece o que já foi feito hoje.
  * Biblioteca, Escrituras e AGU fecham quando o tempo do dia chega no
  * setpoint (a meta de hoje). O Diário fecha com qualquer página do dia.
+ * O Review de Suplementos fecha quando o review do dia foi concluído.
  */
 
 import { getAguStudyLoadSeries } from './aguCycle.js';
@@ -40,6 +41,13 @@ export const ROUTINE_ACTIVITIES = [
     tab: 'agu',
     rule: 'setpoint',
     floor: HOMEOSTASIS_FLOOR_MINUTES.study
+  },
+  {
+    id: 'supplement-review',
+    label: 'Review de Suplementos',
+    tab: 'supplements',
+    rule: 'review',
+    floor: 0
   }
 ];
 
@@ -140,13 +148,44 @@ export function routineActivitySnapshot(source = {}, todayStr = '') {
       ? (count === 1 ? '1 página hoje' : `${count} páginas hoje`)
       : 'nenhuma página hoje'
   };
-  return { reading, scripture, journal, agu };
+  const supplementReview = supplementReviewStatus(source, todayStr);
+  return { reading, scripture, journal, agu, 'supplement-review': supplementReview };
+}
+
+function supplementReviewStatus(source, todayStr) {
+  const meta = routineActivityMeta('supplement-review');
+  const active = (Array.isArray(source.supplements) ? source.supplements : [])
+    .filter(item => item && !item.archived);
+  const reviews = Array.isArray(source.supplementReviews) ? source.supplementReviews : [];
+  const review = reviews.find(item => item && item.date === todayStr && Array.isArray(item.answers) && item.answers.length > 0) || null;
+  const yes = review ? review.answers.filter(answer => answer && answer.taken).length : 0;
+  const no = review ? review.answers.length - yes : 0;
+  const pending = active.length;
+  return {
+    activityId: 'supplement-review',
+    label: meta?.label || 'Review de Suplementos',
+    tab: meta?.tab || 'supplements',
+    rule: 'review',
+    minutes: 0,
+    target: 0,
+    count: review ? review.answers.length : 0,
+    done: !!review,
+    detail: review
+      ? `${yes} sim · ${no} não`
+      : (pending > 0
+        ? `${pending} suplemento${pending === 1 ? '' : 's'} para revisar`
+        : 'nenhum suplemento ativo')
+  };
 }
 
 export function activityPendingMessage(status) {
   if (!status) return 'Esta atividade ainda não foi concluída hoje.';
   if (status.rule === 'entry') {
     return 'O Diário ainda não tem página hoje. A rotina reconhece quando houver um registro.';
+  }
+  if (status.rule === 'review') {
+    const extra = status.detail ? ` (${status.detail})` : '';
+    return `O Review de Suplementos ainda não foi feito hoje${extra}. A rotina reconhece quando o review for concluído.`;
   }
   const label = status.label || 'Esta atividade';
   const progress = status.target > 0 ? ` (${status.minutes} de ${status.target} min)` : '';

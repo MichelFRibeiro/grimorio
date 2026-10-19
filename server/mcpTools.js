@@ -9,7 +9,8 @@ import {
   deleteSupplement,
   logSupplementIntake,
   updateSupplementLog,
-  deleteSupplementLog
+  deleteSupplementLog,
+  completeSupplementReview
 } from './domain/supplements.js';
 import {
   createJournalEntry,
@@ -164,7 +165,7 @@ const locationEnum = z.enum(['anywhere', 'office', 'home', 'gym']);
 const routineStepSchema = z.object({
   habitId: z.string().optional().describe('ID do ritual, se o passo for um ritual'),
   routineId: z.string().optional().describe('ID de outra rotina, se o passo for uma sub-rotina'),
-  activityId: z.enum(['reading', 'scripture', 'journal', 'agu']).optional().describe('Atividade reconhecida pelo dia: reading (Biblioteca), scripture (Escrituras), journal (Diário) ou agu (AGU)'),
+  activityId: z.enum(['reading', 'scripture', 'journal', 'agu', 'supplement-review']).optional().describe('Atividade reconhecida pelo dia: reading (Biblioteca), scripture (Escrituras), journal (Diário), agu (AGU) ou supplement-review (Review de Suplementos)'),
   note: z.string().optional().describe('Lembrete curto deste passo')
 });
 const timeWindowSchema = z.object({
@@ -1348,7 +1349,7 @@ export const toolsDefinition = [
   },
   {
     name: 'create_routine',
-    description: 'Criar uma rotina: sequência de rituais, atividades (reading, scripture, journal, agu) e/ou outras rotinas (mínimo 2, sem repetir, sem ciclo, no máximo 3 níveis). Biblioteca, Escrituras e AGU contam quando o setpoint do dia é atingido. O Diário conta com qualquer página. Não concede recompensa.',
+    description: 'Criar uma rotina: sequência de rituais, atividades (reading, scripture, journal, agu, supplement-review) e/ou outras rotinas (mínimo 2, sem repetir, sem ciclo, no máximo 3 níveis). Biblioteca, Escrituras e AGU contam quando o setpoint do dia é atingido. O Diário conta com qualquer página. O Review de Suplementos conta quando o review do dia foi concluído. Não concede recompensa.',
     schema: {
       title: z.string().describe('Nome da rotina (ex: Manhã, Dia inteiro)'),
       description: z.string().optional().describe('Contexto da sequência'),
@@ -1385,7 +1386,7 @@ export const toolsDefinition = [
   },
   {
     name: 'advance_routine',
-    description: 'Marcar o próximo ritual da rotina que ainda não foi feito hoje, inclusive dentro de uma sub-rotina. Reusa o ritual (streak, XP e moedas). Recusa passo fora de ordem. Não marca Biblioteca, Escrituras, AGU nem Diário: esses passos só fecham quando o dia já os cumpriu. Com undo=true, desmarca um ritual já feito hoje e estorna as recompensas.',
+    description: 'Marcar o próximo ritual da rotina que ainda não foi feito hoje, inclusive dentro de uma sub-rotina. Reusa o ritual (streak, XP e moedas). Recusa passo fora de ordem. Não marca Biblioteca, Escrituras, AGU, Diário nem Review de Suplementos: esses passos só fecham quando o dia já os cumpriu. Com undo=true, desmarca um ritual já feito hoje e estorna as recompensas.',
     schema: {
       id: z.string().describe('ID da rotina'),
       habitId: z.string().optional().describe('ID do ritual. Ao marcar, precisa ser o próximo. Ao desfazer, o passo já feito.'),
@@ -1566,6 +1567,24 @@ export const toolsDefinition = [
       if (result.error) return formatError(result.error);
       saveDb(db);
       return formatSuccess(result.removed, 'Registro de consumo excluído.');
+    }
+  },
+  {
+    name: 'complete_supplement_review',
+    description: 'Concluir o Review de Suplementos de um dia. Cada resposta diz se o suplemento foi tomado (taken=true) ou não. Não cria o registro de consumo: taken=true só anota a resposta. O mesmo dia substitui o review anterior. A rotina reconhece supplement-review quando este review existe.',
+    schema: {
+      date: z.string().describe('Data do review YYYY-MM-DD'),
+      answers: z.array(z.object({
+        supplementId: z.string().describe('ID do suplemento'),
+        taken: z.boolean().describe('true se tomou hoje, false se não')
+      })).describe('Respostas do review, uma por suplemento')
+    },
+    handler: async (args) => {
+      const db = getDb();
+      const result = completeSupplementReview(db, args);
+      if (result.error) return formatError(result.error);
+      saveDb(db);
+      return formatSuccess(result.review, `Review de suplementos de ${result.review.date} concluído.`);
     }
   },
 
@@ -3451,7 +3470,8 @@ export const resourcesDefinition = [
         mimeType: 'application/json',
         text: JSON.stringify({
           supplements: db.supplements || [],
-          logs: db.supplementLogs || []
+          logs: db.supplementLogs || [],
+          reviews: db.supplementReviews || []
         }, null, 2)
       };
     }
