@@ -85,7 +85,7 @@ export const FEATURE_SETTINGS = [
     id: 'routines',
     label: 'Rotinas',
     tab: 'routines',
-    description: 'As sequências de rituais e de outras rotinas. Desligar não apaga a ordem cadastrada.',
+    description: 'As sequências de rituais, atividades e outras rotinas. Desligar não apaga a ordem cadastrada.',
     group: 'Abas'
   },
   {

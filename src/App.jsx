@@ -271,7 +271,9 @@ export function App() {
     const aguPlanObj = data?.aguPlan;
     const now = new Date();
 
-    const routinesDueCount = routinesList.filter(routine => routine.nextHabitId && !routine.completeToday).length;
+    const routinesDueCount = routinesList.filter(routine => (
+      (routine.nextHabitId || routine.nextActivityId) && !routine.completeToday
+    )).length;
     const habitsDueCount = habitsList.filter((habit) => {
       const due = getHabitDueStatus(habit, getHabitWeeklyStats(habit, now), now, todayStr);
       return due.due && !due.completedToday;
@@ -802,6 +804,7 @@ export function App() {
             onAdvanceRoutine={advanceRoutine}
             onUpdateHabitDuration={updateHabitDuration}
             onDeleteRoutine={deleteRoutine}
+            onOpenActivity={(step) => openTab(step?.tab)}
           />
         )}
 

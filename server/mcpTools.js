@@ -164,6 +164,7 @@ const locationEnum = z.enum(['anywhere', 'office', 'home', 'gym']);
 const routineStepSchema = z.object({
   habitId: z.string().optional().describe('ID do ritual, se o passo for um ritual'),
   routineId: z.string().optional().describe('ID de outra rotina, se o passo for uma sub-rotina'),
+  activityId: z.enum(['reading', 'scripture', 'journal', 'agu']).optional().describe('Atividade reconhecida pelo dia: reading (Biblioteca), scripture (Escrituras), journal (Diário) ou agu (AGU)'),
   note: z.string().optional().describe('Lembrete curto deste passo')
 });
 const timeWindowSchema = z.object({
@@ -1347,13 +1348,13 @@ export const toolsDefinition = [
   },
   {
     name: 'create_routine',
-    description: 'Criar uma rotina: sequência de rituais e/ou outras rotinas (mínimo 2, sem repetir, sem ciclo, no máximo 3 níveis de sub-rotina). Não concede recompensa.',
+    description: 'Criar uma rotina: sequência de rituais, atividades (reading, scripture, journal, agu) e/ou outras rotinas (mínimo 2, sem repetir, sem ciclo, no máximo 3 níveis). Biblioteca, Escrituras e AGU contam quando o setpoint do dia é atingido. O Diário conta com qualquer página. Não concede recompensa.',
     schema: {
       title: z.string().describe('Nome da rotina (ex: Manhã, Dia inteiro)'),
       description: z.string().optional().describe('Contexto da sequência'),
       icon: z.string().optional().describe('Ícone Lucide (ex: ListOrdered, Sunrise)'),
       color: z.string().optional().describe('Cor hex (#38bdf8)'),
-      steps: z.array(routineStepSchema).min(2).describe('Passos na ordem: ritual (habitId) ou sub-rotina (routineId)')
+      steps: z.array(routineStepSchema).min(2).describe('Passos na ordem: ritual (habitId), atividade (activityId) ou sub-rotina (routineId)')
     },
     handler: async (args) => {
       const db = getDb();
@@ -1384,7 +1385,7 @@ export const toolsDefinition = [
   },
   {
     name: 'advance_routine',
-    description: 'Marcar o próximo ritual da rotina que ainda não foi feito hoje, inclusive dentro de uma sub-rotina. Reusa o ritual (streak, XP e moedas). Recusa um passo fora de ordem. Com undo=true, desmarca um ritual já feito hoje e estorna as recompensas.',
+    description: 'Marcar o próximo ritual da rotina que ainda não foi feito hoje, inclusive dentro de uma sub-rotina. Reusa o ritual (streak, XP e moedas). Recusa passo fora de ordem. Não marca Biblioteca, Escrituras, AGU nem Diário: esses passos só fecham quando o dia já os cumpriu. Com undo=true, desmarca um ritual já feito hoje e estorna as recompensas.',
     schema: {
       id: z.string().describe('ID da rotina'),
       habitId: z.string().optional().describe('ID do ritual. Ao marcar, precisa ser o próximo. Ao desfazer, o passo já feito.'),

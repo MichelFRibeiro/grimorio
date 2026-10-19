@@ -103,6 +103,7 @@ O script irá:
 ### 📋 Rotinas
 - Uma rotina é uma sequência de rituais já cadastrados e, se quiser, de outras rotinas (mínimo 2 passos, sem repetir o mesmo ritual ou a mesma sub-rotina).
 - Rotina de rotinas: a sub-rotina entra inteira como um passo. O modo guiado faz os rituais dela, na ordem, antes de seguir. Editar a sub-rotina atualiza quem a usa. Não dá para criar um ciclo nem passar de 3 níveis.
+- Também entram Biblioteca, Escrituras, AGU e Diário. As três primeiras contam quando o tempo do dia chega no setpoint. O Diário conta se houver qualquer página hoje. A rotina não marca essas atividades no lugar delas: **Fazer agora** abre a aba.
 - O modo guiado marca só o próximo ritual ainda não feito hoje, mesmo dentro de uma sub-rotina. O ritual é quem recebe streak, XP e moedas — a rotina não dá recompensa extra.
 - Clicar num passo abre o ritual: cronômetro, quantidade (se o ritual mede) e o registro. Um passo já feito pode ser desmarcado ali — o estorno é o do ritual.
 - Ritual com homeostase mostra a quantidade esperada naquela execução (a faixa viva, ex.: 5–6 min), no passo, no botão “Fazer agora” e no registro. Sem homeostase, nada extra aparece.

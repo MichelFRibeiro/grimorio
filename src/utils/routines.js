@@ -1,13 +1,20 @@
 /**
- * Rotinas: sequência ordenada de rituais e de outras rotinas.
- * A rotina não concede XP nem moedas — cada passo de ritual marca
- * o ritual pelo toggle já existente. O progresso do dia é o histórico
- * do ritual, inclusive quando ele está dentro de uma sub-rotina.
+ * Rotinas: sequência ordenada de rituais, atividades e outras rotinas.
+ * A rotina não concede XP nem moedas. O ritual é marcado pelo toggle
+ * já existente. Biblioteca, Escrituras, AGU e Diário não são marcados
+ * aqui: a rotina só reconhece o que o dia já registrou.
  *
- * Uma sub-rotina é referência, não cópia: editar a rotina menor
- * atualiza quem a usa. Ciclo (a manhã dentro do dia e o dia dentro
- * da manhã) é recusado. No máximo MAX_ROUTINE_NESTING elos.
+ * Uma sub-rotina é referência, não cópia. Ciclo é recusado.
+ * No máximo MAX_ROUTINE_NESTING elos.
  */
+
+import {
+  isActivityStep,
+  isRoutineActivityId,
+  routineActivityMeta
+} from './routineActivities.js';
+
+export { isActivityStep } from './routineActivities.js';
 
 export const MAX_ROUTINE_STEPS = 24;
 
@@ -63,6 +70,7 @@ export function sanitizeRoutine(routine, habitIds = null, routineIds = null, chi
 
   const seenHabits = new Set();
   const seenRoutines = new Set();
+  const seenActivities = new Set();
   const steps = [];
   const rawSteps = Array.isArray(routine.steps) ? routine.steps : [];
   rawSteps.forEach(raw => {
@@ -74,6 +82,12 @@ export function sanitizeRoutine(routine, habitIds = null, routineIds = null, chi
       if (routineIds && !routineIds.has(step.routineId)) return;
       if (childMap && routineReaches(childMap, step.routineId, id)) return;
       seenRoutines.add(step.routineId);
+      steps.push(step);
+      return;
+    }
+    if (step.kind === 'activity') {
+      if (seenActivities.has(step.activityId)) return;
+      seenActivities.add(step.activityId);
       steps.push(step);
       return;
     }
@@ -105,11 +119,20 @@ function readStoredStep(step) {
   const routineId = String(step.routineId || '').trim();
   const explicitHabit = String(step.habitId || '').trim();
   const fallbackHabit = String(step.id || '').trim();
-  let kind = step.kind === 'routine' || step.kind === 'habit' ? step.kind : '';
-  if (!kind) kind = routineId && !explicitHabit ? 'routine' : 'habit';
+  const activityId = String(step.activityId || '').trim();
+  let kind = step.kind === 'routine' || step.kind === 'habit' || step.kind === 'activity' ? step.kind : '';
+  if (!kind) {
+    if (routineId && !explicitHabit) kind = 'routine';
+    else if (activityId && !explicitHabit) kind = 'activity';
+    else kind = 'habit';
+  }
   if (kind === 'routine') {
-    if (!routineId || explicitHabit) return null;
+    if (!routineId || explicitHabit || activityId) return null;
     return { kind: 'routine', routineId, note };
+  }
+  if (kind === 'activity') {
+    if (!isRoutineActivityId(activityId) || routineId || explicitHabit) return null;
+    return { kind: 'activity', activityId, note };
   }
   const habitId = explicitHabit || fallbackHabit;
   if (!habitId || routineId) return null;
@@ -211,6 +234,7 @@ export function normalizeRoutineSteps(rawSteps, habits = [], routines = [], self
   const routineIds = new Set((routines || []).map(item => item?.id).filter(Boolean));
   const seenHabits = new Set();
   const seenRoutines = new Set();
+  const seenActivities = new Set();
   const steps = [];
 
   for (const raw of rawSteps) {
@@ -226,6 +250,12 @@ export function normalizeRoutineSteps(rawSteps, habits = [], routines = [], self
       if (!routineIds.has(routineId)) return { error: 'Uma das sub-rotinas da sequência não existe.' };
       seenRoutines.add(routineId);
       steps.push({ kind: 'routine', routineId, note });
+    } else if (classified.step.kind === 'activity') {
+      const { activityId, note } = classified.step;
+      if (seenActivities.has(activityId)) return { error: 'A rotina não pode repetir a mesma atividade.' };
+      if (!isRoutineActivityId(activityId)) return { error: 'Essa atividade não entra em rotina.' };
+      seenActivities.add(activityId);
+      steps.push({ kind: 'activity', activityId, note });
     } else {
       const { habitId, note } = classified.step;
       if (seenHabits.has(habitId)) return { error: 'A rotina não pode repetir o mesmo ritual.' };
@@ -248,22 +278,25 @@ export function normalizeRoutineSteps(rawSteps, habits = [], routines = [], self
 function classifyIncomingStep(step) {
   const routineId = String(step.routineId || '').trim();
   const habitId = String(step.habitId || '').trim();
+  const activityId = String(step.activityId || '').trim();
   const fallbackHabit = String(step.id || '').trim();
   const note = String(step.note || '').trim().slice(0, 240);
+  const mixed = [routineId, habitId, activityId].filter(Boolean).length > 1;
+  if (mixed) return { error: 'Um passo é um ritual, uma atividade ou uma sub-rotina, não mais de um.' };
 
-  if (step.kind === 'routine') {
-    if (habitId) return { error: 'Um passo é um ritual ou uma sub-rotina, não os dois.' };
+  if (step.kind === 'routine' || (!step.kind && routineId)) {
     if (!routineId) return { step: null };
     return { step: { kind: 'routine', routineId, note } };
   }
+  if (step.kind === 'activity' || (!step.kind && activityId)) {
+    if (!activityId) return { step: null };
+    return { step: { kind: 'activity', activityId, note } };
+  }
   if (step.kind === 'habit') {
-    if (routineId) return { error: 'Um passo é um ritual ou uma sub-rotina, não os dois.' };
     const id = habitId || fallbackHabit;
     if (!id) return { step: null };
     return { step: { kind: 'habit', habitId: id, note } };
   }
-  if (routineId && habitId) return { error: 'Um passo é um ritual ou uma sub-rotina, não os dois.' };
-  if (routineId) return { step: { kind: 'routine', routineId, note } };
   const id = habitId || fallbackHabit;
   if (!id) return { step: null };
   return { step: { kind: 'habit', habitId: id, note } };
@@ -273,7 +306,7 @@ function classifyIncomingStep(step) {
  * Passos na ordem, com o ritual ou a sub-rotina resolvidos.
  * Ritual excluído, sub-rotina excluída ou ciclo viram passo ausente.
  */
-export function resolveRoutineSteps(routine, habits = [], todayStr = '', routines = [], seen = null) {
+export function resolveRoutineSteps(routine, habits = [], todayStr = '', routines = [], seen = null, activities = null) {
   const trail = new Set(seen || []);
   if (routine?.id) {
     if (trail.has(routine.id)) return [];
@@ -301,7 +334,7 @@ export function resolveRoutineSteps(routine, habits = [], todayStr = '', routine
           progress: { total: 0, done: 0, missing: 1, complete: false }
         };
       }
-      const children = resolveRoutineSteps(child, habits, todayStr, routines, trail);
+      const children = resolveRoutineSteps(child, habits, todayStr, routines, trail, activities);
       const progress = routineDayProgress(children);
       return {
         index,
@@ -313,6 +346,26 @@ export function resolveRoutineSteps(routine, habits = [], todayStr = '', routine
         missing: false,
         doneToday: progress.complete,
         progress
+      };
+    }
+
+    if (isActivityStep(step)) {
+      const meta = routineActivityMeta(step.activityId);
+      const status = activities?.[step.activityId] || null;
+      return {
+        index,
+        kind: 'activity',
+        activityId: step.activityId,
+        note: step.note || '',
+        title: status?.label || meta?.label || 'Atividade',
+        tab: status?.tab || meta?.tab || '',
+        rule: status?.rule || meta?.rule || '',
+        minutes: status?.minutes || 0,
+        target: status?.target || 0,
+        count: status?.count || 0,
+        detail: status?.detail || '',
+        missing: !meta,
+        doneToday: !!status?.done
       };
     }
 
@@ -334,7 +387,7 @@ export function resolveRoutineSteps(routine, habits = [], todayStr = '', routine
  * Rituais na ordem em que o modo guiado os encontra.
  * O mesmo ritual em dois ramos conta uma vez — o histórico é dele.
  */
-export function flattenRoutineLeaves(resolvedSteps, seenHabits = new Set(), seenRoutines = new Set()) {
+export function flattenRoutineLeaves(resolvedSteps, seenHabits = new Set(), seenRoutines = new Set(), seenActivities = new Set()) {
   const leaves = [];
   for (const step of resolvedSteps || []) {
     if (isRoutineStep(step)) {
@@ -344,7 +397,17 @@ export function flattenRoutineLeaves(resolvedSteps, seenHabits = new Set(), seen
       }
       if (step.routineId && seenRoutines.has(step.routineId)) continue;
       if (step.routineId) seenRoutines.add(step.routineId);
-      leaves.push(...flattenRoutineLeaves(step.steps, seenHabits, seenRoutines));
+      leaves.push(...flattenRoutineLeaves(step.steps, seenHabits, seenRoutines, seenActivities));
+      continue;
+    }
+    if (isActivityStep(step)) {
+      if (step.missing) {
+        leaves.push(step);
+        continue;
+      }
+      if (step.activityId && seenActivities.has(step.activityId)) continue;
+      if (step.activityId) seenActivities.add(step.activityId);
+      leaves.push(step);
       continue;
     }
     if (step?.habitId && seenHabits.has(step.habitId)) continue;
@@ -352,6 +415,19 @@ export function flattenRoutineLeaves(resolvedSteps, seenHabits = new Set(), seen
     leaves.push(step);
   }
   return leaves;
+}
+
+export function routineLeafKey(step) {
+  if (!step || step.missing) return '';
+  if (isActivityStep(step) && step.activityId) return `activity:${step.activityId}`;
+  if (step.habitId && !isRoutineStep(step)) return `habit:${step.habitId}`;
+  return '';
+}
+
+export function stepContainsLeaf(step, leafKey) {
+  if (!leafKey || !step) return false;
+  if (isRoutineStep(step)) return (step.steps || []).some(child => stepContainsLeaf(child, leafKey));
+  return routineLeafKey(step) === leafKey;
 }
 
 export function findRoutineHabitStep(steps, habitId) {
@@ -400,9 +476,15 @@ export function collectRoutineHabitIds(steps, seen = new Set(), acc = []) {
   return acc;
 }
 
-/** Primeiro ritual ainda não feito hoje. Null se a sequência do dia acabou. */
+function isPendingLeaf(step) {
+  if (!step || step.missing || step.doneToday) return false;
+  if (isActivityStep(step)) return !!step.activityId;
+  return !!step.habitId && !isRoutineStep(step);
+}
+
+/** Primeiro passo ainda não feito hoje. Null se a sequência do dia acabou. */
 export function nextRoutineStep(resolvedSteps) {
-  return (resolvedSteps || []).find(step => step?.habitId && !step.missing && !step.doneToday) || null;
+  return (resolvedSteps || []).find(isPendingLeaf) || null;
 }
 
 export function nextRoutineLeaf(resolvedSteps) {
@@ -411,7 +493,7 @@ export function nextRoutineLeaf(resolvedSteps) {
 
 export function routineDayProgress(resolvedSteps) {
   const leaves = flattenRoutineLeaves(resolvedSteps);
-  const present = leaves.filter(step => step?.habitId && !step.missing);
+  const present = leaves.filter(step => routineLeafKey(step));
   const done = present.filter(step => step.doneToday).length;
   return {
     total: present.length,
@@ -425,7 +507,7 @@ export function detachHabitFromRoutines(routines, habitId) {
   if (!Array.isArray(routines) || !habitId) return routines || [];
   return routines.map(routine => ({
     ...routine,
-    steps: (routine.steps || []).filter(step => step?.kind === 'routine' || step?.habitId !== habitId)
+    steps: (routine.steps || []).filter(step => step?.kind === 'routine' || step?.kind === 'activity' || step?.habitId !== habitId)
   }));
 }
 

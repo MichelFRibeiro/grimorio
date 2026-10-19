@@ -13,6 +13,7 @@ import {
   sanitizeRoutines,
   routineLinkError
 } from '../src/utils/routines.js';
+import { routineActivitySnapshot } from '../src/utils/routineActivities.js';
 
 const PORT = Number(process.env.TEST_PORT || process.env.PORT);
 let authToken = null;
@@ -82,6 +83,31 @@ function assertModel() {
     ROUTINE_CYCLE_ERROR
   );
   assert.equal(MAX_ROUTINE_NESTING >= 1, true);
+
+  const today = '2026-04-12';
+  const short = routineActivitySnapshot({
+    readingSessions: [{ date: today, durationMinutes: 10 }],
+    scriptureSessions: [{ date: today, durationMinutes: 10 }],
+    journalEntries: [],
+    examQuestions: [{ id: 'q', subjectId: 'constitucional', date: today, durationMinutes: 10, totalQuestions: 1 }]
+  }, today);
+  assert.equal(short.reading.done, false, `leitura abaixo do setpoint (${short.reading.detail})`);
+  assert.equal(short.scripture.done, false);
+  assert.equal(short.journal.done, false, 'diário vazio não conclui');
+  assert.equal(short.agu.done, false, `AGU abaixo do setpoint (${short.agu.detail})`);
+  assert.ok(short.reading.target >= 15, `setpoint de leitura veio ${short.reading.target}`);
+
+  const met = routineActivitySnapshot({
+    readingSessions: [{ date: today, durationMinutes: short.reading.target }],
+    scriptureSessions: [{ date: today, durationMinutes: short.scripture.target }],
+    journalEntries: [{ id: 'p1', date: today, body: 'uma página' }],
+    examQuestions: [{ id: 'q2', subjectId: 'constitucional', date: today, durationMinutes: short.agu.target, totalQuestions: 1 }]
+  }, today);
+  assert.equal(met.reading.done, true, met.reading.detail);
+  assert.equal(met.scripture.done, true, met.scripture.detail);
+  assert.equal(met.journal.done, true, met.journal.detail);
+  assert.equal(met.journal.detail, '1 página hoje');
+  assert.equal(met.agu.done, true, met.agu.detail);
 }
 
 async function run() {
@@ -299,6 +325,122 @@ async function run() {
     const dayAfter = afterDetach.data.routines.find(item => item.id === dayId);
     assert.ok(dayAfter.steps.every(step => step.routineId !== studyId), 'excluir a sub-rotina tira o passo da rotina-mãe');
     assert.ok(afterDetach.data.habits.some(habit => habit.id === nestedIds[2]), 'excluir a sub-rotina não apaga os rituais');
+
+    const anchor = await request('/api/habits', { method: 'POST' }, { title: 'Abrir o dia', frequency: 'daily' });
+    assert.equal(anchor.status, 200, anchor.data?.error);
+    const anchorId = anchor.data.habit.id;
+    const book = await request('/api/books', { method: 'POST' }, { title: 'Um livro', totalPages: 80 });
+    assert.equal(book.status, 200, book.data?.error || book.raw);
+    const bookId = book.data.book?.id || book.data.id;
+    assert.ok(bookId, 'livro criado');
+
+    const dayWork = await request('/api/routines', { method: 'POST' }, {
+      title: 'Estudo do dia',
+      steps: [
+        { habitId: anchorId },
+        { activityId: 'reading' },
+        { activityId: 'scripture' },
+        { activityId: 'journal' },
+        { activityId: 'agu' }
+      ]
+    });
+    assert.equal(dayWork.status, 200, dayWork.data?.error);
+    const dayWorkId = dayWork.data.routine.id;
+    assert.equal(dayWork.data.routine.nextHabitId, anchorId);
+    assert.equal(dayWork.data.routine.steps[1].kind, 'activity');
+    assert.equal(dayWork.data.routine.steps[1].activityId, 'reading');
+    assert.equal(dayWork.data.routine.steps[1].doneToday, false);
+    assert.ok(dayWork.data.routine.steps[1].target >= 15);
+
+    const repeatActivity = await request('/api/routines', { method: 'POST' }, {
+      title: 'Repete atividade',
+      steps: [{ activityId: 'journal' }, { activityId: 'journal' }]
+    });
+    assert.equal(repeatActivity.status, 400);
+
+    const forced = await request(`/api/routines/${dayWorkId}/advance`, { method: 'POST' }, { habitId: anchorId });
+    assert.equal(forced.status, 200, forced.data?.error);
+    assert.equal(forced.data.routine.nextActivityId, 'reading');
+    assert.equal(forced.data.routine.nextHabitId, null);
+
+    const blocked = await request(`/api/routines/${dayWorkId}/advance`, { method: 'POST' }, {});
+    assert.equal(blocked.status, 400, 'atividade não é marcada pela rotina');
+
+    const shortRead = await request(`/api/books/${bookId}/reading-session`, { method: 'POST' }, {
+      startPage: 1,
+      endPage: 2,
+      durationMinutes: 10
+    });
+    assert.equal(shortRead.status, 200, shortRead.data?.error);
+    const afterShort = await request('/api/state');
+    const stillReading = afterShort.data.routines.find(item => item.id === dayWorkId);
+    assert.equal(stillReading.nextActivityId, 'reading', stillReading.steps.find(step => step.activityId === 'reading')?.detail);
+    assert.equal(stillReading.steps.find(step => step.activityId === 'reading').doneToday, false);
+
+    const enoughRead = await request(`/api/books/${bookId}/reading-session`, { method: 'POST' }, {
+      startPage: 2,
+      endPage: 4,
+      durationMinutes: stillReading.steps.find(step => step.activityId === 'reading').target
+    });
+    assert.equal(enoughRead.status, 200, enoughRead.data?.error);
+    const afterRead = await request('/api/state');
+    const readingDone = afterRead.data.routines.find(item => item.id === dayWorkId);
+    assert.equal(readingDone.steps.find(step => step.activityId === 'reading').doneToday, true);
+    assert.equal(readingDone.nextActivityId, 'scripture');
+
+    const shortScripture = await request('/api/scripture/sessions', { method: 'POST' }, {
+      startBookId: 'joa',
+      startChapter: 1,
+      startVerse: 1,
+      endBookId: 'joa',
+      endChapter: 1,
+      endVerse: 5,
+      durationMinutes: 10
+    });
+    assert.equal(shortScripture.status, 200, shortScripture.data?.error);
+    const midScripture = await request('/api/state');
+    assert.equal(midScripture.data.routines.find(item => item.id === dayWorkId).nextActivityId, 'scripture');
+
+    const scriptureTarget = midScripture.data.routines
+      .find(item => item.id === dayWorkId)
+      .steps.find(step => step.activityId === 'scripture').target;
+    const enoughScripture = await request('/api/scripture/sessions', { method: 'POST' }, {
+      startBookId: 'joa',
+      startChapter: 1,
+      startVerse: 6,
+      endBookId: 'joa',
+      endChapter: 1,
+      endVerse: 10,
+      durationMinutes: scriptureTarget
+    });
+    assert.equal(enoughScripture.status, 200, enoughScripture.data?.error);
+    const afterScripture = await request('/api/state');
+    const scriptureDone = afterScripture.data.routines.find(item => item.id === dayWorkId);
+    assert.equal(scriptureDone.steps.find(step => step.activityId === 'scripture').doneToday, true);
+    assert.equal(scriptureDone.nextActivityId, 'journal');
+
+    const page = await request('/api/journal', { method: 'POST' }, { body: 'Uma linha basta.' });
+    assert.equal(page.status, 200, page.data?.error);
+    const afterJournal = await request('/api/state');
+    const journalDone = afterJournal.data.routines.find(item => item.id === dayWorkId);
+    assert.equal(journalDone.steps.find(step => step.activityId === 'journal').doneToday, true);
+    assert.equal(journalDone.nextActivityId, 'agu');
+
+    const aguTarget = journalDone.steps.find(step => step.activityId === 'agu').target;
+    const aguStudy = await request('/api/questions', { method: 'POST' }, {
+      subject: 'Direito Constitucional',
+      topic: 'Controle de Constitucionalidade',
+      totalQuestions: 5,
+      correctAnswers: 4,
+      durationMinutes: aguTarget
+    });
+    assert.equal(aguStudy.status, 200, aguStudy.data?.error);
+    const afterAgu = await request('/api/state');
+    const finished = afterAgu.data.routines.find(item => item.id === dayWorkId);
+    assert.equal(finished.steps.find(step => step.activityId === 'agu').doneToday, true, finished.steps.find(step => step.activityId === 'agu')?.detail);
+    assert.equal(finished.completeToday, true);
+    assert.equal(finished.nextActivityId, null);
+    assert.equal(finished.nextHabitId, null);
 
     console.log('Rotinas: sequência guiada e sub-rotinas ok');
   } finally {
