@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Pill,
   Plus,
@@ -270,7 +271,8 @@ export function SupplementsView({
   };
 
   const saveIntake = async (event) => {
-    event.preventDefault();
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
     const amount = Number(String(intake.amount).replace(',', '.'));
     if (!intake.supplementId) {
       alert('Escolha o suplemento', 'Cadastre um suplemento antes de registrar o consumo.');
@@ -289,7 +291,7 @@ export function SupplementsView({
       amount,
       date: intake.date,
       time: intake.time,
-      notes: intake.notes.trim()
+      notes: String(intake.notes || '').trim()
     };
     const fromReview = !!intakeModal?.fromReview;
     if (intakeModal?.mode === 'edit') {
@@ -551,27 +553,40 @@ export function SupplementsView({
 
       {intakeModal && (
         <Modal title={intakeModal.mode === 'edit' ? 'Editar registro' : 'Registrar tomada'}>
-          <form onSubmit={saveIntake} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <form
+            method="post"
+            action="#registrar-tomada"
+            noValidate
+            onSubmit={saveIntake}
+            style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
+          >
             <Field label="Suplemento *">
-              <select
-                required
-                disabled={!!intakeModal?.fromReview}
-                value={intake.supplementId}
-                onChange={(event) => {
-                  const next = (supplements || []).find(item => item.id === event.target.value);
-                  setIntake(prev => ({
-                    ...prev,
-                    supplementId: event.target.value,
-                    amount: next?.defaultDose == null ? prev.amount : String(next.defaultDose)
-                  }));
-                }}
-                style={fieldStyle}
-              >
-                <option value="">Selecione</option>
-                {(supplements || []).filter(item => !item.archived || item.id === intake.supplementId).map(item => (
-                  <option key={item.id} value={item.id}>{item.name}{item.archived ? ' (arquivado)' : ''}</option>
-                ))}
-              </select>
+              {intakeModal.fromReview ? (
+                <input
+                  readOnly
+                  value={(supplements || []).find(item => item.id === intake.supplementId)?.name || review?.items?.find(item => item.id === intake.supplementId)?.name || ''}
+                  style={fieldStyle}
+                />
+              ) : (
+                <select
+                  required
+                  value={intake.supplementId}
+                  onChange={(event) => {
+                    const next = (supplements || []).find(item => item.id === event.target.value);
+                    setIntake(prev => ({
+                      ...prev,
+                      supplementId: event.target.value,
+                      amount: next?.defaultDose == null ? prev.amount : String(next.defaultDose)
+                    }));
+                  }}
+                  style={fieldStyle}
+                >
+                  <option value="">Selecione</option>
+                  {(supplements || []).filter(item => !item.archived || item.id === intake.supplementId).map(item => (
+                    <option key={item.id} value={item.id}>{item.name}{item.archived ? ' (arquivado)' : ''}</option>
+                  ))}
+                </select>
+              )}
             </Field>
             <Field label="Quantidade tomada *">
               <input required type="number" min="0" step="any" value={intake.amount} onChange={(event) => setIntake(prev => ({ ...prev, amount: event.target.value }))} style={fieldStyle} />
@@ -590,7 +605,11 @@ export function SupplementsView({
             <div style={{ color: '#64748b', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Clock size={13} /> A hora fica no fuso de São Paulo.
             </div>
-            <ModalActions onCancel={() => setIntakeModal(null)} submitLabel={intakeModal.mode === 'edit' ? 'Salvar alterações' : 'Registrar'} />
+            <ModalActions
+              onCancel={() => setIntakeModal(null)}
+              onSubmit={saveIntake}
+              submitLabel={intakeModal.mode === 'edit' ? 'Salvar alterações' : 'Registrar'}
+            />
           </form>
         </Modal>
       )}
@@ -610,13 +629,15 @@ function Field({ label, children }) {
 }
 
 function Modal({ title, children }) {
-  return (
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div className="modal-overlay" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-      <div className="glass-panel modal-sheet" style={{ maxWidth: '480px', width: '100%', padding: '28px', border: '1px solid rgba(45, 212, 191, 0.35)', borderRadius: '20px' }}>
+      <div className="glass-panel modal-sheet" style={{ maxWidth: '480px', width: '100%', padding: '28px', border: '1px solid rgba(45, 212, 191, 0.35)', borderRadius: '20px' }} onClick={(event) => event.stopPropagation()}>
         <h3 className="font-cinzel" style={{ fontSize: '1.25rem', fontWeight: 800, color: ACCENT, marginBottom: '16px' }}>{title}</h3>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -670,13 +691,17 @@ function ReviewModal({ review, busy, failed, takenToday, onNo, onYes, onRetry, o
   );
 }
 
-function ModalActions({ onCancel, submitLabel }) {
+function ModalActions({ onCancel, submitLabel, onSubmit }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
       <button type="button" onClick={onCancel} style={{ padding: '10px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.08)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
         Cancelar
       </button>
-      <button type="submit" style={{ padding: '10px 18px', borderRadius: '10px', background: ACCENT, color: '#042f2e', fontWeight: 800, border: 'none', cursor: 'pointer' }}>
+      <button
+        type={onSubmit ? 'button' : 'submit'}
+        onClick={onSubmit}
+        style={{ padding: '10px 18px', borderRadius: '10px', background: ACCENT, color: '#042f2e', fontWeight: 800, border: 'none', cursor: 'pointer' }}
+      >
         {submitLabel}
       </button>
     </div>
