@@ -1192,17 +1192,17 @@ export function useGameData() {
 
   const logSupplementIntake = async (logData) => {
     playClick();
-    await mutate('/api/supplement-logs', { method: 'POST', body: logData });
+    return mutate('/api/supplement-logs', { method: 'POST', body: logData });
   };
 
   const updateSupplementLog = async (id, logData) => {
     playClick();
-    await mutate(`/api/supplement-logs/${id}`, { method: 'PUT', body: logData });
+    return mutate(`/api/supplement-logs/${id}`, { method: 'PUT', body: logData });
   };
 
   const deleteSupplementLog = async (id) => {
     playClick();
-    await mutate(`/api/supplement-logs/${id}`, { method: 'DELETE' });
+    return mutate(`/api/supplement-logs/${id}`, { method: 'DELETE' });
   };
 
   const completeSupplementReview = async (reviewData) => {

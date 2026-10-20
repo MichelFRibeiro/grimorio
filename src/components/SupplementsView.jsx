@@ -554,8 +554,6 @@ export function SupplementsView({
       {intakeModal && (
         <Modal title={intakeModal.mode === 'edit' ? 'Editar registro' : 'Registrar tomada'}>
           <form
-            method="post"
-            action="#registrar-tomada"
             noValidate
             onSubmit={saveIntake}
             style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
