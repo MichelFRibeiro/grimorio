@@ -72,6 +72,32 @@ function findActivityStep(steps, activityId) {
 
 const ACCENT = '#38bdf8';
 
+/**
+ * Botão "Fazer agora" da rotina: abre o passo pendente sem precisar expandir
+ * a rotina. Usado no cabeçalho (ao lado do nome) e no rodapé da rotina.
+ */
+function doNowStyle(enabled, { marginTop = 0 } = {}) {
+  return {
+    marginTop,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 14px',
+    borderRadius: '10px',
+    border: 'none',
+    cursor: enabled ? 'pointer' : 'not-allowed',
+    fontWeight: 800,
+    background: enabled ? `linear-gradient(135deg, ${ACCENT} 0%, #0284c7 100%)` : 'rgba(255,255,255,0.06)',
+    color: enabled ? '#0f172a' : '#64748b'
+  };
+}
+
+function doNowLabel(next, nextExpected) {
+  if (!next) return 'Nada pendente nesta sequência';
+  if (next.kind === 'activity') return `Fazer agora: ${next.title}${next.detail ? ` · ${next.detail}` : ''}`;
+  return `Fazer agora: ${next.title}${nextExpected ? ` · esperado ${nextExpected}` : ''}`;
+}
+
 const fieldStyle = {
   width: '100%',
   padding: '10px 14px',
@@ -574,6 +600,16 @@ export function RoutinesView({
     }
   };
 
+  /** Executa o passo pendente da rotina sem precisar expandi-la. */
+  const startNext = (routine, next) => {
+    if (!next) return;
+    if (next.kind === 'activity') {
+      onOpenActivity?.(next);
+      return;
+    }
+    openStep(routine, next);
+  };
+
   const finishStep = async (routine, habit) => {
     if (!routine || !habit || busyId) return;
     setStepError('');
@@ -708,42 +744,71 @@ export function RoutinesView({
             return (
               <article key={routine.id} className="glass-panel" style={{ padding: expanded ? '16px 18px' : '10px 14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => toggleExpanded(routine.id)}
-                    aria-expanded={expanded}
-                    title={expanded ? 'Recolher rotina' : 'Expandir rotina'}
+                  <div
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
-                      flex: '1 1 180px',
+                      flex: '1 1 260px',
                       minWidth: 0,
-                      flexWrap: 'wrap',
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'inherit',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      padding: 0
+                      flexWrap: 'wrap'
                     }}
                   >
-                    {expanded ? <ChevronUp size={16} color="#94a3b8" /> : <ChevronDown size={16} color="#94a3b8" />}
-                    <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.05rem' }}>{routine.title}</h3>
-                    {routine.completeToday ? (
-                      <span title="Concluída hoje" aria-label="Concluída hoje" style={{ fontSize: '0.95rem', lineHeight: 1 }}>✅</span>
-                    ) : null}
-                    {subCount > 0 ? (
-                      <span style={{ fontSize: '0.68rem', fontWeight: 800, color: ACCENT }}>
-                        {subCount} sub-rotina{subCount === 1 ? '' : 's'}
-                      </span>
-                    ) : null}
-                    {parents.length > 0 ? (
-                      <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#94a3b8' }}>
-                        entra em {parents.join(', ')}
-                      </span>
-                    ) : null}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(routine.id)}
+                      aria-expanded={expanded}
+                      title={expanded ? 'Recolher rotina' : 'Expandir rotina'}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        flex: '1 1 auto',
+                        minWidth: 0,
+                        flexWrap: 'wrap',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'inherit',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        padding: 0
+                      }}
+                    >
+                      {expanded ? <ChevronUp size={16} color="#94a3b8" /> : <ChevronDown size={16} color="#94a3b8" />}
+                      <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.05rem' }}>{routine.title}</h3>
+                      {routine.completeToday ? (
+                        <span title="Concluída hoje" aria-label="Concluída hoje" style={{ fontSize: '0.95rem', lineHeight: 1 }}>✅</span>
+                      ) : null}
+                      {subCount > 0 ? (
+                        <span style={{ fontSize: '0.68rem', fontWeight: 800, color: ACCENT }}>
+                          {subCount} sub-rotina{subCount === 1 ? '' : 's'}
+                        </span>
+                      ) : null}
+                      {parents.length > 0 ? (
+                        <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#94a3b8' }}>
+                          entra em {parents.join(', ')}
+                        </span>
+                      ) : null}
+                      {!expanded ? (
+                        <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700 }}>
+                          {routine.completeToday ? 'concluída' : `${done} de ${total}`}
+                        </span>
+                      ) : null}
+                    </button>
+                    {/* Mesmo botão do rodapé, aqui ao lado do nome: executa sem expandir. */}
+                    <button
+                      type="button"
+                      disabled={!next || busyId === routine.id}
+                      onClick={() => startNext(routine, next)}
+                      title={!next
+                        ? 'Nada pendente nesta sequência'
+                        : `Fazer agora sem expandir a rotina: ${next.title || ''}`}
+                      style={{ ...doNowStyle(Boolean(next)), padding: '7px 12px', fontSize: '0.82rem', maxWidth: '100%', textAlign: 'left' }}
+                    >
+                      <Play size={14} />
+                      <span style={{ minWidth: 0 }}>{doNowLabel(next, nextExpected)}</span>
+                    </button>
+                  </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button type="button" onClick={() => openEdit(routine)} title="Editar" style={iconBtn}>
                       <Pencil size={15} />
@@ -784,34 +849,11 @@ export function RoutinesView({
                 <button
                   type="button"
                   disabled={!next || busyId === routine.id}
-                  onClick={() => {
-                    if (!next) return;
-                    if (next.kind === 'activity') {
-                      onOpenActivity?.(next);
-                      return;
-                    }
-                    openStep(routine, next);
-                  }}
-                  style={{
-                    marginTop: '14px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '10px 14px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    cursor: next ? 'pointer' : 'not-allowed',
-                    fontWeight: 800,
-                    background: next ? `linear-gradient(135deg, ${ACCENT} 0%, #0284c7 100%)` : 'rgba(255,255,255,0.06)',
-                    color: next ? '#0f172a' : '#64748b'
-                  }}
+                  onClick={() => startNext(routine, next)}
+                  style={doNowStyle(Boolean(next), { marginTop: 14 })}
                 >
                   <Play size={15} />
-                  {next
-                    ? (next.kind === 'activity'
-                      ? `Fazer agora: ${next.title}${next.detail ? ` · ${next.detail}` : ''}`
-                      : `Fazer agora: ${next.title}${nextExpected ? ` · esperado ${nextExpected}` : ''}`)
-                    : 'Nada pendente nesta sequência'}
+                  {doNowLabel(next, nextExpected)}
                 </button>
                 </>
                 )}
