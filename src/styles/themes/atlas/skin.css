@@ -1,0 +1,565 @@
+/* =========================================================================
+   TEMA "Atlas Botânico"
+   O Grimório como caderno de história natural: papel de algodão, tinta
+   vegetal, verde-sálvia e ocre de herbário. Protege a leitura sem virar
+   catálogo de loja: nada de carimbo terracota nem cantos de ficha.
+
+   O mapa mental continua escuro (as cores dos ramos precisam de contraste).
+   ========================================================================= */
+
+@import url('./dark-rules.css');
+@import url('./derived.css');
+@import url('./overrides.css');
+
+html[data-theme="atlas"] {
+  color-scheme: light;
+
+  --font-heading: 'Cormorant Garamond', 'Iowan Old Style', Georgia, serif;
+  --font-body: 'Karla', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* tokens normalizados: a UI de Configurações e os gráficos leem daqui */
+  --tpl-scheme: light;
+  --tpl-paper: #f4f1e6;
+  --tpl-card: #fdfbf5;
+  --tpl-ink: #2c3527;
+  --tpl-soft: #66705a;
+  --tpl-accent: #a8742b;
+  --tpl-accent-2: #3a7173;
+  --tpl-rule: rgba(60, 70, 52, 0.16);
+  --tpl-shadow: rgba(44, 53, 39, 0.08);
+  --tpl-ok: #47705a;
+  --tpl-alert: #b05f6b;
+  --tpl-warm: #a8742b;
+  --tpl-muted: #8d9484;
+  --tpl-heading-font: var(--font-heading);
+  --tpl-body-font: var(--font-body);
+
+  --bg-main: #f4f1e6;
+  --bg-card: #fdfbf5;
+  --bg-card-hover: #ffffff;
+  --bg-card-active: #eee9db;
+  --paper-deep: #e9e4d5;
+  --paper-line: rgba(60, 70, 52, 0.16);
+  --border-subtle: rgba(60, 70, 52, 0.18);
+  --border-bright: rgba(58, 113, 115, 0.45);
+
+  --text-main: #2c3527;
+  --text-muted: #66705a;
+  --text-dim: #8d9484;
+
+  --accent-gold: #a8742b;
+  --accent-gold-glow: rgba(168, 116, 43, 0.16);
+  --accent-cyan: #3a7173;
+  --accent-emerald: #47705a;
+  --accent-purple: #7c5f95;
+  --accent-rose: #b05f6b;
+
+  --herb-ink: #2c3527;
+  --herb-sage: #47705a;
+  --herb-teal: #3a7173;
+  --herb-ochre: #a8742b;
+  --herb-plum: #7c5f95;
+  --herb-rose: #b05f6b;
+  --herb-rule: rgba(60, 70, 52, 0.16);
+}
+
+/* ------------------------------------------------------------------ base */
+html[data-theme="atlas"] body {
+  background-color: var(--bg-main);
+  background-image:
+    radial-gradient(90% 60% at 6% -6%, rgba(71, 112, 90, 0.07) 0%, transparent 58%),
+    radial-gradient(80% 55% at 104% 2%, rgba(58, 113, 115, 0.06) 0%, transparent 55%),
+    radial-gradient(70% 50% at 50% 110%, rgba(168, 116, 43, 0.05) 0%, transparent 60%),
+    repeating-linear-gradient(0deg, rgba(60, 70, 52, 0.018) 0 1px, transparent 1px 4px);
+  background-attachment: fixed;
+  color: var(--text-main);
+  font-family: var(--font-body);
+  letter-spacing: 0.004em;
+}
+
+
+html[data-theme="atlas"] ::selection { background: rgba(71, 112, 90, 0.22); color: #1f2619; }
+
+
+html[data-theme="atlas"] ::-webkit-scrollbar { width: 11px; height: 11px; }
+
+html[data-theme="atlas"] ::-webkit-scrollbar-track { background: var(--paper-deep); }
+
+html[data-theme="atlas"] ::-webkit-scrollbar-thumb { background: #cfc9b6; border: 2px solid var(--paper-deep); border-radius: 6px; }
+
+html[data-theme="atlas"] ::-webkit-scrollbar-thumb:hover { background: #bdb6a0; }
+
+
+html[data-theme="atlas"] a { color: var(--herb-teal); }
+
+
+html[data-theme="atlas"] h1,
+html[data-theme="atlas"] h2,
+html[data-theme="atlas"] h3,
+html[data-theme="atlas"] h4,
+html[data-theme="atlas"] .font-cinzel {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--herb-ink);
+}
+
+
+/* ------------------------------------------------------ superfícies */
+html[data-theme="atlas"] .glass-panel {
+  background: var(--bg-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--herb-rule);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 1px 0 rgba(60, 70, 52, 0.04);
+  position: relative;
+}
+
+
+/* filete de herbário no topo das peças grandes, como uma régua de caderno */
+html[data-theme="atlas"] .app-nav::before,
+html[data-theme="atlas"] .today-section::before,
+html[data-theme="atlas"] header.glass-panel::before,
+html[data-theme="atlas"] .hero-identity::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  border-radius: 10px 10px 0 0;
+  background: linear-gradient(90deg, var(--herb-sage) 0%, rgba(71, 112, 90, 0.12) 42%, transparent 70%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+
+html[data-theme="atlas"] .glass-panel-gold {
+  background: #fbf6e9;
+  backdrop-filter: none;
+  border: 1px solid rgba(168, 116, 43, 0.35);
+  border-radius: 10px;
+}
+
+
+html[data-theme="atlas"] .rpg-card {
+  background: var(--bg-card);
+  border: 1px solid var(--herb-rule);
+  border-radius: 8px;
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+
+html[data-theme="atlas"] .rpg-card:hover {
+  background: #ffffff;
+  border-color: rgba(71, 112, 90, 0.35);
+  box-shadow: 0 6px 16px -12px rgba(60, 70, 52, 0.55);
+}
+
+
+/* canaletas: campos e caixas de cronômetro (fundo preto translúcido) */
+/* -------------------------------------------------------- navegação */
+html[data-theme="atlas"] .app-nav {
+  background: rgba(253, 251, 245, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--herb-rule);
+  border-radius: 10px;
+}
+
+
+html[data-theme="atlas"] .app-nav-tab {
+  border-radius: 6px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+}
+
+
+html[data-theme="atlas"] .app-nav-tab[aria-pressed="true"] {
+  background: rgba(71, 112, 90, 0.10);
+  border-color: rgba(71, 112, 90, 0.42);
+  color: var(--herb-sage);
+  box-shadow: inset 0 -2px 0 var(--herb-sage);
+}
+
+
+html[data-theme="atlas"] .tab-fallback { color: var(--text-muted); }
+
+
+/* ----------------------------------------------------------- header */
+html[data-theme="atlas"] .header-identity h1 {
+  font-size: 1.6rem !important;
+  letter-spacing: -0.01em;
+}
+
+
+html[data-theme="atlas"] .header-identity p {
+  font-family: var(--font-heading);
+  font-style: italic;
+  font-size: 1.02rem !important;
+  color: var(--herb-teal) !important;
+}
+
+
+html[data-theme="atlas"] .progress-container {
+  background: #ece6d6;
+  border: 1px solid var(--herb-rule);
+  border-radius: 2px;
+  box-shadow: inset 0 1px 2px rgba(60, 70, 52, 0.12);
+  overflow: hidden;
+}
+
+
+html[data-theme="atlas"] .progress-fill-xp,
+html[data-theme="atlas"] .progress-fill-boss,
+html[data-theme="atlas"] .progress-fill-book,
+html[data-theme="atlas"] .progress-fill-process {
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+
+html[data-theme="atlas"] .progress-fill-xp { background: linear-gradient(90deg, #8f6222 0%, var(--herb-ochre) 100%); }
+
+html[data-theme="atlas"] .progress-fill-boss { background: linear-gradient(90deg, #7f3d45 0%, var(--herb-rose) 100%); }
+
+html[data-theme="atlas"] .progress-fill-book { background: linear-gradient(90deg, #2f5140 0%, var(--herb-sage) 100%); }
+
+html[data-theme="atlas"] .progress-fill-process { background: linear-gradient(90deg, #26565a 0%, var(--herb-teal) 100%); }
+
+
+/* --------------------------------------------------- campos e botões */
+html[data-theme="atlas"] input,
+html[data-theme="atlas"] select,
+html[data-theme="atlas"] textarea {
+  background: #fffdf8 !important;
+  border: 1px solid var(--herb-rule) !important;
+  border-radius: 4px !important;
+  color: var(--text-main) !important;
+  font-family: var(--font-body);
+  accent-color: var(--herb-teal);
+  color-scheme: light;
+}
+
+
+html[data-theme="atlas"] input::placeholder,
+html[data-theme="atlas"] textarea::placeholder { color: #9aa08d !important; opacity: 1; }
+
+
+html[data-theme="atlas"] input:focus,
+html[data-theme="atlas"] select:focus,
+html[data-theme="atlas"] textarea:focus {
+  outline: none !important;
+  border-color: rgba(58, 113, 115, 0.6) !important;
+  box-shadow: 0 0 0 3px rgba(58, 113, 115, 0.12) !important;
+}
+
+
+html[data-theme="atlas"] button { font-family: var(--font-body); border-radius: 5px; }
+
+
+/* ------------------------------------------------------------ modais */
+html[data-theme="atlas"] .modal-overlay {
+  background: rgba(44, 53, 39, 0.45) !important;
+  backdrop-filter: blur(3px) !important;
+  -webkit-backdrop-filter: blur(3px) !important;
+}
+
+
+html[data-theme="atlas"] .modal-sheet {
+  background: #fdfbf5 !important;
+  border: 1px solid var(--herb-rule) !important;
+  border-top: 3px solid var(--herb-sage) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 24px 50px -28px rgba(44, 53, 39, 0.6) !important;
+}
+
+
+html[data-theme="atlas"] .modal-sheet h3 { font-family: var(--font-heading) !important; }
+
+
+/* -------------------------------------------------------------- hoje */
+html[data-theme="atlas"] .today-hero h2 {
+  font-size: 2.3rem !important;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+
+html[data-theme="atlas"] .today-kicker {
+  font-family: var(--font-body);
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-size: 0.64rem !important;
+  color: var(--herb-ochre) !important;
+}
+
+
+html[data-theme="atlas"] .today-count {
+  background: rgba(168, 116, 43, 0.12);
+  border: 1px solid rgba(168, 116, 43, 0.32);
+  color: #7c5518;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+
+html[data-theme="atlas"] .today-link { color: var(--herb-teal); font-weight: 700; }
+
+
+html[data-theme="atlas"] .today-section {
+  border-radius: 10px;
+}
+
+
+html[data-theme="atlas"] .today-section h3,
+html[data-theme="atlas"] .today-now h3,
+html[data-theme="atlas"] .today-plan h3 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.3rem;
+}
+
+
+html[data-theme="atlas"] .today-inline-input,
+html[data-theme="atlas"] .today-field input,
+html[data-theme="atlas"] .today-line select {
+  background: #fffdf8;
+  border-color: var(--herb-rule);
+  color: var(--text-main);
+}
+
+
+html[data-theme="atlas"] .today-solid,
+html[data-theme="atlas"] .quick-capture-fab {
+  background: var(--herb-sage) !important;
+  color: #fbf9f2 !important;
+  box-shadow: 0 8px 18px -12px rgba(44, 53, 39, 0.7) !important;
+}
+
+
+html[data-theme="atlas"] .today-ghost,
+html[data-theme="atlas"] .today-chips button {
+  background: transparent;
+  border-color: rgba(71, 112, 90, 0.35);
+  color: var(--herb-sage);
+}
+
+
+html[data-theme="atlas"] .today-chips button.is-on {
+  background: rgba(71, 112, 90, 0.14);
+  border-color: var(--herb-sage);
+  color: #2f5140;
+}
+
+
+html[data-theme="atlas"] .today-banner {
+  background: rgba(168, 116, 43, 0.09);
+  border-color: rgba(168, 116, 43, 0.3);
+  color: #7c5518;
+}
+
+
+html[data-theme="atlas"] kbd {
+  background: #fffdf8;
+  border: 1px solid var(--herb-rule);
+  border-bottom-width: 2px;
+  color: var(--herb-teal);
+  font-family: var(--font-mono);
+  border-radius: 4px;
+}
+
+
+/* ---------------------------------------------------------- gráficos */
+html[data-theme="atlas"] .agu-load-chart-canvas {
+  /* a área do gráfico é pintada pelo Chart.js (em JS), não pelo CSS */
+  background: #f3efe2;
+  border-top: 1px solid #2f5140;
+  border-bottom: 1px solid #2f5140;
+  border-radius: 4px;
+  padding: 6px;
+}
+
+
+html[data-theme="atlas"] .agu-load-chart-side,
+html[data-theme="atlas"] .agu-load-chart-band-label {
+  font-family: var(--font-body);
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-shadow: none;
+}
+
+
+html[data-theme="atlas"] .agu-load-chart-band-label--home { color: var(--herb-sage); }
+
+
+html[data-theme="atlas"] .agu-edital-wrap {
+  border: 1px solid var(--herb-rule);
+  background: var(--bg-card);
+}
+
+
+html[data-theme="atlas"] .agu-edital-table th {
+  background: var(--paper-deep);
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+
+
+html[data-theme="atlas"] .agu-edital-table th,
+html[data-theme="atlas"] .agu-edital-table td {
+  border-bottom: 1px solid var(--herb-rule);
+}
+
+
+/* capa de livro: um etiqueta de herbário */
+html[data-theme="atlas"] .book-cover { border-radius: 4px !important; }
+
+html[data-theme="atlas"] .book-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+
+/* ----------------------------------------------------------- diversos */
+html[data-theme="atlas"] .rankings-panel,
+html[data-theme="atlas"] .rankings-card,
+html[data-theme="atlas"] .rankings-metric { background: var(--bg-card); }
+
+html[data-theme="atlas"] .rankings-tabs,
+html[data-theme="atlas"] .rankings-tiers,
+html[data-theme="atlas"] .rankings-progress {
+  background: var(--paper-deep);
+  border: 1px solid var(--herb-rule);
+}
+
+
+html[data-theme="atlas"] .rankings-tab { border-radius: 4px; }
+
+
+html[data-theme="atlas"] .oracle-trace-step { background: #fffdf8; border-color: var(--herb-rule); }
+
+html[data-theme="atlas"] .oracle-trace-json { background: #f7f4ea; border-color: var(--herb-rule); }
+
+
+html[data-theme="atlas"] .focus-play-btn {
+  background: var(--herb-sage);
+  color: #fbf9f2;
+  box-shadow: 0 10px 20px -14px rgba(44, 53, 39, 0.8);
+}
+
+
+html[data-theme="atlas"] .focus-seek {
+  background: linear-gradient(90deg, var(--herb-teal) var(--progress, 0%), var(--paper-deep) var(--progress, 0%));
+}
+
+
+/* o mapa mental segue escuro, em verde-tinteiro */
+html[data-theme="atlas"] .mindmap-canvas,
+html[data-theme="atlas"] .mindmap-fullscreen-root { background: #1c2620 !important; }
+
+
+html[data-theme="atlas"] :focus-visible {
+  outline: 2px solid rgba(58, 113, 115, 0.7);
+  outline-offset: 2px;
+}
+
+
+
+/* ------------------------------------------------------------------------
+   Correções de classes que o tema atual (catalog-theme.css) já reescreveu.
+   Aqui os mesmos seletores recebem a cor da proposta; por virem depois no
+   cascade, vencem sem precisar de !important.
+   ------------------------------------------------------------------------ */
+html[data-theme="atlas"] .today-hero h2,
+html[data-theme="atlas"] .today-section h3,
+html[data-theme="atlas"] .today-now h3,
+html[data-theme="atlas"] .today-plan h3,
+html[data-theme="atlas"] .today-line,
+html[data-theme="atlas"] .today-line-btn {
+  color: #2c3527;
+}
+
+
+html[data-theme="atlas"] .today-kicker {
+  color: #a8742b !important;
+}
+
+
+html[data-theme="atlas"] .today-count,
+html[data-theme="atlas"] .today-link,
+html[data-theme="atlas"] .today-check,
+html[data-theme="atlas"] .today-modal h4 {
+  color: #a8742b;
+}
+
+
+html[data-theme="atlas"] .today-count {
+  background: rgba(168, 116, 43, 0.12);
+  border: 1px solid rgba(168, 116, 43, 0.32);
+}
+
+
+html[data-theme="atlas"] .today-meta,
+html[data-theme="atlas"] .today-empty,
+html[data-theme="atlas"] .today-now p,
+html[data-theme="atlas"] .today-line em,
+html[data-theme="atlas"] .today-stats,
+html[data-theme="atlas"] .today-rank-list,
+html[data-theme="atlas"] .today-field {
+  color: #66705a;
+}
+
+
+html[data-theme="atlas"] .today-section h3,
+html[data-theme="atlas"] .today-now h3 {
+  font-family: var(--font-heading);
+}
+
+
+html[data-theme="atlas"] kbd {
+  color: #a8742b;
+}
+
+
+/* --------------------------------------------------- gráficos (Chart.js)
+   O canvas do Chart.js passa por cima do CSS: o que aparece fora da área
+   do gráfico é só CSS, mas a área interna é desenhada em JS com as cores do
+   tema antigo. Aqui a moldura acompanha a proposta. */
+html[data-theme="atlas"] .agu-load-chart,
+html[data-theme="atlas"] .glass-panel-gold.agu-load-chart {
+  background: #fdfbf5 !important;
+  border: 1px solid var(--herb-rule) !important;
+}
+
+
+html[data-theme="atlas"] .agu-load-chart-canvas {
+  /* sem pintura: o canvas do Chart.js cobre essa área */
+  border-top: 1px solid #2f5140;
+  border-bottom: 1px solid #2f5140;
+  border-radius: 4px;
+  padding: 4px;
+}
+
+
+html[data-theme="atlas"] .agu-load-chart-side,
+html[data-theme="atlas"] .agu-load-chart-band-label {
+  text-shadow: none;
+}
+
+
+html[data-theme="atlas"] .agu-load-chart-band-label--home { color: #2f5140 !important; }
+
+html[data-theme="atlas"] .agu-load-chart-side { color: #b05f6b !important; }
+

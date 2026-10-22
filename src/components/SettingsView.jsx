@@ -1,10 +1,20 @@
-import React, { useState } from 'react';
-import { Settings, RotateCcw } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Settings, RotateCcw, Check } from 'lucide-react';
 import { FEATURE_SETTINGS, defaultFeatureSettings } from '../utils/featureSettings';
+import { THEMES, normalizeTheme } from '../utils/theme';
 
-export function SettingsView({ settings, onChange, playClick }) {
+export function SettingsView({ settings, onChange, theme, onChangeTheme, playClick }) {
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
+  const [themeBusy, setThemeBusy] = useState(null);
+  const [themeError, setThemeError] = useState('');
+  const [shownTheme, setShownTheme] = useState(normalizeTheme(theme));
+
+  // o valor em vigor pode mudar por fora (outra aba, perfil); acompanha.
+  useEffect(() => {
+    setShownTheme(normalizeTheme(theme));
+  }, [theme]);
+
   const current = { ...defaultFeatureSettings(), ...(settings || {}) };
   const groups = [];
   FEATURE_SETTINGS.forEach((feature) => {
@@ -25,6 +35,22 @@ export function SettingsView({ settings, onChange, playClick }) {
       setError(err?.message || 'Não foi possível gravar a preferência.');
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const chooseTheme = async (id) => {
+    if (!onChangeTheme || themeBusy) return;
+    if (id === shownTheme) return;
+    if (playClick) playClick();
+    setThemeBusy(id);
+    setThemeError('');
+    try {
+      await onChangeTheme(id);
+      setShownTheme(id);
+    } catch (err) {
+      setThemeError(err?.message || 'Não foi possível trocar o tema.');
+    } finally {
+      setThemeBusy(null);
     }
   };
 
@@ -67,6 +93,63 @@ export function SettingsView({ settings, onChange, playClick }) {
       </header>
 
       {error && <p className="settings-error" role="alert">{error}</p>}
+
+      <section className="glass-panel settings-themes" aria-labelledby="settings-theme-title">
+        <div className="settings-themes-head">
+          <h3 id="settings-theme-title">Aparência</h3>
+          <p>Escolha o visual do Grimório. A troca é imediata e fica gravada no seu perfil.</p>
+        </div>
+        <div className="settings-theme-grid" role="radiogroup" aria-labelledby="settings-theme-title">
+          {THEMES.map((item) => {
+            const selected = item.id === shownTheme;
+            const busy = themeBusy === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={`Usar o tema ${item.label}`}
+                className={`settings-theme${selected ? ' is-selected' : ''}`}
+                disabled={themeBusy != null}
+                onClick={() => chooseTheme(item.id)}
+              >
+                <span
+                  className={`settings-theme-preview${item.dark ? ' is-dark' : ' is-light'}`}
+                  style={{ '--swatch-accent': item.colors[3] || item.colors[0] }}
+                  aria-hidden="true"
+                >
+                  <span className="settings-theme-bar" />
+                  <span className="settings-theme-blocks">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                </span>
+                <span className="settings-theme-body">
+                  <span className="settings-theme-name">
+                    {item.label}
+                    {selected && (
+                      <span className="settings-theme-check" aria-hidden="true">
+                        <Check size={12} /> Em uso
+                      </span>
+                    )}
+                  </span>
+                  <span className="settings-theme-sub">{item.subtitle}</span>
+                  <span className="settings-theme-desc">{item.description}</span>
+                  <span className="settings-theme-swatches" aria-hidden="true">
+                    {item.colors.map((color) => (
+                      <i key={color} style={{ background: color }} />
+                    ))}
+                  </span>
+                </span>
+                {busy && <span className="settings-theme-busy" aria-hidden="true">…</span>}
+              </button>
+            );
+          })}
+        </div>
+        {themeError && <p className="settings-error" role="alert">{themeError}</p>}
+      </section>
 
       {groups.map((group) => (
         <section key={group.name} className="glass-panel settings-group">

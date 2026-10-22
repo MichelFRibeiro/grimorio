@@ -1,0 +1,623 @@
+/* =========================================================================
+   TEMA "Terminal de Estudo"
+   O Grimório encarado como um console de foco: grafite profundo, fosforescência
+   âmbar (XP) e ciano (moedas/estado), monoespaçado nos dados e nas réguas.
+   A ideia é sair do "RPG de fantasia" e entrar no "instrumento de trabalho".
+   ========================================================================= */
+
+@import url('./derived.css');
+@import url('./overrides.css');
+
+html[data-theme="terminal"] {
+  color-scheme: dark;
+
+  --font-heading: 'IBM Plex Mono', ui-monospace, monospace;
+  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* tokens normalizados: a UI de Configurações e os gráficos leem daqui */
+  --tpl-scheme: dark;
+  --tpl-paper: #0f1318;
+  --tpl-card: #151a21;
+  --tpl-ink: #dbe2ea;
+  --tpl-soft: #93a0b2;
+  --tpl-accent: #ffc861;
+  --tpl-accent-2: #5fe3d0;
+  --tpl-rule: rgba(120, 145, 175, 0.20);
+  --tpl-shadow: rgba(0, 0, 0, 0.5);
+  --tpl-ok: #8fe3a4;
+  --tpl-alert: #ff8f9c;
+  --tpl-warm: #ffc861;
+  --tpl-muted: #7b8798;
+  --tpl-heading-font: var(--font-heading);
+  --tpl-body-font: var(--font-body);
+
+  --bg-main: #0f1318;
+  --bg-card: #151a21;
+  --bg-card-hover: #1a212b;
+  --bg-card-active: #202935;
+  --surface-well: #0b0e12;
+  --rule: #2a3340;
+  --rule-soft: rgba(120, 145, 175, 0.16);
+  --border-subtle: rgba(120, 145, 175, 0.18);
+  --border-bright: rgba(255, 200, 97, 0.45);
+
+  --text-main: #dbe2ea;
+  --text-muted: #93a0b2;
+  --text-dim: #687483;
+
+  --accent-gold: #ffc861;
+  --accent-gold-glow: rgba(255, 200, 97, 0.18);
+  --accent-cyan: #5fe3d0;
+  --accent-emerald: #8fe3a4;
+  --accent-purple: #b8a6ff;
+  --accent-rose: #ff8f9c;
+
+  --amber: #ffc861;
+  --cyan: #5fe3d0;
+  --lime: #8fe3a4;
+  --magenta: #ff8f9c;
+  --violet: #b8a6ff;
+}
+
+/* ------------------------------------------------------------------ base */
+html[data-theme="terminal"] body {
+  background-color: var(--bg-main);
+  background-image:
+    linear-gradient(rgba(120, 145, 175, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120, 145, 175, 0.045) 1px, transparent 1px),
+    radial-gradient(80% 60% at 50% -10%, rgba(255, 200, 97, 0.06) 0%, transparent 60%);
+  background-size: 32px 32px, 32px 32px, 100% 100%;
+  background-attachment: fixed;
+  color: var(--text-main);
+  font-family: var(--font-body);
+  letter-spacing: 0.002em;
+}
+
+
+html[data-theme="terminal"] ::selection { background: rgba(95, 227, 208, 0.32); color: #f4f7fb; }
+
+
+html[data-theme="terminal"] ::-webkit-scrollbar { width: 10px; height: 10px; }
+
+html[data-theme="terminal"] ::-webkit-scrollbar-track { background: var(--surface-well); }
+
+html[data-theme="terminal"] ::-webkit-scrollbar-thumb { background: #2a3340; border-radius: 0; }
+
+html[data-theme="terminal"] ::-webkit-scrollbar-thumb:hover { background: #3a4657; }
+
+
+html[data-theme="terminal"] a { color: var(--cyan); text-underline-offset: 2px; }
+
+
+/* Títulos herdam a cor de propósito: o JSX pinta alguns em âmbar/ciano e essa
+   diferenciação continua valendo no console. */
+html[data-theme="terminal"] h1,
+html[data-theme="terminal"] h2,
+html[data-theme="terminal"] h3,
+html[data-theme="terminal"] h4,
+html[data-theme="terminal"] .font-cinzel {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+
+/* -------------------------------------------------------- superfícies */
+html[data-theme="terminal"] .glass-panel {
+  background: var(--bg-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.015);
+  position: relative;
+}
+
+
+/* cantos de mira, como um HUD */
+html[data-theme="terminal"] .glass-panel::before,
+html[data-theme="terminal"] .glass-panel::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(255, 200, 97, 0.45);
+  pointer-events: none;
+}
+
+
+html[data-theme="terminal"] .glass-panel::before {
+  top: -1px;
+  left: -1px;
+  border-right: none;
+  border-bottom: none;
+}
+
+
+html[data-theme="terminal"] .glass-panel::after {
+  bottom: -1px;
+  right: -1px;
+  border-left: none;
+  border-top: none;
+}
+
+
+html[data-theme="terminal"] .glass-panel-gold {
+  background: #141a20;
+  border: 1px solid rgba(255, 200, 97, 0.32);
+  border-radius: 6px;
+  backdrop-filter: none;
+}
+
+
+html[data-theme="terminal"] .rpg-card {
+  background: var(--bg-card);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+
+html[data-theme="terminal"] .rpg-card:hover {
+  background: var(--bg-card-hover);
+  border-color: rgba(95, 227, 208, 0.4);
+  transform: none;
+  box-shadow: none;
+}
+
+
+/* ---------------------------------------------------------- navegação */
+html[data-theme="terminal"] .app-nav {
+  background: rgba(15, 19, 24, 0.92);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 6px;
+  gap: 4px;
+}
+
+
+html[data-theme="terminal"] .app-nav-tab {
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem !important;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+
+html[data-theme="terminal"] .app-nav-tab[aria-pressed="true"] {
+  background: rgba(255, 200, 97, 0.10);
+  border-color: rgba(255, 200, 97, 0.5);
+  color: var(--amber);
+  box-shadow: inset 2px 0 0 var(--amber);
+}
+
+
+html[data-theme="terminal"] .nav-tab-badge {
+  border-radius: 2px !important;
+  font-family: var(--font-mono);
+}
+
+
+html[data-theme="terminal"] .tab-fallback {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+
+/* --------------------------------------------------------------- header */
+html[data-theme="terminal"] .header-identity h1 {
+  font-size: 1.15rem !important;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+
+html[data-theme="terminal"] .header-identity p {
+  font-family: var(--font-mono) !important;
+  font-size: 0.74rem !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+
+/* etiquetas do header: monoespaçadas */
+html[data-theme="terminal"] header.glass-panel [style*="text-transform: uppercase"] {
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
+
+html[data-theme="terminal"] .progress-container {
+  background: #0a0d11;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+
+
+html[data-theme="terminal"] .progress-fill-xp,
+html[data-theme="terminal"] .progress-fill-boss,
+html[data-theme="terminal"] .progress-fill-book,
+html[data-theme="terminal"] .progress-fill-process {
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+
+html[data-theme="terminal"] .progress-fill-xp {
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.28) 0 2px, transparent 2px 6px),
+    linear-gradient(90deg, #d79f3c 0%, var(--amber) 100%);
+}
+
+
+html[data-theme="terminal"] .progress-fill-boss {
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.28) 0 2px, transparent 2px 6px),
+    linear-gradient(90deg, #c96b63 0%, var(--magenta) 100%);
+}
+
+
+html[data-theme="terminal"] .progress-fill-book { background: linear-gradient(90deg, #5fae72 0%, var(--lime) 100%); }
+
+html[data-theme="terminal"] .progress-fill-process { background: linear-gradient(90deg, #3aa89a 0%, var(--cyan) 100%); }
+
+
+/* ---------------------------------------------------- campos e botões */
+html[data-theme="terminal"] input,
+html[data-theme="terminal"] select,
+html[data-theme="terminal"] textarea {
+  background: var(--surface-well) !important;
+  border: 1px solid var(--rule) !important;
+  border-radius: 3px !important;
+  color: var(--text-main) !important;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  accent-color: var(--cyan);
+  color-scheme: dark;
+}
+
+
+html[data-theme="terminal"] input::placeholder,
+html[data-theme="terminal"] textarea::placeholder { color: #5c6876 !important; opacity: 1; }
+
+
+html[data-theme="terminal"] input:focus,
+html[data-theme="terminal"] select:focus,
+html[data-theme="terminal"] textarea:focus {
+  outline: none !important;
+  border-color: rgba(95, 227, 208, 0.65) !important;
+  box-shadow: 0 0 0 2px rgba(95, 227, 208, 0.18) !important;
+}
+
+
+html[data-theme="terminal"] button {
+  font-family: var(--font-body);
+  border-radius: 3px;
+}
+
+
+/* --------------------------------------------------------------- modais */
+html[data-theme="terminal"] .modal-overlay {
+  background: rgba(6, 9, 12, 0.82) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+}
+
+
+html[data-theme="terminal"] .modal-sheet {
+  background: #12171d !important;
+  border: 1px solid #33404f !important;
+  border-radius: 6px !important;
+  box-shadow: 0 0 0 1px rgba(255, 200, 97, 0.12), 0 30px 60px -30px #000 !important;
+}
+
+
+html[data-theme="terminal"] .modal-sheet h3 {
+  font-family: var(--font-heading) !important;
+  letter-spacing: -0.01em;
+}
+
+
+/* ----------------------------------------------------------------- hoje */
+html[data-theme="terminal"] .today-kicker {
+  font-family: var(--font-mono) !important;
+  letter-spacing: 0.24em;
+  font-size: 0.64rem !important;
+  color: var(--cyan) !important;
+}
+
+
+html[data-theme="terminal"] .today-kicker::before {
+  content: '> ';
+  color: var(--amber);
+}
+
+
+html[data-theme="terminal"] .today-hero h2 {
+  font-size: 1.75rem !important;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+
+html[data-theme="terminal"] .today-section h3,
+html[data-theme="terminal"] .today-now h3,
+html[data-theme="terminal"] .today-plan h3 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+
+html[data-theme="terminal"] .today-count {
+  background: rgba(95, 227, 208, 0.1);
+  border: 1px solid rgba(95, 227, 208, 0.35);
+  color: var(--cyan);
+  border-radius: 2px;
+  font-family: var(--font-mono);
+}
+
+
+html[data-theme="terminal"] .today-link { color: var(--cyan); font-family: var(--font-mono); font-size: 0.78rem; }
+
+
+html[data-theme="terminal"] .today-inline-input,
+html[data-theme="terminal"] .today-field input,
+html[data-theme="terminal"] .today-line select {
+  background: var(--surface-well);
+  border-color: var(--rule);
+  color: var(--text-main);
+}
+
+
+html[data-theme="terminal"] .today-solid,
+html[data-theme="terminal"] .quick-capture-fab {
+  background: linear-gradient(135deg, #d79f3c 0%, var(--amber) 100%) !important;
+  color: #10141a !important;
+  border-radius: 3px !important;
+  box-shadow: 0 0 0 1px rgba(255, 200, 97, 0.35), 0 8px 24px -12px rgba(255, 200, 97, 0.5) !important;
+  font-weight: 700;
+}
+
+
+html[data-theme="terminal"] .today-ghost,
+html[data-theme="terminal"] .today-chips button {
+  background: transparent;
+  border-color: var(--rule);
+  color: var(--text-muted);
+}
+
+
+html[data-theme="terminal"] .today-chips button.is-on {
+  background: rgba(95, 227, 208, 0.12);
+  border-color: rgba(95, 227, 208, 0.5);
+  color: var(--cyan);
+}
+
+
+html[data-theme="terminal"] .today-banner {
+  background: rgba(255, 200, 97, 0.06);
+  border-color: rgba(255, 200, 97, 0.28);
+  color: var(--amber);
+}
+
+
+html[data-theme="terminal"] kbd {
+  background: var(--surface-well);
+  border: 1px solid var(--rule);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  border-radius: 2px;
+}
+
+
+/* ------------------------------------------------------------- gráficos */
+html[data-theme="terminal"] .agu-load-chart-canvas {
+  /* a área do gráfico é pintada pelo Chart.js (em JS), não pelo CSS */
+  background: #12171e;
+  border-top: 1px solid #8fe3a4;
+  border-bottom: 1px solid #8fe3a4;
+  border-radius: 4px;
+  padding: 6px;
+}
+
+
+html[data-theme="terminal"] .agu-load-chart-side,
+html[data-theme="terminal"] .agu-load-chart-band-label {
+  font-family: var(--font-mono);
+  letter-spacing: 0.24em;
+  font-size: 0.68rem;
+  text-shadow: none;
+}
+
+
+html[data-theme="terminal"] .agu-load-chart-band-label--home { color: var(--lime); }
+
+
+html[data-theme="terminal"] .agu-edital-wrap {
+  border: 1px solid var(--rule);
+  background: var(--bg-card);
+}
+
+
+html[data-theme="terminal"] .agu-edital-table th {
+  background: var(--surface-well);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+
+html[data-theme="terminal"] .agu-edital-table th,
+html[data-theme="terminal"] .agu-edital-table td {
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+
+/* capa de livro: da capa ilustrada para uma etiqueta de arquivo */
+html[data-theme="terminal"] .book-cover { border-radius: 2px !important; }
+
+html[data-theme="terminal"] .book-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.10) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, transparent 40%);
+  mix-blend-mode: overlay;
+}
+
+
+/* -------------------------------------------------------------- diversos */
+html[data-theme="terminal"] .rankings-panel,
+html[data-theme="terminal"] .rankings-card,
+html[data-theme="terminal"] .rankings-metric { background: var(--bg-card); }
+
+html[data-theme="terminal"] .rankings-tabs,
+html[data-theme="terminal"] .rankings-tiers,
+html[data-theme="terminal"] .rankings-progress {
+  background: var(--surface-well);
+  border: 1px solid var(--rule);
+}
+
+
+html[data-theme="terminal"] .rankings-tab { border-radius: 2px; font-family: var(--font-mono); font-size: 0.78rem; }
+
+
+html[data-theme="terminal"] .oracle-trace-step { background: var(--surface-well); border-color: var(--rule); }
+
+html[data-theme="terminal"] .oracle-trace-json { background: #090c10; border-color: var(--rule); font-family: var(--font-mono); }
+
+
+html[data-theme="terminal"] .focus-play-btn {
+  background: linear-gradient(135deg, #d79f3c 0%, var(--amber) 100%);
+  color: #10141a;
+  border-radius: 3px;
+}
+
+
+html[data-theme="terminal"] .focus-seek {
+  background: linear-gradient(90deg, var(--cyan) var(--progress, 0%), var(--surface-well) var(--progress, 0%));
+}
+
+
+/* o mapa mental fica dois tons abaixo do resto */
+html[data-theme="terminal"] .mindmap-canvas,
+html[data-theme="terminal"] .mindmap-fullscreen-root { background: #090c10 !important; }
+
+
+/* números sempre monoespaçados */
+html[data-theme="terminal"] .today-stats strong,
+html[data-theme="terminal"] .rankings-metric strong,
+html[data-theme="terminal"] .ranking-score,
+html[data-theme="terminal"] [class*="stat"] strong {
+  font-family: var(--font-mono);
+}
+
+
+html[data-theme="terminal"] :focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+
+
+/* ------------------------------------------------------------------------
+   Correções de classes que o tema atual (catalog-theme.css) já reescreveu.
+   Aqui os mesmos seletores recebem a cor da proposta; por virem depois no
+   cascade, vencem sem precisar de !important.
+   ------------------------------------------------------------------------ */
+html[data-theme="terminal"] .today-hero h2,
+html[data-theme="terminal"] .today-section h3,
+html[data-theme="terminal"] .today-now h3,
+html[data-theme="terminal"] .today-plan h3,
+html[data-theme="terminal"] .today-line,
+html[data-theme="terminal"] .today-line-btn {
+  color: #eef2f7;
+}
+
+
+html[data-theme="terminal"] .today-kicker {
+  color: #ffc861 !important;
+}
+
+
+html[data-theme="terminal"] .today-count,
+html[data-theme="terminal"] .today-link,
+html[data-theme="terminal"] .today-check,
+html[data-theme="terminal"] .today-modal h4 {
+  color: #ffc861;
+}
+
+
+html[data-theme="terminal"] .today-count {
+  background: rgba(255, 200, 97, 0.12);
+  border: 1px solid rgba(255, 200, 97, 0.35);
+}
+
+
+html[data-theme="terminal"] .today-meta,
+html[data-theme="terminal"] .today-empty,
+html[data-theme="terminal"] .today-now p,
+html[data-theme="terminal"] .today-line em,
+html[data-theme="terminal"] .today-stats,
+html[data-theme="terminal"] .today-rank-list,
+html[data-theme="terminal"] .today-field {
+  color: #93a0b2;
+}
+
+
+html[data-theme="terminal"] .today-section h3,
+html[data-theme="terminal"] .today-now h3 {
+  font-family: var(--font-heading);
+}
+
+
+html[data-theme="terminal"] kbd {
+  color: #ffc861;
+}
+
+
+/* --------------------------------------------------- gráficos (Chart.js)
+   O canvas do Chart.js passa por cima do CSS: o que aparece fora da área
+   do gráfico é só CSS, mas a área interna é desenhada em JS com as cores do
+   tema antigo. Aqui a moldura acompanha a proposta. */
+html[data-theme="terminal"] .agu-load-chart,
+html[data-theme="terminal"] .glass-panel-gold.agu-load-chart {
+  background: #141a20 !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+
+
+html[data-theme="terminal"] .agu-load-chart-canvas {
+  /* sem pintura: o canvas do Chart.js cobre essa área */
+  border-top: 1px solid #8fe3a4;
+  border-bottom: 1px solid #8fe3a4;
+  border-radius: 4px;
+  padding: 4px;
+}
+
+
+html[data-theme="terminal"] .agu-load-chart-side,
+html[data-theme="terminal"] .agu-load-chart-band-label {
+  text-shadow: none;
+}
+
+
+html[data-theme="terminal"] .agu-load-chart-band-label--home { color: #8fe3a4 !important; }
+
+html[data-theme="terminal"] .agu-load-chart-side { color: #ff8f9c !important; }
+

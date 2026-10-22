@@ -10,6 +10,7 @@ import { weekKeyOf } from './domain/bossWeek.js';
 import { listUnacknowledged, acknowledgePenalty, acknowledgeAllPenalties, prepareContest } from './domain/penalties.js';
 import { computeAnalytics } from './analytics.js';
 import { discoverCorrelations } from './correlations.js';
+import { normalizeTheme } from '../src/utils/theme.js';
 import { computeCategoryRankings, RANK_TIERS } from './rankings.js';
 import { suggestNextAction, previewNextAction, recordEnergyAndSuggest, declineAndRemember, acceptDoseOnly, snoozeAndRemember } from './oracleSuggest.js';
 import { openRouterKeyStatus, setStoredOpenRouterKey, getOpenRouterApiKey } from './jevClient.js';
@@ -680,7 +681,15 @@ app.post('/api/profile', (req, res) => {
     if (name) db.userProfile.name = name;
     if (avatar) db.userProfile.avatar = avatar;
     if (title) db.userProfile.title = title;
-    if (theme) db.userProfile.theme = theme;
+    // Tema visual: só os conhecidos entram. Valor estranho é ignorado (e não
+    // derruba o resto do perfil); lista em src/utils/theme.js.
+    if (theme !== undefined) {
+      const nextTheme = normalizeTheme(theme);
+      if (typeof theme === 'string' && nextTheme !== theme.trim()) {
+        return res.status(400).json({ error: 'Tema desconhecido.' });
+      }
+      db.userProfile.theme = nextTheme;
+    }
     if (currentLocation !== undefined) {
       db.userProfile.currentLocation = currentLocation == null || currentLocation === ''
         ? null

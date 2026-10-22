@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { useGameData } from './hooks/useGameData';
 import { Header } from './components/Header';
@@ -11,6 +11,9 @@ import { JudgmentModal } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
 import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare, ListOrdered, NotebookPen } from 'lucide-react';
 import { isFeatureEnabled, isTabEnabled } from './utils/featureSettings';
+import { Chart as ChartJS } from 'chart.js';
+import { installChartTheme } from './utils/chartTheme';
+import { applyTheme, normalizeTheme, useTheme } from './utils/theme';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
 import { useFocusPlayer } from './hooks/useFocusPlayer';
@@ -348,6 +351,39 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [data?.userProfile?.featureSettings]);
 
+  // Tema visual: o perfil manda; o aparelho guarda uma cópia para abrir já no
+  // tema certo. Trocar em Configurações aplica na hora e grava no perfil.
+  // O pincel dos gráficos (canvas) é instalado uma vez e repinta a cada troca.
+  useMemo(() => installChartTheme(ChartJS), []);
+  const { theme: activeTheme } = useTheme();
+  const profileTheme = normalizeTheme(data?.userProfile?.theme);
+  // O PERFIL é a fonte de verdade (vale em qualquer aparelho). Quando a conta
+  // carrega pela primeira vez na sessão, o tema do perfil substitui o que
+  // estava no aparelho — inclusive o de um equipamento que foi trocado por
+  // outro. Depois disso, trocar aqui atualiza o perfil; quando a mudança veio
+  // de fora (outro aparelho), o novo perfil é aplicado de novo a cada resposta.
+  const themeSyncedRef = useRef(null);
+  useEffect(() => {
+    if (!data?.userProfile) return;
+    if (themeSyncedRef.current === profileTheme) return;
+    themeSyncedRef.current = profileTheme;
+    if (profileTheme !== activeTheme) applyTheme(profileTheme);
+  }, [data?.userProfile, profileTheme, activeTheme]);
+
+  const changeTheme = async (nextTheme) => {
+    const safe = normalizeTheme(nextTheme);
+    const previous = activeTheme;
+    applyTheme(safe); // responde na hora
+    if (!updateProfile) return safe;
+    try {
+      await updateProfile({ theme: safe });
+    } catch (err) {
+      applyTheme(previous); // o servidor recusou: volta como estava
+      throw err;
+    }
+    return safe;
+  };
+
   if (loadingAuth || (isAuthenticated && loading)) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0c0e14', color: '#fbbf24' }}>
@@ -473,6 +509,7 @@ export function App() {
 
   const featureSettings = userProfile?.featureSettings;
   const featureOn = (id) => isFeatureEnabled(featureSettings, id);
+
   const openTab = (tab) => {
     if (!tab || !isTabEnabled(featureSettings, tab)) return;
     setActiveTab(tab);
@@ -912,6 +949,8 @@ export function App() {
           <SettingsView
             settings={featureSettings}
             onChange={updateProfile ? (next) => updateProfile({ featureSettings: next }) : undefined}
+            theme={activeTheme}
+            onChangeTheme={changeTheme}
             playClick={playClick}
           />
         )}

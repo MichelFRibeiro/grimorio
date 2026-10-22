@@ -143,6 +143,7 @@ O script irá:
 - Botão **Configurações** no cabeçalho, ao lado de Sair. Cada função do Grimório tem um interruptor: Vitórias Planejadas, Chefe Ativo, O Oráculo indica, Hoje, Missões, Questões, Biblioteca, Escrituras, Mapas, Processos, Rituais, Rotinas, Suplementos, Celular, Diário, Correlações, Foco, Taverna, AGU, Oráculo e Bate Papo.
 - Desligar **só esconde**. Missões, rituais, leituras, moedas e o plano AGU continuam gravados; ligar de novo devolve tudo como estava. O Oráculo deixa de indicar o que estiver desligado, e o painel Hoje deixa de mostrar a seção correspondente.
 - A preferência fica no perfil (`POST /api/profile` com `featureSettings`) e vale em qualquer aparelho da mesma conta.
+- **Aparência — escolha do tema.** No topo da tela há quatro visuais: **Catálogo** (o padrão de sempre: papel creme e carimbo terracota), **Lousa de Giz** (verde-escura, tipo lousa), **Atlas Botânico** (papel claro, verde-sálvia e ocre) e **Terminal de Estudo** (grafite, âmbar e ciano). A troca é imediata e fica gravada no perfil (`userProfile.theme`), então acompanha a conta em qualquer aparelho; o aparelho também guarda uma cópia local, que é aplicada antes do primeiro desenho para a página não abrir no tema errado.
 
 ### 💬 Sala de Bate Papo
 - Aba **Bate Papo**. A chave do OpenRouter é a mesma do Oráculo: fica só no servidor e pode ser cadastrada (ou trocada) na própria sala.
@@ -302,6 +303,41 @@ curl -X POST http://localhost:3000/api/mcp \
 ```
 
 ---
+
+## 🎨 Temas (arquitetura)
+
+Os quatro visuais estão em `src/styles/themes/<id>/` e vivem no **mesmo bundle**:
+
+| Arquivo | Papel |
+| --- | --- |
+| `skin.css` | tokens, tipografia, forma, superfícies e componentes; tudo escopado em `html[data-theme="<id>"]` |
+| `overrides.css` | reescrita dos literais de cor do JSX (`[style*="color: rgb(...)"]`), gerada por script |
+| `dark-rules.css` | espelho claro das regras de classe do `index.css` (que é o tema escuro), só nos temas claros |
+| `derived.css` | tons montados por template literal (`${accent}22`), também gerados |
+| `sketch.css` | detalhe extra da Lousa (sublinhado traçado) |
+
+Como funciona na prática:
+
+1. o `index.html` aplica `data-theme` antes de pintar, lendo `localStorage.grimorio_theme`;
+2. o App reconcilia com `userProfile.theme`, que é a fonte de verdade (vale em todos os aparelhos);
+3. trocar em Configurações aplica na hora e grava no perfil; se o servidor recusar, o tema anterior volta;
+4. os gráficos (Chart.js, canvas) são repintados por `src/utils/chartTheme.js`, que lê os tokens `--tpl-*` de cada tema.
+
+Genar os arquivos derivados (não editar à mão):
+
+```bash
+node scripts/build-theme-overrides.mjs   # overrides.css dos temas novos
+node scripts/build-dark-fallback.mjs     # dark-rules.css dos temas claros
+node scripts/build-derived-colors.mjs    # derived.css dos quatro
+node scripts/build-catalog-theme.mjs     # overrides.css do Catálogo (precisa de Chromium)
+```
+
+Auditorias de legibilidade (rodam sobre o build servido):
+
+```bash
+node scripts/audit-contrast.mjs   # telas em todos os temas medindo contraste texto/fundo
+node scripts/audit-modals.mjs     # modais (missão, chefe, rankings, MCP, sair)
+```
 
 ## 🧪 Testes
 

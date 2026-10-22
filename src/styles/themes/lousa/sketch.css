@@ -1,0 +1,37 @@
+/* =========================================================================
+   TEMA "Lousa de Giz" — camada "giz à mão"
+   Detalhes que fazem a tela parecer escrita à mão numa lousa de verdade,
+   sem tocar no HTML:
+   1. títulos de seção ganham sublinhado traçado em SVG (não é retângulo);
+   2. títulos ficam com sombra de giz encostado.
+   ========================================================================= */
+
+/* 1. sublinhado traçado nos títulos de seção */
+html[data-theme="lousa"] .today-section-head h3,
+html[data-theme="lousa"] .today-now h3 {
+  position: relative;
+  padding-bottom: 4px;
+}
+
+html[data-theme="lousa"] .today-section-head h3::after,
+html[data-theme="lousa"] .today-now h3::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 24%;
+  bottom: 0;
+  height: 4px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='4' viewBox='0 0 120 4'><path d='M1 2.6 C 18 1.1, 30 3.3, 48 2.1 S 84 0.9, 119 2.4' fill='none' stroke='%23f0e3a5' stroke-opacity='0.42' stroke-width='1.2' stroke-linecap='round'/></svg>");
+  background-repeat: repeat-x;
+  background-size: 120px 4px;
+  pointer-events: none;
+}
+
+/* 2. sombra de giz nos títulos (texto continua limpo: nada de máscara) */
+html[data-theme="lousa"] h1,
+html[data-theme="lousa"] h2,
+html[data-theme="lousa"] h3,
+html[data-theme="lousa"] .font-cinzel {
+  letter-spacing: 0.012em;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}

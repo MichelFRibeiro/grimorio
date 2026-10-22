@@ -1,0 +1,669 @@
+/* =========================================================================
+   TEMA "Lousa de Giz"
+   Grimório como lousa de professor: verde-lousa profundo, giz branco e giz
+   amarelo/turquesa, linhas desenhadas à mão, headings em serifa de contorno.
+   É a proposta mais próxima do "Dark Fantasy" atual, só que disciplinada:
+   o dourado neon vira giz amarelo suave e tudo o que era cor de vidro vira
+   pigmento de giz.
+
+   Carregada por ÚLTIMO, depois de index.css e catalog-theme.css. Por isso
+   basta declarar as propriedades uma vez, com a mesma especificidade:
+   [style*=...] vence o estilo inline, .classe vence a regra anterior.
+   ========================================================================= */
+
+@import url('./derived.css');
+@import url('./overrides.css');
+
+html[data-theme="lousa"] {
+  color-scheme: dark;
+
+  --font-heading: 'Grenze Gotisch', 'Cinzel', serif;
+  --font-body: 'Patrick Hand', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* tokens normalizados: a UI de Configurações e os gráficos leem daqui */
+  --tpl-scheme: dark;
+  --tpl-paper: #22302b;
+  --tpl-card: #26362f;
+  --tpl-ink: #eef1e8;
+  --tpl-soft: #a9b6a5;
+  --tpl-accent: #f0e3a5;
+  --tpl-accent-2: #9ad9cf;
+  --tpl-rule: rgba(238, 241, 232, 0.14);
+  --tpl-shadow: rgba(0, 0, 0, 0.35);
+  --tpl-ok: #b4d9a8;
+  --tpl-alert: #e8a19b;
+  --tpl-warm: #f0e3a5;
+  --tpl-muted: #8d9b89;
+  --tpl-heading-font: var(--font-heading);
+  --tpl-body-font: var(--font-body);
+
+  /* superfícies */
+  --bg-main: #22302b;
+  --bg-card: #26362f;
+  --bg-card-hover: #2c3e36;
+  --bg-card-active: #33473e;
+  --surface-well: #1c2925;
+  --surface-sunk: #18231f;
+  --border-subtle: rgba(231, 238, 226, 0.13);
+  --border-bright: rgba(240, 227, 165, 0.32);
+
+  /* tinta */
+  --text-main: #eef1e8;
+  --text-muted: #b8c3b4;
+  --text-dim: #93a08f;
+
+  /* giz */
+  --accent-gold: #f0e3a5;
+  --accent-gold-glow: rgba(240, 227, 165, 0.18);
+  --accent-cyan: #9ad9cf;
+  --accent-emerald: #b4d9a8;
+  --accent-purple: #d2bec6;
+  --accent-rose: #e8a19b;
+
+  --c-chalk: #eef1e8;
+  --c-chalk-yellow: #f0e3a5;
+  --c-chalk-teal: #9ad9cf;
+  --c-chalk-sage: #b4d9a8;
+  --c-chalk-rose: #e8a19b;
+  --c-chalk-plum: #d2bec6;
+  --c-chalk-dim: #b8c3b4;
+  --c-chalk-faint: #93a08f;
+  --c-line: rgba(231, 238, 226, 0.13);
+  --c-grain: rgba(255, 255, 255, 0.014);
+}
+
+/* ------------------------------------------------------------------ base */
+html[data-theme="lousa"] html { background: var(--bg-main); }
+
+
+html[data-theme="lousa"] body {
+  background-color: var(--bg-main);
+  background-image:
+    radial-gradient(120% 75% at 8% -8%, rgba(180, 217, 168, 0.07) 0%, transparent 55%),
+    radial-gradient(110% 70% at 102% 6%, rgba(154, 217, 207, 0.055) 0%, transparent 52%),
+    radial-gradient(90% 60% at 50% 118%, rgba(240, 227, 165, 0.04) 0%, transparent 60%),
+    radial-gradient(140% 100% at 50% 50%, transparent 58%, rgba(0, 0, 0, 0.30) 100%),
+    repeating-linear-gradient(0deg, var(--c-grain) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, var(--c-grain) 0 1px, transparent 1px 3px);
+  background-attachment: fixed;
+  color: var(--text-main);
+  font-family: var(--font-body);
+  font-feature-settings: 'kern' 1;
+  letter-spacing: 0.005em;
+}
+
+
+html[data-theme="lousa"] ::selection { background: rgba(240, 227, 165, 0.26); color: #fbfaf2; }
+
+
+html[data-theme="lousa"] ::-webkit-scrollbar { width: 10px; height: 10px; }
+
+html[data-theme="lousa"] ::-webkit-scrollbar-track { background: var(--surface-sunk); }
+
+html[data-theme="lousa"] ::-webkit-scrollbar-thumb { background: #3a4c43; border-radius: 6px; border: 2px solid var(--surface-sunk); }
+
+html[data-theme="lousa"] ::-webkit-scrollbar-thumb:hover { background: #4a5f54; }
+
+
+html[data-theme="lousa"] a { color: var(--c-chalk-teal); }
+
+
+/* tipografia de giz */
+html[data-theme="lousa"] h1,
+html[data-theme="lousa"] h2,
+html[data-theme="lousa"] h3,
+html[data-theme="lousa"] h4,
+html[data-theme="lousa"] .font-cinzel {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  letter-spacing: 0.005em;
+}
+
+
+/* traço de giz: borda dupla levemente desigual via máscara de ruído */
+html[data-theme="lousa"] .glass-panel,
+html[data-theme="lousa"] .rpg-card {
+  position: relative;
+  background: var(--bg-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 14px 30px -24px rgba(0, 0, 0, 0.9);
+}
+
+
+html[data-theme="lousa"] .glass-panel {
+  /* filete de giz no topo do quadro */
+  background-image: linear-gradient(180deg, rgba(231, 238, 226, 0.035) 0%, transparent 42%);
+}
+
+
+html[data-theme="lousa"] .glass-panel-gold {
+  background: #2b3630;
+  border: 1px solid rgba(240, 227, 165, 0.28);
+  border-radius: 14px;
+  backdrop-filter: none;
+}
+
+
+html[data-theme="lousa"] .rpg-card {
+  border-left-width: 4px;
+  border-radius: 12px;
+  background: var(--bg-card);
+}
+
+
+html[data-theme="lousa"] .rpg-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--c-line);
+  border-left-color: currentColor;
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 18px 34px -24px rgba(0, 0, 0, 0.95);
+}
+
+
+/* cartões de missão: as bordas laterais coloridas são o "giz escolhido" */
+html[data-theme="lousa"] .rpg-card[style*="border-left"] {
+  border-top-color: var(--c-line);
+  border-right-color: var(--c-line);
+  border-bottom-color: var(--c-line);
+}
+
+
+/* --------------------------------------------------------- navegação */
+html[data-theme="lousa"] .app-nav {
+  background: rgba(34, 48, 43, 0.86);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+}
+
+
+html[data-theme="lousa"] .app-nav-tab {
+  border-radius: 10px;
+  font-family: var(--font-body);
+  letter-spacing: 0.01em;
+}
+
+
+/* aviso de canto: a aba ativa ganha um sublinhado de giz */
+html[data-theme="lousa"] .app-nav-tab[aria-pressed="true"] {
+  background: rgba(240, 227, 165, 0.10);
+  border-color: rgba(240, 227, 165, 0.38);
+  color: var(--c-chalk-yellow);
+  box-shadow: inset 0 -2px 0 rgba(240, 227, 165, 0.55);
+}
+
+
+html[data-theme="lousa"] .tab-fallback { color: var(--c-chalk-dim); }
+
+html[data-theme="lousa"] .nav-tab-badge { font-family: var(--font-mono); }
+
+
+/* ------------------------------------------------------------- header */
+html[data-theme="lousa"] header.glass-panel { border-radius: 16px; }
+
+
+html[data-theme="lousa"] .header-identity h1 {
+  font-size: 1.45rem !important;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+
+html[data-theme="lousa"] .header-identity p {
+  font-family: var(--font-body);
+  letter-spacing: 0.02em;
+}
+
+
+/* barras de progresso: trilho vazado, preenchimento como giz esfregado */
+html[data-theme="lousa"] .progress-container {
+  background: var(--surface-sunk);
+  border: 1px solid var(--c-line);
+  border-radius: 99px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+
+html[data-theme="lousa"] .progress-fill-xp,
+html[data-theme="lousa"] .progress-fill-boss,
+html[data-theme="lousa"] .progress-fill-book,
+html[data-theme="lousa"] .progress-fill-process {
+  border-radius: 99px;
+  box-shadow: none;
+  background-image:
+    repeating-linear-gradient(100deg, rgba(255, 255, 255, 0.10) 0 2px, transparent 2px 7px),
+    linear-gradient(90deg, currentColor, currentColor);
+  background-blend-mode: overlay, normal;
+}
+
+
+html[data-theme="lousa"] .progress-fill-xp {
+  background-color: var(--c-chalk-yellow);
+  background-image:
+    repeating-linear-gradient(100deg, rgba(255, 255, 255, 0.22) 0 2px, transparent 2px 6px),
+    linear-gradient(90deg, #d8c98b 0%, var(--c-chalk-yellow) 65%, #fbf3c8 100%);
+}
+
+
+html[data-theme="lousa"] .progress-fill-boss {
+  background-color: var(--c-chalk-rose);
+  background-image:
+    repeating-linear-gradient(100deg, rgba(255, 255, 255, 0.18) 0 2px, transparent 2px 6px),
+    linear-gradient(90deg, #b9756f 0%, var(--c-chalk-rose) 70%, #f3c2bd 100%);
+}
+
+
+html[data-theme="lousa"] .progress-fill-book {
+  background-image: linear-gradient(90deg, #8ebd83 0%, var(--c-chalk-sage) 100%);
+}
+
+
+html[data-theme="lousa"] .progress-fill-process {
+  background-image: linear-gradient(90deg, #6fb0c0 0%, #b7d3e8 100%);
+}
+
+
+/* --------------------------------------------------- campos e botões */
+html[data-theme="lousa"] input,
+html[data-theme="lousa"] select,
+html[data-theme="lousa"] textarea {
+  background: var(--surface-sunk) !important;
+  border: 1px solid var(--c-line) !important;
+  border-radius: 9px !important;
+  color: var(--text-main) !important;
+  font-family: var(--font-body);
+  accent-color: var(--c-chalk-yellow);
+  color-scheme: dark;
+}
+
+
+html[data-theme="lousa"] input::placeholder,
+html[data-theme="lousa"] textarea::placeholder { color: var(--c-chalk-faint) !important; opacity: 1; }
+
+
+html[data-theme="lousa"] input:focus,
+html[data-theme="lousa"] select:focus,
+html[data-theme="lousa"] textarea:focus {
+  outline: none !important;
+  border-color: rgba(240, 227, 165, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(240, 227, 165, 0.10) !important;
+}
+
+
+html[data-theme="lousa"] button { font-family: var(--font-body); }
+
+
+/* ------------------------------------------------------------ modais */
+html[data-theme="lousa"] .modal-overlay {
+  background: rgba(12, 18, 16, 0.80) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+}
+
+
+html[data-theme="lousa"] .modal-sheet {
+  background: #25342e !important;
+  border: 1px solid rgba(231, 238, 226, 0.16) !important;
+  border-radius: 16px !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 30px 70px -30px rgba(0, 0, 0, 0.95) !important;
+}
+
+
+html[data-theme="lousa"] .modal-sheet h3 {
+  font-family: var(--font-heading) !important;
+  font-weight: 800 !important;
+}
+
+
+/* -------------------------------------------------------------- hoje */
+html[data-theme="lousa"] .today-section { border-radius: 14px; }
+
+
+html[data-theme="lousa"] .today-hero h2,
+html[data-theme="lousa"] .today-section h3,
+html[data-theme="lousa"] .today-now h3,
+html[data-theme="lousa"] .today-plan h3 {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: 0.005em;
+}
+
+
+html[data-theme="lousa"] .today-hero h2 { font-size: 2rem !important; }
+
+
+html[data-theme="lousa"] .today-kicker {
+  font-family: var(--font-mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 0.68rem !important;
+  color: var(--c-chalk-yellow) !important;
+}
+
+
+html[data-theme="lousa"] .today-count {
+  background: rgba(240, 227, 165, 0.12);
+  border: 1px solid rgba(240, 227, 165, 0.32);
+  color: var(--c-chalk-yellow);
+  font-family: var(--font-mono);
+}
+
+
+html[data-theme="lousa"] .today-link { color: var(--c-chalk-teal); }
+
+html[data-theme="lousa"] .today-meta,
+html[data-theme="lousa"] .today-empty,
+html[data-theme="lousa"] .today-now p,
+html[data-theme="lousa"] .today-stats { color: var(--c-chalk-dim); }
+
+
+html[data-theme="lousa"] .today-inline-input,
+html[data-theme="lousa"] .today-field input,
+html[data-theme="lousa"] .today-line select {
+  background: var(--surface-sunk);
+  border-color: var(--c-line);
+  color: var(--text-main);
+}
+
+
+html[data-theme="lousa"] .today-solid,
+html[data-theme="lousa"] .quick-capture-fab {
+  background: linear-gradient(135deg, #e3d291 0%, #cdb96e 100%) !important;
+  color: #1f2a25 !important;
+  box-shadow: 0 12px 26px -14px rgba(0, 0, 0, 0.9) !important;
+}
+
+
+html[data-theme="lousa"] .today-ghost,
+html[data-theme="lousa"] .today-chips button {
+  background: rgba(231, 238, 226, 0.05);
+  border-color: var(--c-line);
+  color: var(--c-chalk-dim);
+}
+
+
+html[data-theme="lousa"] .today-chips button.is-on {
+  background: rgba(154, 217, 207, 0.16);
+  border-color: rgba(154, 217, 207, 0.45);
+  color: var(--c-chalk-teal);
+}
+
+
+/* fim de dia / semana: painéis com cara de anotação de lousa */
+html[data-theme="lousa"] .today-banner {
+  background: rgba(240, 227, 165, 0.07);
+  border-color: rgba(240, 227, 165, 0.26);
+  color: var(--c-chalk-yellow);
+}
+
+
+html[data-theme="lousa"] kbd {
+  background: var(--surface-sunk);
+  border: 1px solid var(--c-line);
+  color: var(--c-chalk-yellow);
+  font-family: var(--font-mono);
+  border-radius: 5px;
+}
+
+
+/* ---------------------------------------------------------- gráficos */
+/* Chart.js desenha no canvas; os rótulos seguem a cor do texto padrão. */
+html[data-theme="lousa"] .agu-load-chart-canvas {
+  /* a área do gráfico é pintada pelo Chart.js (em JS), não pelo CSS */
+  background: #33473e;
+  border-top: 1px solid #b4d9a8;
+  border-bottom: 1px solid #b4d9a8;
+  border-radius: 4px;
+  padding: 6px;
+}
+
+
+html[data-theme="lousa"] .agu-load-chart-side,
+html[data-theme="lousa"] .agu-load-chart-band-label {
+  font-family: var(--font-mono);
+  letter-spacing: 0.20em;
+  text-shadow: none;
+}
+
+
+html[data-theme="lousa"] .agu-load-chart-band-label--home { color: var(--c-chalk-sage); }
+
+
+html[data-theme="lousa"] .agu-edital-wrap {
+  border: 1px solid var(--c-line);
+  background: var(--bg-card);
+}
+
+
+html[data-theme="lousa"] .agu-edital-table th {
+  background: var(--surface-sunk);
+  color: var(--c-chalk-dim);
+}
+
+
+html[data-theme="lousa"] .agu-edital-table th,
+html[data-theme="lousa"] .agu-edital-table td { border-bottom: 1px solid var(--c-line); }
+
+
+html[data-theme="lousa"] .agu-edital-table tr.subject-row { background: rgba(240, 227, 165, 0.06); }
+
+
+/* capas de livros: gradientes chapados ganham textura de giz */
+html[data-theme="lousa"] .book-cover { border-radius: 8px !important; }
+
+html[data-theme="lousa"] .book-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 4px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, transparent 30%);
+  mix-blend-mode: soft-light;
+}
+
+
+/* ----------------------------------------------------------- diversos */
+html[data-theme="lousa"] .rankings-panel,
+html[data-theme="lousa"] .rankings-card,
+html[data-theme="lousa"] .rankings-metric { background: var(--bg-card); }
+
+html[data-theme="lousa"] .rankings-tabs,
+html[data-theme="lousa"] .rankings-tiers,
+html[data-theme="lousa"] .rankings-progress {
+  background: var(--surface-sunk);
+  border: 1px solid var(--c-line);
+}
+
+
+html[data-theme="lousa"] .oracle-trace-step { background: var(--surface-well); border-color: var(--c-line); }
+
+html[data-theme="lousa"] .oracle-trace-json { background: var(--surface-sunk); border-color: var(--c-line); }
+
+
+html[data-theme="lousa"] .chat-room-bubble { border-radius: 12px; }
+
+
+html[data-theme="lousa"] .focus-play-btn {
+  background: linear-gradient(135deg, #e3d291 0%, #cdb96e 100%);
+  color: #1f2a25;
+  box-shadow: 0 12px 26px -14px rgba(0, 0, 0, 0.9);
+}
+
+
+html[data-theme="lousa"] .focus-seek {
+  background: linear-gradient(90deg, var(--c-chalk-teal) var(--progress, 0%), var(--surface-sunk) var(--progress, 0%));
+}
+
+
+html[data-theme="lousa"] .floating-toasts { font-family: var(--font-body); }
+
+
+/* o mapa mental continua escuro de propósito, mas na cor da lousa */
+html[data-theme="lousa"] .mindmap-canvas,
+html[data-theme="lousa"] .mindmap-fullscreen-root { background: #18231f !important; }
+
+
+/* rolagem/realce de foco — anel de giz */
+html[data-theme="lousa"] :focus-visible {
+  outline: 2px dashed rgba(240, 227, 165, 0.7);
+  outline-offset: 2px;
+}
+
+
+/* ------------------------------------------------- traço de giz */
+/* As bordas escuras/cinzas do JSX viram traço de giz: branco em alfa baixo. */
+html[data-theme="lousa"] .rpg-card,
+html[data-theme="lousa"] .glass-panel,
+html[data-theme="lousa"] .glass-panel-gold {
+  border-width: 1.5px;
+}
+
+
+/* o "desenho" do giz: a borda dupla com traço levemente quebrado */
+html[data-theme="lousa"] .glass-panel::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px dashed rgba(238, 241, 232, 0.10);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+
+/* cartões de missão (a borda esquerda colorida é o giz escolhido) */
+html[data-theme="lousa"] .rpg-card {
+  border-color: rgba(238, 241, 232, 0.12);
+  border-width: 1.5px;
+}
+
+
+/* chips e botões em contorno de giz */
+html[data-theme="lousa"] .chip-row button,
+html[data-theme="lousa"] .app-nav-tab,
+html[data-theme="lousa"] button[title] {
+  border-radius: 999px;
+}
+
+
+/* sombras profundas de lousa, sem brilho neon */
+html[data-theme="lousa"] .quick-capture-fab {
+  border: 1.5px solid rgba(238, 241, 232, 0.22);
+}
+
+
+/* linhas de texto levemente "escritas à mão" no título do dia */
+html[data-theme="lousa"] .today-hero h2 {
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+
+/* a barra XP: giz amarelo com granulação */
+html[data-theme="lousa"] .progress-fill-xp { box-shadow: 0 0 12px rgba(240, 227, 165, 0.18) !important; }
+
+html[data-theme="lousa"] .progress-fill-boss { box-shadow: 0 0 12px rgba(232, 161, 155, 0.16) !important; }
+
+
+
+/* ------------------------------------------------------------------------
+   Correções de classes que o tema atual (catalog-theme.css) já reescreveu.
+   Aqui os mesmos seletores recebem a cor da proposta; por virem depois no
+   cascade, vencem sem precisar de !important.
+   ------------------------------------------------------------------------ */
+html[data-theme="lousa"] .today-hero h2,
+html[data-theme="lousa"] .today-section h3,
+html[data-theme="lousa"] .today-now h3,
+html[data-theme="lousa"] .today-plan h3,
+html[data-theme="lousa"] .today-line,
+html[data-theme="lousa"] .today-line-btn {
+  color: #eef1e8;
+}
+
+
+html[data-theme="lousa"] .today-kicker {
+  color: #f0e3a5 !important;
+}
+
+
+html[data-theme="lousa"] .today-count,
+html[data-theme="lousa"] .today-link,
+html[data-theme="lousa"] .today-check,
+html[data-theme="lousa"] .today-modal h4 {
+  color: #f0e3a5;
+}
+
+
+html[data-theme="lousa"] .today-count {
+  background: rgba(240, 227, 165, 0.12);
+  border: 1px solid rgba(240, 227, 165, 0.32);
+}
+
+
+html[data-theme="lousa"] .today-meta,
+html[data-theme="lousa"] .today-empty,
+html[data-theme="lousa"] .today-now p,
+html[data-theme="lousa"] .today-line em,
+html[data-theme="lousa"] .today-stats,
+html[data-theme="lousa"] .today-rank-list,
+html[data-theme="lousa"] .today-field {
+  color: #a9b6a5;
+}
+
+
+html[data-theme="lousa"] .today-section h3,
+html[data-theme="lousa"] .today-now h3 {
+  font-family: var(--font-heading);
+}
+
+
+html[data-theme="lousa"] kbd {
+  color: #f0e3a5;
+}
+
+
+/* --------------------------------------------------- gráficos (Chart.js)
+   O canvas do Chart.js passa por cima do CSS: o que aparece fora da área
+   do gráfico é só CSS, mas a área interna é desenhada em JS com as cores do
+   tema antigo. Aqui a moldura acompanha a proposta. */
+html[data-theme="lousa"] .agu-load-chart,
+html[data-theme="lousa"] .glass-panel-gold.agu-load-chart {
+  background: #26362f !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+
+
+html[data-theme="lousa"] .agu-load-chart-canvas {
+  /* sem pintura: o canvas do Chart.js cobre essa área */
+  border-top: 1px solid #b4d9a8;
+  border-bottom: 1px solid #b4d9a8;
+  border-radius: 4px;
+  padding: 4px;
+}
+
+
+html[data-theme="lousa"] .agu-load-chart-side,
+html[data-theme="lousa"] .agu-load-chart-band-label {
+  text-shadow: none;
+}
+
+
+html[data-theme="lousa"] .agu-load-chart-band-label--home { color: #b4d9a8 !important; }
+
+html[data-theme="lousa"] .agu-load-chart-side { color: #e8a19b !important; }
+

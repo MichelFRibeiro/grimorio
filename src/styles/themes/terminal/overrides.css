@@ -1,0 +1,233 @@
+/* GERADO por scripts/build-theme-overrides.mjs — não editar à mão. */
+/* Tema "Terminal de Estudo": reinterpreta os literais de cor do JSX. */
+
+/* --- texto --- */
+html[data-theme="terminal"] [style*="color: rgb(2, 44, 34)"] { color: #c9d2de !important; }
+html[data-theme="terminal"] [style*="color: rgb(4, 47, 46)"] { color: #c9d2de !important; }
+html[data-theme="terminal"] [style*="color: rgb(5, 46, 22)"] { color: #c9d2de !important; }
+html[data-theme="terminal"] [style*="color: rgb(7, 10, 19)"] { color: #0e1217 !important; }
+html[data-theme="terminal"] [style*="color: rgb(15, 23, 42)"] { color: #c9d2de !important; }
+html[data-theme="terminal"] [style*="color: rgb(16, 185, 129)"] { color: #8fe3a4 !important; }
+html[data-theme="terminal"] [style*="color: rgb(17, 17, 17)"] { color: #c9d2de !important; }
+html[data-theme="terminal"] [style*="color: rgb(31, 41, 55)"] { color: #c9d2de !important; }
+html[data-theme="terminal"] [style*="color: rgb(34, 211, 238)"] { color: #5fe3d0 !important; }
+html[data-theme="terminal"] [style*="color: rgb(42, 33, 24)"] { color: #c9d2de !important; }
+html[data-theme="terminal"] [style*="color: rgb(52, 211, 153)"] { color: #8fe3a4 !important; }
+html[data-theme="terminal"] [style*="color: rgb(56, 189, 248)"] { color: #5fe3d0 !important; }
+html[data-theme="terminal"] [style*="color: rgb(100, 116, 139)"] { color: #8693a5 !important; }
+html[data-theme="terminal"] [style*="color: rgb(109, 40, 217)"] { color: #b8a6ff !important; }
+html[data-theme="terminal"] [style*="color: rgb(125, 211, 252)"] { color: #8feee0 !important; }
+html[data-theme="terminal"] [style*="color: rgb(134, 239, 172)"] { color: #8fe3a4 !important; }
+html[data-theme="terminal"] [style*="color: rgb(148, 163, 184)"] { color: #9dabbd !important; }
+html[data-theme="terminal"] [style*="color: rgb(159, 18, 57)"] { color: #e8695f !important; }
+html[data-theme="terminal"] [style*="color: rgb(168, 85, 247)"] { color: #b8a6ff !important; }
+html[data-theme="terminal"] [style*="color: rgb(192, 132, 252)"] { color: #b8a6ff !important; }
+html[data-theme="terminal"] [style*="color: rgb(196, 181, 253)"] { color: #b8a6ff !important; }
+html[data-theme="terminal"] [style*="color: rgb(203, 213, 225)"] { color: #c9d2de !important; }
+html[data-theme="terminal"] [style*="color: rgb(226, 232, 240)"] { color: #c9d2de !important; }
+html[data-theme="terminal"] [style*="color: rgb(233, 213, 255)"] { color: #cdc0ff !important; }
+html[data-theme="terminal"] [style*="color: rgb(234, 179, 8)"] { color: #ffc861 !important; }
+html[data-theme="terminal"] [style*="color: rgb(244, 63, 94)"] { color: #ff8f9c !important; }
+html[data-theme="terminal"] [style*="color: rgb(244, 114, 182)"] { color: #ff8f9c !important; }
+html[data-theme="terminal"] [style*="color: rgb(245, 158, 11)"] { color: #e6a84a !important; }
+html[data-theme="terminal"] [style*="color: rgb(248, 113, 113)"] { color: #ff8f9c !important; }
+html[data-theme="terminal"] [style*="color: rgb(248, 250, 252)"] { color: #e8ecf2 !important; }
+html[data-theme="terminal"] [style*="color: rgb(251, 113, 133)"] { color: #ff8f9c !important; }
+html[data-theme="terminal"] [style*="color: rgb(251, 191, 36)"] { color: #ffc861 !important; }
+html[data-theme="terminal"] [style*="color: rgb(252, 165, 165)"] { color: #ff8f9c !important; }
+html[data-theme="terminal"] [style*="color: rgb(252, 211, 77)"] { color: #ffc861 !important; }
+html[data-theme="terminal"] [style*="color: rgb(253, 164, 175)"] { color: #ff8f9c !important; }
+html[data-theme="terminal"] [style*="color: rgb(253, 230, 138)"] { color: #ffc861 !important; }
+html[data-theme="terminal"] [style*="color: rgb(254, 205, 211)"] { color: #ff8f9c !important; }
+html[data-theme="terminal"] [style*="color: rgb(255, 255, 255)"] { color: #f4f7fb !important; }
+html[data-theme="terminal"] [style*="color: rgba(148, 163, 184, 0.6)"] { color: rgba(157, 171, 189, 0.6) !important; }
+html[data-theme="terminal"] [style*="color: rgba(255, 255, 255, 0.04)"] { color: rgba(244, 247, 251, 0.04) !important; }
+html[data-theme="terminal"] [style*="color: rgba(255, 255, 255, 0.05)"] { color: rgba(244, 247, 251, 0.05) !important; }
+
+/* --- fundos --- */
+html[data-theme="terminal"] [style*="background: rgb(6, 9, 17)"] { background: #151a21 !important; }
+html[data-theme="terminal"] [style*="background: rgb(7, 10, 19)"] { background: #151a21 !important; }
+html[data-theme="terminal"] [style*="background: rgb(10, 13, 20)"] { background: #151a21 !important; }
+html[data-theme="terminal"] [style*="background: rgb(12, 14, 20)"] { background: #151a21 !important; }
+html[data-theme="terminal"] [style*="background: rgb(12, 16, 29)"] { background: #151a21 !important; }
+html[data-theme="terminal"] [style*="background: rgb(19, 23, 34)"] { background: #151a21 !important; }
+html[data-theme="terminal"] [style*="background: rgb(34, 197, 94)"] { background: #8fe3a4 !important; }
+html[data-theme="terminal"] [style*="background: rgb(56, 189, 248)"] { background: #5fe3d0 !important; }
+html[data-theme="terminal"] [style*="background: rgb(239, 68, 68)"] { background: #e8695f !important; }
+html[data-theme="terminal"] [style*="background: rgb(245, 158, 11)"] { background: #e6a84a !important; }
+html[data-theme="terminal"] [style*="background: rgb(251, 191, 36)"] { background: #ffc861 !important; }
+html[data-theme="terminal"] [style*="background: rgb(251, 247, 238)"] { background: #151a21 !important; }
+html[data-theme="terminal"] [style*="background: rgb(255, 255, 255)"] { background: #f4f7fb !important; }
+html[data-theme="terminal"] [style*="background: rgba(109, 40, 217, 0.08)"] { background: rgba(184, 166, 255, 0.08) !important; }
+html[data-theme="terminal"] [style*="background: rgba(12, 14, 20, 0.94)"] { background: rgba(21, 26, 33, 0.94) !important; }
+html[data-theme="terminal"] [style*="background: rgba(154, 52, 18, 0.05)"] { background: rgba(230, 168, 74, 0.05) !important; }
+html[data-theme="terminal"] [style*="background: rgba(16, 185, 129, 0.08)"] { background: rgba(143, 227, 164, 0.08) !important; }
+html[data-theme="terminal"] [style*="background: rgba(16, 185, 129, 0.1)"] { background: rgba(143, 227, 164, 0.1) !important; }
+html[data-theme="terminal"] [style*="background: rgba(16, 185, 129, 0.15)"] { background: rgba(143, 227, 164, 0.15) !important; }
+html[data-theme="terminal"] [style*="background: rgba(16, 185, 129, 0.16)"] { background: rgba(143, 227, 164, 0.16) !important; }
+html[data-theme="terminal"] [style*="background: rgba(16, 185, 129, 0.75)"] { background: rgba(143, 227, 164, 0.75) !important; }
+html[data-theme="terminal"] [style*="background: rgba(168, 85, 247, 0.1)"] { background: rgba(184, 166, 255, 0.1) !important; }
+html[data-theme="terminal"] [style*="background: rgba(168, 85, 247, 0.14)"] { background: rgba(184, 166, 255, 0.14) !important; }
+html[data-theme="terminal"] [style*="background: rgba(168, 85, 247, 0.15)"] { background: rgba(184, 166, 255, 0.15) !important; }
+html[data-theme="terminal"] [style*="background: rgba(168, 85, 247, 0.18)"] { background: rgba(184, 166, 255, 0.18) !important; }
+html[data-theme="terminal"] [style*="background: rgba(168, 85, 247, 0.08)"] { background: rgba(184, 166, 255, 0.08) !important; }
+html[data-theme="terminal"] [style*="background: rgba(19, 23, 34, 0.85)"] { background: rgba(21, 26, 33, 0.85) !important; }
+html[data-theme="terminal"] [style*="background: rgba(19, 23, 34, 0.9)"] { background: rgba(21, 26, 33, 0.9) !important; }
+html[data-theme="terminal"] [style*="background: rgba(19, 23, 34, 0.95)"] { background: rgba(21, 26, 33, 0.95) !important; }
+html[data-theme="terminal"] [style*="background: rgba(19, 23, 34, 0.96)"] { background: rgba(21, 26, 33, 0.96) !important; }
+html[data-theme="terminal"] [style*="background: rgba(2, 6, 23, 0.72)"] { background: rgba(21, 26, 33, 0.72) !important; }
+html[data-theme="terminal"] [style*="background: rgba(2, 6, 23, 0.78)"] { background: rgba(21, 26, 33, 0.78) !important; }
+html[data-theme="terminal"] [style*="background: rgba(23, 22, 18, 0.85)"] { background: rgba(21, 26, 33, 0.85) !important; }
+html[data-theme="terminal"] [style*="background: rgba(239, 68, 68, 0.08)"] { background: rgba(232, 105, 95, 0.08) !important; }
+html[data-theme="terminal"] [style*="background: rgba(239, 68, 68, 0.1)"] { background: rgba(232, 105, 95, 0.1) !important; }
+html[data-theme="terminal"] [style*="background: rgba(239, 68, 68, 0.12)"] { background: rgba(232, 105, 95, 0.12) !important; }
+html[data-theme="terminal"] [style*="background: rgba(239, 68, 68, 0.15)"] { background: rgba(232, 105, 95, 0.15) !important; }
+html[data-theme="terminal"] [style*="background: rgba(239, 68, 68, 0.25)"] { background: rgba(232, 105, 95, 0.25) !important; }
+html[data-theme="terminal"] [style*="background: rgba(244, 63, 94, 0.08)"] { background: rgba(255, 143, 156, 0.08) !important; }
+html[data-theme="terminal"] [style*="background: rgba(244, 63, 94, 0.1)"] { background: rgba(255, 143, 156, 0.1) !important; }
+html[data-theme="terminal"] [style*="background: rgba(244, 63, 94, 0.12)"] { background: rgba(255, 143, 156, 0.12) !important; }
+html[data-theme="terminal"] [style*="background: rgba(244, 63, 94, 0.14)"] { background: rgba(255, 143, 156, 0.14) !important; }
+html[data-theme="terminal"] [style*="background: rgba(244, 63, 94, 0.16)"] { background: rgba(255, 143, 156, 0.16) !important; }
+html[data-theme="terminal"] [style*="background: rgba(244, 63, 94, 0.2)"] { background: rgba(255, 143, 156, 0.2) !important; }
+html[data-theme="terminal"] [style*="background: rgba(244, 63, 94, 0.65)"] { background: rgba(255, 143, 156, 0.65) !important; }
+html[data-theme="terminal"] [style*="background: rgba(245, 158, 11, 0.04)"] { background: rgba(230, 168, 74, 0.04) !important; }
+html[data-theme="terminal"] [style*="background: rgba(245, 158, 11, 0.05)"] { background: rgba(230, 168, 74, 0.05) !important; }
+html[data-theme="terminal"] [style*="background: rgba(245, 158, 11, 0.08)"] { background: rgba(230, 168, 74, 0.08) !important; }
+html[data-theme="terminal"] [style*="background: rgba(245, 158, 11, 0.1)"] { background: rgba(230, 168, 74, 0.1) !important; }
+html[data-theme="terminal"] [style*="background: rgba(245, 158, 11, 0.12)"] { background: rgba(230, 168, 74, 0.12) !important; }
+html[data-theme="terminal"] [style*="background: rgba(245, 158, 11, 0.15)"] { background: rgba(230, 168, 74, 0.15) !important; }
+html[data-theme="terminal"] [style*="background: rgba(245, 158, 11, 0.18)"] { background: rgba(230, 168, 74, 0.18) !important; }
+html[data-theme="terminal"] [style*="background: rgba(245, 158, 11, 0.2)"] { background: rgba(230, 168, 74, 0.2) !important; }
+html[data-theme="terminal"] [style*="background: rgba(245, 158, 11, 0.25)"] { background: rgba(230, 168, 74, 0.25) !important; }
+html[data-theme="terminal"] [style*="background: rgba(245, 158, 11, 0.65)"] { background: rgba(230, 168, 74, 0.65) !important; }
+html[data-theme="terminal"] [style*="background: rgba(251, 191, 36, 0.12)"] { background: rgba(255, 200, 97, 0.12) !important; }
+html[data-theme="terminal"] [style*="background: rgba(251, 191, 36, 0.06)"] { background: rgba(255, 200, 97, 0.06) !important; }
+html[data-theme="terminal"] [style*="background: rgba(255, 255, 255, 0.02)"] { background: rgba(244, 247, 251, 0.02) !important; }
+html[data-theme="terminal"] [style*="background: rgba(255, 255, 255, 0.03)"] { background: rgba(244, 247, 251, 0.03) !important; }
+html[data-theme="terminal"] [style*="background: rgba(255, 255, 255, 0.04)"] { background: rgba(244, 247, 251, 0.04) !important; }
+html[data-theme="terminal"] [style*="background: rgba(255, 255, 255, 0.05)"] { background: rgba(244, 247, 251, 0.05) !important; }
+html[data-theme="terminal"] [style*="background: rgba(255, 255, 255, 0.06)"] { background: rgba(244, 247, 251, 0.06) !important; }
+html[data-theme="terminal"] [style*="background: rgba(255, 255, 255, 0.08)"] { background: rgba(244, 247, 251, 0.08) !important; }
+html[data-theme="terminal"] [style*="background: rgba(255, 255, 255, 0.1)"] { background: rgba(244, 247, 251, 0.1) !important; }
+html[data-theme="terminal"] [style*="background: rgba(42, 33, 24, 0.94)"] { background: rgba(201, 210, 222, 0.94) !important; }
+html[data-theme="terminal"] [style*="background: rgba(45, 212, 191, 0.16)"] { background: rgba(179, 240, 192, 0.16) !important; }
+html[data-theme="terminal"] [style*="background: rgba(5, 7, 13, 0.88)"] { background: rgba(21, 26, 33, 0.88) !important; }
+html[data-theme="terminal"] [style*="background: rgba(56, 189, 248, 0.08)"] { background: rgba(95, 227, 208, 0.08) !important; }
+html[data-theme="terminal"] [style*="background: rgba(56, 189, 248, 0.1)"] { background: rgba(95, 227, 208, 0.1) !important; }
+html[data-theme="terminal"] [style*="background: rgba(56, 189, 248, 0.12)"] { background: rgba(95, 227, 208, 0.12) !important; }
+html[data-theme="terminal"] [style*="background: rgba(56, 189, 248, 0.15)"] { background: rgba(95, 227, 208, 0.15) !important; }
+html[data-theme="terminal"] [style*="background: rgba(56, 189, 248, 0.18)"] { background: rgba(95, 227, 208, 0.18) !important; }
+html[data-theme="terminal"] [style*="background: rgba(56, 189, 248, 0.25)"] { background: rgba(95, 227, 208, 0.25) !important; }
+html[data-theme="terminal"] [style*="background: rgba(56, 189, 248, 0.65)"] { background: rgba(95, 227, 208, 0.65) !important; }
+html[data-theme="terminal"] [style*="background: rgba(6, 182, 212, 0.08)"] { background: rgba(95, 227, 208, 0.08) !important; }
+html[data-theme="terminal"] [style*="background: rgba(6, 182, 212, 0.1)"] { background: rgba(95, 227, 208, 0.1) !important; }
+html[data-theme="terminal"] [style*="background: rgba(6, 182, 212, 0.15)"] { background: rgba(95, 227, 208, 0.15) !important; }
+html[data-theme="terminal"] [style*="background: rgba(8, 10, 18, 0.55)"] { background: rgba(21, 26, 33, 0.55) !important; }
+
+/* --- bordas --- */
+html[data-theme="terminal"] [style*="border-color: rgb(16, 185, 129)"] { border-color: #8fe3a4 !important; }
+html[data-theme="terminal"] [style*="border-color: rgb(56, 189, 248)"] { border-color: #5fe3d0 !important; }
+html[data-theme="terminal"] [style*="border-color: rgb(100, 116, 139)"] { border-color: #8693a5 !important; }
+html[data-theme="terminal"] [style*="border-color: rgb(168, 85, 247)"] { border-color: #b8a6ff !important; }
+html[data-theme="terminal"] [style*="border-color: rgb(244, 63, 94)"] { border-color: #ff8f9c !important; }
+html[data-theme="terminal"] [style*="border-color: rgb(245, 158, 11)"] { border-color: #e6a84a !important; }
+html[data-theme="terminal"] [style*="border-color: rgb(251, 191, 36)"] { border-color: #ffc861 !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(109, 40, 217, 0.22)"] { border-color: rgba(184, 166, 255, 0.22) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(124, 58, 237, 0.25)"] { border-color: rgba(184, 166, 255, 0.25) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(124, 58, 237, 0.28)"] { border-color: rgba(184, 166, 255, 0.28) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(124, 58, 237, 0.35)"] { border-color: rgba(184, 166, 255, 0.35) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(148, 163, 184, 0.28)"] { border-color: rgba(157, 171, 189, 0.28) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(148, 163, 184, 0.3)"] { border-color: rgba(157, 171, 189, 0.3) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(15, 110, 107, 0.45)"] { border-color: rgba(95, 227, 208, 0.45) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(154, 52, 18, 0.35)"] { border-color: rgba(230, 168, 74, 0.35) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(16, 185, 129, 0.2)"] { border-color: rgba(143, 227, 164, 0.2) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(16, 185, 129, 0.25)"] { border-color: rgba(143, 227, 164, 0.25) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(16, 185, 129, 0.3)"] { border-color: rgba(143, 227, 164, 0.3) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(16, 185, 129, 0.35)"] { border-color: rgba(143, 227, 164, 0.35) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(16, 185, 129, 0.4)"] { border-color: rgba(143, 227, 164, 0.4) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(16, 185, 129, 0.5)"] { border-color: rgba(143, 227, 164, 0.5) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(16, 185, 129, 0.85)"] { border-color: rgba(143, 227, 164, 0.85) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(168, 85, 247, 0.2)"] { border-color: rgba(184, 166, 255, 0.2) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(168, 85, 247, 0.3)"] { border-color: rgba(184, 166, 255, 0.3) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(168, 85, 247, 0.35)"] { border-color: rgba(184, 166, 255, 0.35) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(168, 85, 247, 0.4)"] { border-color: rgba(184, 166, 255, 0.4) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(168, 85, 247, 0.45)"] { border-color: rgba(184, 166, 255, 0.45) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(168, 85, 247, 0.5)"] { border-color: rgba(184, 166, 255, 0.5) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(239, 68, 68, 0.25)"] { border-color: rgba(232, 105, 95, 0.25) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(239, 68, 68, 0.3)"] { border-color: rgba(232, 105, 95, 0.3) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(239, 68, 68, 0.35)"] { border-color: rgba(232, 105, 95, 0.35) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(239, 68, 68, 0.4)"] { border-color: rgba(232, 105, 95, 0.4) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(244, 63, 94, 0.25)"] { border-color: rgba(255, 143, 156, 0.25) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(244, 63, 94, 0.3)"] { border-color: rgba(255, 143, 156, 0.3) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(244, 63, 94, 0.45)"] { border-color: rgba(255, 143, 156, 0.45) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(244, 63, 94, 0.35)"] { border-color: rgba(255, 143, 156, 0.35) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(245, 158, 11, 0.2)"] { border-color: rgba(230, 168, 74, 0.2) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(245, 158, 11, 0.22)"] { border-color: rgba(230, 168, 74, 0.22) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(245, 158, 11, 0.25)"] { border-color: rgba(230, 168, 74, 0.25) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(245, 158, 11, 0.3)"] { border-color: rgba(230, 168, 74, 0.3) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(245, 158, 11, 0.35)"] { border-color: rgba(230, 168, 74, 0.35) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(245, 158, 11, 0.4)"] { border-color: rgba(230, 168, 74, 0.4) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(245, 158, 11, 0.5)"] { border-color: rgba(230, 168, 74, 0.5) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(245, 158, 11, 0.6)"] { border-color: rgba(230, 168, 74, 0.6) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(248, 113, 113, 0.45)"] { border-color: rgba(255, 143, 156, 0.45) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(248, 250, 252, 0.35)"] { border-color: rgba(232, 236, 242, 0.35) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(251, 191, 36, 0.35)"] { border-color: rgba(255, 200, 97, 0.35) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(251, 191, 36, 0.4)"] { border-color: rgba(255, 200, 97, 0.4) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(251, 191, 36, 0.45)"] { border-color: rgba(255, 200, 97, 0.45) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(251, 191, 36, 0.55)"] { border-color: rgba(255, 200, 97, 0.55) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(251, 191, 36, 0.28)"] { border-color: rgba(255, 200, 97, 0.28) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(251, 191, 36, 0.5)"] { border-color: rgba(255, 200, 97, 0.5) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(255, 255, 255, 0.04)"] { border-color: rgba(244, 247, 251, 0.04) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(255, 255, 255, 0.05)"] { border-color: rgba(244, 247, 251, 0.05) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(255, 255, 255, 0.06)"] { border-color: rgba(244, 247, 251, 0.06) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(255, 255, 255, 0.07)"] { border-color: rgba(244, 247, 251, 0.07) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(255, 255, 255, 0.08)"] { border-color: rgba(244, 247, 251, 0.08) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(255, 255, 255, 0.1)"] { border-color: rgba(244, 247, 251, 0.1) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(255, 255, 255, 0.12)"] { border-color: rgba(244, 247, 251, 0.12) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(255, 255, 255, 0.14)"] { border-color: rgba(244, 247, 251, 0.14) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(255, 255, 255, 0.15)"] { border-color: rgba(244, 247, 251, 0.15) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(255, 255, 255, 0.2)"] { border-color: rgba(244, 247, 251, 0.2) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(255, 255, 255, 0.22)"] { border-color: rgba(244, 247, 251, 0.22) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(45, 212, 191, 0.35)"] { border-color: rgba(179, 240, 192, 0.35) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(52, 211, 153, 0.45)"] { border-color: rgba(143, 227, 164, 0.45) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(56, 189, 248, 0.22)"] { border-color: rgba(95, 227, 208, 0.22) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(56, 189, 248, 0.25)"] { border-color: rgba(95, 227, 208, 0.25) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(56, 189, 248, 0.3)"] { border-color: rgba(95, 227, 208, 0.3) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(56, 189, 248, 0.35)"] { border-color: rgba(95, 227, 208, 0.35) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(56, 189, 248, 0.4)"] { border-color: rgba(95, 227, 208, 0.4) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(56, 189, 248, 0.45)"] { border-color: rgba(95, 227, 208, 0.45) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(56, 189, 248, 0.5)"] { border-color: rgba(95, 227, 208, 0.5) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(6, 182, 212, 0.15)"] { border-color: rgba(95, 227, 208, 0.15) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(6, 182, 212, 0.2)"] { border-color: rgba(95, 227, 208, 0.2) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(6, 182, 212, 0.3)"] { border-color: rgba(95, 227, 208, 0.3) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(6, 182, 212, 0.4)"] { border-color: rgba(95, 227, 208, 0.4) !important; }
+html[data-theme="terminal"] [style*="border-color: rgba(61, 46, 31, 0.16)"] { border-color: rgba(201, 210, 222, 0.16) !important; }
+
+/* --- gradientes (cores internas remapeadas, alfa preservado) --- */
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.08) 100%)"] { background: linear-gradient(135deg, rgba(230, 168, 74, 0.2) 0%, rgba(230, 168, 74, 0.08) 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgb(245, 158, 11) 0%, rgb(217, 119, 6) 100%)"] { background: linear-gradient(135deg, #e6a84a 0%, #ca9441 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgb(16, 185, 129) 0%, rgb(5, 150, 105) 100%)"] { background: linear-gradient(135deg, #8fe3a4 0%, #7ec890 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgb(56, 189, 248) 0%, rgb(2, 132, 199) 100%)"] { background: linear-gradient(135deg, #5fe3d0 0%, #54c8b7 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(19, 23, 34, 0.9) 100%)"] { background: linear-gradient(135deg, rgba(230, 168, 74, 0.08) 0%, rgba(14, 18, 23, 0.9) 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgba(244, 63, 94, 0.08) 0%, rgba(19, 23, 34, 0.9) 100%)"] { background: linear-gradient(135deg, rgba(255, 143, 156, 0.08) 0%, rgba(14, 18, 23, 0.9) 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgb(239, 68, 68) 0%, rgb(220, 38, 38) 100%)"] { background: linear-gradient(135deg, #e8695f 0%, #dc2626 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(19, 23, 34, 0.92) 100%)"] { background: linear-gradient(135deg, rgba(230, 168, 74, 0.12) 0%, rgba(14, 18, 23, 0.92) 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(19, 23, 34, 0.92) 100%)"] { background: linear-gradient(135deg, rgba(255, 200, 97, 0.08) 0%, rgba(14, 18, 23, 0.92) 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(160deg, rgba(6, 182, 212, 0.12) 0%, rgba(19, 23, 34, 0.94) 42%, rgba(168, 85, 247, 0.1) 100%)"] { background: linear-gradient(160deg, rgba(95, 227, 208, 0.12) 0%, rgba(14, 18, 23, 0.94) 42%, rgba(184, 166, 255, 0.1) 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgb(239, 68, 68) 0%, rgb(185, 28, 28) 100%)"] { background: linear-gradient(135deg, #e8695f 0%, #cc5c54 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(185, 28, 28, 0.2) 100%)"] { background: linear-gradient(135deg, rgba(232, 105, 95, 0.2) 0%, rgba(232, 105, 95, 0.2) 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(168, 85, 247, 0.2) 100%)"] { background: linear-gradient(135deg, rgba(230, 168, 74, 0.2) 0%, rgba(184, 166, 255, 0.2) 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(180deg, rgba(30, 27, 20, 0.98) 0%, rgba(15, 17, 26, 0.98) 100%)"] { background: linear-gradient(180deg, rgba(14, 18, 23, 0.98) 0%, rgba(14, 18, 23, 0.98) 100%) !important; }
+html[data-theme="terminal"] [style*="background: radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, rgba(168, 85, 247, 0.05) 50%, transparent 70%)"] { background: radial-gradient(circle, rgba(230, 168, 74, 0.15) 0%, rgba(184, 166, 255, 0.05) 50%, transparent 70%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(168, 85, 247, 0.25) 100%)"] { background: linear-gradient(135deg, rgba(230, 168, 74, 0.25) 0%, rgba(184, 166, 255, 0.25) 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(90deg, rgba(56, 189, 248, 0.1) 0%, rgba(168, 85, 247, 0.05) 100%)"] { background: linear-gradient(90deg, rgba(95, 227, 208, 0.1) 0%, rgba(184, 166, 255, 0.05) 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgb(168, 85, 247) 0%, rgb(124, 58, 237) 100%)"] { background: linear-gradient(135deg, #b8a6ff 0%, #a292e0 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgba(124, 58, 237, 0.07) 0%, rgba(251, 247, 238, 0.96) 100%)"] { background: linear-gradient(135deg, rgba(184, 166, 255, 0.07) 0%, rgba(21, 26, 33, 0.96) 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgb(6, 182, 212) 0%, rgb(8, 145, 178) 100%)"] { background: linear-gradient(135deg, #5fe3d0 0%, #54c8b7 100%) !important; }
+html[data-theme="terminal"] [style*="background: linear-gradient(135deg, rgb(245, 158, 11), rgb(217, 119, 6))"] { background: linear-gradient(135deg, #e6a84a, #ca9441) !important; }
+
+/* --- rotulo de botao de fundo forte (color preto no JSX) --- */
+html[data-theme="terminal"] [style*="color: rgb(0, 0, 0)"][style*="background"] { color: #0b0e12 !important; }
+html[data-theme="terminal"] [style*="color: rgb(0, 0, 0)"][style*="border"] { color: #0b0e12 !important; }
+html[data-theme="terminal"] [style*="color: black"][style*="background"] { color: #0b0e12 !important; }
+html[data-theme="terminal"] [style*="color: black"][style*="border"] { color: #0b0e12 !important; }

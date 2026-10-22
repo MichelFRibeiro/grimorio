@@ -1,13 +1,33 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="claro">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔️</text></svg>" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#fbf7ee" />
     <title>Grimório de Missões | Chronicles of Focus</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <!-- Fontes dos quatro temas: cinzel/jakarta (Catálogo), Grenze/Patrick (Lousa),
+         Cormorant/Karla (Atlas) e IBM Plex (Terminal). -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&family=Grenze+Gotisch:wght@400;600;800;900&family=Patrick+Hand&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Karla:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Tema escolhido: aplicado antes do primeiro desenho para a página não
+         abrir no tema errado e "piscar". O valor no aparelho ganha do padrão;
+         quando o perfil responder, o App confirma e mantém. -->
+    <script>
+      (function () {
+        var KNOWN = ['claro', 'lousa', 'atlas', 'terminal'];
+        var DARK = { lousa: 1, terminal: 1 };
+        var theme = 'claro';
+        try {
+          var stored = window.localStorage.getItem('grimorio_theme');
+          if (KNOWN.indexOf(stored) >= 0) theme = stored;
+        } catch (e) { /* modo privado: fica o padrão */ }
+        var root = document.documentElement;
+        root.setAttribute('data-theme', theme);
+        root.style.colorScheme = DARK[theme] ? 'dark' : 'light';
+      })();
+    </script>
     <!-- Google Identity Services for Google Login -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>

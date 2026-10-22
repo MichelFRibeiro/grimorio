@@ -1,0 +1,238 @@
+/* GERADO por scripts/build-theme-overrides.mjs — não editar à mão. */
+/* Tema "Atlas Botânico": reinterpreta os literais de cor do JSX. */
+
+/* --- texto --- */
+html[data-theme="atlas"] [style*="color: rgb(2, 44, 34)"] { color: #8b957c !important; }
+html[data-theme="atlas"] [style*="color: rgb(4, 47, 46)"] { color: #8b957c !important; }
+html[data-theme="atlas"] [style*="color: rgb(5, 46, 22)"] { color: #8b957c !important; }
+html[data-theme="atlas"] [style*="color: rgb(7, 10, 19)"] { color: #e6e1d2 !important; }
+html[data-theme="atlas"] [style*="color: rgb(15, 23, 42)"] { color: #8b957c !important; }
+html[data-theme="atlas"] [style*="color: rgb(16, 185, 129)"] { color: #47705a !important; }
+html[data-theme="atlas"] [style*="color: rgb(17, 17, 17)"] { color: #8b957c !important; }
+html[data-theme="atlas"] [style*="color: rgb(31, 41, 55)"] { color: #8b957c !important; }
+html[data-theme="atlas"] [style*="color: rgb(34, 211, 238)"] { color: #3a7173 !important; }
+html[data-theme="atlas"] [style*="color: rgb(42, 33, 24)"] { color: #2c3527 !important; }
+html[data-theme="atlas"] [style*="color: rgb(52, 211, 153)"] { color: #47705a !important; }
+html[data-theme="atlas"] [style*="color: rgb(56, 189, 248)"] { color: #3a7173 !important; }
+html[data-theme="atlas"] [style*="color: rgb(100, 116, 139)"] { color: #656f59 !important; }
+html[data-theme="atlas"] [style*="color: rgb(109, 40, 217)"] { color: #7c5f95 !important; }
+html[data-theme="atlas"] [style*="color: rgb(125, 211, 252)"] { color: #4a8284 !important; }
+html[data-theme="atlas"] [style*="color: rgb(134, 239, 172)"] { color: #47705a !important; }
+html[data-theme="atlas"] [style*="color: rgb(148, 163, 184)"] { color: #5c6652 !important; }
+html[data-theme="atlas"] [style*="color: rgb(159, 18, 57)"] { color: #a3413c !important; }
+html[data-theme="atlas"] [style*="color: rgb(168, 85, 247)"] { color: #7c5f95 !important; }
+html[data-theme="atlas"] [style*="color: rgb(192, 132, 252)"] { color: #7c5f95 !important; }
+html[data-theme="atlas"] [style*="color: rgb(196, 181, 253)"] { color: #7c5f95 !important; }
+html[data-theme="atlas"] [style*="color: rgb(203, 213, 225)"] { color: #3d4735 !important; }
+html[data-theme="atlas"] [style*="color: rgb(226, 232, 240)"] { color: #3d4735 !important; }
+html[data-theme="atlas"] [style*="color: rgb(233, 213, 255)"] { color: #5d4475 !important; }
+html[data-theme="atlas"] [style*="color: rgb(234, 179, 8)"] { color: #a8742b !important; }
+html[data-theme="atlas"] [style*="color: rgb(244, 63, 94)"] { color: #b05f6b !important; }
+html[data-theme="atlas"] [style*="color: rgb(244, 114, 182)"] { color: #b05f6b !important; }
+html[data-theme="atlas"] [style*="color: rgb(245, 158, 11)"] { color: #9a6a24 !important; }
+html[data-theme="atlas"] [style*="color: rgb(248, 113, 113)"] { color: #b05f6b !important; }
+html[data-theme="atlas"] [style*="color: rgb(248, 250, 252)"] { color: #2c3527 !important; }
+html[data-theme="atlas"] [style*="color: rgb(251, 113, 133)"] { color: #b05f6b !important; }
+html[data-theme="atlas"] [style*="color: rgb(251, 191, 36)"] { color: #a8742b !important; }
+html[data-theme="atlas"] [style*="color: rgb(252, 165, 165)"] { color: #b05f6b !important; }
+html[data-theme="atlas"] [style*="color: rgb(252, 211, 77)"] { color: #a8742b !important; }
+html[data-theme="atlas"] [style*="color: rgb(253, 164, 175)"] { color: #b05f6b !important; }
+html[data-theme="atlas"] [style*="color: rgb(253, 230, 138)"] { color: #a8742b !important; }
+html[data-theme="atlas"] [style*="color: rgb(254, 205, 211)"] { color: #b05f6b !important; }
+html[data-theme="atlas"] [style*="color: rgb(255, 255, 255)"] { color: #26301f !important; }
+html[data-theme="atlas"] [style*="color: rgba(148, 163, 184, 0.6)"] { color: rgba(92, 102, 82, 0.6) !important; }
+html[data-theme="atlas"] [style*="color: rgba(255, 255, 255, 0.04)"] { color: rgba(38, 48, 31, 0.04) !important; }
+html[data-theme="atlas"] [style*="color: rgba(255, 255, 255, 0.05)"] { color: rgba(38, 48, 31, 0.05) !important; }
+
+/* --- fundos --- */
+html[data-theme="atlas"] [style*="background: rgb(6, 9, 17)"] { background: #fdfbf5 !important; }
+html[data-theme="atlas"] [style*="background: rgb(7, 10, 19)"] { background: #fdfbf5 !important; }
+html[data-theme="atlas"] [style*="background: rgb(10, 13, 20)"] { background: #fdfbf5 !important; }
+html[data-theme="atlas"] [style*="background: rgb(12, 14, 20)"] { background: #fdfbf5 !important; }
+html[data-theme="atlas"] [style*="background: rgb(12, 16, 29)"] { background: #fdfbf5 !important; }
+html[data-theme="atlas"] [style*="background: rgb(19, 23, 34)"] { background: #fdfbf5 !important; }
+html[data-theme="atlas"] [style*="background: rgb(34, 197, 94)"] { background: #47705a !important; }
+html[data-theme="atlas"] [style*="background: rgb(56, 189, 248)"] { background: #3a7173 !important; }
+html[data-theme="atlas"] [style*="background: rgb(239, 68, 68)"] { background: #a3413c !important; }
+html[data-theme="atlas"] [style*="background: rgb(245, 158, 11)"] { background: #9a6a24 !important; }
+html[data-theme="atlas"] [style*="background: rgb(251, 191, 36)"] { background: #a8742b !important; }
+html[data-theme="atlas"] [style*="background: rgb(251, 247, 238)"] { background: #f7f4ea !important; }
+html[data-theme="atlas"] [style*="background: rgb(255, 255, 255)"] { background: #26301f !important; }
+html[data-theme="atlas"] [style*="background: rgba(0, 0, 0, 0.25)"] { background: #e9e4d5 !important; }
+html[data-theme="atlas"] [style*="background: rgba(0, 0, 0, 0.45)"] { background: #e9e4d5 !important; }
+html[data-theme="atlas"] [style*="background: rgba(0, 0, 0, 0.3)"] { background: #e9e4d5 !important; }
+html[data-theme="atlas"] [style*="background: rgba(0, 0, 0, 0.35)"] { background: #e9e4d5 !important; }
+html[data-theme="atlas"] [style*="background: rgba(0, 0, 0, 0.4)"] { background: #e9e4d5 !important; }
+html[data-theme="atlas"] [style*="background: rgba(109, 40, 217, 0.08)"] { background: rgba(124, 95, 149, 0.08) !important; }
+html[data-theme="atlas"] [style*="background: rgba(12, 14, 20, 0.94)"] { background: rgba(253, 251, 245, 0.94) !important; }
+html[data-theme="atlas"] [style*="background: rgba(154, 52, 18, 0.05)"] { background: rgba(154, 106, 36, 0.05) !important; }
+html[data-theme="atlas"] [style*="background: rgba(16, 185, 129, 0.08)"] { background: rgba(71, 112, 90, 0.08) !important; }
+html[data-theme="atlas"] [style*="background: rgba(16, 185, 129, 0.1)"] { background: rgba(71, 112, 90, 0.1) !important; }
+html[data-theme="atlas"] [style*="background: rgba(16, 185, 129, 0.15)"] { background: rgba(71, 112, 90, 0.15) !important; }
+html[data-theme="atlas"] [style*="background: rgba(16, 185, 129, 0.16)"] { background: rgba(71, 112, 90, 0.16) !important; }
+html[data-theme="atlas"] [style*="background: rgba(16, 185, 129, 0.75)"] { background: rgba(71, 112, 90, 0.75) !important; }
+html[data-theme="atlas"] [style*="background: rgba(168, 85, 247, 0.1)"] { background: rgba(124, 95, 149, 0.1) !important; }
+html[data-theme="atlas"] [style*="background: rgba(168, 85, 247, 0.14)"] { background: rgba(124, 95, 149, 0.14) !important; }
+html[data-theme="atlas"] [style*="background: rgba(168, 85, 247, 0.15)"] { background: rgba(124, 95, 149, 0.15) !important; }
+html[data-theme="atlas"] [style*="background: rgba(168, 85, 247, 0.18)"] { background: rgba(124, 95, 149, 0.18) !important; }
+html[data-theme="atlas"] [style*="background: rgba(168, 85, 247, 0.08)"] { background: rgba(124, 95, 149, 0.08) !important; }
+html[data-theme="atlas"] [style*="background: rgba(19, 23, 34, 0.85)"] { background: rgba(253, 251, 245, 0.85) !important; }
+html[data-theme="atlas"] [style*="background: rgba(19, 23, 34, 0.9)"] { background: rgba(253, 251, 245, 0.9) !important; }
+html[data-theme="atlas"] [style*="background: rgba(19, 23, 34, 0.95)"] { background: rgba(253, 251, 245, 0.95) !important; }
+html[data-theme="atlas"] [style*="background: rgba(19, 23, 34, 0.96)"] { background: rgba(253, 251, 245, 0.96) !important; }
+html[data-theme="atlas"] [style*="background: rgba(2, 6, 23, 0.72)"] { background: rgba(253, 251, 245, 0.72) !important; }
+html[data-theme="atlas"] [style*="background: rgba(2, 6, 23, 0.78)"] { background: rgba(253, 251, 245, 0.78) !important; }
+html[data-theme="atlas"] [style*="background: rgba(23, 22, 18, 0.85)"] { background: rgba(253, 251, 245, 0.85) !important; }
+html[data-theme="atlas"] [style*="background: rgba(239, 68, 68, 0.08)"] { background: rgba(163, 65, 60, 0.08) !important; }
+html[data-theme="atlas"] [style*="background: rgba(239, 68, 68, 0.1)"] { background: rgba(163, 65, 60, 0.1) !important; }
+html[data-theme="atlas"] [style*="background: rgba(239, 68, 68, 0.12)"] { background: rgba(163, 65, 60, 0.12) !important; }
+html[data-theme="atlas"] [style*="background: rgba(239, 68, 68, 0.15)"] { background: rgba(163, 65, 60, 0.15) !important; }
+html[data-theme="atlas"] [style*="background: rgba(239, 68, 68, 0.25)"] { background: rgba(163, 65, 60, 0.25) !important; }
+html[data-theme="atlas"] [style*="background: rgba(244, 63, 94, 0.08)"] { background: rgba(176, 95, 107, 0.08) !important; }
+html[data-theme="atlas"] [style*="background: rgba(244, 63, 94, 0.1)"] { background: rgba(176, 95, 107, 0.1) !important; }
+html[data-theme="atlas"] [style*="background: rgba(244, 63, 94, 0.12)"] { background: rgba(176, 95, 107, 0.12) !important; }
+html[data-theme="atlas"] [style*="background: rgba(244, 63, 94, 0.14)"] { background: rgba(176, 95, 107, 0.14) !important; }
+html[data-theme="atlas"] [style*="background: rgba(244, 63, 94, 0.16)"] { background: rgba(176, 95, 107, 0.16) !important; }
+html[data-theme="atlas"] [style*="background: rgba(244, 63, 94, 0.2)"] { background: rgba(176, 95, 107, 0.2) !important; }
+html[data-theme="atlas"] [style*="background: rgba(244, 63, 94, 0.65)"] { background: rgba(176, 95, 107, 0.65) !important; }
+html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.04)"] { background: rgba(154, 106, 36, 0.04) !important; }
+html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.05)"] { background: rgba(154, 106, 36, 0.05) !important; }
+html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.08)"] { background: rgba(154, 106, 36, 0.08) !important; }
+html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.1)"] { background: rgba(154, 106, 36, 0.1) !important; }
+html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.12)"] { background: rgba(154, 106, 36, 0.12) !important; }
+html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.15)"] { background: rgba(154, 106, 36, 0.15) !important; }
+html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.18)"] { background: rgba(154, 106, 36, 0.18) !important; }
+html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.2)"] { background: rgba(154, 106, 36, 0.2) !important; }
+html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.25)"] { background: rgba(154, 106, 36, 0.25) !important; }
+html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.65)"] { background: rgba(154, 106, 36, 0.65) !important; }
+html[data-theme="atlas"] [style*="background: rgba(251, 191, 36, 0.12)"] { background: rgba(168, 116, 43, 0.12) !important; }
+html[data-theme="atlas"] [style*="background: rgba(251, 191, 36, 0.06)"] { background: rgba(168, 116, 43, 0.06) !important; }
+html[data-theme="atlas"] [style*="background: rgba(255, 255, 255, 0.02)"] { background: #f6f2e6 !important; }
+html[data-theme="atlas"] [style*="background: rgba(255, 255, 255, 0.03)"] { background: #f4f0e4 !important; }
+html[data-theme="atlas"] [style*="background: rgba(255, 255, 255, 0.04)"] { background: #f3efe2 !important; }
+html[data-theme="atlas"] [style*="background: rgba(255, 255, 255, 0.05)"] { background: #f2eee1 !important; }
+html[data-theme="atlas"] [style*="background: rgba(255, 255, 255, 0.06)"] { background: #f0ece0 !important; }
+html[data-theme="atlas"] [style*="background: rgba(255, 255, 255, 0.08)"] { background: #eee9d9 !important; }
+html[data-theme="atlas"] [style*="background: rgba(255, 255, 255, 0.1)"] { background: #ebe5d4 !important; }
+html[data-theme="atlas"] [style*="background: rgba(42, 33, 24, 0.94)"] { background: rgba(44, 53, 39, 0.94) !important; }
+html[data-theme="atlas"] [style*="background: rgba(45, 212, 191, 0.16)"] { background: rgba(88, 126, 98, 0.16) !important; }
+html[data-theme="atlas"] [style*="background: rgba(5, 7, 13, 0.88)"] { background: rgba(253, 251, 245, 0.88) !important; }
+html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.08)"] { background: rgba(58, 113, 115, 0.08) !important; }
+html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.1)"] { background: rgba(58, 113, 115, 0.1) !important; }
+html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.12)"] { background: rgba(58, 113, 115, 0.12) !important; }
+html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.15)"] { background: rgba(58, 113, 115, 0.15) !important; }
+html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.18)"] { background: rgba(58, 113, 115, 0.18) !important; }
+html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.25)"] { background: rgba(58, 113, 115, 0.25) !important; }
+html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.65)"] { background: rgba(58, 113, 115, 0.65) !important; }
+html[data-theme="atlas"] [style*="background: rgba(6, 182, 212, 0.08)"] { background: rgba(58, 113, 115, 0.08) !important; }
+html[data-theme="atlas"] [style*="background: rgba(6, 182, 212, 0.1)"] { background: rgba(58, 113, 115, 0.1) !important; }
+html[data-theme="atlas"] [style*="background: rgba(6, 182, 212, 0.15)"] { background: rgba(58, 113, 115, 0.15) !important; }
+html[data-theme="atlas"] [style*="background: rgba(8, 10, 18, 0.55)"] { background: rgba(253, 251, 245, 0.55) !important; }
+
+/* --- bordas --- */
+html[data-theme="atlas"] [style*="border-color: rgb(16, 185, 129)"] { border-color: #47705a !important; }
+html[data-theme="atlas"] [style*="border-color: rgb(56, 189, 248)"] { border-color: #3a7173 !important; }
+html[data-theme="atlas"] [style*="border-color: rgb(100, 116, 139)"] { border-color: #656f59 !important; }
+html[data-theme="atlas"] [style*="border-color: rgb(168, 85, 247)"] { border-color: #7c5f95 !important; }
+html[data-theme="atlas"] [style*="border-color: rgb(244, 63, 94)"] { border-color: #b05f6b !important; }
+html[data-theme="atlas"] [style*="border-color: rgb(245, 158, 11)"] { border-color: #9a6a24 !important; }
+html[data-theme="atlas"] [style*="border-color: rgb(251, 191, 36)"] { border-color: #a8742b !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(109, 40, 217, 0.22)"] { border-color: rgba(124, 95, 149, 0.22) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(124, 58, 237, 0.25)"] { border-color: rgba(124, 95, 149, 0.25) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(124, 58, 237, 0.28)"] { border-color: rgba(124, 95, 149, 0.28) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(124, 58, 237, 0.35)"] { border-color: rgba(124, 95, 149, 0.35) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(148, 163, 184, 0.28)"] { border-color: rgba(92, 102, 82, 0.28) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(148, 163, 184, 0.3)"] { border-color: rgba(92, 102, 82, 0.3) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(15, 110, 107, 0.45)"] { border-color: rgba(58, 113, 115, 0.45) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(154, 52, 18, 0.35)"] { border-color: rgba(154, 106, 36, 0.35) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(16, 185, 129, 0.2)"] { border-color: rgba(71, 112, 90, 0.2) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(16, 185, 129, 0.25)"] { border-color: rgba(71, 112, 90, 0.25) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(16, 185, 129, 0.3)"] { border-color: rgba(71, 112, 90, 0.3) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(16, 185, 129, 0.35)"] { border-color: rgba(71, 112, 90, 0.35) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(16, 185, 129, 0.4)"] { border-color: rgba(71, 112, 90, 0.4) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(16, 185, 129, 0.5)"] { border-color: rgba(71, 112, 90, 0.5) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(16, 185, 129, 0.85)"] { border-color: rgba(71, 112, 90, 0.85) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(168, 85, 247, 0.2)"] { border-color: rgba(124, 95, 149, 0.2) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(168, 85, 247, 0.3)"] { border-color: rgba(124, 95, 149, 0.3) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(168, 85, 247, 0.35)"] { border-color: rgba(124, 95, 149, 0.35) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(168, 85, 247, 0.4)"] { border-color: rgba(124, 95, 149, 0.4) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(168, 85, 247, 0.45)"] { border-color: rgba(124, 95, 149, 0.45) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(168, 85, 247, 0.5)"] { border-color: rgba(124, 95, 149, 0.5) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(239, 68, 68, 0.25)"] { border-color: rgba(163, 65, 60, 0.25) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(239, 68, 68, 0.3)"] { border-color: rgba(163, 65, 60, 0.3) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(239, 68, 68, 0.35)"] { border-color: rgba(163, 65, 60, 0.35) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(239, 68, 68, 0.4)"] { border-color: rgba(163, 65, 60, 0.4) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(244, 63, 94, 0.25)"] { border-color: rgba(176, 95, 107, 0.25) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(244, 63, 94, 0.3)"] { border-color: rgba(176, 95, 107, 0.3) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(244, 63, 94, 0.45)"] { border-color: rgba(176, 95, 107, 0.45) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(244, 63, 94, 0.35)"] { border-color: rgba(176, 95, 107, 0.35) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(245, 158, 11, 0.2)"] { border-color: rgba(154, 106, 36, 0.2) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(245, 158, 11, 0.22)"] { border-color: rgba(154, 106, 36, 0.22) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(245, 158, 11, 0.25)"] { border-color: rgba(154, 106, 36, 0.25) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(245, 158, 11, 0.3)"] { border-color: rgba(154, 106, 36, 0.3) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(245, 158, 11, 0.35)"] { border-color: rgba(154, 106, 36, 0.35) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(245, 158, 11, 0.4)"] { border-color: rgba(154, 106, 36, 0.4) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(245, 158, 11, 0.5)"] { border-color: rgba(154, 106, 36, 0.5) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(245, 158, 11, 0.6)"] { border-color: rgba(154, 106, 36, 0.6) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(248, 113, 113, 0.45)"] { border-color: rgba(176, 95, 107, 0.45) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(248, 250, 252, 0.35)"] { border-color: rgba(44, 53, 39, 0.35) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(251, 191, 36, 0.35)"] { border-color: rgba(168, 116, 43, 0.35) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(251, 191, 36, 0.4)"] { border-color: rgba(168, 116, 43, 0.4) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(251, 191, 36, 0.45)"] { border-color: rgba(168, 116, 43, 0.45) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(251, 191, 36, 0.55)"] { border-color: rgba(168, 116, 43, 0.55) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(251, 191, 36, 0.28)"] { border-color: rgba(168, 116, 43, 0.28) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(251, 191, 36, 0.5)"] { border-color: rgba(168, 116, 43, 0.5) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(255, 255, 255, 0.04)"] { border-color: rgba(38, 48, 31, 0.04) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(255, 255, 255, 0.05)"] { border-color: rgba(38, 48, 31, 0.05) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(255, 255, 255, 0.06)"] { border-color: rgba(38, 48, 31, 0.06) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(255, 255, 255, 0.07)"] { border-color: rgba(38, 48, 31, 0.07) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(255, 255, 255, 0.08)"] { border-color: rgba(38, 48, 31, 0.08) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(255, 255, 255, 0.1)"] { border-color: rgba(38, 48, 31, 0.1) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(255, 255, 255, 0.12)"] { border-color: rgba(38, 48, 31, 0.12) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(255, 255, 255, 0.14)"] { border-color: rgba(38, 48, 31, 0.14) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(255, 255, 255, 0.15)"] { border-color: rgba(38, 48, 31, 0.15) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(255, 255, 255, 0.2)"] { border-color: rgba(38, 48, 31, 0.2) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(255, 255, 255, 0.22)"] { border-color: rgba(38, 48, 31, 0.22) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(45, 212, 191, 0.35)"] { border-color: rgba(88, 126, 98, 0.35) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(52, 211, 153, 0.45)"] { border-color: rgba(71, 112, 90, 0.45) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(56, 189, 248, 0.22)"] { border-color: rgba(58, 113, 115, 0.22) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(56, 189, 248, 0.25)"] { border-color: rgba(58, 113, 115, 0.25) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(56, 189, 248, 0.3)"] { border-color: rgba(58, 113, 115, 0.3) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(56, 189, 248, 0.35)"] { border-color: rgba(58, 113, 115, 0.35) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(56, 189, 248, 0.4)"] { border-color: rgba(58, 113, 115, 0.4) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(56, 189, 248, 0.45)"] { border-color: rgba(58, 113, 115, 0.45) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(56, 189, 248, 0.5)"] { border-color: rgba(58, 113, 115, 0.5) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(6, 182, 212, 0.15)"] { border-color: rgba(58, 113, 115, 0.15) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(6, 182, 212, 0.2)"] { border-color: rgba(58, 113, 115, 0.2) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(6, 182, 212, 0.3)"] { border-color: rgba(58, 113, 115, 0.3) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(6, 182, 212, 0.4)"] { border-color: rgba(58, 113, 115, 0.4) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(61, 46, 31, 0.16)"] { border-color: rgba(44, 53, 39, 0.16) !important; }
+
+/* --- gradientes (cores internas remapeadas, alfa preservado) --- */
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.08) 100%)"] { background: linear-gradient(135deg, rgba(154, 106, 36, 0.2) 0%, rgba(154, 106, 36, 0.08) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgb(245, 158, 11) 0%, rgb(217, 119, 6) 100%)"] { background: linear-gradient(135deg, #9a6a24 0%, #885d20 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgb(16, 185, 129) 0%, rgb(5, 150, 105) 100%)"] { background: linear-gradient(135deg, #47705a 0%, #3e634f 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgb(56, 189, 248) 0%, rgb(2, 132, 199) 100%)"] { background: linear-gradient(135deg, #3a7173 0%, #336365 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(19, 23, 34, 0.9) 100%)"] { background: linear-gradient(135deg, rgba(154, 106, 36, 0.08) 0%, rgba(230, 225, 210, 0.9) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(244, 63, 94, 0.08) 0%, rgba(19, 23, 34, 0.9) 100%)"] { background: linear-gradient(135deg, rgba(176, 95, 107, 0.08) 0%, rgba(230, 225, 210, 0.9) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgb(239, 68, 68) 0%, rgb(220, 38, 38) 100%)"] { background: linear-gradient(135deg, #a3413c 0%, #dc2626 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(19, 23, 34, 0.92) 100%)"] { background: linear-gradient(135deg, rgba(154, 106, 36, 0.12) 0%, rgba(230, 225, 210, 0.92) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(19, 23, 34, 0.92) 100%)"] { background: linear-gradient(135deg, rgba(168, 116, 43, 0.08) 0%, rgba(230, 225, 210, 0.92) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(160deg, rgba(6, 182, 212, 0.12) 0%, rgba(19, 23, 34, 0.94) 42%, rgba(168, 85, 247, 0.1) 100%)"] { background: linear-gradient(160deg, rgba(58, 113, 115, 0.12) 0%, rgba(230, 225, 210, 0.94) 42%, rgba(124, 95, 149, 0.1) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgb(239, 68, 68) 0%, rgb(185, 28, 28) 100%)"] { background: linear-gradient(135deg, #a3413c 0%, #8f3935 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(185, 28, 28, 0.2) 100%)"] { background: linear-gradient(135deg, rgba(163, 65, 60, 0.2) 0%, rgba(163, 65, 60, 0.2) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(168, 85, 247, 0.2) 100%)"] { background: linear-gradient(135deg, rgba(154, 106, 36, 0.2) 0%, rgba(124, 95, 149, 0.2) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(180deg, rgba(30, 27, 20, 0.98) 0%, rgba(15, 17, 26, 0.98) 100%)"] { background: linear-gradient(180deg, rgba(230, 225, 210, 0.98) 0%, rgba(230, 225, 210, 0.98) 100%) !important; }
+html[data-theme="atlas"] [style*="background: radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, rgba(168, 85, 247, 0.05) 50%, transparent 70%)"] { background: radial-gradient(circle, rgba(154, 106, 36, 0.15) 0%, rgba(124, 95, 149, 0.05) 50%, transparent 70%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(168, 85, 247, 0.25) 100%)"] { background: linear-gradient(135deg, rgba(154, 106, 36, 0.25) 0%, rgba(124, 95, 149, 0.25) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(90deg, rgba(56, 189, 248, 0.1) 0%, rgba(168, 85, 247, 0.05) 100%)"] { background: linear-gradient(90deg, rgba(58, 113, 115, 0.1) 0%, rgba(124, 95, 149, 0.05) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgb(168, 85, 247) 0%, rgb(124, 58, 237) 100%)"] { background: linear-gradient(135deg, #7c5f95 0%, #6d5483 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(124, 58, 237, 0.07) 0%, rgba(251, 247, 238, 0.96) 100%)"] { background: linear-gradient(135deg, rgba(124, 95, 149, 0.07) 0%, rgba(247, 244, 234, 0.96) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgb(6, 182, 212) 0%, rgb(8, 145, 178) 100%)"] { background: linear-gradient(135deg, #3a7173 0%, #336365 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgb(245, 158, 11), rgb(217, 119, 6))"] { background: linear-gradient(135deg, #9a6a24, #885d20) !important; }
+
+/* --- rotulo de botao de fundo forte (color preto no JSX) --- */
+html[data-theme="atlas"] [style*="color: rgb(0, 0, 0)"][style*="background"] { color: #fdfbf5 !important; }
+html[data-theme="atlas"] [style*="color: rgb(0, 0, 0)"][style*="border"] { color: #fdfbf5 !important; }
+html[data-theme="atlas"] [style*="color: black"][style*="background"] { color: #fdfbf5 !important; }
+html[data-theme="atlas"] [style*="color: black"][style*="border"] { color: #fdfbf5 !important; }

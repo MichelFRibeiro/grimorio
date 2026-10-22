@@ -8,7 +8,12 @@
  * tocar no DOM em tempo de execução.
  *
  * Rode com: node scripts/build-catalog-theme.mjs
- * A saída vai para src/styles/catalog-overrides.css.
+ * A saída vai para src/styles/themes/claro/overrides.css (tema "Catálogo").
+ *
+ * IMPORTANTE: todo seletor é escopado em html[data-theme="claro"], porque os
+ * quatro temas convivem no mesmo bundle e suas regras [style*="..."] têm a
+ * mesma forma — sem o escopo, este tema (o último na cascata pela ordem dos
+ * imports) venceria em todos os outros.
  */
 import { chromium } from 'playwright-core';
 import { writeFileSync } from 'node:fs';
@@ -249,8 +254,27 @@ async function serialized(prop, value) {
   }, [prop, value]);
 }
 
+const THEME_SCOPE = 'html[data-theme="claro"]';
+
+/**
+ * Escopa cada seletor da regra. Os seletores trazem vírgulas dentro das
+ * aspas ("344, 63, 94"), então a divisão respeita o que está entre ".
+ */
+function scopeSelectors(selector) {
+  const parts = [];
+  let buf = '';
+  let quoted = false;
+  for (const ch of selector) {
+    if (ch === '"') { quoted = !quoted; buf += ch; }
+    else if (ch === ',' && !quoted) { parts.push(buf.trim()); buf = ''; }
+    else buf += ch;
+  }
+  if (buf.trim()) parts.push(buf.trim());
+  return parts.map((p) => `${THEME_SCOPE} ${p}`).join(', ');
+}
+
 const lines = [];
-const rule = (selector, body) => lines.push(`${selector} { ${body} }`);
+const rule = (selector, body) => lines.push(`${scopeSelectors(selector)} { ${body} }`);
 
 lines.push('/* Gerado por scripts/build-catalog-theme.mjs — não editar à mão. */');
 lines.push('/* Reinterpreta os tons literais do JSX. O mapa mental fica de fora. */');
@@ -327,5 +351,6 @@ lines.push('.book-cover [style*="color:"], .book-cover [style*="background"] { c
 await browser.close();
 
 const out = lines.join('\n') + '\n';
-writeFileSync(new URL('../src/styles/catalog-overrides.css', import.meta.url), out);
-console.log(`Escreveu ${lines.length} linhas em src/styles/catalog-overrides.css`);
+const target = new URL('../src/styles/themes/claro/overrides.css', import.meta.url);
+writeFileSync(target, out);
+console.log(`Escreveu ${lines.length} linhas em src/styles/themes/claro/overrides.css (escopado em html[data-theme="claro"])`);
