@@ -36,6 +36,13 @@ import {
   buildMonthCalendar
 } from '../utils/dailyVictories';
 
+/* Mesma saída do select de categoria da missão: #fff entra no remap de botão
+   e some no popup escuro. O token do tema não entra nesse remap. */
+const themeCategoryOptionStyle = {
+  color: 'var(--tpl-ink)',
+  backgroundColor: 'var(--tpl-card)'
+};
+
 const DEFAULT_CATEGORIES = [
   { id: 'cat-1', name: 'Trabalho', color: '#38bdf8' },
   { id: 'cat-2', name: 'Estudos', color: '#a855f7' },
@@ -975,6 +982,7 @@ export function DailyVictoriesCard({
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>Categoria</label>
                 <select
+                  className="theme-category-select"
                   value={formCategory}
                   onChange={(e) => setFormCategory(e.target.value)}
                   style={{
@@ -983,13 +991,17 @@ export function DailyVictoriesCard({
                     borderRadius: '10px',
                     background: '#1a2030',
                     border: '1px solid rgba(255, 255, 255, 0.15)',
-                    color: '#fff',
+                    color: 'var(--tpl-ink)',
                     fontSize: '0.9rem'
                   }}
                 >
                   {activeCategories.map(c => {
                     const name = typeof c === 'string' ? c : c.name;
-                    return <option key={name} value={name}>{name}</option>;
+                    return (
+                      <option key={name} value={name} style={themeCategoryOptionStyle}>
+                        {name}
+                      </option>
+                    );
                   })}
                 </select>
               </div>

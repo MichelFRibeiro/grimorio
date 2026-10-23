@@ -99,20 +99,24 @@ input, select, textarea {
   max-width: 100%;
 }
 
-/* Popup nativo de categoria da missão. A cor é o token do tema, com
+/* Popup nativo de categoria (missão e vitória). A cor é o token do tema, com
    !important para vencer o remap de "rótulo de botão" (que pinta #fff de
    tinta escura sobre o fundo escuro do popup — só a linha destacada aparecia). */
-select.mission-category-select {
+select.mission-category-select,
+select.theme-category-select {
   color: var(--tpl-ink) !important;
 }
 
 select.mission-category-select option,
-select.mission-category-select option:checked {
+select.mission-category-select option:checked,
+select.theme-category-select option,
+select.theme-category-select option:checked {
   color: var(--tpl-ink) !important;
   background-color: var(--tpl-card) !important;
 }
 
-select.mission-category-select option:checked {
+select.mission-category-select option:checked,
+select.theme-category-select option:checked {
   background-color: var(--bg-card-active, var(--tpl-card)) !important;
 }
 
