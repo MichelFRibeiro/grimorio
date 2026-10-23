@@ -31,6 +31,32 @@ import { formatDurationLabel, confirmLongDuration, MAX_DURATION_MINUTES } from '
 import { consumeActivityTimerMinutes, peekActivityTimerMinutes } from '../utils/liveActivityTimers';
 import { canPlanQuestAsDailyVictory, MAX_DAILY_VICTORIES } from '../utils/dailyVictories';
 
+/* A lista nativa do <select> pinta cada <option> com a cor do controle.
+   #fff + fundo entra na regra de "rótulo de botão" e vira tinta de contraste
+   do tema — escura na Lousa/Terminal, clara no Atlas — sobre um popup da
+   mesma família. Só a linha destacada ficava legível. O token do tema não
+   entra nesse remap e acompanha claro/escuro. */
+const missionCategoryOptionStyle = {
+  color: 'var(--tpl-ink)',
+  backgroundColor: 'var(--tpl-card)'
+};
+
+function renderMissionCategoryOptions(categories) {
+  return categories.map((category) => {
+    const name = typeof category === 'string' ? category : category.name;
+    return (
+      <option
+        key={name}
+        value={name}
+        className="mission-category-option"
+        style={missionCategoryOptionStyle}
+      >
+        {name}
+      </option>
+    );
+  });
+}
+
 export function QuestsView({
   quests,
   questCategories = [],
@@ -991,6 +1017,7 @@ export function QuestsView({
                   Categoria
                 </label>
                 <select
+                  className="mission-category-select"
                   value={newCategory}
                   onChange={(e) => {
                     const next = e.target.value;
@@ -1003,14 +1030,11 @@ export function QuestsView({
                     borderRadius: '10px',
                     background: '#1a2030',
                     border: '1px solid rgba(255, 255, 255, 0.15)',
-                    color: '#fff',
+                    color: 'var(--tpl-ink)',
                     fontSize: '0.9rem'
                   }}
                 >
-                  {activeCategories.map(c => {
-                    const name = typeof c === 'string' ? c : c.name;
-                    return <option key={name} value={name}>{name}</option>;
-                  })}
+                  {renderMissionCategoryOptions(activeCategories)}
                 </select>
               </div>
 
@@ -1226,6 +1250,7 @@ export function QuestsView({
                   Categoria
                 </label>
                 <select
+                  className="mission-category-select"
                   value={editCategory}
                   onChange={(e) => {
                     const next = e.target.value;
@@ -1238,14 +1263,11 @@ export function QuestsView({
                     borderRadius: '10px',
                     background: '#1a2030',
                     border: '1px solid rgba(255, 255, 255, 0.15)',
-                    color: '#fff',
+                    color: 'var(--tpl-ink)',
                     fontSize: '0.9rem'
                   }}
                 >
-                  {activeCategories.map(c => {
-                    const name = typeof c === 'string' ? c : c.name;
-                    return <option key={name} value={name}>{name}</option>;
-                  })}
+                  {renderMissionCategoryOptions(activeCategories)}
                 </select>
               </div>
 
