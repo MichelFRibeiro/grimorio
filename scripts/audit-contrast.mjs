@@ -40,32 +40,71 @@ const MEASURE = `
     return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
   };
   // primeira cor de um background-image (gradiente) — o "fundo" visível
-  const firstGradientColor = (cs) => {
+  const gradientStops = (cs) => {
     const img = cs.backgroundImage || '';
-    if (!img || img === 'none') return null;
-    const m = img.match(/rgba?\([^)]+\)|#(?:[0-9a-f]{3}|[0-9a-f]{6})/i);
-    if (!m) return null;
-    let c = m[0];
-    if (c.startsWith('#')) {
-      const h = c.slice(1);
-      const full = h.length === 3 ? h.split('').map(x => x + x).join('') : h;
-      c = 'rgba(' + parseInt(full.slice(0,2),16) + ', ' + parseInt(full.slice(2,4),16) + ', ' + parseInt(full.slice(4,6),16) + ', 1)';
-    }
-    return parse(c);
+    if (!img || img === 'none') return [];
+    return (img.match(/rgba?\([^)]+\)/g) || []).map((c) => parse(c)).filter((c) => c && c.a > 0.5);
   };
-  const bgOf = (el) => {
+  const firstGradientColor = (cs) => gradientStops(cs)[0] || null;
+  /**
+   * Cor percebida atrás do texto: em vez de somar backgroundColor dos
+   * ancestrais (que erra com gradiente, pseudo-elemento e camada), amostra o
+   * que está de fato desenhado em três pontos por trás das letras. Cada ponto
+   * é pintado num canvas 1x1 com o maior z-index possível via
+   * elementFromPoint + getComputedStyle; quando o elemento apontado tem
+   * gradiente, usa a parada mais próxima do ponto.
+   */
+  const bgAt = (x, y, el) => {
+    const stack = document.elementsFromPoint(x, y);
+    // do mais próximo do fundo para o mais próximo da frente
+    let acc = null;
+    for (let i = stack.length - 1; i >= 0; i -= 1) {
+      const node = stack[i];
+      if (node.contains(el) && node !== el) continue; // ancestrais do texto
+      const cs = getComputedStyle(node);
+      const stops = gradientStops(cs);
+      let c = null;
+      if (stops.length) c = stops[0];
+      else c = parse(cs.backgroundColor);
+      if (c && c.a > 0) acc = acc ? blend(c, acc) : c;
+    }
+    const body = parse(getComputedStyle(document.body).backgroundColor) || { r: 255, g: 255, b: 255, a: 1 };
+    return acc ? blend(acc, body) : body;
+  };
+  // Fallback: soma de backgroundColor/primeira parada dos ancestrais.
+  const bgByAncestry = (el) => {
     let node = el, acc = null;
     while (node) {
       const cs = getComputedStyle(node);
-      // gradiente cobre o backgroundColor: a cor visível é a do gradiente
-      const grad = firstGradientColor(cs);
-      const c = (grad && grad.a > 0.5) ? grad : parse(cs.backgroundColor);
-      if (c && c.a > 0) { acc = acc ? blend(acc, c) : c; if (acc.a >= 0.99) return acc; }
-      if (!node.parentElement) break;
+      const stops = gradientStops(cs);
+      const c = stops.length ? stops[0] : parse(cs.backgroundColor);
+      if (c && c.a > 0) { acc = acc ? blend(c, acc) : c; if (acc.a >= 0.99) return acc; }
       node = node.parentElement;
     }
-    const body = parse(getComputedStyle(document.body).backgroundColor);
-    return acc ? blend(acc, body && body.a ? body : { r: 255, g: 255, b: 255, a: 1 }) : (body || { r: 255, g: 255, b: 255, a: 1 });
+    const body = parse(getComputedStyle(document.body).backgroundColor) || { r: 255, g: 255, b: 255, a: 1 };
+    return acc ? blend(acc, body) : body;
+  };
+  const bgOf = (el) => {
+    let rect = el.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return bgByAncestry(el);
+    const inView = rect.top >= 0 && rect.left >= 0 && rect.bottom <= innerHeight && rect.right <= innerWidth;
+    if (!inView) {
+      el.scrollIntoView({ block: 'center', inline: 'center' });
+      rect = el.getBoundingClientRect();
+    }
+    const pts = [
+      [rect.left + rect.width * 0.5, rect.top + rect.height * 0.5],
+      [rect.left + rect.width * 0.25, rect.top + rect.height * 0.5],
+      [rect.left + rect.width * 0.75, rect.top + rect.height * 0.5]
+    ];
+    for (const [x, y] of pts) {
+      if (x < 1 || y < 1 || x > innerWidth - 1 || y > innerHeight - 1) continue;
+      const c = bgAt(x, y, el);
+      // branco puro é sinal de que amostrou fora da página
+      if (c && !(c.r > 250 && c.g > 250 && c.b > 250 && !el.closest('[data-theme="atlas"], [data-theme="claro"]'))) return c;
+      if (c) return c;
+    }
+    return bgByAncestry(el);
   };
   const out = [];
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -90,7 +129,19 @@ const MEASURE = `
     const weight = Number(cs.fontWeight) || 400;
     const large = size >= 24 || (size >= 18.66 && weight >= 700);
     const need = large ? 3 : 4.5;
-    const r = ratio(fg, bg);
+    // se algum ancestral tem gradiente, a mancha de fundo pode ser qualquer
+    // parada: mede contra a de MENOR contraste (pior caso de leitura).
+    let bgFinal = bg, r = ratio(fg, bg);
+    for (let node = el, hits = 0; node && hits < 3; node = node.parentElement) {
+      const stops = gradientStops(getComputedStyle(node));
+      if (!stops.length) continue;
+      hits += 1;
+      for (const stop of stops) {
+        const rr = ratio(fg, blend(stop, stop));
+        if (rr < r) { r = rr; bgFinal = stop; }
+      }
+    }
+    const bgReport = bgFinal;
     if (r < need) {
       out.push({
         text: text.slice(0, 70),
@@ -99,9 +150,9 @@ const MEASURE = `
         ratio: Math.round(r * 100) / 100,
         need,
         color: cs.color,
-        bg: 'rgb(' + [bg.r, bg.g, bg.b].map(v => Math.round(v)).join(', ') + ')',
-        lightOnLight: lum(fg) > 0.35 && lum(bg) > 0.35,
-        darkOnDark: lum(fg) < 0.12 && lum(bg) < 0.12
+        bg: 'rgb(' + [bgReport.r, bgReport.g, bgReport.b].map(v => Math.round(v)).join(', ') + ')',
+        lightOnLight: lum(fg) > 0.35 && lum(bgReport) > 0.35,
+        darkOnDark: lum(fg) < 0.12 && lum(bgReport) < 0.12
       });
     }
   }
@@ -136,12 +187,20 @@ async function switchTheme(page, theme) {
     await page.waitForTimeout(400);
 
     if (!(await page.locator('.settings-theme').count())) {
+      // garante header desenhado: se não estiver, recarrega
       if (!(await page.locator('header button[title="Configurações"]').count())) {
         await page.reload({ waitUntil: 'networkidle' });
-        await page.waitForTimeout(2200);
+        await page.waitForTimeout(2400);
       }
       await page.locator('header button[title="Configurações"]').first().click({ force: true }).catch(() => {});
       await page.waitForTimeout(1000);
+      if (!(await page.locator('.settings-theme').count())) {
+        // o clique pode ter recolhido a aba; tenta de novo após reload
+        await page.reload({ waitUntil: 'networkidle' });
+        await page.waitForTimeout(2400);
+        await page.locator('header button[title="Configurações"]').first().click({ force: true }).catch(() => {});
+        await page.waitForTimeout(1200);
+      }
     }
 
     const card = page.locator('.settings-theme', { hasText: LABELS[theme] }).first();
@@ -196,7 +255,9 @@ for (const theme of THEMES) {
   await page.screenshot({ path: `${OUT}/${theme}-login.png` });
   await login(page);
   // conta exclusiva por tema: o perfil dela guarda o tema da auditoria
-  await loginAs(page, `auditor-${theme}@grimorio.test`, `Auditor ${theme}`);
+  // conta nova a cada execução: conta antiga já tem tema gravado e o perfil
+  // vence a troca feita pela UI (era a fonte dos números inconsistentes).
+  await loginAs(page, `auditor-${theme}-${Date.now()}@grimorio.test`, `Auditor ${theme}`);
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(2500);
   const ok = await switchTheme(page, theme);
@@ -206,7 +267,12 @@ for (const theme of THEMES) {
   for (const label of TAB_LABELS) {
     try {
       // o tema pode ter sido revertido pela reconciliação do perfil; reaplica
-      const stillOk = await switchTheme(page, theme);
+      let stillOk = await switchTheme(page, theme);
+      if (!stillOk) {
+        await page.reload({ waitUntil: 'networkidle' });
+        await page.waitForTimeout(2400);
+        stillOk = await switchTheme(page, theme);
+      }
       if (!stillOk) console.log('tema perdido antes de', label);
       const header = page.locator(`header button[title="${label}"]`);
       const tab = page.locator('nav.app-nav button', { hasText: new RegExp(label) }).first();
@@ -217,8 +283,13 @@ for (const theme of THEMES) {
         await tab.click({ force: true });
       } else continue;
       await page.waitForTimeout(2400);
+      const temaAtual = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+      if (temaAtual !== theme) {
+        report[theme].push({ tela: label, erro: `tema ${temaAtual} != ${theme}` });
+        continue;
+      }
       const v = await page.evaluate(MEASURE);
-      report[theme].push({ tela: label, violations: v });
+      report[theme].push({ tela: label, violations: v, tema: temaAtual });
       await page.screenshot({ path: `${OUT}/${theme}-${label.toLowerCase().normalize('NFD').replace(/[^a-z]/g, '')}.png`, fullPage: true });
     } catch (e) {
       report[theme].push({ tela: label, erro: e.message.slice(0, 100) });

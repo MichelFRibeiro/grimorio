@@ -97,7 +97,7 @@ function collectLiterals() {
 const PAPEIS = {
   '#f8fafc': 'claro', '#ffffff': 'claro2', '#e2e8f0': 'claro3', '#cbd5e1': 'claro3',
   '#94a3b8': 'dim', '#64748b': 'dim2', '#475569': 'dim3',
-  '#0f172a': 'escuro', '#1f2937': 'escuro', '#111111': 'escuro',
+  '#1f2937': 'escuro', '#111111': 'escuro',
   '#fbbf24': 'amarelo', '#f59e0b': 'laranja', '#fcd34d': 'amarelo', '#d97706': 'laranja',
   '#fde68a': 'amarelo', '#eab308': 'amarelo', '#fb923c': 'laranja',
   '#38bdf8': 'turquesa', '#7dd3fc': 'ceu', '#06b6d4': 'turquesa', '#0284c7': 'turquesa',
@@ -275,12 +275,37 @@ for (const [tema, dados] of Object.entries(TEMAS)) {
     rule(`${scope} [style*="${canonicalGradient(g)}"]`, `background: ${novo} !important;`);
   }
 
-  // 5) rótulo de botão (color:#000 no JSX). Declarado por último e com dois
-  //    atributos no seletor: ganha de qualquer regra de cor de um atributo só.
-  lines.push('', '/* --- rotulo de botao de fundo forte (color preto no JSX) ---' + ' */');
-  for (const marcador of ['color: rgb(0, 0, 0)', 'color: black']) {
-    rule(`${scope} [style*="${marcador}"][style*="background"]`, `color: ${dados.papelContraste} !important;`);
-    rule(`${scope} [style*="${marcador}"][style*="border"]`, `color: ${dados.papelContraste} !important;`);
+  // 5) Rótulo de botão sobre fundo forte.
+  //    No JSX, #000, #111 e #0f172a nunca são "tinta de texto": aparecem
+  //    sempre em cima de um botão chapado/gradiente (azul, âmbar, verde).
+  //    Reinterpretá-los como texto comum no tema escuro os tornaria CLAROS —
+  //    e o botão (que também foi clareado) ficaria claro sobre claro.
+  //    Aqui os três viram a cor de contraste do tema, com dois atributos no
+  //    seletor para ganhar de qualquer regra de cor de um atributo só.
+  lines.push('', '/* --- rotulo de botao de FUNDO FORTE (chapado ou gradiente de destaque) ---' + ' */');
+  // Botão cujo fundo é uma cor chapada ou um gradiente de destaque: o rótulo
+  // explícito do JSX (#000, #111, #0f172a ou #fff) tem de vir do TEMA, porque
+  // o fundo também foi remapeado. Sem isso, #fff continuava claro num fundo
+  // que clareou (Lousa/Atlas) ou #0f172a virava claro sobre botão claro.
+  //
+  // NÃO se aplica a botão de véu ("rgba(255,255,255,0.06)"): ali o fundo é
+  // transparente e o texto herda o contraste do cartão — forçar a cor de
+  // contraste do tema deixava o véu ilegível.
+  const veus = ['rgba(255, 255, 255, 0.04)', 'rgba(255, 255, 255, 0.05)',
+    'rgba(255, 255, 255, 0.06)', 'rgba(255, 255, 255, 0.08)',
+    'rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.12)'];
+  const somenteFundoForte = (sel) => veus.reduce(
+    (acc, v) => `${acc}:not([style*="background: ${v}"])`, sel);
+  const rotulos = [
+    'color: rgb(0, 0, 0)', 'color: black',
+    'color: rgb(17, 24, 39)', 'color: rgb(15, 23, 42)',
+    'color: rgb(255, 255, 255)', 'color: rgb(248, 250, 252)'
+  ];
+  for (const marcador of rotulos) {
+    rule(somenteFundoForte(`${scope} [style*="${marcador}"][style*="background"]`),
+      `color: ${dados.papelContraste} !important;`);
+    rule(somenteFundoForte(`${scope} [style*="${marcador}"][style*="background"][style*="border-color"]`),
+      `color: ${dados.papelContraste} !important;`);
   }
 
   const out = lines.join('\n') + '\n';
