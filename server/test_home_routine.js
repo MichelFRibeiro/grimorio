@@ -101,6 +101,15 @@ function assertModel() {
   assert.equal(routineVictoryProblem(routines[0]), null);
   assert.equal(routineVictoryProblem({ id: 'empty', steps: [] }) !== null, true);
   assert.equal(routineVictoryProblem({ id: 'only-missing', steps: [{ kind: 'habit', habitId: 'nope' }] }), null);
+  const onlyChild = [
+    { id: 'pai', title: 'Dia', steps: [{ kind: 'routine', routineId: 'filho' }] },
+    { id: 'filho', title: 'Manhã', steps: [{ kind: 'habit', habitId: 'h1' }] }
+  ];
+  assert.equal(
+    routineVictoryProblem(onlyChild[0], { habits, routines: onlyChild }),
+    null,
+    'rotina feita só de sub-rotina tem passos para reconhecer'
+  );
 
   // Sub-rotina: o retrato inclui os rituais do ramo filho.
   const nested = [

@@ -172,9 +172,17 @@ export function routineVictoryGate(routine, snapshot) {
  * Valida se a rotina pode virar vitória do dia: precisa de ao menos um passo
  * válido (ritual existente ou atividade). Sem isso não há o que reconhecer.
  */
-export function routineVictoryProblem(routine) {
+/**
+ * Uma rotina pode ser só uma sequência de outras rotinas. Os passos gravados
+ * não trazem os filhos; sem resolvê-los, a rotina parece vazia e o servidor
+ * recusa planejá-la como vitória.
+ */
+export function routineVictoryProblem(routine, context = null) {
   if (!routine || !routine.id) return 'Escolha uma rotina para planejar a execução.';
-  const leaves = flattenRoutineLeaves(routine.steps || []);
+  const steps = context
+    ? resolveRoutineSteps(routine, context.habits || [], '', context.routines || [])
+    : (routine.steps || []);
+  const leaves = flattenRoutineLeaves(steps);
   const present = leaves.filter(step => !step?.missing && (
     step?.kind === 'activity' ? !!step.activityId : !!step.habitId
   ));

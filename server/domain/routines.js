@@ -360,8 +360,8 @@ export function routineVictoryReadiness(db, routineId, date = getSaoPauloDateStr
 export function planRoutineVictory(db, routineId, { date, category } = {}) {
   const found = findRoutineCatalog(db, routineId);
   if (found.error) return found;
-  const { routine } = found;
-  const problem = routineVictoryProblem(routine);
+  const { routine, habits, routines } = found;
+  const problem = routineVictoryProblem(routine, { habits, routines });
   if (problem) return fail(problem);
 
   const todayStr = getSaoPauloDateStr();

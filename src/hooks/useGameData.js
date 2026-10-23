@@ -1201,9 +1201,14 @@ export function useGameData() {
     playClick();
     const result = await mutate(`/api/routines/${routineId}/plan`, {
       body: extra || {},
-      refreshOnSuccess: false
+      refreshOnSuccess: false,
+      toastOnError: false
     });
-    if (!result) throw new Error('Erro ao planejar a rotina como vitória.');
+    if (!result || result.__error) {
+      const message = result?.error || 'Erro ao planejar a rotina como vitória.';
+      showErrorToast(message);
+      throw new Error(message);
+    }
     fetchState();
     return { success: true, result };
   };

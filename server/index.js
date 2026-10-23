@@ -2265,13 +2265,19 @@ app.post('/api/routines/:id/plan', (req, res) => {
     });
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
+    let today = null;
+    try {
+      today = buildTodayPayload(db);
+    } catch (payloadErr) {
+      console.warn(`plan rotina: retrato do dia ignorado: ${payloadErr?.message || payloadErr}`);
+    }
     res.json({
       success: true,
       victory: result.victory,
       created: result.created,
       readiness: result.readiness,
       todaySummary: summarizeDay(db.dailyVictories, result.victory.date, db.dailyVictoryBonuses),
-      today: buildTodayPayload(db)
+      today
     });
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
