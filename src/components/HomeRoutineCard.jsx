@@ -595,8 +595,9 @@ export function HomeRoutineCard({
         </p>
       ) : null}
 
+      {(expanded || victory) ? (
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginTop: expanded ? '12px' : '10px' }}>
-        {!victory ? (
+        {expanded && !victory ? (
           <button
             type="button"
             form="grimorio-no-form"
@@ -675,6 +676,7 @@ export function HomeRoutineCard({
           </span>
         ) : null}
       </div>
+      ) : null}
 
       {error ? (
         <p role="alert" style={{ margin: '10px 0 0', color: '#f87171', fontSize: '0.78rem', fontWeight: 700 }}>
