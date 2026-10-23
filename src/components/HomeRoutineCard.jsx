@@ -4,6 +4,8 @@ import {
   BookMarked,
   BookOpen,
   Check,
+  ChevronDown,
+  ChevronUp,
   ListOrdered,
   NotebookPen,
   Pill,
@@ -204,6 +206,9 @@ export function HomeRoutineCard({
   const [confirm, setConfirm] = useState({ isOpen: false, mode: null, message: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // A rotina da tela inicial nasce recolhida. O nome abre os passos;
+  // "Fazer agora" fica ao lado do nome para não precisar expandir.
+  const [expanded, setExpanded] = useState(false);
 
   const chosen = useMemo(
     () => (routines || []).find((item) => item && item.id === homeRoutineId) || null,
@@ -291,7 +296,15 @@ export function HomeRoutineCard({
     }
   };
 
-  const askPlan = async () => {
+  // Impede o Firefox de tratar o clique como envio de formulário
+  // (o mesmo erro "não pode criar link para file:///").
+  const holdClick = (event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+  };
+
+  const askPlan = async (event) => {
+    holdClick(event);
     if (playClick) playClick();
     if (!victory && total > 0) {
       // Planejar a rotina inteira tira uma vaga do dia: confirma antes.
@@ -305,7 +318,8 @@ export function HomeRoutineCard({
     await run('plan');
   };
 
-  const askComplete = () => {
+  const askComplete = (event) => {
+    holdClick(event);
     if (playClick) playClick();
     setConfirm({
       isOpen: true,
@@ -314,7 +328,8 @@ export function HomeRoutineCard({
     });
   };
 
-  const askReopen = () => {
+  const askReopen = (event) => {
+    holdClick(event);
     if (playClick) playClick();
     setConfirm({
       isOpen: true,
@@ -323,10 +338,20 @@ export function HomeRoutineCard({
     });
   };
 
-  const confirmAction = async () => {
+  const confirmAction = async (event) => {
+    holdClick(event);
     const mode = confirm.mode;
-    setConfirm({ isOpen: false, mode: null, message: '' });
+    // Fecha no turno seguinte: se o modal sumir no mesmo clique, o Firefox
+    // entrega o clique ao botão que estava atrás e tenta navegar.
+    setTimeout(() => setConfirm({ isOpen: false, mode: null, message: '' }), 0);
     await run(mode);
+  };
+
+  const startNow = (event) => {
+    holdClick(event);
+    if (!next || busy) return;
+    if (playClick) playClick();
+    onStartNext?.(next);
   };
 
   const victoryBadge = (() => {
@@ -358,7 +383,7 @@ export function HomeRoutineCard({
           : 'linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(19, 23, 34, 0.92) 100%)'
       }}
     >
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '10px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: expanded ? '10px' : 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: '1 1 280px' }}>
           <div
             aria-hidden="true"
@@ -379,9 +404,61 @@ export function HomeRoutineCard({
           </div>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-              <h2 id="home-routine-title" className="font-cinzel" style={{ fontSize: '1.05rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-                {chosen.title}
-              </h2>
+              <button
+                type="button"
+                form="grimorio-no-form"
+                onClick={() => setExpanded((open) => !open)}
+                aria-expanded={expanded}
+                aria-controls="home-routine-steps"
+                title={expanded ? 'Recolher a rotina' : 'Expandir a rotina'}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  flexWrap: 'wrap',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'inherit',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  padding: 0,
+                  minWidth: 0
+                }}
+              >
+                {expanded ? <ChevronUp size={16} color="#94a3b8" /> : <ChevronDown size={16} color="#94a3b8" />}
+                <h2 id="home-routine-title" className="font-cinzel" style={{ fontSize: '1.05rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                  {chosen.title}
+                </h2>
+              </button>
+              <button
+                type="button"
+                form="grimorio-no-form"
+                disabled={!next || busy}
+                onClick={startNow}
+                title={next ? `Fazer agora: ${next.title}` : 'Nada pendente nesta sequência'}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 12px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  cursor: next ? 'pointer' : 'not-allowed',
+                  fontWeight: 800,
+                  fontSize: '0.82rem',
+                  background: next ? 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)' : 'rgba(255,255,255,0.06)',
+                  color: next ? '#0f172a' : '#64748b',
+                  maxWidth: '100%',
+                  textAlign: 'left'
+                }}
+              >
+                <Play size={14} />
+                <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                  {next
+                    ? `Fazer agora: ${next.title}${next.detail ? ` · ${next.detail}` : ''}`
+                    : 'Nada pendente nesta sequência'}
+                </span>
+              </button>
               <span
                 style={{
                   fontSize: '0.7rem',
@@ -431,9 +508,11 @@ export function HomeRoutineCard({
                 </span>
               ) : null}
             </div>
-            <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
-              {chosen.description || 'Rotina escolhida para acompanhar o dia.'}
-            </p>
+            {expanded ? (
+              <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
+                {chosen.description || 'Rotina escolhida para acompanhar o dia.'}
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -480,7 +559,7 @@ export function HomeRoutineCard({
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: rows.length ? '10px' : 0 }}>
+      {expanded ? <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: rows.length ? '10px' : 0 }}>
         <div className="progress-container" style={{ height: '8px', flex: 1 }}>
           <div
             style={{
@@ -496,10 +575,10 @@ export function HomeRoutineCard({
         <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
           {done} de {total} hoje
         </span>
-      </div>
+      </div> : null}
 
-      {rows.length ? (
-        <ul style={{ listStyle: 'none', margin: 0, padding: '6px 0 0', display: 'flex', flexDirection: 'column' }}>
+      {expanded && rows.length ? (
+        <ul id="home-routine-steps" style={{ listStyle: 'none', margin: 0, padding: '6px 0 0', display: 'flex', flexDirection: 'column' }}>
           {rows.map(({ step, depth }, index) => (
             <StepRow
               // O mesmo ritual pode aparecer em dois ramos: a posição é a chave.
@@ -510,49 +589,17 @@ export function HomeRoutineCard({
             />
           ))}
         </ul>
-      ) : (
+      ) : expanded ? (
         <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
           Esta rotina ainda não tem passos. Monte a sequência na aba Rotinas.
         </p>
-      )}
+      ) : null}
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
-        <button
-          type="button"
-          disabled={!next || busy}
-          onClick={() => {
-            if (!next || busy) return;
-            if (playClick) playClick();
-            onStartNext?.(next);
-          }}
-          title={next ? `Fazer agora: ${next.title}` : 'Nada pendente nesta sequência'}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '9px 14px',
-            borderRadius: '10px',
-            border: 'none',
-            cursor: next ? 'pointer' : 'not-allowed',
-            fontWeight: 800,
-            fontSize: '0.82rem',
-            background: next ? 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)' : 'rgba(255,255,255,0.06)',
-            color: next ? '#0f172a' : '#64748b',
-            maxWidth: '100%',
-            textAlign: 'left'
-          }}
-        >
-          <Play size={14} />
-          <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
-            {next
-              ? `Fazer agora: ${next.title}${next.detail ? ` · ${next.detail}` : ''}`
-              : 'Nada pendente nesta sequência'}
-          </span>
-        </button>
-
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginTop: expanded ? '12px' : '10px' }}>
         {!victory ? (
           <button
             type="button"
+            form="grimorio-no-form"
             onClick={askPlan}
             disabled={busy || !total || manualVictoriesFull(dailyVictories, todayStr)}
             title={planDisabledReason || 'Incluir a execução integral desta rotina nas vitórias de hoje'}
@@ -576,6 +623,7 @@ export function HomeRoutineCard({
         ) : victory.completed ? (
           <button
             type="button"
+            form="grimorio-no-form"
             onClick={askReopen}
             disabled={busy}
             title="Reabrir a vitória e estornar as recompensas"
@@ -598,6 +646,7 @@ export function HomeRoutineCard({
         ) : (
           <button
             type="button"
+            form="grimorio-no-form"
             onClick={askComplete}
             disabled={busy || !completeToday}
             title={completeToday ? 'Conquistar a vitória da rotina' : (row ? `${done} de ${total} passos feitos hoje` : '')}

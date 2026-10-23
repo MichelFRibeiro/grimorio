@@ -871,7 +871,12 @@ export function RoutinesView({
                     {onPlanRoutineVictory && (
                       <button
                         type="button"
-                        onClick={() => toggleRoutineVictory(routine)}
+                        form="grimorio-no-form"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          toggleRoutineVictory(routine);
+                        }}
                         disabled={victoryBusyId === routine.id}
                         aria-pressed={!!plannedVictory}
                         title={plannedVictory

@@ -121,7 +121,13 @@ export function PhoneTimePrompt({
         {error && <p className="phone-time-error">{error}</p>}
 
         <div className="phone-time-actions">
-          <button type="submit" className="phone-time-save" disabled={busy}>
+          <button
+            type="button"
+            form="grimorio-no-form"
+            className="phone-time-save"
+            disabled={busy}
+            onClick={submit}
+          >
             {busy ? 'Registrando…' : 'Registrar'}
           </button>
           <button type="button" className="phone-time-later" onClick={onLater} disabled={busy}>

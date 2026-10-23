@@ -137,7 +137,12 @@ export function ConfirmModal({
           {cancelText && (
             <button
               type="button"
-              onClick={onCancel}
+              form="grimorio-no-form"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onCancel?.();
+              }}
               style={{
                 padding: '9px 18px',
                 borderRadius: '10px',
@@ -156,7 +161,15 @@ export function ConfirmModal({
 
           <button
             type="button"
-            onClick={onConfirm}
+            form="grimorio-no-form"
+            onClick={(event) => {
+              // Firefox trata clique em botão de formulário como navegação.
+              // Sem isto, o clique cai num submit debaixo do modal e o
+              // navegador tenta abrir file:/// (erro de segurança).
+              event.preventDefault();
+              event.stopPropagation();
+              onConfirm?.(event);
+            }}
             style={{
               padding: '9px 20px',
               borderRadius: '10px',
