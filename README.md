@@ -90,7 +90,7 @@ O script irá:
 
 ### ⏳ Jej um — monitoramento
 - Aba **Jejum**: relógio do jejum em curso, meta (12:12, 14:10, 16:8, 18:6, 20:4, OMAD, 24 h ou outra) e marcos de acompanhamento. Os marcos são referência, não orientação médica.
-- Só um jejum em curso por vez. Dá para corrigir início, fim, meta e nota, ou registrar um jejum já encerrado. O registro aceita até 7 dias.
+- O início pode ser agora, mais cedo hoje ou em um dia anterior. O fim fica em aberto enquanto o jejum corre, ou pode ser um horário que já passou. **Editar** em cada registro altera início, fim, meta e nota. Só um jejum em curso por vez. O registro aceita até 7 dias.
 - Enquanto corre, uma faixa na tela inicial mostra o relógio e abre a aba. A aba ganha o selo "ativo".
 - Gráfico de 14, 30 ou 90 dias com as horas encerradas em cada dia, média, mais longo, metas batidas e sequência.
 - Não concede XP, moedas nem dano no chefe. Desligar em Configurações só esconde a aba e a faixa.

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Hourglass, Pencil, Plus, Trash2 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
-import { getSaoPauloDateStr, getSaoPauloNowDateTimeLocal } from '../utils/timeUtils';
+import { addDaysToDateStr, getSaoPauloDateStr, getSaoPauloNowDateTimeLocal } from '../utils/timeUtils';
 import {
   FASTING_CHART_DAYS,
   FASTING_NOTE_MAX,
@@ -49,6 +49,13 @@ function formatWhen(iso) {
 function dayLabel(dateStr) {
   const [, month, day] = dateStr.split('-');
   return `${day}/${month}`;
+}
+
+function shiftLocalDay(local, days) {
+  const source = local || getSaoPauloNowDateTimeLocal();
+  const [date, time] = source.split('T');
+  if (!date) return getSaoPauloNowDateTimeLocal();
+  return `${addDaysToDateStr(date, days)}T${time || '20:00'}`;
 }
 
 function targetMinutesFrom(protocolId, customHours) {
@@ -193,7 +200,7 @@ export function FastingView({
     setEditor({
       mode,
       id: session?.id || null,
-      started: session ? getSaoPauloNowDateTimeLocal(session.startedAt) : '',
+      started: session ? getSaoPauloNowDateTimeLocal(session.startedAt) : getSaoPauloNowDateTimeLocal(),
       ended: session?.endedAt ? getSaoPauloNowDateTimeLocal(session.endedAt) : '',
       protocolId: currentProtocol,
       customHours: session ? String(Math.round((session.targetMinutes / 60) * 10) / 10) : customHours,
@@ -214,8 +221,8 @@ export function FastingView({
       setError('Informe o início.');
       return;
     }
-    if (editor.mode === 'past' && !editor.ended) {
-      setError('Informe o fim do jejum já encerrado.');
+    if (editor.ended && editor.ended < editor.started) {
+      setError('O fim precisa ser depois do início.');
       return;
     }
     const body = {
@@ -248,16 +255,13 @@ export function FastingView({
             <h2 className="font-cinzel">Jejum — monitoramento</h2>
           </div>
           <p>
-            O relógio do jejum em curso, a meta e os que já foram encerrados. Não concede XP.
-            O registro aceita até 7 dias.
+            O início pode ser agora, mais cedo hoje ou em um dia anterior. O fim fica em aberto enquanto o jejum corre, ou pode ser um horário que já passou. Não concede XP.
           </p>
           <p className="fasting-disclaimer">Os marcos são referência de acompanhamento, não orientação médica.</p>
         </div>
-        {!active && (
-          <button type="button" className="fasting-primary" onClick={() => openEditor(null, 'past')}>
-            <Plus size={16} /> Registrar já encerrado
-          </button>
-        )}
+        <button type="button" className="fasting-primary" onClick={() => openEditor(null, 'past')}>
+          <Plus size={16} /> Registrar jejum
+        </button>
       </header>
 
       <article className="glass-panel fasting-live">
@@ -300,7 +304,7 @@ export function FastingView({
                 Encerrar jejum
               </button>
               <button type="button" className="fasting-ghost" disabled={busy} onClick={() => openEditor(active, 'edit')}>
-                <Pencil size={15} /> Corrigir
+                <Pencil size={15} /> Editar
               </button>
               <button
                 type="button"
@@ -399,27 +403,28 @@ export function FastingView({
       </div>
 
       <div className="glass-panel fasting-panel">
-        <h3>Encerrados</h3>
-        {closed.length === 0 ? (
-          <p className="fasting-empty">Nenhum jejum encerrado ainda.</p>
+        <h3>Registros</h3>
+        {list.length === 0 ? (
+          <p className="fasting-empty">Nenhum jejum registrado ainda. O início pode ser de ontem, com o fim em aberto.</p>
         ) : (
           <ul className="fasting-log">
-            {closed.map((session) => {
+            {list.map((session) => {
               const duration = sessionDurationMs(session, now);
               const reached = goalReached(session, now);
+              const open = !session.endedAt;
               return (
                 <li key={session.id}>
                   <div>
-                    <strong>{formatWhen(session.endedAt)}</strong>
+                    <strong>{open ? `Em curso desde ${formatWhen(session.startedAt)}` : formatWhen(session.endedAt)}</strong>
                     <span>{formatFastingSpan(duration)} · meta {protocolLabel(session.targetMinutes)}</span>
-                    <em>{reached ? 'meta batida' : 'abaixo da meta'}</em>
+                    <em>{open ? 'fim em aberto' : (reached ? 'meta batida' : 'abaixo da meta')}</em>
                     {session.note && <small>{session.note}</small>}
                   </div>
                   <div className="fasting-log-actions">
-                    <button type="button" onClick={() => openEditor(session, 'edit')} aria-label={`Corrigir jejum de ${formatWhen(session.endedAt)}`}>
-                      <Pencil size={15} />
+                    <button type="button" onClick={() => openEditor(session, 'edit')} aria-label={`Editar jejum de ${formatWhen(session.startedAt)}`}>
+                      Editar
                     </button>
-                    <button type="button" onClick={() => setPending({ kind: 'delete', session })} aria-label={`Excluir jejum de ${formatWhen(session.endedAt)}`}>
+                    <button type="button" onClick={() => setPending({ kind: 'delete', session })} aria-label={`Excluir jejum de ${formatWhen(session.startedAt)}`}>
                       <Trash2 size={15} />
                     </button>
                   </div>
@@ -440,25 +445,60 @@ export function FastingView({
             onClick={(event) => event.stopPropagation()}
             onSubmit={saveEditor}
           >
-            <h3 id="fasting-edit-title">{editor.mode === 'past' ? 'Registrar jejum' : 'Corrigir jejum'}</h3>
+            <h3 id="fasting-edit-title">{editor.mode === 'past' ? 'Registrar jejum' : 'Editar jejum'}</h3>
+            <p className="fasting-hint">
+              O início pode ser agora, mais cedo hoje ou em um dia anterior.
+              Deixe o fim em aberto se o jejum ainda está em curso, ou informe um fim que já passou.
+            </p>
             <label>
               Início
               <input
                 type="datetime-local"
                 value={editor.started}
+                max={getSaoPauloNowDateTimeLocal(now)}
                 onChange={(event) => setEditor({ ...editor, started: event.target.value })}
                 required
               />
             </label>
-            <label>
-              Fim
+            <div className="fasting-protocols">
+              <button
+                type="button"
+                form="grimorio-no-form"
+                onClick={() => setEditor({ ...editor, started: getSaoPauloNowDateTimeLocal(now) })}
+              >
+                Início agora
+              </button>
+              <button
+                type="button"
+                form="grimorio-no-form"
+                onClick={() => setEditor({ ...editor, started: shiftLocalDay(getSaoPauloNowDateTimeLocal(now), -1) })}
+              >
+                Início ontem
+              </button>
+            </div>
+            <label className="fasting-open-toggle">
               <input
-                type="datetime-local"
-                value={editor.ended}
-                onChange={(event) => setEditor({ ...editor, ended: event.target.value })}
-                required={editor.mode === 'past'}
+                type="checkbox"
+                checked={!editor.ended}
+                onChange={(event) => setEditor({
+                  ...editor,
+                  ended: event.target.checked ? '' : getSaoPauloNowDateTimeLocal(now)
+                })}
               />
+              Fim em aberto — jejum ainda em curso
             </label>
+            {editor.ended !== '' && (
+              <label>
+                Fim
+                <input
+                  type="datetime-local"
+                  value={editor.ended}
+                  max={getSaoPauloNowDateTimeLocal(now)}
+                  onChange={(event) => setEditor({ ...editor, ended: event.target.value })}
+                  required
+                />
+              </label>
+            )}
             <ProtocolPicker
               protocolId={editor.protocolId}
               customHours={editor.customHours}

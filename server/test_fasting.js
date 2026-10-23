@@ -133,4 +133,41 @@ const tooLong = startFastingSession(db, {
 }, { now: endedAt });
 assert.match(tooLong.error, /7 dias/);
 
+const later = new Date('2026-10-25T10:00:00-03:00');
+const backdated = startFastingSession(db, {
+  startedAt: '2026-10-24T20:00',
+  targetMinutes: 16 * 60,
+  note: 'comecei ontem'
+}, { now: later });
+assert.equal(backdated.error, undefined);
+assert.equal(backdated.session.endedAt, null);
+assert.equal(backdated.session.startedAt, parseFastingInstant('2026-10-24T20:00').toISOString());
+assert.equal(activeFastingSession(db.fastingSessions).id, backdated.session.id);
+
+const closedPast = startFastingSession(db, {
+  startedAt: '2026-10-24T08:00',
+  endedAt: '2026-10-24T16:00',
+  targetMinutes: 12 * 60
+}, { now: later });
+assert.equal(closedPast.error, undefined);
+assert.equal(closedPast.session.endedAt, parseFastingInstant('2026-10-24T16:00').toISOString());
+
+const editedPast = updateFastingSession(db, closedPast.session.id, {
+  startedAt: '2026-10-24T09:00',
+  endedAt: '2026-10-24T15:30',
+  note: 'horário corrigido'
+}, { now: later });
+assert.equal(editedPast.error, undefined);
+assert.equal(editedPast.session.startedAt, parseFastingInstant('2026-10-24T09:00').toISOString());
+assert.equal(editedPast.session.endedAt, parseFastingInstant('2026-10-24T15:30').toISOString());
+assert.equal(editedPast.session.note, 'horário corrigido');
+
+const movedOpen = updateFastingSession(db, backdated.session.id, {
+  startedAt: '2026-10-24T19:00',
+  endedAt: ''
+}, { now: later });
+assert.equal(movedOpen.error, undefined);
+assert.equal(movedOpen.session.endedAt, null);
+assert.equal(movedOpen.session.startedAt, parseFastingInstant('2026-10-24T19:00').toISOString());
+
 console.log('fasting ok');
