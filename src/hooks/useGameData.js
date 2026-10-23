@@ -420,6 +420,10 @@ export function useGameData() {
         next.phoneTimeLogs = result.logs;
         changed = true;
       }
+      if (Array.isArray(result.fastingSessions) && path.startsWith('/api/fasting')) {
+        next.fastingSessions = result.fastingSessions;
+        changed = true;
+      }
       if (Array.isArray(result.entries) && path.startsWith('/api/journal')) {
         next.journalEntries = result.entries;
         changed = true;
@@ -1305,6 +1309,57 @@ export function useGameData() {
     await mutate(`/api/phone-time/${id}`, { method: 'DELETE' });
   };
 
+  const startFasting = async (body = {}) => {
+    playClick();
+    const result = await mutate('/api/fasting', {
+      method: 'POST',
+      body,
+      toastOnError: false
+    });
+    if (!result || result.__error) {
+      throw new Error(result?.error || 'Não foi possível registrar o jejum.');
+    }
+    return result;
+  };
+
+  const endFasting = async (id, body = {}) => {
+    playClick();
+    const result = await mutate(`/api/fasting/${id}/end`, {
+      method: 'POST',
+      body,
+      toastOnError: false
+    });
+    if (!result || result.__error) {
+      throw new Error(result?.error || 'Não foi possível encerrar o jejum.');
+    }
+    return result;
+  };
+
+  const updateFasting = async (id, body = {}) => {
+    playClick();
+    const result = await mutate(`/api/fasting/${id}`, {
+      method: 'PUT',
+      body,
+      toastOnError: false
+    });
+    if (!result || result.__error) {
+      throw new Error(result?.error || 'Não foi possível corrigir o jejum.');
+    }
+    return result;
+  };
+
+  const deleteFasting = async (id) => {
+    playClick();
+    const result = await mutate(`/api/fasting/${id}`, {
+      method: 'DELETE',
+      toastOnError: false
+    });
+    if (!result || result.__error) {
+      throw new Error(result?.error || 'Não foi possível excluir o jejum.');
+    }
+    return result;
+  };
+
   const saveJournalEntry = async (entry = {}) => {
     playClick();
     const id = entry.id;
@@ -1902,6 +1957,10 @@ export function useGameData() {
     completeSupplementReview,
     savePhoneTime,
     deletePhoneTime,
+    startFasting,
+    endFasting,
+    updateFasting,
+    deleteFasting,
     saveJournalEntry,
     deleteJournalEntry,
     addReward,

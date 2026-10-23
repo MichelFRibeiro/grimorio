@@ -88,6 +88,13 @@ O script irá:
 - Várias páginas no mesmo dia. Dá para corrigir, buscar e apagar. O rascunho não salvo fica no navegador até guardar.
 - Não concede XP, moedas nem dano no chefe. Desligar em Configurações só esconde a aba.
 
+### ⏳ Jej um — monitoramento
+- Aba **Jejum**: relógio do jejum em curso, meta (12:12, 14:10, 16:8, 18:6, 20:4, OMAD, 24 h ou outra) e marcos de acompanhamento. Os marcos são referência, não orientação médica.
+- Só um jejum em curso por vez. Dá para corrigir início, fim, meta e nota, ou registrar um jejum já encerrado. O registro aceita até 7 dias.
+- Enquanto corre, uma faixa na tela inicial mostra o relógio e abre a aba. A aba ganha o selo "ativo".
+- Gráfico de 14, 30 ou 90 dias com as horas encerradas em cada dia, média, mais longo, metas batidas e sequência.
+- Não concede XP, moedas nem dano no chefe. Desligar em Configurações só esconde a aba e a faixa.
+
 ### 💊 Suplementos
 - Cadastro de suplementos (Omega 3, Creatina) com unidade e dose usual.
 - Registro de cada tomada com data, hora e quantidade.
@@ -140,7 +147,7 @@ O script irá:
 - O motor local roda em `server/nextAction.js`; o julgamento do Jev, em `server/oracleJev.js`; a memória (energia, quantidades e desfechos), em `server/oracleMemory.js`.
 
 ### ⚙️ Configurações
-- Botão **Configurações** no cabeçalho, ao lado de Sair. Cada função do Grimório tem um interruptor: Vitórias Planejadas, Chefe Ativo, O Oráculo indica, Hoje, Missões, Questões, Biblioteca, Escrituras, Mapas, Processos, Rituais, Rotinas, Suplementos, Celular, Diário, Correlações, Foco, Taverna, AGU, Oráculo e Bate Papo.
+- Botão **Configurações** no cabeçalho, ao lado de Sair. Cada função do Grimório tem um interruptor: Vitórias Planejadas, Chefe Ativo, O Oráculo indica, Hoje, Missões, Questões, Biblioteca, Escrituras, Mapas, Processos, Rituais, Rotinas, Suplementos, Jej um, Celular, Diário, Correlações, Foco, Taverna, AGU, Oráculo e Bate Papo.
 - Desligar **só esconde**. Missões, rituais, leituras, moedas e o plano AGU continuam gravados; ligar de novo devolve tudo como estava. O Oráculo deixa de indicar o que estiver desligado, e o painel Hoje deixa de mostrar a seção correspondente.
 - A preferência fica no perfil (`POST /api/profile` com `featureSettings`) e vale em qualquer aparelho da mesma conta.
 - **Aparência — escolha do tema.** No topo da tela há quatro visuais: **Catálogo** (o padrão de sempre: papel creme e carimbo terracota), **Lousa de Giz** (verde-escura, tipo lousa), **Atlas Botânico** (papel claro, verde-sálvia e ocre) e **Terminal de Estudo** (grafite, âmbar e ciano). A troca é imediata e fica gravada no perfil (`userProfile.theme`), então acompanha a conta em qualquer aparelho; o aparelho também guarda uma cópia local, que é aplicada antes do primeiro desenho para a página não abrir no tema errado.

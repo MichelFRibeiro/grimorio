@@ -89,6 +89,13 @@ import { formatBrl } from '../src/utils/coinExchange.js';
 import { sanitizePhoneTimeLogs } from '../src/utils/phoneTime.js';
 import { deletePhoneTimeLog, upsertPhoneTimeLog } from './domain/phoneTime.js';
 import {
+  deleteFastingSession,
+  endFastingSession,
+  ensureFastingSessions,
+  startFastingSession,
+  updateFastingSession
+} from './domain/fasting.js';
+import {
   createJournalEntry,
   deleteJournalEntry,
   listJournalEntries,
@@ -628,6 +635,7 @@ app.get('/api/state', async (req, res) => {
         }
       }
       db.phoneTimeLogs = sanitizePhoneTimeLogs(db.phoneTimeLogs);
+      db.fastingSessions = ensureFastingSessions(db);
       lastStateSanitized = { dbRef: db, todayStr };
     } else if (db.aguPlan?.startedAt && (!db.aguPlan.currentCycle?.end || todayStr > db.aguPlan.currentCycle.end)) {
       const next = ensureCurrentCycle(db.aguPlan, db.examQuestions || [], todayStr);
@@ -2474,6 +2482,66 @@ app.delete('/api/phone-time/:id', (req, res) => {
     if (result.error) return res.status(result.status || 400).json({ error: result.error });
     saveDb(db);
     res.json({ success: true, logs: db.phoneTimeLogs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 6.55. JEJUM — MONITORAMENTO
+// ==========================================
+app.get('/api/fasting', (req, res) => {
+  try {
+    const db = getDb();
+    res.json({ success: true, fastingSessions: ensureFastingSessions(db) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/fasting', (req, res) => {
+  try {
+    const db = getDb();
+    const result = startFastingSession(db, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, session: result.session, created: result.created, fastingSessions: result.fastingSessions });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/fasting/:id/end', (req, res) => {
+  try {
+    const db = getDb();
+    const result = endFastingSession(db, req.params.id, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, session: result.session, fastingSessions: result.fastingSessions });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/fasting/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = updateFastingSession(db, req.params.id, req.body || {});
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, session: result.session, fastingSessions: result.fastingSessions });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/fasting/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const result = deleteFastingSession(db, req.params.id);
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({ success: true, fastingSessions: result.fastingSessions });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -10,7 +10,7 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { DestinyChestModal } from './components/DestinyChestModal';
 import { JudgmentModal } from './components/JudgmentModal';
 import { FloatingToasts } from './components/FloatingToasts';
-import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare, ListOrdered, NotebookPen } from 'lucide-react';
+import { Scroll, Target, BookOpen, BookMarked, Layers, Flame, Gift, Compass, Scale, Headphones, Network, Sun, Pill, Smartphone, GitCompare, MessagesSquare, ListOrdered, NotebookPen, Hourglass } from 'lucide-react';
 import { isFeatureEnabled, isTabEnabled } from './utils/featureSettings';
 import { Chart as ChartJS } from 'chart.js';
 import { installChartTheme } from './utils/chartTheme';
@@ -26,6 +26,7 @@ import { buildHomeRoutine } from './utils/homeRoutine';
 import { routineActivitySnapshot } from './utils/routineActivities';
 import { PhoneTimePrompt } from './components/PhoneTimePrompt';
 import { needsYesterdayPhonePrompt, yesterdayDateStr } from './utils/phoneTime';
+import { activeFastingSession } from './utils/fasting';
 
 const LoginView = lazy(() => import('./components/LoginView').then((m) => ({ default: m.LoginView })));
 const TodayView = lazy(() => import('./components/TodayView').then((m) => ({ default: m.TodayView })));
@@ -48,6 +49,8 @@ const MindMapsView = lazy(() => import('./components/MindMapsView').then((m) => 
 const AguCampaignView = lazy(() => import('./components/AguCampaignView').then((m) => ({ default: m.AguCampaignView })));
 const CorrelationsView = lazy(() => import('./components/CorrelationsView').then((m) => ({ default: m.CorrelationsView })));
 const PhoneTimeView = lazy(() => import('./components/PhoneTimeView').then((m) => ({ default: m.PhoneTimeView })));
+const FastingView = lazy(() => import('./components/FastingView').then((m) => ({ default: m.FastingView })));
+const FastingHomeStrip = lazy(() => import('./components/FastingView').then((m) => ({ default: m.FastingHomeStrip })));
 const JournalView = lazy(() => import('./components/JournalView').then((m) => ({ default: m.JournalView })));
 const ChatRoomView = lazy(() => import('./components/ChatRoomView').then((m) => ({ default: m.ChatRoomView })));
 const FocusChamberView = lazy(() => import('./components/FocusPlayer').then((m) => ({ default: m.FocusChamberView })));
@@ -215,6 +218,10 @@ export function App() {
     deleteMindMapImage,
     savePhoneTime,
     deletePhoneTime,
+    startFasting,
+    endFasting,
+    updateFasting,
+    deleteFasting,
     saveJournalEntry,
     deleteJournalEntry,
     updateProfile
@@ -589,6 +596,8 @@ export function App() {
     }
   };
 
+  const fastingActive = Boolean(activeFastingSession(data?.fastingSessions));
+
   const tabs = [
     { id: 'today', label: 'Hoje', icon: Sun },
     { id: 'quests', label: 'Missões', icon: Scroll, badge: pendingQuestsCount },
@@ -600,6 +609,7 @@ export function App() {
     { id: 'habits', label: 'Rituais', icon: Flame, badge: habitsDueCount },
     { id: 'routines', label: 'Rotinas', icon: ListOrdered, badge: routinesDueCount },
     { id: 'supplements', label: 'Suplementos', icon: Pill },
+    { id: 'fasting', label: 'Jejum', icon: Hourglass, badge: fastingActive ? 'ativo' : undefined },
     { id: 'phone', label: 'Celular', icon: Smartphone },
     { id: 'journal', label: 'Diário', icon: NotebookPen, badge: todayJournalCount },
     { id: 'correlations', label: 'Correlações', icon: GitCompare },
@@ -663,6 +673,20 @@ export function App() {
           onReopenVictory={featureOn('victories') ? reopenRoutineVictory : undefined}
           playClick={playClick}
         />
+      )}
+
+      {featureOn('fasting') && fastingActive && (
+        <Suspense fallback={null}>
+          <FastingHomeStrip
+            sessions={data?.fastingSessions}
+            onOpen={() => {
+              openTab('fasting');
+              window.setTimeout(() => {
+                document.querySelector('main')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 60);
+            }}
+          />
+        </Suspense>
       )}
 
       {/* Boss Raid Banner */}
@@ -735,7 +759,7 @@ export function App() {
             >
               <Icon size={18} />
               <span className="nav-tab-label">{tab.label}</span>
-              {tab.badge !== undefined && tab.badge > 0 && (
+              {tab.badge !== undefined && tab.badge !== null && tab.badge !== 0 && tab.badge !== '' && (
                 <span
                   className="nav-tab-badge"
                   style={{
@@ -937,6 +961,16 @@ export function App() {
             data={data}
             onSave={savePhoneTime}
             onDelete={deletePhoneTime}
+          />
+        )}
+
+        {activeTab === 'fasting' && (
+          <FastingView
+            sessions={data?.fastingSessions}
+            onStart={startFasting}
+            onEnd={endFasting}
+            onUpdate={updateFasting}
+            onDelete={deleteFasting}
           />
         )}
 

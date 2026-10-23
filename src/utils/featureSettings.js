@@ -103,6 +103,13 @@ export const FEATURE_SETTINGS = [
     group: 'Abas'
   },
   {
+    id: 'fasting',
+    label: 'Jejum',
+    tab: 'fasting',
+    description: 'O monitoramento do jejum em curso e o histórico. Desligar só esconde; os registros continuam gravados.',
+    group: 'Abas'
+  },
+  {
     id: 'journal',
     label: 'Diário',
     tab: 'journal',
