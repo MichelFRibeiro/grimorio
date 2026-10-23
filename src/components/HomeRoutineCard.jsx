@@ -595,7 +595,7 @@ export function HomeRoutineCard({
         </p>
       ) : null}
 
-      {(expanded || victory) ? (
+      {expanded ? (
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginTop: expanded ? '12px' : '10px' }}>
         {expanded && !victory ? (
           <button
