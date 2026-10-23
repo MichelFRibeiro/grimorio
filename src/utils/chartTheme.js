@@ -78,13 +78,29 @@ function themeColor(palette, role) {
   return palette[role] || null;
 }
 
+/**
+ * Traço pedido pelo gráfico (série entre os pontos, setpoint, limites
+ * tracejados da faixa). borderWidth 0 é ausência explícita; cor transparente
+ * também. Sem isso, o pincel apagava a linha no beforeInit — o primeiro
+ * desenho ficava só com os pontos.
+ */
+function hasIntentionalStroke(dataset) {
+  const border = dataset.borderColor;
+  if (typeof border !== 'string') return false;
+  const lower = border.toLowerCase().replace(/\s+/g, '');
+  if (!lower || lower === 'transparent' || lower === 'none') return false;
+  return dataset.borderWidth !== 0;
+}
+
 /** Recolore a configuração ANTES de o Chart.js montar o gráfico. */
-function recolorConfig(config, palette) {
+export function recolorConfig(config, palette) {
   const data = config && config.data;
   if (data && Array.isArray(data.datasets)) {
     data.datasets.forEach((dataset) => {
       if (!dataset) return;
-      // dataset de preenchimento de zona: cor cheia, sem borda
+      // Fundo de zona: recolore. A borda só some se o dataset não tem traço
+      // de propósito. A série usa `${cor}14` (hex de 8 dígitos), que casa com
+      // o papel da cor — zerar a borda aí apagava a linha entre os pontos.
       const bg = dataset.backgroundColor;
       if (typeof bg === 'string') {
         const role = roleOf(bg);
@@ -92,8 +108,10 @@ function recolorConfig(config, palette) {
           const color = themeColor(palette, role);
           if (color) {
             dataset.backgroundColor = withAlpha(color, 0.16);
-            dataset.borderColor = 'transparent';
-            dataset.borderWidth = 0;
+            if (!hasIntentionalStroke(dataset)) {
+              dataset.borderColor = 'transparent';
+              dataset.borderWidth = 0;
+            }
           }
         }
       }
