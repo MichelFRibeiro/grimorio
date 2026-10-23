@@ -15,7 +15,11 @@ import {
   toggleCompletedBlock,
   sanitizeAguPlan,
   addBlockDuration,
+  appendBlockNote,
+  deleteStudyBlock,
   setBlockDuration,
+  setBlockNote,
+  updateStudyBlockMeta,
   getAguStudyTimeTotals,
   getAguStudyLoadSeries,
   classifyStudyLoadHours,
@@ -135,6 +139,35 @@ assert(homeostasisVictory.source === DAILY_VICTORY_OVERFLOW_SOURCES.study, 'Vit�
 
 assert(sanitizeAguPlan(null, monday).completedBlocks, 'sanitize cria plano vazio');
 assert(sanitizeAguPlan(plan, monday).blockDurations[`${monday}|administrativo|estudo|atos`] === 45, 'sanitize preserva durações');
+
+const noteKey = `${monday}|administrativo|estudo|atos`;
+let notedPlan = appendBlockNote(plan, noteKey, '  Revisei a Lei 9.784  ');
+assert(notedPlan.blockNotes[noteKey] === 'Revisei a Lei 9.784', 'Anotação do bloco é gravada');
+notedPlan = appendBlockNote(notedPlan, noteKey, '   ');
+assert(notedPlan.blockNotes[noteKey] === 'Revisei a Lei 9.784', 'Anotação vazia não apaga o que já foi escrito');
+notedPlan = appendBlockNote(notedPlan, noteKey, 'Revisei a Lei 9.784');
+assert(notedPlan.blockNotes[noteKey] === 'Revisei a Lei 9.784', 'A mesma anotação não duplica');
+notedPlan = appendBlockNote(notedPlan, noteKey, 'Errei decadência');
+assert(notedPlan.blockNotes[noteKey] === 'Revisei a Lei 9.784\n\nErrei decadência', 'Nova sessão acrescenta a anotação');
+const notedBlock = summarizePlan(notedPlan, exams, monday).studyBlocks.find((block) => block.key === noteKey);
+assert(notedBlock && notedBlock.note.includes('decadência'), 'Histórico mostra a anotação');
+const todayKey = today.blocks[0].key;
+notedPlan = appendBlockNote(notedPlan, todayKey, 'Bloco de hoje');
+const todayNoted = summarizePlan(notedPlan, exams, monday).today.blocks.find((block) => block.key === todayKey);
+assert(String(todayNoted?.note || '').includes('Bloco de hoje'), `Bloco de hoje mostra a anotação (veio ${todayNoted?.note})`);
+notedPlan = setBlockNote(notedPlan, noteKey, 'Nota corrigida');
+assert(notedPlan.blockNotes[noteKey] === 'Nota corrigida', 'Editar substitui a anotação');
+notedPlan = setBlockNote(notedPlan, noteKey, '   ');
+assert(!notedPlan.blockNotes?.[noteKey], 'Anotação vazia na edição apaga');
+notedPlan = appendBlockNote(notedPlan, noteKey, 'volta');
+assert(sanitizeAguPlan(notedPlan, monday).blockNotes[noteKey] === 'volta', 'sanitize preserva anotações');
+assert(sanitizeAguPlan({ completedBlocks: {} }, monday).blockNotes && typeof sanitizeAguPlan({ completedBlocks: {} }, monday).blockNotes === 'object', 'sanitize cria o mapa de anotações');
+const moved = updateStudyBlockMeta(notedPlan, noteKey, { topicId: 'poderes' });
+assert(moved.key !== noteKey, 'Trocar o tópico muda a chave');
+assert(moved.plan.blockNotes[moved.key] === 'volta', 'A anotação acompanha a chave nova');
+assert(!moved.plan.blockNotes[noteKey], 'A chave antiga não fica com a anotação');
+const removed = deleteStudyBlock(moved.plan, moved.key);
+assert(!removed.blockNotes[moved.key], 'Excluir o bloco apaga a anotação');
 
 console.log('🎉 Teste da campanha AGU PASSOU COM SUCESSO!');
 process.exit(0);

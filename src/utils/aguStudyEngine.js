@@ -210,6 +210,23 @@ export function sameStudySlot(a, b, options = {}) {
   return left.kind === right.kind;
 }
 
+/** Anotação facultativa do bloco, gravada ao lançar o que foi feito. */
+export function noteForStudySlot(plan, block) {
+  const notes = plan?.blockNotes;
+  if (!notes || typeof notes !== 'object' || Array.isArray(notes)) return '';
+  const read = (value) => String(value || '').replace(/\r\n/g, '\n').trim();
+  const direct = block?.key ? read(notes[block.key]) : '';
+  if (direct) return direct;
+  let found = '';
+  Object.entries(notes).forEach(([key, value]) => {
+    if (found) return;
+    if (sameStudySlot(key, block) || sameStudySlot(key, block, { ignoreKind: true })) {
+      found = read(value);
+    }
+  });
+  return found;
+}
+
 export function durationForStudySlot(plan, block) {
   const durations = plan?.blockDurations || {};
   let minutes = parseDurationMinutes(durations[block?.key]);
@@ -345,6 +362,7 @@ export function collectStudyBlocks(plan, examQuestions = []) {
       minutes: rec.durationMinutes,
       markedDone: rec.markedDone
     });
+    rec.note = noteForStudySlot(plan, rec);
   });
 
   return Object.values(byKey).sort((a, b) => {

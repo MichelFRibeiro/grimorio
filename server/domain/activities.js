@@ -16,7 +16,7 @@ import { getSaoPauloDateStr, getSaoPauloHour, getSaoPauloDayOfWeek, calculateHab
 import { willpowerForDifficulty } from '../../src/utils/activityScale.js';
 import { parseDurationMinutes, parseHabitCount, parseHabitNote, getHabitDurationForDate, getHabitNoteForDate, setHabitDurationForDate, setHabitCountForDate, setHabitNoteForDate, clearHabitDurationForDate, clearHabitCountForDate, clearHabitNoteForDate, clearLiveActivityTimer } from '../../src/utils/activityDuration.js';
 import { sanitizeScriptureDraft, scriptureDraftsEqual } from '../../src/utils/liveScriptureDraft.js';
-import { sanitizeAguPlan, applyExamToPlan, refreshAguProgress } from '../../src/utils/aguCycle.js';
+import { sanitizeAguPlan, applyExamToPlan, refreshAguProgress, appendBlockNote } from '../../src/utils/aguCycle.js';
 import { syncDailyVictoriesFromActivity } from '../dailyVictorySync.js';
 import { applyHabitMeasure, applyHabitTracking, persistHabitHomeostasis } from '../../src/utils/habitHomeostasis.js';
 import { markDecisionAccepted, markDecisionCompleted } from '../oracleMemory.js';
@@ -799,6 +799,9 @@ export function logExamQuestions(db, body = {}) {
   if (!db.examQuestions) db.examQuestions = [];
   db.examQuestions.unshift(entry);
   applyExamSideEffects(db, entry);
+  if (entry.blockKey && body.sessionNote != null && String(body.sessionNote).trim() && db.aguPlan) {
+    db.aguPlan = appendBlockNote(db.aguPlan, entry.blockKey, body.sessionNote);
+  }
 
   const rewardResult = grant({
     xp: rewards.xp,

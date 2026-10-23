@@ -110,6 +110,7 @@ import {
   summarizePlan,
   toggleCompletedBlock,
   addBlockDuration,
+  appendBlockNote,
   setBlockDuration,
   ensureCurrentCycle,
   advanceAguCycle,
@@ -3069,7 +3070,8 @@ app.put('/api/agu-plan/block', (req, res) => {
       kind,
       durationMinutes,
       totalQuestions,
-      correctAnswers
+      correctAnswers,
+      note
     } = req.body || {};
     const total = totalQuestions === undefined || totalQuestions === ''
       ? undefined
@@ -3087,7 +3089,7 @@ app.put('/api/agu-plan/block', (req, res) => {
     const { plan: nextPlan, key: nextKey } = updateStudyBlockMeta(
       sanitizeAguPlan(db.aguPlan, todayStr),
       key,
-      { dateStr, subjectId, topicId, kind, durationMinutes, totalQuestions: total }
+      { dateStr, subjectId, topicId, kind, durationMinutes, totalQuestions: total, note }
     );
     db.aguPlan = nextPlan;
 
@@ -3135,7 +3137,9 @@ app.put('/api/agu-plan/block', (req, res) => {
           wrongAnswers: total - correct,
           accuracyRate,
           durationMinutes: parseDurationMinutes(durationMinutes),
-          notes: `Campanha AGU · bloco editado · ${topic?.name || ''}`,
+          notes: note && String(note).trim()
+            ? `Campanha AGU · bloco editado · ${topic?.name || ''}\n${String(note).trim()}`
+            : `Campanha AGU · bloco editado · ${topic?.name || ''}`,
           notebookUrl: subject?.tecCadernoUrl || linked[0]?.notebookUrl || '',
           xpEarned: totalXp,
           coinsEarned: coins,
@@ -3220,17 +3224,21 @@ app.post('/api/agu-plan/block/delete', (req, res) => {
 
 app.post('/api/agu-plan/block-duration', (req, res) => {
   try {
-    const { key, durationMinutes, mode } = req.body || {};
+    const { key, durationMinutes, mode, note } = req.body || {};
     if (!key || typeof key !== 'string') {
       return res.status(400).json({ error: 'Informe a chave do bloco (key).' });
     }
     const db = getDb();
     const todayStr = getSaoPauloDateStr();
-    const plan = sanitizeAguPlan(db.aguPlan, todayStr);
+    let plan = sanitizeAguPlan(db.aguPlan, todayStr);
     // mode=add soma uma nova sessão ao bloco; o padrão continua substituindo (edição manual do total).
-    db.aguPlan = String(mode || '').toLowerCase() === 'add'
+    plan = String(mode || '').toLowerCase() === 'add'
       ? addBlockDuration(plan, key, durationMinutes)
       : setBlockDuration(plan, key, durationMinutes);
+    if (note != null && String(note).trim()) {
+      plan = appendBlockNote(plan, key, note);
+    }
+    db.aguPlan = plan;
     db.aguPlan = refreshAguProgress(db.aguPlan, db.examQuestions || [], todayStr);
     const linkedVictories = syncDailyVictoriesFromActivity(db, { today: todayStr, syncStudy: true });
     saveDb(db);

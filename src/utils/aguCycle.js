@@ -78,6 +78,7 @@ import {
   isBlockComplete,
   isPortugueseRequired,
   isSlotMarkedDone,
+  noteForStudySlot,
   overlayLoggedDayBlocks,
   sameStudySlot,
   serializeTopicStatus,
@@ -310,6 +311,7 @@ function hydrateBlock(raw, dateStr, plan, subjectStats, topicStats, examQuestion
     kindMeta,
     group,
     productMeta: raw.targetProduct ? AGU_PRODUCT_META[raw.targetProduct] : null,
+    note: noteForStudySlot(plan, slot),
     mastery: getTopicMastery(tStats || stats, plan?.staleDays || AGU_STALE_DAYS),
     topicName: raw.topicName || cursor?.topicName || null,
     optional: Boolean(raw.optional),
@@ -486,10 +488,13 @@ function summarizeCacheSignature(plan, examQuestions, today) {
   const durationKeys = plan?.blockDurations
     ? Object.entries(plan.blockDurations).map(([k, v]) => `${k}:${v}`).join(',')
     : '';
+  const noteKeys = plan?.blockNotes
+    ? Object.entries(plan.blockNotes).map(([k, v]) => `${k}:${String(v || '').length}`).join(',')
+    : '';
   const firstExam = examQuestions?.[0];
   const lastExam = examQuestions?.[examQuestions.length - 1];
   const examSig = `${examQuestions?.length || 0}:${firstExam?.id || ''}:${firstExam?.totalQuestions || 0}:${firstExam?.correctAnswers || 0}:${firstExam?.durationMinutes || 0}:${lastExam?.id || ''}`;
-  return `${today}|${plan?.updatedAt || ''}|${plan?.startedAt || ''}|${plan?.phase || ''}|${plan?.keepPortuguese}|${plan?.editalPublished}|${plan?.homeostasis?.setpointMinutes || 0}|${plan?.homeostasis?.targetMinutes || 0}|${plan?.horizonMonths || 0}|${completedKeys}|${durationKeys}|${(plan?.errorNotebook || []).length}|${(plan?.debt || []).length}|${examSig}`;
+  return `${today}|${plan?.updatedAt || ''}|${plan?.startedAt || ''}|${plan?.phase || ''}|${plan?.keepPortuguese}|${plan?.editalPublished}|${plan?.homeostasis?.setpointMinutes || 0}|${plan?.homeostasis?.targetMinutes || 0}|${plan?.horizonMonths || 0}|${completedKeys}|${durationKeys}|${noteKeys}|${(plan?.errorNotebook || []).length}|${(plan?.debt || []).length}|${examSig}`;
 }
 
 export function summarizePlan(plan, examQuestions = [], todayStr) {
@@ -613,6 +618,67 @@ export function toggleCompletedBlock(plan, key) {
   };
 }
 
+/** Uma sessão cabe em 500 caracteres; o bloco acumula várias, até 2000. */
+export const MAX_AGU_BLOCK_NOTE_LENGTH = 500;
+export const MAX_AGU_BLOCK_NOTES_STORED = 2000;
+
+export function parseAguBlockNote(value) {
+  if (value == null) return '';
+  return String(value).replace(/\r\n/g, '\n').trim().slice(0, MAX_AGU_BLOCK_NOTE_LENGTH);
+}
+
+function cleanStoredBlockNote(value) {
+  return String(value || '').replace(/\r\n/g, '\n').trim().slice(0, MAX_AGU_BLOCK_NOTES_STORED);
+}
+
+export function normalizeBlockNotes(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  Object.entries(raw).forEach(([key, value]) => {
+    if (!key || typeof key !== 'string' || key.length > 240) return;
+    const note = cleanStoredBlockNote(value);
+    if (note) out[key] = note;
+  });
+  return out;
+}
+
+/**
+ * Acrescenta a anotação desta sessão. Vazio não grava e não apaga o que já havia.
+ * A mesma frase no fim do texto não é duplicada.
+ */
+export function appendBlockNote(plan, key, note) {
+  if (!plan || !key) return plan;
+  const value = parseAguBlockNote(note);
+  if (!value) return plan;
+  const blockNotes = { ...(plan.blockNotes || {}) };
+  const existing = cleanStoredBlockNote(blockNotes[key]);
+  if (existing === value || existing.endsWith(`\n\n${value}`)) return plan;
+  const joined = existing ? `${existing}\n\n${value}` : value;
+  blockNotes[key] = joined.length <= MAX_AGU_BLOCK_NOTES_STORED
+    ? joined
+    : joined.slice(joined.length - MAX_AGU_BLOCK_NOTES_STORED).replace(/^\n+/, '');
+  return {
+    ...plan,
+    blockNotes,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+/** Substitui a anotação do bloco. Vazio apaga, como a edição do histórico de hábitos. */
+export function setBlockNote(plan, key, note) {
+  if (!plan || !key) return plan;
+  const value = cleanStoredBlockNote(note);
+  const blockNotes = { ...(plan.blockNotes || {}) };
+  if (value) blockNotes[key] = value;
+  else delete blockNotes[key];
+  if (!value && !plan.blockNotes?.[key]) return plan;
+  return {
+    ...plan,
+    blockNotes,
+    updatedAt: new Date().toISOString()
+  };
+}
+
 export function addBlockDuration(plan, key, minutes) {
   const amount = parseDurationMinutes(minutes);
   if (!plan || !key || amount <= 0) return plan;
@@ -642,6 +708,7 @@ function remapBlockKey(plan, fromKey, toKey) {
   if (!plan || !fromKey || !toKey || fromKey === toKey) return plan;
   const completedBlocks = { ...(plan.completedBlocks || {}) };
   const blockDurations = { ...(plan.blockDurations || {}) };
+  const blockNotes = { ...(plan.blockNotes || {}) };
   if (completedBlocks[fromKey]) {
     completedBlocks[toKey] = completedBlocks[fromKey];
     delete completedBlocks[fromKey];
@@ -654,10 +721,19 @@ function remapBlockKey(plan, fromKey, toKey) {
     blockDurations[toKey] = blockDurations[fromKey];
     delete blockDurations[fromKey];
   }
+  if (blockNotes[fromKey] != null) {
+    const fromNote = blockNotes[fromKey];
+    delete blockNotes[fromKey];
+    if (!blockNotes[toKey]) blockNotes[toKey] = fromNote;
+    else if (!String(blockNotes[toKey]).includes(String(fromNote))) {
+      blockNotes[toKey] = cleanStoredBlockNote(`${blockNotes[toKey]}\n\n${fromNote}`);
+    }
+  }
   return {
     ...plan,
     completedBlocks,
     blockDurations,
+    blockNotes,
     updatedAt: new Date().toISOString()
   };
 }
@@ -666,13 +742,16 @@ export function deleteStudyBlock(plan, key) {
   if (!plan || !key) return plan;
   const completedBlocks = { ...(plan.completedBlocks || {}) };
   const blockDurations = { ...(plan.blockDurations || {}) };
+  const blockNotes = { ...(plan.blockNotes || {}) };
   delete completedBlocks[key];
   delete completedBlocks[`${key}|product`];
   delete blockDurations[key];
+  delete blockNotes[key];
   return {
     ...plan,
     completedBlocks,
     blockDurations,
+    blockNotes,
     updatedAt: new Date().toISOString()
   };
 }
@@ -716,6 +795,9 @@ export function updateStudyBlockMeta(plan, key, patch = {}) {
   let next = remapBlockKey(plan, key, nextKey);
   if (patch.durationMinutes !== undefined) {
     next = setBlockDuration(next, nextKey, patch.durationMinutes);
+  }
+  if (patch.note !== undefined) {
+    next = setBlockNote(next, nextKey, patch.note);
   }
   const questions = Number(patch.totalQuestions);
   const minutes = patch.durationMinutes !== undefined
@@ -1011,6 +1093,7 @@ export function sanitizeAguPlan(plan, todayStr, examQuestions = []) {
     staleDays: Number(plan.staleDays) > 0 ? Number(plan.staleDays) : AGU_STALE_DAYS,
     completedBlocks: plan.completedBlocks && typeof plan.completedBlocks === 'object' ? plan.completedBlocks : {},
     blockDurations: plan.blockDurations && typeof plan.blockDurations === 'object' ? plan.blockDurations : {},
+    blockNotes: normalizeBlockNotes(plan.blockNotes),
     topicStatus: plan.topicStatus && typeof plan.topicStatus === 'object' ? plan.topicStatus : {},
     subjectNotes: plan.subjectNotes && typeof plan.subjectNotes === 'object' ? plan.subjectNotes : {},
     currentTopic: plan.currentTopic && typeof plan.currentTopic === 'object' ? plan.currentTopic : {},

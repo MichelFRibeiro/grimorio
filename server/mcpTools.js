@@ -2327,6 +2327,7 @@ export const toolsDefinition = [
       wrongAnswers: z.number().optional().describe('Quantidade de erros (se omitido, calcula total - acertos)'),
       durationMinutes: z.number().optional().default(30).describe('Tempo dedicado em minutos'),
       notes: z.string().optional().describe('Observações, pontos de melhoria ou pegadinhas'),
+      sessionNote: z.string().optional().describe('Anotação facultativa do que foi feito neste bloco AGU. Vazio não grava nota.'),
       notebookUrl: z.string().optional().describe('Link do caderno de questões (Qconcursos, Tec, etc.)'),
       date: z.string().optional().describe('Data no formato YYYY-MM-DD')
     },

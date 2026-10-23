@@ -829,6 +829,7 @@ export function createDefaultAguPlan(todayStr) {
     staleDays: AGU_STALE_DAYS,
     completedBlocks: {},
     blockDurations: {},
+    blockNotes: {},
     topicStatus: {},
     subjectNotes: {},
     currentTopic: {},

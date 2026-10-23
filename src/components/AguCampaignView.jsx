@@ -37,7 +37,7 @@ import {
   AGU_TARGET_ACCURACY,
   AGU_THEORY_URL
 } from '../data/aguCurriculum.js';
-import { buildAguHomeostasisStudyVictory, summarizePlan } from '../utils/aguCycle.js';
+import { buildAguHomeostasisStudyVictory, MAX_AGU_BLOCK_NOTE_LENGTH, MAX_AGU_BLOCK_NOTES_STORED, summarizePlan } from '../utils/aguCycle.js';
 import { getSaoPauloDateStr } from '../utils/timeUtils.js';
 import { AguStudyLoadChart } from './AguStudyLoadChart';
 import { PlanHomeostasisVictoryButton } from './PlanHomeostasisVictoryButton';
@@ -297,6 +297,7 @@ export function AguCampaignView({
   const [logTotal, setLogTotal] = useState('');
   const [logCorrect, setLogCorrect] = useState('');
   const [logMinutes, setLogMinutes] = useState('');
+  const [logNote, setLogNote] = useState('');
   const [logError, setLogError] = useState('');
   const [screen, setScreen] = useState('hoje');
   const todayBlockKeys = (summary.today?.blocks || []).map((block) => block.key);
@@ -322,15 +323,17 @@ export function AguCampaignView({
     setLogTotal(remaining);
     setLogCorrect('0');
     setLogMinutes(live > 0 ? String(live) : '');
+    setLogNote('');
     setLogError('');
   };
 
   const closeLog = () => {
     setLogBlock(null);
+    setLogNote('');
     setLogError('');
   };
 
-  const submitLog = (e) => {
+  const submitLog = async (e) => {
     e.preventDefault();
     if (!logBlock) return;
     const total = parseInt(logTotal, 10);
@@ -351,8 +354,11 @@ export function AguCampaignView({
       return;
     }
     consumeBlockTimer(logBlock.key);
-    if (total > 0 && onAddQuestions) {
-      onAddQuestions({
+    const userNote = logNote.trim();
+    const campaignNote = `Campanha AGU · ${logBlock.kindMeta?.label || 'bloco'} · ${logBlock.topicName || ''} · ${total}/${logBlock.target || AGU_BLOCK_QUESTION_TARGET} q`;
+    const willLogQuestions = total > 0 && Boolean(onAddQuestions);
+    if (willLogQuestions) {
+      await onAddQuestions({
         category: 'Estudos',
         subject: logBlock.subject?.name || 'Geral',
         topic: logBlock.topicName || logBlock.kindMeta?.label || '',
@@ -366,14 +372,18 @@ export function AguCampaignView({
         totalQuestions: total,
         correctAnswers: correct,
         durationMinutes,
-        notes: `Campanha AGU · ${logBlock.kindMeta?.label || 'bloco'} · ${logBlock.topicName || ''} · ${total}/${logBlock.target || AGU_BLOCK_QUESTION_TARGET} q`,
+        notes: userNote ? `${campaignNote}\n${userNote}` : campaignNote,
+        sessionNote: userNote || undefined,
         notebookUrl: logBlock.subject?.tecCadernoUrl || '',
         date: todayStr
       });
     }
     const addDuration = onAddBlockDuration || onSetBlockDuration;
     if (addDuration && durationMinutes > 0) {
-      addDuration(logBlock.key, durationMinutes, { mode: 'add' });
+      await addDuration(logBlock.key, durationMinutes, {
+        mode: 'add',
+        note: userNote || undefined
+      });
     }
     closeLog();
   };
@@ -863,6 +873,17 @@ export function AguCampaignView({
               placeholder="ex: 33"
               style={inputStyle}
             />
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, margin: '12px 0 6px' }}>
+              Notas (opcional)
+            </label>
+            <textarea
+              value={logNote}
+              maxLength={MAX_AGU_BLOCK_NOTE_LENGTH}
+              rows={3}
+              onChange={(e) => setLogNote(e.target.value)}
+              placeholder="Como foi este bloco? Pode deixar em branco."
+              style={noteFieldStyle}
+            />
             {logError && <p style={{ color: '#fb7185', fontSize: '0.8rem', marginTop: '10px' }}>{logError}</p>}
             <div style={{ display: 'flex', gap: '8px', marginTop: '16px', justifyContent: 'flex-end' }}>
               <button type="button" onClick={closeLog} style={ghostBtnStyle}>Cancelar</button>
@@ -993,6 +1014,7 @@ function AguBlockCard({ block, index = 0, aguPlan, onToggle, onLog, onSetDuratio
           )}
         </div>
       </div>
+      <BlockNote note={block.note} />
       <div style={{ marginTop: '12px' }}>
         <ActivityTimerBox
           kind="agu"
@@ -1102,6 +1124,7 @@ function BlockHistoryList({ blocks, onUpdateBlock, onDeleteBlock }) {
   const [editTotal, setEditTotal] = useState('0');
   const [editCorrect, setEditCorrect] = useState('0');
   const [editMinutes, setEditMinutes] = useState('0');
+  const [editNote, setEditNote] = useState('');
   const [editError, setEditError] = useState('');
 
   const openEdit = (block) => {
@@ -1113,6 +1136,7 @@ function BlockHistoryList({ blocks, onUpdateBlock, onDeleteBlock }) {
     setEditTotal(String(block.totalQuestions || 0));
     setEditCorrect(String(block.correctAnswers || 0));
     setEditMinutes(String(block.durationMinutes || 0));
+    setEditNote(block.note || '');
     setEditError('');
   };
 
@@ -1148,7 +1172,8 @@ function BlockHistoryList({ blocks, onUpdateBlock, onDeleteBlock }) {
       kind: editKind,
       totalQuestions: total,
       correctAnswers: correct,
-      durationMinutes: minutes
+      durationMinutes: minutes,
+      note: editNote
     });
     setEditing(null);
   };
@@ -1180,6 +1205,7 @@ function BlockHistoryList({ blocks, onUpdateBlock, onDeleteBlock }) {
                 <span>{formatStudyDuration(block.durationMinutes)}</span>
                 <span style={{ color: block.done ? '#10b981' : '#fbbf24' }}>{block.done ? 'concluído' : 'em aberto'}</span>
               </div>
+              <BlockNote note={block.note} />
               <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
                 {onUpdateBlock && (
                   <button type="button" onClick={() => openEdit(block)} style={ghostBtnStyle}>
@@ -1250,6 +1276,15 @@ function BlockHistoryList({ blocks, onUpdateBlock, onDeleteBlock }) {
             <input type="number" min="0" value={editCorrect} onChange={(e) => setEditCorrect(e.target.value)} style={inputStyle} />
             <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, margin: '12px 0 6px' }}>Tempo estudado (min)</label>
             <input type="number" min="0" value={editMinutes} onChange={(e) => setEditMinutes(e.target.value)} style={inputStyle} />
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, margin: '12px 0 6px' }}>Notas (opcional)</label>
+            <textarea
+              value={editNote}
+              maxLength={MAX_AGU_BLOCK_NOTES_STORED}
+              rows={3}
+              onChange={(e) => setEditNote(e.target.value)}
+              placeholder="Como foi este bloco? Pode deixar em branco."
+              style={noteFieldStyle}
+            />
             {editError && <p style={{ color: '#fb7185', fontSize: '0.8rem', marginTop: '10px' }}>{editError}</p>}
             <div style={{ display: 'flex', gap: '8px', marginTop: '16px', justifyContent: 'flex-end' }}>
               <button type="button" onClick={() => setEditing(null)} style={ghostBtnStyle}>Cancelar</button>
@@ -1304,6 +1339,31 @@ function linkBtnStyle(color) {
 }
 
 
+
+function BlockNote({ note }) {
+  const text = String(note || '').trim();
+  if (!text) return null;
+  return (
+    <p style={{ fontSize: '0.8rem', color: '#e2e8f0', marginTop: '8px', lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+      <span style={{ display: 'block', fontSize: '0.68rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '2px' }}>Notas</span>
+      {text}
+    </p>
+  );
+}
+
+const noteFieldStyle = {
+  width: '100%',
+  resize: 'vertical',
+  padding: '10px 12px',
+  borderRadius: '10px',
+  background: '#1a2030',
+  border: '1px solid rgba(245, 158, 11, 0.35)',
+  color: 'var(--tpl-ink)',
+  fontSize: '0.95rem',
+  fontWeight: 500,
+  fontFamily: 'inherit',
+  lineHeight: 1.45
+};
 
 const inputStyle = {
   width: '100%',

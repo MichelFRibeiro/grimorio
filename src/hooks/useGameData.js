@@ -1702,7 +1702,12 @@ export function useGameData() {
     playClick();
     const mode = options.mode === 'add' ? 'add' : 'set';
     const result = await mutate('/api/agu-plan/block-duration', {
-      body: { key, durationMinutes, mode },
+      body: {
+        key,
+        durationMinutes,
+        mode,
+        ...(options.note ? { note: options.note } : {})
+      },
       refreshOnSuccess: false
     });
     if (!result) return;
@@ -1710,8 +1715,8 @@ export function useGameData() {
     fetchState();
   };
 
-  const addAguBlockDuration = async (key, durationMinutes) => {
-    await setAguBlockDuration(key, durationMinutes, { mode: 'add' });
+  const addAguBlockDuration = async (key, durationMinutes, options = {}) => {
+    await setAguBlockDuration(key, durationMinutes, { ...options, mode: 'add' });
   };
 
   const updateAguBlock = async (payload) => {
