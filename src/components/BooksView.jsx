@@ -40,6 +40,11 @@ import { ReadingLoadChart } from './ReadingLoadChart';
 import { PlanHomeostasisVictoryButton } from './PlanHomeostasisVictoryButton';
 import { buildReadingHomeostasisVictory } from '../utils/homeostasis';
 
+/* #fff (ou um acento chapado) junto de background entra no remap de "rótulo
+   de botão" e a fonte vira tinta escura sobre o fundo escuro do campo.
+   O token do tema não entra nesse seletor e acompanha claro/escuro. */
+const sessionFieldInk = 'var(--tpl-ink)';
+
 export function BooksView({
   books,
   readingSessions,
@@ -1943,7 +1948,7 @@ export function BooksView({
                       borderRadius: '10px',
                       background: '#1a2030',
                       border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: '#fff',
+                      color: sessionFieldInk,
                       fontSize: '1rem',
                       fontFamily: 'var(--font-mono)'
                     }}
@@ -1971,7 +1976,7 @@ export function BooksView({
                       borderRadius: '10px',
                       background: '#1a2030',
                       border: '1px solid rgba(16, 185, 129, 0.4)',
-                      color: '#34d399',
+                      color: sessionFieldInk,
                       fontWeight: 800,
                       fontSize: '1rem',
                       fontFamily: 'var(--font-mono)'
@@ -2019,7 +2024,7 @@ export function BooksView({
                         borderRadius: '10px',
                         background: '#1a2030',
                         border: '1px solid rgba(255, 255, 255, 0.15)',
-                        color: '#fff',
+                        color: sessionFieldInk,
                         fontSize: '0.88rem'
                       }}
                     />
@@ -2040,7 +2045,7 @@ export function BooksView({
                           borderRadius: '8px',
                           background: '#1a2030',
                           border: '1px solid rgba(245, 158, 11, 0.3)',
-                          color: '#fbbf24',
+                          color: sessionFieldInk,
                           fontWeight: 700,
                           fontSize: '0.88rem',
                           fontFamily: 'var(--font-mono)'
@@ -2060,7 +2065,7 @@ export function BooksView({
                           borderRadius: '8px',
                           background: '#1a2030',
                           border: '1px solid rgba(255, 255, 255, 0.12)',
-                          color: '#fff',
+                          color: sessionFieldInk,
                           fontSize: '0.85rem'
                         }}
                       />
@@ -2156,7 +2161,7 @@ export function BooksView({
                     borderRadius: '10px',
                     background: '#1a2030',
                     border: '1px solid rgba(255, 255, 255, 0.12)',
-                    color: '#fff',
+                    color: sessionFieldInk,
                     fontSize: '0.88rem'
                   }}
                 />
@@ -2720,7 +2725,7 @@ export function BooksView({
                       borderRadius: '10px',
                       background: '#1a2030',
                       border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: '#fff',
+                      color: sessionFieldInk,
                       fontSize: '1rem',
                       fontFamily: 'var(--font-mono)'
                     }}
@@ -2747,7 +2752,7 @@ export function BooksView({
                       borderRadius: '10px',
                       background: '#1a2030',
                       border: '1px solid rgba(56, 189, 248, 0.4)',
-                      color: '#38bdf8',
+                      color: sessionFieldInk,
                       fontWeight: 800,
                       fontSize: '1rem',
                       fontFamily: 'var(--font-mono)'
@@ -2770,7 +2775,7 @@ export function BooksView({
                       borderRadius: '10px',
                       background: '#1a2030',
                       border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: '#fff',
+                      color: sessionFieldInk,
                       fontSize: '1rem',
                       fontFamily: 'var(--font-mono)'
                     }}
@@ -2817,7 +2822,7 @@ export function BooksView({
                         borderRadius: '10px',
                         background: '#1a2030',
                         border: '1px solid rgba(255, 255, 255, 0.15)',
-                        color: '#fff',
+                        color: sessionFieldInk,
                         fontSize: '0.88rem'
                       }}
                     />
@@ -2837,7 +2842,7 @@ export function BooksView({
                           borderRadius: '8px',
                           background: '#1a2030',
                           border: '1px solid rgba(245, 158, 11, 0.3)',
-                          color: '#fbbf24',
+                          color: sessionFieldInk,
                           fontWeight: 700,
                           fontSize: '0.88rem',
                           fontFamily: 'var(--font-mono)'
@@ -2857,7 +2862,7 @@ export function BooksView({
                           borderRadius: '8px',
                           background: '#1a2030',
                           border: '1px solid rgba(255, 255, 255, 0.12)',
-                          color: '#fff',
+                          color: sessionFieldInk,
                           fontSize: '0.85rem'
                         }}
                       />
@@ -2952,7 +2957,7 @@ export function BooksView({
                     borderRadius: '10px',
                     background: '#1a2030',
                     border: '1px solid rgba(255, 255, 255, 0.12)',
-                    color: '#fff',
+                    color: sessionFieldInk,
                     fontSize: '0.88rem'
                   }}
                 />
@@ -3058,7 +3063,7 @@ export function BooksView({
                     borderRadius: '10px',
                     background: '#1a2030',
                     border: '1px solid rgba(255, 255, 255, 0.15)',
-                    color: '#fff',
+                    color: sessionFieldInk,
                     fontSize: '0.9rem',
                     lineHeight: 1.5,
                     resize: 'vertical'
@@ -3081,7 +3086,7 @@ export function BooksView({
                     borderRadius: '10px',
                     background: '#1a2030',
                     border: '1px solid rgba(245, 158, 11, 0.3)',
-                    color: '#fbbf24',
+                    color: sessionFieldInk,
                     fontWeight: 700,
                     fontSize: '0.95rem',
                     fontFamily: 'var(--font-mono)'
@@ -3104,7 +3109,7 @@ export function BooksView({
                     borderRadius: '10px',
                     background: '#1a2030',
                     border: '1px solid rgba(255, 255, 255, 0.15)',
-                    color: '#fff',
+                    color: sessionFieldInk,
                     fontSize: '0.9rem'
                   }}
                 />
