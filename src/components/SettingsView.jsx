@@ -1,14 +1,62 @@
 import React, { useEffect, useState } from 'react';
-import { Settings, RotateCcw, Check } from 'lucide-react';
+import { Settings, RotateCcw, Check, ListOrdered, X } from 'lucide-react';
 import { FEATURE_SETTINGS, defaultFeatureSettings } from '../utils/featureSettings';
 import { THEMES, normalizeTheme } from '../utils/theme';
 
-export function SettingsView({ settings, onChange, theme, onChangeTheme, playClick }) {
+/** Um item do seletor da rotina da tela inicial. */
+function RoutineChoice({ routine, selected, disabled, onPick }) {
+  const progress = routine.progress || { total: 0, done: 0 };
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      aria-label={`Mostrar a rotina ${routine.title} na tela inicial`}
+      className={`settings-theme settings-routine${selected ? ' is-selected' : ''}`}
+      disabled={disabled}
+      onClick={() => onPick(routine.id)}
+    >
+      <span className="settings-theme-body">
+        <span className="settings-theme-name">
+          <ListOrdered size={14} aria-hidden="true" />
+          {routine.title}
+          {selected && (
+            <span className="settings-theme-check" aria-hidden="true">
+              <Check size={12} /> Na tela inicial
+            </span>
+          )}
+        </span>
+        <span className="settings-theme-desc">
+          {!routine.progress
+            ? 'A tela inicial fica sem o quadro da rotina'
+            : progress.total
+              ? `${progress.done} de ${progress.total} passos feitos hoje`
+              : 'Rotina ainda sem passos'}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+export function SettingsView({
+  settings,
+  onChange,
+  theme,
+  onChangeTheme,
+  playClick,
+  routines = [],
+  homeRoutineId = null,
+  onChangeHomeRoutine,
+  onOpenRoutines,
+  routinesEnabled = true
+}) {
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
   const [themeBusy, setThemeBusy] = useState(null);
   const [themeError, setThemeError] = useState('');
   const [shownTheme, setShownTheme] = useState(normalizeTheme(theme));
+  const [routineBusy, setRoutineBusy] = useState(false);
+  const [routineError, setRoutineError] = useState('');
 
   // o valor em vigor pode mudar por fora (outra aba, perfil); acompanha.
   useEffect(() => {
@@ -51,6 +99,22 @@ export function SettingsView({ settings, onChange, theme, onChangeTheme, playCli
       setThemeError(err?.message || 'Não foi possível trocar o tema.');
     } finally {
       setThemeBusy(null);
+    }
+  };
+
+  const chooseRoutine = async (routineId) => {
+    if (!onChangeHomeRoutine || routineBusy) return;
+    const next = routineId || null;
+    if (next === (homeRoutineId || null)) return;
+    if (playClick) playClick();
+    setRoutineBusy(true);
+    setRoutineError('');
+    try {
+      await onChangeHomeRoutine(next);
+    } catch (err) {
+      setRoutineError(err?.message || 'Não foi possível trocar a rotina da tela inicial.');
+    } finally {
+      setRoutineBusy(false);
     }
   };
 
@@ -149,6 +213,61 @@ export function SettingsView({ settings, onChange, theme, onChangeTheme, playCli
           })}
         </div>
         {themeError && <p className="settings-error" role="alert">{themeError}</p>}
+      </section>
+
+      <section className="glass-panel settings-themes" aria-labelledby="settings-routine-title">
+        <div className="settings-themes-head">
+          <h3 id="settings-routine-title">Rotina da tela inicial</h3>
+          <p>
+            A rotina escolhida aparece logo abaixo de "Vitórias Planejadas para o Dia",
+            com os passos de hoje e o próximo a fazer. A escolha fica no seu perfil e
+            acompanha a conta em qualquer aparelho.
+          </p>
+        </div>
+        {!routinesEnabled ? (
+          <p className="settings-hint">
+            A aba Rotinas está desligada. Ligue "Rotinas" nos interruptores abaixo para escolher uma rotina.
+          </p>
+        ) : routines.length === 0 ? (
+          <p className="settings-hint">
+            Você ainda não tem rotinas.{' '}
+            {onOpenRoutines ? (
+              <button type="button" className="settings-link" onClick={() => onOpenRoutines()}>
+                Criar a primeira rotina
+              </button>
+            ) : null}
+          </p>
+        ) : (
+          <div className="settings-theme-grid" role="radiogroup" aria-labelledby="settings-routine-title">
+            <RoutineChoice
+              routine={{ id: '', title: 'Nenhuma', progress: null }}
+              selected={!homeRoutineId}
+              disabled={routineBusy}
+              onPick={() => chooseRoutine(null)}
+            />
+            {routines.map((routine) => (
+              <RoutineChoice
+                key={routine.id}
+                routine={routine}
+                selected={routine.id === homeRoutineId}
+                disabled={routineBusy}
+                onPick={chooseRoutine}
+              />
+            ))}
+          </div>
+        )}
+        {homeRoutineId && routines.length ? (
+          <button
+            type="button"
+            className="settings-link"
+            onClick={() => chooseRoutine(null)}
+            disabled={routineBusy}
+            style={{ marginTop: '10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <X size={13} /> Não mostrar nenhuma rotina na tela inicial
+          </button>
+        ) : null}
+        {routineError && <p className="settings-error" role="alert">{routineError}</p>}
       </section>
 
       {groups.map((group) => (

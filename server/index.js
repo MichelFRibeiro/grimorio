@@ -132,6 +132,7 @@ import {
   updateDailyVictory
 } from '../src/utils/dailyVictories.js';
 import { syncDailyVictoriesFromActivity } from './dailyVictorySync.js';
+import { sanitizeRoutines } from '../src/utils/routines.js';
 import {
   completeQuest as domainCompleteQuest,
   updateQuestDuration as domainUpdateQuestDuration,
@@ -173,12 +174,18 @@ import {
 } from './domain/activities.js';
 import {
   advanceRoutine,
+  completeRoutineVictory,
   createRoutine,
   deleteRoutine,
+  listRoutinePlans,
   listRoutines,
+  planRoutineVictory,
   removeHabitFromRoutines,
+  reopenRoutineVictory,
+  routineVictoryReadiness,
   updateRoutine
 } from './domain/routines.js';
+import { HOME_ROUTINE_FIELD, findRoutineById, normalizeHomeRoutineId } from '../src/utils/homeRoutine.js';
 import {
   createMindMap,
   addMindMapNode,
@@ -677,7 +684,7 @@ app.get('/api/rankings', (req, res) => {
 app.post('/api/profile', (req, res) => {
   try {
     const db = getDb();
-    const { name, avatar, title, theme, currentLocation, locationManual, featureSettings } = req.body;
+    const { name, avatar, title, theme, currentLocation, locationManual, featureSettings, homeRoutineId } = req.body;
     if (name) db.userProfile.name = name;
     if (avatar) db.userProfile.avatar = avatar;
     if (title) db.userProfile.title = title;
@@ -700,6 +707,16 @@ app.post('/api/profile', (req, res) => {
     }
     if (locationManual !== undefined) {
       db.userProfile.locationManual = !!locationManual;
+    }
+    // Rotina da tela inicial (Configurações). `null`/'' limpam a escolha;
+    // um id precisa existir — gravar uma rotina inexistente só faria o cartão
+    // da tela inicial nascer quebrado.
+    if (homeRoutineId !== undefined) {
+      const nextId = normalizeHomeRoutineId(homeRoutineId);
+      if (nextId && !findRoutineById(sanitizeRoutines(db.routines, db.habits || []), nextId)) {
+        return res.status(400).json({ error: 'Rotina não encontrada.' });
+      }
+      db.userProfile[HOME_ROUTINE_FIELD] = nextId;
     }
     // Interruptor de Configurações: só o que aparece muda. O restante do
     // perfil (e os dados de cada função) fica intocado.
@@ -2206,6 +2223,113 @@ app.delete('/api/routines/:id', (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ------------------------------------------
+// Execução integral da rotina como vitória do dia
+// ------------------------------------------
+app.get('/api/routines/victories', (req, res) => {
+  try {
+    const db = getDb();
+    const todayStr = getSaoPauloDateStr();
+    res.json({
+      success: true,
+      today: todayStr,
+      plans: listRoutinePlans(db, todayStr)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/routines/:id/readiness', (req, res) => {
+  try {
+    const db = getDb();
+    const readiness = routineVictoryReadiness(db, req.params.id, req.query?.date || getSaoPauloDateStr());
+    if (readiness.status === 'missing') {
+      return res.status(404).json({ error: readiness.error || 'Rotina não encontrada.' });
+    }
+    res.json({ success: true, readiness });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/routines/:id/plan', (req, res) => {
+  try {
+    const db = getDb();
+    const result = planRoutineVictory(db, req.params.id, {
+      date: req.body?.date,
+      category: req.body?.category
+    });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({
+      success: true,
+      victory: result.victory,
+      created: result.created,
+      readiness: result.readiness,
+      todaySummary: summarizeDay(db.dailyVictories, result.victory.date, db.dailyVictoryBonuses),
+      today: buildTodayPayload(db)
+    });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+app.post('/api/routines/:id/complete', async (req, res) => {
+  try {
+    const db = getDb();
+    const result = await completeRoutineVictory(db, req.params.id, {
+      date: req.body?.date || getSaoPauloDateStr(),
+      note: req.body?.note
+    });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({
+      success: true,
+      victory: result.victory,
+      willComplete: result.willComplete,
+      stateUnchanged: result.stateUnchanged,
+      bonusAwardedNow: result.bonusAwardedNow,
+      bonusRevertedNow: result.bonusRevertedNow,
+      rewardResult: result.rewardResult,
+      bonusRewardResult: result.bonusRewardResult,
+      chest: result.chest?.chest || null,
+      readiness: result.readiness,
+      todaySummary: summarizeDay(result.list, result.todayStr, result.bonuses),
+      today: buildTodayPayload(db),
+      analytics: computeAnalytics()
+    });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+app.post('/api/routines/:id/reopen', async (req, res) => {
+  try {
+    const db = getDb();
+    const result = await reopenRoutineVictory(db, req.params.id, {
+      date: req.body?.date || getSaoPauloDateStr()
+    });
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    saveDb(db);
+    res.json({
+      success: true,
+      victory: result.victory,
+      willComplete: result.willComplete,
+      stateUnchanged: result.stateUnchanged,
+      bonusRevertedNow: result.bonusRevertedNow,
+      rewardResult: result.rewardResult,
+      bonusRewardResult: result.bonusRewardResult,
+      readiness: result.readiness,
+      todaySummary: summarizeDay(result.list, result.todayStr, result.bonuses),
+      today: buildTodayPayload(db),
+      analytics: computeAnalytics()
+    });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
   }
 });
 

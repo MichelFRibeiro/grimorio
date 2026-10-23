@@ -4151,6 +4151,47 @@ kbd {
   outline-offset: 2px;
 }
 
+.settings-hint {
+  margin: 0;
+  color: var(--tpl-soft, #94a3b8);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.settings-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--tpl-accent, #fbbf24);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.settings-link:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Seletor da rotina da tela inicial: mesma linguagem dos cartões de tema,
+   sem a miniatura (a rotina é texto e progresso). */
+.settings-routine {
+  gap: 6px;
+}
+
+.settings-routine .settings-theme-body {
+  gap: 4px;
+}
+
+.settings-routine .settings-theme-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 /* ---------------------------------------------------------------------------
    Aparência: escolha do tema em Configurações.
    Usa só os tokens --tpl-* de cada tema (declarados em

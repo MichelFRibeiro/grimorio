@@ -83,6 +83,9 @@ html[data-theme="claro"] [style*="linear-gradient(135deg, rgba(251, 191, 36, 0.0
 html[data-theme="claro"] [style*="linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(19, 23, 34, 0.9) 100%)"] { background: linear-gradient(135deg, rgba(154, 52, 18, 0.08) 0%, rgba(251, 247, 238, 0.96) 100%) !important; }
 html[data-theme="claro"] [style*="linear-gradient(135deg, rgba(244, 63, 94, 0.08) 0%, rgba(19, 23, 34, 0.9) 100%)"] { background: linear-gradient(135deg, rgba(159, 18, 57, 0.08) 0%, rgba(251, 247, 238, 0.96) 100%) !important; }
 html[data-theme="claro"] [style*="linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(19, 23, 34, 0.92) 100%)"] { background: linear-gradient(135deg, rgba(107, 33, 168, 0.08) 0%, rgba(251, 247, 238, 0.96) 100%) !important; }
+html[data-theme="claro"] [style*="linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(19, 23, 34, 0.92) 100%)"] { background: linear-gradient(135deg, rgba(29, 111, 138, 0.08) 0%, rgba(251, 247, 238, 0.96) 100%) !important; }
+html[data-theme="claro"] [style*="linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(19, 23, 34, 0.92) 100%)"] { background: linear-gradient(135deg, rgba(63, 125, 78, 0.1) 0%, rgba(251, 247, 238, 0.96) 100%) !important; }
+html[data-theme="claro"] [style*="linear-gradient(135deg, rgba(56, 189, 248, 0.06) 0%, rgba(19, 23, 34, 0.92) 100%)"] { background: linear-gradient(135deg, rgba(29, 111, 138, 0.06) 0%, rgba(251, 247, 238, 0.96) 100%) !important; }
 html[data-theme="claro"] [style*="linear-gradient(160deg, rgba(6, 182, 212, 0.12) 0%, rgba(19, 23, 34, 0.94) 42%, rgba(168, 85, 247, 0.1) 100%)"] { background: linear-gradient(160deg, rgba(14, 116, 144, 0.1) 0%, rgba(251, 247, 238, 0.97) 42%, rgba(107, 33, 168, 0.08) 100%) !important; }
 html[data-theme="claro"] [style*="linear-gradient(rgba(30, 27, 20, 0.98) 0%, rgba(15, 17, 26, 0.98) 100%)"] { background: linear-gradient(180deg, rgba(251, 244, 228, 0.98) 0%, rgba(251, 247, 238, 0.98) 100%) !important; }
 

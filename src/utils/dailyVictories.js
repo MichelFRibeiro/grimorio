@@ -17,15 +17,73 @@ export const DAILY_VICTORY_OVERFLOW_SOURCES = {
   scripture: 'homeostasis-scripture'
 };
 
+/**
+ * Execução integral de uma rotina planejada como vitória do dia.
+ *
+ * A rotina planejada é uma vaga MANUAL (uma das 3 do dia): é uma tarefa do
+ * herói, não uma meta de homeostase. O `routineId` é o que liga a vitória à
+ * execução; `source: 'routine'` é só a etiqueta que o cartão usa para desenhar
+ * a linha com o progresso da rotina em vez de um título solto.
+ *
+ * Planejar não paga nada. Conquistar paga como uma vitória comum, mas o
+ * servidor só aceita quando todos os passos da rotina foram cumpridos hoje.
+ */
+export const ROUTINE_VICTORY_SOURCE = 'routine';
+
+const ROUTINE_VICTORY_PREFIX = 'Rotina inteira: ';
+
+/** Título exibido da execução de uma rotina nas Vitórias do dia. */
+export function normalizeRoutineVictoryTitle(title) {
+  const name = String(title || '').trim() || 'Rotina';
+  return `${ROUTINE_VICTORY_PREFIX}${name}`.slice(0, 160);
+}
+
+export function isRoutineVictory(victory) {
+  return !!victory && victory.source === ROUTINE_VICTORY_SOURCE && !!victory.routineId;
+}
+
 export function isOverflowDailyVictorySource(source) {
   return Object.values(DAILY_VICTORY_OVERFLOW_SOURCES).includes(source)
     || isHabitHomeostasisSource(source);
 }
 
+/**
+ * Teto de vagas do dia para a origem. A execução de uma rotina ocupa vaga
+ * manual: o dia continua com 3 vagas no total (tarefas e rotinas juntas).
+ */
 export function maxDailyVictoriesForSource(source) {
   return isOverflowDailyVictorySource(source)
     ? EXTENDED_MAX_DAILY_VICTORIES
     : MAX_DAILY_VICTORIES;
+}
+
+/** Vagas manuais ocupadas no dia (vitórias sem origem de homeostase). */
+export function countManualVictoriesForDate(list = [], dateStr) {
+  return listVictoriesForDate(list, dateStr)
+    .filter(item => !isOverflowDailyVictorySource(item.source))
+    .length;
+}
+
+export function findVictoryForRoutine(list = [], routineId, dateStr) {
+  const id = String(routineId || '').trim();
+  if (!id) return null;
+  return listVictoriesForDate(list, dateStr)
+    .find(item => item.source === ROUTINE_VICTORY_SOURCE && item.routineId === id) || null;
+}
+
+/** Toda rotina planejada para o dia (as linhas que o cartão desenha). */
+export function listRoutineVictoriesForDate(list = [], dateStr) {
+  return listVictoriesForDate(list, dateStr)
+    .filter(item => item.source === ROUTINE_VICTORY_SOURCE && item.routineId);
+}
+
+/**
+ * O dia está cheio para mais uma vaga manual? Conta só as tarefas do herói:
+ * leitura e estudo pela homeostase têm teto próprio (5) e não podem ocupar a
+ * vaga da rotina nem de uma tarefa comum.
+ */
+export function manualVictoriesFull(list = [], dateStr) {
+  return countManualVictoriesForDate(list, dateStr) >= MAX_DAILY_VICTORIES;
 }
 
 export const DAILY_VICTORY_REWARDS = {
@@ -145,6 +203,9 @@ export function summarizeDay(list = [], dateStr, bonuses = {}) {
   const items = listVictoriesForDate(list, dateStr);
   const completedCount = items.filter(item => item.completed).length;
   const plannedCount = items.length;
+  // Vaga manual (as 3 do dia) é uma coisa; o dia pode passar delas com as
+  // vitórias de homeostase. Somar tudo subestimava as vagas livres.
+  const manualCount = countManualVictoriesForDate(list, dateStr);
   const outcome = classifyDayOutcome(plannedCount, completedCount);
   const displayCap = Math.max(plannedCount, MAX_DAILY_VICTORIES);
   return {
@@ -152,10 +213,11 @@ export function summarizeDay(list = [], dateStr, bonuses = {}) {
     items,
     plannedCount,
     completedCount,
+    manualCount,
     displayCap,
-    remainingSlots: Math.max(0, MAX_DAILY_VICTORIES - plannedCount),
+    remainingSlots: Math.max(0, MAX_DAILY_VICTORIES - manualCount),
     remainingOverflowSlots: Math.max(0, EXTENDED_MAX_DAILY_VICTORIES - plannedCount),
-    canAdd: plannedCount < MAX_DAILY_VICTORIES,
+    canAdd: manualCount < MAX_DAILY_VICTORIES,
     canAddOverflow: plannedCount < EXTENDED_MAX_DAILY_VICTORIES,
     allComplete: plannedCount > 0 && completedCount === plannedCount,
     tripleComplete: plannedCount >= MAX_DAILY_VICTORIES && completedCount >= MAX_DAILY_VICTORIES,
@@ -280,6 +342,16 @@ export function sanitizeDailyVictory(raw) {
   const questId = String(raw.questId || '').trim();
   if (questId) {
     victory.questId = questId;
+  }
+  // Execução de rotina: o `routineId` é o vínculo com a execução do dia.
+  // Vitória marcada como rotina sem rotina não tem o que conferir — o
+  // registro órfão é descartado em vez de virar uma tarefa comum.
+  const routineId = String(raw.routineId || '').trim();
+  if (routineId) {
+    victory.source = ROUTINE_VICTORY_SOURCE;
+    victory.routineId = routineId;
+  } else if (raw.source === ROUTINE_VICTORY_SOURCE) {
+    return null;
   }
   return victory;
 }
@@ -479,16 +551,32 @@ export function createDailyVictory(list = [], input = {}, { today = getSaoPauloD
   }
 
   const current = sanitizeDailyVictories(list);
-  const source = isOverflowDailyVictorySource(input.source) ? input.source : undefined;
+  const routineId = String(input.routineId || '').trim() || undefined;
+  const source = routineId
+    ? ROUTINE_VICTORY_SOURCE
+    : (isOverflowDailyVictorySource(input.source) ? input.source : undefined);
   const habitId = String(input.habitId || '').trim() || habitIdFromHomeostasisSource(source) || undefined;
   const questId = String(input.questId || '').trim() || undefined;
   if (questId && isQuestPlannedForDate(current, questId, date)) {
     throw new Error('Esta missão já está nas vitórias planejadas deste dia.');
   }
+  if (source === ROUTINE_VICTORY_SOURCE) {
+    const existing = findVictoryForRoutine(current, routineId, date);
+    if (existing) {
+      throw new Error('Esta rotina já está nas vitórias planejadas deste dia.');
+    }
+  }
   const cap = maxDailyVictoriesForSource(source);
-  const count = countVictoriesForDate(current, date);
+  // O teto manual conta só as tarefas do herói: uma leitura pela homeostase
+  // não pode encher as vagas e deixar a rotina de fora.
+  const count = isOverflowDailyVictorySource(source)
+    ? countVictoriesForDate(current, date)
+    : countManualVictoriesForDate(current, date);
   if (count >= cap) {
-    throw new Error(`Já existem ${count} vitórias planejadas para ${formatDailyVictoryDate(date)}.`);
+    throw new Error(isOverflowDailyVictorySource(source)
+      ? `Já existem ${count} vitórias planejadas para ${formatDailyVictoryDate(date)}.`
+      : `Já existem ${count} vitórias planejadas para ${formatDailyVictoryDate(date)} `
+        + `(limite de ${MAX_DAILY_VICTORIES} tarefas do dia).`);
   }
 
   const nowIso = new Date().toISOString();
@@ -500,12 +588,14 @@ export function createDailyVictory(list = [], input = {}, { today = getSaoPauloD
     source,
     habitId,
     questId,
+    routineId,
     completed: false,
     completedAt: null,
     note: '',
     createdAt: nowIso,
     updatedAt: nowIso
   });
+  if (!victory) throw new Error('Não foi possível planejar esta vitória.');
 
   return {
     list: [...current, victory],
@@ -540,9 +630,15 @@ export function updateDailyVictory(list = [], id, patch = {}, { today = getSaoPa
       throw new Error('Só é possível mover vitórias para hoje ou para amanhã.');
     }
     const moveCap = maxDailyVictoriesForSource(existing.source);
-    const nextCount = countVictoriesForDate(current.filter(item => item.id !== id), nextDate);
+    const others = current.filter(item => item.id !== id);
+    const nextCount = isOverflowDailyVictorySource(existing.source)
+      ? countVictoriesForDate(others, nextDate)
+      : countManualVictoriesForDate(others, nextDate);
     if (nextCount >= moveCap) {
       throw new Error(`Já existem ${nextCount} vitórias planejadas para ${formatDailyVictoryDate(nextDate)}.`);
+    }
+    if (isRoutineVictory(existing) && findVictoryForRoutine(others, existing.routineId, nextDate)) {
+      throw new Error('Esta rotina já está nas vitórias planejadas do outro dia.');
     }
     existing.date = nextDate;
   }
@@ -672,4 +768,31 @@ export function deleteDailyVictory(list = [], bonuses = {}, id) {
 
 export function bonusEntityId(dateStr) {
   return `dv-bonus-${dateStr}`;
+}
+
+// ---------------------------------------------------------------------------
+// Execução integral da rotina como linha das Vitórias do dia
+//
+// O cartão da tela inicial desenha a rotina planejada com o progresso real do
+// dia (passos feitos de total). O progresso vem do próprio objeto da rotina
+// (`routine.progress`), que o servidor recolhe com `routineDayProgress` — a
+// mesma régua da aba Rotinas. Aqui só se junta a linha da vitória com a
+// rotina escolhida, sem inventar um segundo progresso.
+// ---------------------------------------------------------------------------
+
+/**
+ * Execução que a linha da vitória representa: a rotina planejada, com título
+ * vivo (a rotina pode ser renomeada depois de planejada) e a contagem de hoje.
+ */
+export function describeRoutineVictoryRow(victory, routine) {
+  if (!isRoutineVictory(victory)) return null;
+  const progress = routine?.progress || { total: 0, done: 0 };
+  return {
+    routineId: victory.routineId,
+    title: routine?.title || victory.title,
+    found: !!routine,
+    done: Math.max(0, Number(progress.done) || 0),
+    total: Math.max(0, Number(progress.total) || 0),
+    complete: !!routine?.completeToday
+  };
 }

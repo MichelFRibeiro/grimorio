@@ -428,6 +428,12 @@ export function useGameData() {
         next.rewards = upsertById(next.rewards, result.reward);
         changed = true;
       }
+      if (result.userProfile) {
+        // POST /api/profile devolve o perfil inteiro (rotina da tela inicial,
+        // tema, interruptores). Sem isto o cartão só aparecia depois do GET.
+        next.userProfile = result.userProfile;
+        changed = true;
+      }
       if (result.redemption) {
         next.rewardRedemptions = upsertById(next.rewardRedemptions, result.redemption);
         changed = true;
@@ -1175,6 +1181,72 @@ export function useGameData() {
     await mutate(`/api/routines/${id}`, { method: 'DELETE' });
   };
 
+  /**
+   * A rotina escolhida para a tela inicial. A escolha é do perfil (vale em
+   * qualquer aparelho); o cartão da tela inicial lê `userProfile.homeRoutineId`.
+   */
+  const setHomeRoutine = async (routineId) => {
+    playClick();
+    const result = await mutate('/api/profile', {
+      body: { homeRoutineId: routineId || null },
+      refreshOnSuccess: false
+    });
+    if (!result) throw new Error('Não foi possível salvar a rotina da tela inicial.');
+    fetchState();
+    return { success: true };
+  };
+
+  /** Planeja a execução integral da rotina como uma vitória do dia. */
+  const planRoutineVictory = async (routineId, extra = {}) => {
+    playClick();
+    const result = await mutate(`/api/routines/${routineId}/plan`, {
+      body: extra || {},
+      refreshOnSuccess: false
+    });
+    if (!result) throw new Error('Erro ao planejar a rotina como vitória.');
+    fetchState();
+    return { success: true, result };
+  };
+
+  /** Conquista a vitória da rotina (o servidor confere que ela foi inteira). */
+  const completeRoutineVictory = async (routineId, extra = {}) => {
+    playClick();
+    const result = await mutate(`/api/routines/${routineId}/complete`, {
+      body: extra || {},
+      refreshOnSuccess: false
+    });
+    if (!result) throw new Error('Erro ao registrar a vitória da rotina.');
+    if (result.rewardResult) {
+      handleRewardResponse(result.rewardResult, `Rotina inteira: ${result.victory?.title || ''}`);
+    }
+    if (result.bonusAwardedNow && result.bonusRewardResult) {
+      handleRewardResponse(result.bonusRewardResult, 'Tríade de vitórias conquistada!');
+      confetti({ particleCount: 90, spread: 80, origin: { y: 0.55 } });
+    } else {
+      confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+    }
+    queueChest(result.chest);
+    fetchState();
+    return { success: true, result };
+  };
+
+  /** Reabre a vitória da rotina, estornando o que ela pagou. */
+  const reopenRoutineVictory = async (routineId, extra = {}) => {
+    playClick();
+    const result = await mutate(`/api/routines/${routineId}/reopen`, {
+      body: extra || {},
+      refreshOnSuccess: false
+    });
+    if (!result) throw new Error('Erro ao reabrir a vitória da rotina.');
+    showRewardToast(
+      -(result.rewardResult?.revertedXp || 40),
+      -(result.rewardResult?.revertedCoins || 12),
+      `Vitória reaberta: ${result.victory?.title || 'rotina'}`
+    );
+    fetchState();
+    return { success: true, result };
+  };
+
   const addSupplement = async (supplementData) => {
     playClick();
     await mutate('/api/supplements', { method: 'POST', body: supplementData });
@@ -1876,6 +1948,10 @@ export function useGameData() {
     updateDailyVictory,
     completeDailyVictory,
     deleteDailyVictory,
+    setHomeRoutine,
+    planRoutineVictory,
+    completeRoutineVictory,
+    reopenRoutineVictory,
     addMindMap,
     updateMindMap,
     addMindMapNode,

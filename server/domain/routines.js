@@ -6,9 +6,19 @@
  */
 
 import { uid } from '../db.js';
-import { getSaoPauloDateStr } from '../timeUtils.js';
-import { toggleHabit } from './activities.js';
+import { addDaysToDateStr, getSaoPauloDateStr } from '../timeUtils.js';
+import { completeDailyVictoryUseCase, toggleHabit } from './activities.js';
 import { activityPendingMessage, routineActivitySnapshot } from '../../src/utils/routineActivities.js';
+import {
+  canPlanForDate,
+  createDailyVictory,
+  findVictoryForRoutine,
+  isValidDateStr,
+  normalizeRoutineVictoryTitle,
+  ROUTINE_VICTORY_SOURCE,
+  sanitizeDailyVictories
+} from '../../src/utils/dailyVictories.js';
+import { routineDaySnapshot, routineVictoryProblem } from '../../src/utils/homeRoutine.js';
 import {
   detachHabitFromRoutines,
   detachRoutineFromRoutines,
@@ -187,7 +197,16 @@ export function deleteRoutine(db, id) {
   if (index === -1) return fail('Rotina não encontrada.', 404);
   const [removed] = routines.splice(index, 1);
   db.routines = detachRoutineFromRoutines(routines, id);
-  return { removed };
+  // Vitórias planejadas desta rotina que ninguém conquistou: a rotina deixou
+  // de existir, então não há mais execução para reconhecer. As conquistadas
+  // ficam no histórico (foram pagas e aconteceram).
+  const victoryCleanup = removeRoutineVictories(db, id);
+  // A rotina escolhida para a tela inicial deixa de existir: o cartão passa a
+  // explicar em vez de apontar para um fantasma.
+  if (db.userProfile && db.userProfile.homeRoutineId === id) {
+    db.userProfile.homeRoutineId = null;
+  }
+  return { removed, removedVictories: victoryCleanup.removed };
 }
 
 /**
@@ -268,4 +287,194 @@ export function undoRoutineStep(db, id, { habitId } = {}) {
 export function removeHabitFromRoutines(db, habitId) {
   if (!Array.isArray(db.routines) || !habitId) return;
   db.routines = detachHabitFromRoutines(db.routines, habitId);
+}
+
+// ---------------------------------------------------------------------------
+// Execução integral de uma rotina como Vitória Planejada para o Dia
+//
+// Planejar não paga nada: o registro é uma vaga manual do dia (uma das 3),
+// com `source: 'routine'` e o `routineId`. Conquistar paga como uma vitória
+// comum (+ XP e moedas), mas só depois que o SERVIDOR confere que todos os
+// passos da rotina foram cumpridos hoje — rituais marcados e atividades
+// (Biblioteca, Escrituras, AGU, Diário, Review) reconhecidas.
+// Desmarcar um ritual depois não estorna a vitória sozinho: reabrir a vitória
+// é ato explícito. Excluir a rotina leva junto as vitórias dela que ainda não
+// foram conquistadas; as conquistadas continuam no histórico (foram feitas).
+// ---------------------------------------------------------------------------
+
+/** Id estável da vitória de uma rotina: mesma rotina, mesmo cartão no dia. */
+export function routineVictoryId(routineId) {
+  return `dv-routine-${String(routineId || '').trim()}`;
+}
+
+function findRoutineCatalog(db, routineId) {
+  const habits = db.habits || [];
+  const routines = sanitizeRoutines(ensureList(db), habits);
+  const routine = routines.find(item => item.id === routineId) || null;
+  if (!routine) return { error: 'Rotina não encontrada.', status: 404 };
+  return { routine, routines, habits };
+}
+
+/**
+ * Foto da execução da rotina numa data. `live` marca o próprio dia: só nele a
+ * execução pode ser conferida (uma vitória de amanhã mostra o plano, não o
+ * resultado). `complete` é o que a confirmação da vitória exige.
+ */
+export function routineVictorySnapshot(db, routineId, date = getSaoPauloDateStr()) {
+  const found = findRoutineCatalog(db, routineId);
+  if (found.error) return found;
+  const { routine, routines, habits } = found;
+  const activities = activityMap(db, date);
+  const snapshot = routineDaySnapshot(routine, habits, routines, date, activities);
+  return {
+    status: 'ok',
+    routine: decorateRoutine(routine, habits, date, routines, activities),
+    date,
+    total: snapshot.progress.total,
+    done: snapshot.progress.done,
+    missing: snapshot.progress.missing,
+    complete: snapshot.progress.complete,
+    live: date === getSaoPauloDateStr()
+  };
+}
+
+/** Prontidão da vitória: pendente, pronta (todos os passos do dia), vazia ou fechada. */
+export function routineVictoryReadiness(db, routineId, date = getSaoPauloDateStr()) {
+  const snap = routineVictorySnapshot(db, routineId, date);
+  if (snap.error) {
+    return { status: 'missing', error: snap.error, routine: null, date, total: 0, done: 0, missing: 0, live: false };
+  }
+  let status = 'pending';
+  if (!snap.total) status = 'empty';
+  else if (!snap.live) status = 'closed';
+  else if (snap.complete) status = 'ready';
+  return { ...snap, status };
+}
+
+/**
+ * Planeja a execução da rotina como vitória do dia.
+ * A rotina ocupa uma vaga manual: o dia continua com 3 vagas no total, e a
+ * rotina entra em qualquer uma delas (inclusive no lugar de uma tarefa que
+ * ainda não foi planejada).
+ */
+export function planRoutineVictory(db, routineId, { date, category } = {}) {
+  const found = findRoutineCatalog(db, routineId);
+  if (found.error) return found;
+  const { routine } = found;
+  const problem = routineVictoryProblem(routine);
+  if (problem) return fail(problem);
+
+  const todayStr = getSaoPauloDateStr();
+  const targetDate = isValidDateStr(date) ? date : todayStr;
+  if (!canPlanForDate(targetDate, todayStr)) {
+    return fail('Só é possível planejar para hoje ou para amanhã.');
+  }
+  db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+
+  // Já planejada neste dia: devolve a existente em vez de duplicar.
+  const existing = findVictoryForRoutine(db.dailyVictories, routineId, targetDate);
+  if (existing) {
+    return {
+      victory: existing,
+      created: false,
+      readiness: routineVictoryReadiness(db, routineId, targetDate)
+    };
+  }
+
+  const defaultCat = String(category || '').trim() || db.questCategories?.[0]?.name || 'Pessoal';
+  let result;
+  try {
+    result = createDailyVictory(db.dailyVictories, {
+      title: normalizeRoutineVictoryTitle(routine.title),
+      category: defaultCat,
+      date: targetDate,
+      routineId
+    }, { today: todayStr, defaultCategory: defaultCat });
+  } catch (err) {
+    return fail(err.message);
+  }
+  db.dailyVictories = result.list;
+  return {
+    victory: result.victory,
+    created: true,
+    readiness: routineVictoryReadiness(db, routineId, targetDate)
+  };
+}
+
+/** Conquista a vitória da rotina — só com a rotina inteira cumprida hoje. */
+export async function completeRoutineVictory(db, routineId, { date = getSaoPauloDateStr(), note } = {}) {
+  const found = findRoutineCatalog(db, routineId);
+  if (found.error) return found;
+  const { routine } = found;
+
+  db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+  const victory = findVictoryForRoutine(db.dailyVictories, routineId, date);
+  if (!victory) return fail('A execução desta rotina não está nas vitórias planejadas deste dia.', 404);
+  if (victory.completed) return fail('Esta vitória já foi conquistada.');
+
+  const snap = routineVictorySnapshot(db, routineId, date);
+  if (snap.error) return snap;
+  if (!snap.live) return fail('Só é possível registrar a vitória no próprio dia planejado.');
+  if (!snap.total) return fail('Esta rotina não tem passos válidos para reconhecer no dia.');
+  if (!snap.complete) {
+    return fail(`Faltam ${snap.total - snap.done} de ${snap.total} passos da rotina para hoje.`);
+  }
+
+  const text = note != null && String(note).trim()
+    ? String(note).trim()
+    : `Rotina "${routine.title}" cumprida inteira hoje.`;
+  const result = await completeDailyVictoryUseCase(db, {
+    id: victory.id,
+    completed: true,
+    note: text
+  });
+  if (result.error) return result;
+  return {
+    ...result,
+    readiness: routineVictoryReadiness(db, routineId, date)
+  };
+}
+
+/** Reabrir a vitória da rotina estorna o que ela pagou; os rituais ficam. */
+export async function reopenRoutineVictory(db, routineId, { date = getSaoPauloDateStr() } = {}) {
+  const found = findRoutineCatalog(db, routineId);
+  if (found.error) return found;
+  db.dailyVictories = sanitizeDailyVictories(db.dailyVictories);
+  const victory = findVictoryForRoutine(db.dailyVictories, routineId, date);
+  if (!victory) return fail('A execução desta rotina não está nas vitórias planejadas deste dia.', 404);
+  if (!victory.completed) return fail('Esta vitória ainda não foi conquistada.');
+  const result = await completeDailyVictoryUseCase(db, { id: victory.id, completed: false });
+  if (result.error) return result;
+  return { ...result, readiness: routineVictoryReadiness(db, routineId, date) };
+}
+
+/** Rotinas planejadas nos dias que ainda podem ser editados (hoje e amanhã). */
+export function listRoutinePlans(db, date = getSaoPauloDateStr()) {
+  const targets = [date, addDaysToDateStr(date, 1)];
+  return sanitizeDailyVictories(db.dailyVictories)
+    .filter(item => item.source === ROUTINE_VICTORY_SOURCE && targets.includes(item.date))
+    .map(item => ({
+      victoryId: item.id,
+      routineId: item.routineId,
+      date: item.date,
+      completed: !!item.completed,
+      readiness: routineVictoryReadiness(db, item.routineId, item.date)
+    }));
+}
+
+/**
+ * Rotina excluída: as vitórias dela que ainda NÃO foram conquistadas somem
+ * (a rotina não existe mais para ser cumprida). As conquistadas ficam: são
+ * histórico de um dia que aconteceu. Chamar antes de gravar a exclusão.
+ */
+export function removeRoutineVictories(db, routineId) {
+  if (!Array.isArray(db.dailyVictories) || !routineId) return { removed: [] };
+  const current = sanitizeDailyVictories(db.dailyVictories);
+  const removed = current.filter(item => (
+    item.source === ROUTINE_VICTORY_SOURCE && item.routineId === routineId && !item.completed
+  ));
+  if (!removed.length) return { removed: [] };
+  const ids = new Set(removed.map(item => item.id));
+  db.dailyVictories = current.filter(item => !ids.has(item.id));
+  return { removed };
 }

@@ -69,6 +69,7 @@ html[data-theme="atlas"] [style*="background: rgba(16, 185, 129, 0.08)"] { backg
 html[data-theme="atlas"] [style*="background: rgba(16, 185, 129, 0.1)"] { background: rgba(71, 112, 90, 0.1) !important; }
 html[data-theme="atlas"] [style*="background: rgba(16, 185, 129, 0.15)"] { background: rgba(71, 112, 90, 0.15) !important; }
 html[data-theme="atlas"] [style*="background: rgba(16, 185, 129, 0.16)"] { background: rgba(71, 112, 90, 0.16) !important; }
+html[data-theme="atlas"] [style*="background: rgba(16, 185, 129, 0.18)"] { background: rgba(71, 112, 90, 0.18) !important; }
 html[data-theme="atlas"] [style*="background: rgba(16, 185, 129, 0.75)"] { background: rgba(71, 112, 90, 0.75) !important; }
 html[data-theme="atlas"] [style*="background: rgba(168, 85, 247, 0.1)"] { background: rgba(124, 95, 149, 0.1) !important; }
 html[data-theme="atlas"] [style*="background: rgba(168, 85, 247, 0.14)"] { background: rgba(124, 95, 149, 0.14) !important; }
@@ -104,6 +105,7 @@ html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.18)"] { backg
 html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.2)"] { background: rgba(154, 106, 36, 0.2) !important; }
 html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.25)"] { background: rgba(154, 106, 36, 0.25) !important; }
 html[data-theme="atlas"] [style*="background: rgba(245, 158, 11, 0.65)"] { background: rgba(154, 106, 36, 0.65) !important; }
+html[data-theme="atlas"] [style*="background: rgba(251, 191, 36, 0.1)"] { background: rgba(168, 116, 43, 0.1) !important; }
 html[data-theme="atlas"] [style*="background: rgba(251, 191, 36, 0.12)"] { background: rgba(168, 116, 43, 0.12) !important; }
 html[data-theme="atlas"] [style*="background: rgba(251, 191, 36, 0.06)"] { background: rgba(168, 116, 43, 0.06) !important; }
 html[data-theme="atlas"] [style*="background: rgba(255, 255, 255, 0.02)"] { background: #f6f2e6 !important; }
@@ -119,6 +121,7 @@ html[data-theme="atlas"] [style*="background: rgba(5, 7, 13, 0.88)"] { backgroun
 html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.08)"] { background: rgba(58, 113, 115, 0.08) !important; }
 html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.1)"] { background: rgba(58, 113, 115, 0.1) !important; }
 html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.12)"] { background: rgba(58, 113, 115, 0.12) !important; }
+html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.14)"] { background: rgba(58, 113, 115, 0.14) !important; }
 html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.15)"] { background: rgba(58, 113, 115, 0.15) !important; }
 html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.18)"] { background: rgba(58, 113, 115, 0.18) !important; }
 html[data-theme="atlas"] [style*="background: rgba(56, 189, 248, 0.25)"] { background: rgba(58, 113, 115, 0.25) !important; }
@@ -194,6 +197,7 @@ html[data-theme="atlas"] [style*="border-color: rgba(255, 255, 255, 0.2)"] { bor
 html[data-theme="atlas"] [style*="border-color: rgba(255, 255, 255, 0.22)"] { border-color: rgba(38, 48, 31, 0.22) !important; }
 html[data-theme="atlas"] [style*="border-color: rgba(45, 212, 191, 0.35)"] { border-color: rgba(88, 126, 98, 0.35) !important; }
 html[data-theme="atlas"] [style*="border-color: rgba(52, 211, 153, 0.45)"] { border-color: rgba(71, 112, 90, 0.45) !important; }
+html[data-theme="atlas"] [style*="border-color: rgba(56, 189, 248, 0.2)"] { border-color: rgba(58, 113, 115, 0.2) !important; }
 html[data-theme="atlas"] [style*="border-color: rgba(56, 189, 248, 0.22)"] { border-color: rgba(58, 113, 115, 0.22) !important; }
 html[data-theme="atlas"] [style*="border-color: rgba(56, 189, 248, 0.25)"] { border-color: rgba(58, 113, 115, 0.25) !important; }
 html[data-theme="atlas"] [style*="border-color: rgba(56, 189, 248, 0.3)"] { border-color: rgba(58, 113, 115, 0.3) !important; }
@@ -221,6 +225,9 @@ html[data-theme="atlas"] [style*="background: linear-gradient(160deg, rgba(6, 18
 html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgb(239, 68, 68) 0%, rgb(185, 28, 28) 100%)"] { background: linear-gradient(135deg, #a3413c 0%, #8f3935 100%) !important; }
 html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(185, 28, 28, 0.2) 100%)"] { background: linear-gradient(135deg, rgba(163, 65, 60, 0.2) 0%, rgba(163, 65, 60, 0.2) 100%) !important; }
 html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(168, 85, 247, 0.2) 100%)"] { background: linear-gradient(135deg, rgba(154, 106, 36, 0.2) 0%, rgba(124, 95, 149, 0.2) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(56, 189, 248, 0.06) 0%, rgba(19, 23, 34, 0.92) 100%)"] { background: linear-gradient(135deg, rgba(58, 113, 115, 0.06) 0%, rgba(230, 225, 210, 0.92) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(19, 23, 34, 0.92) 100%)"] { background: linear-gradient(135deg, rgba(71, 112, 90, 0.1) 0%, rgba(230, 225, 210, 0.92) 100%) !important; }
+html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(19, 23, 34, 0.92) 100%)"] { background: linear-gradient(135deg, rgba(58, 113, 115, 0.08) 0%, rgba(230, 225, 210, 0.92) 100%) !important; }
 html[data-theme="atlas"] [style*="background: linear-gradient(180deg, rgba(30, 27, 20, 0.98) 0%, rgba(15, 17, 26, 0.98) 100%)"] { background: linear-gradient(180deg, rgba(230, 225, 210, 0.98) 0%, rgba(230, 225, 210, 0.98) 100%) !important; }
 html[data-theme="atlas"] [style*="background: radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, rgba(168, 85, 247, 0.05) 50%, transparent 70%)"] { background: radial-gradient(circle, rgba(154, 106, 36, 0.15) 0%, rgba(124, 95, 149, 0.05) 50%, transparent 70%) !important; }
 html[data-theme="atlas"] [style*="background: linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(168, 85, 247, 0.25) 100%)"] { background: linear-gradient(135deg, rgba(154, 106, 36, 0.25) 0%, rgba(124, 95, 149, 0.25) 100%) !important; }

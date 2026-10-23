@@ -4,6 +4,7 @@ import { useGameData } from './hooks/useGameData';
 import { Header } from './components/Header';
 import { BossRaid } from './components/BossRaid';
 import { DailyVictoriesCard } from './components/DailyVictoriesCard';
+import { HomeRoutineCard } from './components/HomeRoutineCard';
 import { NextActionCard } from './components/NextActionCard';
 import { LevelUpModal } from './components/LevelUpModal';
 import { DestinyChestModal } from './components/DestinyChestModal';
@@ -21,6 +22,8 @@ import { getSaoPauloDateStr, addDaysToDateStr, getSaoPauloDayOfWeek } from './ut
 import { summarizePlan, getAguStudyLoadSeries } from './utils/aguCycle';
 import { getReadingLoadSeries, getScriptureLoadSeries } from './utils/homeostasis';
 import { getHabitLoadSeries, habitHomeostasisEnabled } from './utils/habitHomeostasis';
+import { buildHomeRoutine } from './utils/homeRoutine';
+import { routineActivitySnapshot } from './utils/routineActivities';
 import { PhoneTimePrompt } from './components/PhoneTimePrompt';
 import { needsYesterdayPhonePrompt, yesterdayDateStr } from './utils/phoneTime';
 
@@ -132,6 +135,10 @@ export function App() {
     updateRoutine,
     advanceRoutine,
     deleteRoutine,
+    setHomeRoutine,
+    planRoutineVictory,
+    completeRoutineVictory,
+    reopenRoutineVictory,
     addSupplement,
     updateSupplement,
     deleteSupplement,
@@ -223,6 +230,9 @@ export function App() {
   const [lastQuestCategory, setLastQuestCategory] = useState('');
   const [phonePromptSnoozed, setPhonePromptSnoozed] = useState(false);
   const [phonePromptBusy, setPhonePromptBusy] = useState(false);
+  // "Fazer agora" do cartão da tela inicial: abre a aba Rotinas já no passo
+  // pendente da rotina escolhida, com o mesmo modal de registro de lá.
+  const [routineRequest, setRoutineRequest] = useState(null);
 
   const focusEnabled = isFeatureEnabled(data?.userProfile?.featureSettings, 'focus');
   useEffect(() => {
@@ -319,6 +329,34 @@ export function App() {
     data?.aguPlan,
     data?.analytics?.summary?.mindMapBranchesDue,
     data?.journalEntries,
+    todayStr
+  ]);
+
+  // Rotina da tela inicial: o perfil manda (vale em qualquer aparelho).
+  // O cartão vive logo abaixo de "Vitórias Planejadas para o Dia" e é lido
+  // da mesma carga da aba Rotinas — nenhum pedido extra ao servidor.
+  const homeRoutineId = data?.userProfile?.homeRoutineId || null;
+  const homeRoutine = useMemo(() => {
+    if (!homeRoutineId) return null;
+    const habitsList = data?.habits || [];
+    const routinesList = data?.routines || [];
+    if (!routinesList.length) return null;
+    let activities = null;
+    try {
+      activities = routineActivitySnapshot(data || {}, todayStr);
+    } catch {
+      activities = null;
+    }
+    return buildHomeRoutine(routinesList, habitsList, todayStr, homeRoutineId, activities);
+  }, [
+    homeRoutineId,
+    data?.routines,
+    data?.habits,
+    data?.readingSessions,
+    data?.scriptureSessions,
+    data?.aguPlan,
+    data?.journalEntries,
+    data?.supplementLogs,
     todayStr
   ]);
 
@@ -515,6 +553,21 @@ export function App() {
     setActiveTab(tab);
   };
 
+  /** Passo pendente da rotina da tela inicial, aberto na aba Rotinas. */
+  const runHomeRoutineStep = (step) => {
+    if (!step || !isTabEnabled(featureSettings, 'routines')) return;
+    if (step.kind === 'activity') {
+      if (step.activityId === 'supplement-review' && isTabEnabled(featureSettings, step.tab)) {
+        setPendingSupplementReview(true);
+      }
+      openTab(step.tab);
+      return;
+    }
+    if (!step.habitId) return;
+    setRoutineRequest({ routineId: homeRoutine?.id || homeRoutineId, habitId: step.habitId, at: Date.now() });
+    openTab('routines');
+  };
+
   const handleInsightAction = async (action) => {
     if (!action) return;
     if (action.type === 'plan_victory') {
@@ -588,7 +641,29 @@ export function App() {
         readingFloorMinutes={homeostasisFloors.reading}
         scriptureFloorMinutes={homeostasisFloors.scripture}
         habitFloorMinutes={homeostasisFloors.habits}
+        routines={routines}
+        onCompleteRoutineVictory={featureOn('routines') ? completeRoutineVictory : undefined}
+        onReopenRoutineVictory={featureOn('routines') ? reopenRoutineVictory : undefined}
+        onOpenRoutine={() => openTab('routines')}
+        playClick={playClick}
       />}
+
+      {/* Rotina escolhida em Configurações, logo abaixo das vitórias do dia. */}
+      {featureOn('routines') && (
+        <HomeRoutineCard
+          routines={routines}
+          homeRoutineId={homeRoutineId}
+          homeRoutine={homeRoutine}
+          dailyVictories={dailyVictories}
+          onOpenSettings={() => setActiveTab('settings')}
+          onOpenTab={openTab}
+          onStartNext={runHomeRoutineStep}
+          onPlanVictory={featureOn('victories') ? planRoutineVictory : undefined}
+          onCompleteVictory={featureOn('victories') ? completeRoutineVictory : undefined}
+          onReopenVictory={featureOn('victories') ? reopenRoutineVictory : undefined}
+          playClick={playClick}
+        />
+      )}
 
       {/* Boss Raid Banner */}
       {featureOn('boss') && <BossRaid boss={bossRaid} />}
@@ -843,6 +918,11 @@ export function App() {
             onAdvanceRoutine={advanceRoutine}
             onUpdateHabitDuration={updateHabitDuration}
             onDeleteRoutine={deleteRoutine}
+            pendingStep={routineRequest}
+            onPendingStepConsumed={() => setRoutineRequest(null)}
+            dailyVictories={dailyVictories}
+            onPlanRoutineVictory={featureOn('victories') ? planRoutineVictory : undefined}
+            onDeleteRoutineVictory={featureOn('victories') ? deleteDailyVictory : undefined}
             onOpenActivity={(step) => {
               if (step?.activityId === 'supplement-review' && isTabEnabled(featureSettings, step.tab)) {
                 setPendingSupplementReview(true);
@@ -951,6 +1031,11 @@ export function App() {
             onChange={updateProfile ? (next) => updateProfile({ featureSettings: next }) : undefined}
             theme={activeTheme}
             onChangeTheme={changeTheme}
+            routines={featureOn('routines') ? routines : []}
+            homeRoutineId={homeRoutineId}
+            onChangeHomeRoutine={setHomeRoutine}
+            onOpenRoutines={() => openTab('routines')}
+            routinesEnabled={featureOn('routines')}
             playClick={playClick}
           />
         )}

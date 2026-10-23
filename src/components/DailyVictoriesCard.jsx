@@ -14,11 +14,14 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ListOrdered
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import {
+  describeRoutineVictoryRow,
+  isRoutineVictory,
   MAX_DAILY_VICTORIES,
   EXTENDED_MAX_DAILY_VICTORIES,
   DAILY_VICTORY_REWARDS,
@@ -59,7 +62,13 @@ export function DailyVictoriesCard({
   studyFloorMinutes = null,
   readingFloorMinutes = null,
   scriptureFloorMinutes = null,
-  habitFloorMinutes = null
+  habitFloorMinutes = null,
+  // Rotinas: a linha de uma execução planejada mostra o progresso do dia.
+  routines = [],
+  onCompleteRoutineVictory,
+  onReopenRoutineVictory,
+  onOpenRoutine,
+  playClick
 }) {
   const todayStr = getSaoPauloDateStr();
   const dates = getPlannableDates(todayStr);
@@ -128,6 +137,36 @@ export function DailyVictoriesCard({
     scriptureFloorMinutes,
     habitFloorMinutes
   });
+
+  /** Execução de rotina planejada: título vivo (a rotina pode ser renomeada). */
+  const routineRow = (victory) => {
+    if (!isRoutineVictory(victory)) return null;
+    const routine = (routines || []).find((item) => item && item.id === victory.routineId);
+    return describeRoutineVictoryRow(victory, routine);
+  };
+
+  /** Conquista/reabre a vitória da rotina pelo caminho próprio do servidor. */
+  const completeRoutine = async (victory) => {
+    const routine = (routines || []).find((item) => item && item.id === victory.routineId);
+    const row = routineRow(victory);
+    const total = row?.total || 0;
+    if (!victory.completed && total > 0 && row.done < total) {
+      setRoutineNote({
+        victoryId: victory.id,
+        text: `Faltam ${total - row.done} de ${total} passos da rotina para hoje.`
+      });
+      return;
+    }
+    setRoutineNote(null);
+    try {
+      if (victory.completed) await onReopenRoutineVictory?.(victory.routineId);
+      else await onCompleteRoutineVictory?.(victory.routineId);
+    } catch (err) {
+      setRoutineNote({ victoryId: victory.id, text: err?.message || 'Não foi possível registrar a vitória da rotina.' });
+    }
+  };
+
+  const [routineNote, setRoutineNote] = useState(null);
 
   const selectHistoryDate = (date) => {
     setHistoryDate(date);
@@ -684,6 +723,8 @@ export function DailyVictoriesCard({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {summary.items.map((victory, idx) => {
             const color = categoryColor(victory.category, activeCategories);
+            const routineInfo = routineRow(victory);
+            const note = routineNote && routineNote.victoryId === victory.id ? routineNote : null;
             return (
               <div
                 key={victory.id}
@@ -700,11 +741,19 @@ export function DailyVictoriesCard({
                 <button
                   type="button"
                   onClick={() => {
+                    if (routineInfo) {
+                      if (canComplete || victory.completed) completeRoutine(victory);
+                      return;
+                    }
                     if (victory.completed) promptReopen(victory);
                     else if (canComplete) openComplete(victory);
                   }}
                   disabled={!canComplete && !victory.completed}
-                  title={!canComplete && !victory.completed ? 'Só é possível realizar no próprio dia' : (victory.completed ? 'Reabrir' : 'Registrar vitória')}
+                  title={routineInfo
+                    ? (victory.completed
+                      ? 'Reabrir a vitória da rotina'
+                      : `Rotina inteira: ${routineInfo.done} de ${routineInfo.total} passos hoje`)
+                    : (!canComplete && !victory.completed ? 'Só é possível realizar no próprio dia' : (victory.completed ? 'Reabrir' : 'Registrar vitória'))}
                   style={{
                     background: 'none',
                     border: 'none',
@@ -735,8 +784,28 @@ export function DailyVictoriesCard({
                       color: victory.completed ? '#94a3b8' : '#f8fafc',
                       textDecoration: victory.completed ? 'line-through' : 'none'
                     }}>
-                      {victoryTitle(victory)}
+                      {routineInfo ? routineInfo.title : victoryTitle(victory)}
                     </span>
+                    {routineInfo ? (
+                      <span
+                        title="Passos da rotina cumpridos hoje"
+                        style={{
+                          fontSize: '0.68rem',
+                          padding: '1px 7px',
+                          borderRadius: '999px',
+                          background: routineInfo.complete ? 'rgba(16, 185, 129, 0.16)' : 'rgba(56, 189, 248, 0.14)',
+                          color: routineInfo.complete ? '#34d399' : '#38bdf8',
+                          border: `1px solid ${routineInfo.complete ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.35)'}`,
+                          fontWeight: 800,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                      >
+                        <ListOrdered size={11} />
+                        {routineInfo.found ? `${routineInfo.done}/${routineInfo.total}` : 'rotina excluída'}
+                      </span>
+                    ) : null}
                     <span style={{
                       fontSize: '0.68rem',
                       padding: '1px 7px',
@@ -749,6 +818,18 @@ export function DailyVictoriesCard({
                       {victory.category}
                     </span>
                   </div>
+                  {routineInfo && !victory.completed && routineInfo.found ? (
+                    <p style={{ margin: '6px 0 0', fontSize: '0.76rem', color: routineInfo.complete ? '#34d399' : '#94a3b8' }}>
+                      {routineInfo.complete
+                        ? 'Rotina inteira cumprida — clique no círculo para conquistar a vitória.'
+                        : `Faltam ${Math.max(0, routineInfo.total - routineInfo.done)} de ${routineInfo.total} passos da rotina.`}
+                    </p>
+                  ) : null}
+                  {note ? (
+                    <p role="status" style={{ margin: '6px 0 0', fontSize: '0.76rem', color: '#fbbf24', fontWeight: 700 }}>
+                      {note.text}
+                    </p>
+                  ) : null}
                   {victory.completed && victory.note && (
                     <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: '#94a3b8', whiteSpace: 'pre-wrap' }}>
                       {victory.note}
@@ -757,7 +838,27 @@ export function DailyVictoriesCard({
                 </div>
 
                 <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                  {!victory.completed && (
+                  {routineInfo ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (playClick) playClick();
+                        onOpenRoutine?.(victory.routineId);
+                      }}
+                      title="Ver a rotina"
+                      style={{
+                        background: 'rgba(56, 189, 248, 0.1)',
+                        border: '1px solid rgba(56, 189, 248, 0.22)',
+                        color: '#38bdf8',
+                        cursor: 'pointer',
+                        padding: '5px',
+                        borderRadius: '8px'
+                      }}
+                    >
+                      <ListOrdered size={13} />
+                    </button>
+                  ) : null}
+                  {!victory.completed && !routineInfo && (
                     <button
                       type="button"
                       onClick={() => openEdit(victory)}
@@ -777,7 +878,7 @@ export function DailyVictoriesCard({
                   {victory.completed && canComplete && (
                     <button
                       type="button"
-                      onClick={() => promptReopen(victory)}
+                      onClick={() => (routineInfo ? completeRoutine(victory) : promptReopen(victory))}
                       title="Reabrir e estornar"
                       style={{
                         background: 'rgba(245, 158, 11, 0.1)',

@@ -15,7 +15,8 @@ import {
   Plus,
   RotateCcw,
   Scale,
-  Trash2
+  Trash2,
+  Trophy
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityTimerBox } from './ActivityTimerBox';
@@ -28,6 +29,7 @@ import { getSaoPauloDateStr } from '../utils/timeUtils';
 import { getHabitLoadSeries, habitMeasureLabel, habitTracksCount, habitTracksTime } from '../utils/habitHomeostasis';
 import { HabitHistoryModal, habitHistoryButtonStyle } from './HabitHistoryModal';
 import { ROUTINE_ACTIVITIES } from '../utils/routineActivities';
+import { findVictoryForRoutine } from '../utils/dailyVictories';
 import {
   MAX_ROUTINE_NESTING,
   collectRoutineHabitIds,
@@ -440,7 +442,14 @@ export function RoutinesView({
   onAdvanceRoutine,
   onUpdateHabitDuration,
   onDeleteRoutine,
-  onOpenActivity
+  onOpenActivity,
+  // Vindo do cartão da tela inicial: { routineId, habitId } do passo a abrir.
+  pendingStep = null,
+  onPendingStepConsumed,
+  // Execução integral da rotina como vitória do dia.
+  dailyVictories = [],
+  onPlanRoutineVictory,
+  onDeleteRoutineVictory
 }) {
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm());
@@ -458,6 +467,10 @@ export function RoutinesView({
   const [minutesEdited, setMinutesEdited] = useState(false);
   const [stepError, setStepError] = useState('');
   const [stepNote, setStepNote] = useState('');
+  // "Incluir nas vitórias": a rotina inteira como uma vaga do dia.
+  const [victoryBusyId, setVictoryBusyId] = useState(null);
+  const [victoryNote, setVictoryNote] = useState(null);
+  const [victoryNoteRoutineId, setVictoryNoteRoutineId] = useState(null);
   const [historyHabitId, setHistoryHabitId] = useState(null);
 
   const habitById = useMemo(() => new Map((habits || []).map(habit => [habit.id, habit])), [habits]);
@@ -583,6 +596,50 @@ export function RoutinesView({
       ? String(getHabitDurationForDate(habitById.get(step.habitId), getSaoPauloDateStr()) || '')
       : '');
     setActiveStep({ routineId: routine.id, habitId: step.habitId });
+  };
+
+  // Cartão da tela inicial pediu o próximo passo desta rotina: abre o mesmo
+  // modal do "Fazer agora" e avisa que o pedido foi atendido.
+  useEffect(() => {
+    if (!pendingStep?.routineId || !pendingStep?.habitId) return;
+    const routine = (routines || []).find(item => item.id === pendingStep.routineId);
+    const step = findRoutineHabitStep(routine?.steps, pendingStep.habitId);
+    onPendingStepConsumed?.();
+    if (!routine || !step || step.missing) return;
+    openStep(routine, step);
+    // openStep só usa estado: rodar quando o pedido muda é o suficiente.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingStep]);
+
+  /**
+   * Inclui (ou tira) a rotina inteira das vitórias planejadas de hoje.
+   * A rotina ocupa uma das 3 vagas: o servidor recusa se o dia já estiver cheio.
+   */
+  const toggleRoutineVictory = async (routine) => {
+    if (!routine || victoryBusyId) return;
+    const todayStr = getSaoPauloDateStr();
+    const planned = findVictoryForRoutine(dailyVictories, routine.id, todayStr);
+    if (planned?.completed) {
+      setVictoryNoteRoutineId(routine.id);
+      setVictoryNote({ ok: false, text: 'Esta rotina já foi conquistada hoje. Reabra a vitória para mudar isso.' });
+      return;
+    }
+    setVictoryBusyId(routine.id);
+    setVictoryNote(null);
+    setVictoryNoteRoutineId(routine.id);
+    try {
+      if (planned) {
+        await onDeleteRoutineVictory?.(planned.id);
+        setVictoryNote({ ok: true, text: `"${routine.title}" saiu das vitórias de hoje.` });
+      } else {
+        await onPlanRoutineVictory?.(routine.id);
+        setVictoryNote({ ok: true, text: `"${routine.title}" agora é uma das vitórias de hoje.` });
+      }
+    } catch (err) {
+      setVictoryNote({ ok: false, text: err?.message || 'Não foi possível atualizar a vitória da rotina.' });
+    } finally {
+      setVictoryBusyId(null);
+    }
   };
 
   const closeStep = () => {
@@ -741,6 +798,7 @@ export function RoutinesView({
             const todayLabel = formatDurationLabel(time.todayMinutes);
             const totalLabel = formatDurationLabel(time.totalMinutes);
             const expanded = expandedIds.has(routine.id);
+            const plannedVictory = findVictoryForRoutine(dailyVictories, routine.id, getSaoPauloDateStr());
             return (
               <article key={routine.id} className="glass-panel" style={{ padding: expanded ? '16px 18px' : '10px 14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -809,7 +867,39 @@ export function RoutinesView({
                       <span style={{ minWidth: 0 }}>{doNowLabel(next, nextExpected)}</span>
                     </button>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {onPlanRoutineVictory && (
+                      <button
+                        type="button"
+                        onClick={() => toggleRoutineVictory(routine)}
+                        disabled={victoryBusyId === routine.id}
+                        aria-pressed={!!plannedVictory}
+                        title={plannedVictory
+                          ? (plannedVictory.completed
+                            ? 'Rotina inteira conquistada hoje como vitória do dia'
+                            : 'Esta rotina está nas vitórias de hoje — clique para tirar')
+                          : 'Incluir a rotina inteira nas vitórias de hoje'}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 10px',
+                          borderRadius: '9px',
+                          border: `1px solid ${plannedVictory ? 'rgba(251, 191, 36, 0.45)' : 'rgba(255,255,255,0.12)'}`,
+                          background: plannedVictory ? 'rgba(251, 191, 36, 0.14)' : 'rgba(255,255,255,0.05)',
+                          color: plannedVictory ? '#fbbf24' : '#cbd5e1',
+                          fontWeight: 800,
+                          fontSize: '0.74rem',
+                          cursor: victoryBusyId === routine.id ? 'progress' : 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        <Trophy size={13} />
+                        {plannedVictory
+                          ? (plannedVictory.completed ? 'Vitória conquistada' : 'Nas vitórias de hoje')
+                          : 'Incluir nas vitórias'}
+                      </button>
+                    )}
                     <button type="button" onClick={() => openEdit(routine)} title="Editar" style={iconBtn}>
                       <Pencil size={15} />
                     </button>
@@ -818,6 +908,20 @@ export function RoutinesView({
                     </button>
                   </div>
                 </div>
+
+                {victoryNote && victoryNoteRoutineId === routine.id ? (
+                  <p
+                    role="status"
+                    style={{
+                      margin: '8px 0 0',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      color: victoryNote.ok ? '#34d399' : '#fbbf24'
+                    }}
+                  >
+                    {victoryNote.text}
+                  </p>
+                ) : null}
 
                 {expanded && routine.description ? (
                   <p style={{ margin: '8px 0 0', color: '#94a3b8', fontSize: '0.82rem' }}>{routine.description}</p>

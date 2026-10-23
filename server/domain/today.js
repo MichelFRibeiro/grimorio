@@ -25,6 +25,7 @@ import {
   createDailyVictory,
   isOverflowDailyVictorySource,
   listVictoriesForDate,
+  countManualVictoriesForDate,
   maxDailyVictoriesForSource,
   summarizeDay
 } from '../../src/utils/dailyVictories.js';
@@ -471,7 +472,11 @@ export function acceptDayPlan(db, { items, date, now = new Date() } = {}) {
     if (!title) return;
     const source = isOverflowDailyVictorySource(item?.source) ? item.source : undefined;
     const cap = maxDailyVictoriesForSource(source);
-    const count = listVictoriesForDate(db.dailyVictories, targetDate).length;
+    // Vaga manual (as 3 do dia) só conta tarefas do herói; leitura e estudo
+    // pela homeostase têm teto próprio e não disputam a vaga.
+    const count = isOverflowDailyVictorySource(source)
+      ? listVictoriesForDate(db.dailyVictories, targetDate).length
+      : countManualVictoriesForDate(db.dailyVictories, targetDate);
     if (count >= cap) {
       skipped.push({ title, reason: `Teto de ${cap} vitórias para este dia.` });
       return;
