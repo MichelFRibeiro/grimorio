@@ -49,6 +49,12 @@ import {
 import { HabitLoadChart } from './HabitLoadChart';
 import { HabitHistoryModal, habitHistoryButtonStyle } from './HabitHistoryModal';
 
+/* O popup nativo herda #fff e o remap de botão pinta a lista de escuro. */
+const themeCategoryOptionStyle = {
+  color: 'var(--tpl-ink)',
+  backgroundColor: 'var(--tpl-card)'
+};
+
 const HIDE_SETTLED_STORAGE_KEY = 'grimorio_hide_settled_habits';
 const MONTH_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
 
@@ -222,15 +228,16 @@ function MonthDaySelect({ value, onChange, accent = '#ef4444' }) {
         borderRadius: '10px',
         background: '#1a2030',
         border: `1px solid ${accent}55`,
-        color: '#fff',
+        color: 'var(--tpl-ink)',
         fontSize: '0.95rem',
         fontWeight: 800,
         fontFamily: 'var(--font-mono)',
         textAlign: 'center'
       }}
+      className="theme-category-select"
     >
       {MONTH_DAY_OPTIONS.map(day => (
-        <option key={day} value={day}>{padMonthDay(day)}</option>
+        <option key={day} value={day} style={themeCategoryOptionStyle}>{padMonthDay(day)}</option>
       ))}
     </select>
   );
@@ -1647,6 +1654,7 @@ export function HabitsView({
                   Categoria *
                 </label>
                 <select
+                  className="theme-category-select"
                   value={newCategory}
                   onChange={(e) => {
                     const next = e.target.value;
@@ -1659,14 +1667,14 @@ export function HabitsView({
                     borderRadius: '10px',
                     background: '#1a2030',
                     border: '1px solid rgba(255, 255, 255, 0.15)',
-                    color: '#fff',
+                    color: 'var(--tpl-ink)',
                     fontSize: '0.9rem'
                   }}
                 >
                   {activeCategories.map(cat => {
                     const catName = typeof cat === 'string' ? cat : cat.name;
                     return (
-                      <option key={catName} value={catName}>
+                      <option key={catName} value={catName} style={themeCategoryOptionStyle}>
                         {catName}
                       </option>
                     );
@@ -1679,6 +1687,7 @@ export function HabitsView({
                   Frequência
                 </label>
                 <select
+                  className="theme-category-select"
                   value={newFrequency}
                   onChange={(e) => {
                     const freq = e.target.value;
@@ -1693,16 +1702,16 @@ export function HabitsView({
                     borderRadius: '10px',
                     background: '#1a2030',
                     border: '1px solid rgba(255, 255, 255, 0.15)',
-                    color: '#fff',
+                    color: 'var(--tpl-ink)',
                     fontSize: '0.9rem'
                   }}
                 >
-                  <option value="daily">Todos os dias (Diário)</option>
-                  <option value="weekdays">Dias de semana (Seg-Sex - 5x/sem)</option>
-                  <option value="times_per_week">N vezes por semana (Personalizado)</option>
-                  <option value="weekly">1 vez por semana (Semanal)</option>
-                  <option value="fortnightly">01 vez por quinzena</option>
-                  <option value="monthly">01 vez por mês</option>
+                  <option value="daily" style={themeCategoryOptionStyle}>Todos os dias (Diário)</option>
+                  <option value="weekdays" style={themeCategoryOptionStyle}>Dias de semana (Seg-Sex - 5x/sem)</option>
+                  <option value="times_per_week" style={themeCategoryOptionStyle}>N vezes por semana (Personalizado)</option>
+                  <option value="weekly" style={themeCategoryOptionStyle}>1 vez por semana (Semanal)</option>
+                  <option value="fortnightly" style={themeCategoryOptionStyle}>01 vez por quinzena</option>
+                  <option value="monthly" style={themeCategoryOptionStyle}>01 vez por mês</option>
                 </select>
               </div>
 
@@ -1939,6 +1948,7 @@ export function HabitsView({
                   Categoria *
                 </label>
                 <select
+                  className="theme-category-select"
                   value={editCategory}
                   onChange={(e) => {
                     const next = e.target.value;
@@ -1951,14 +1961,14 @@ export function HabitsView({
                     borderRadius: '10px',
                     background: '#1a2030',
                     border: '1px solid rgba(255, 255, 255, 0.15)',
-                    color: '#fff',
+                    color: 'var(--tpl-ink)',
                     fontSize: '0.9rem'
                   }}
                 >
                   {activeCategories.map(cat => {
                     const catName = typeof cat === 'string' ? cat : cat.name;
                     return (
-                      <option key={catName} value={catName}>
+                      <option key={catName} value={catName} style={themeCategoryOptionStyle}>
                         {catName}
                       </option>
                     );
@@ -1971,6 +1981,7 @@ export function HabitsView({
                   Frequência
                 </label>
                 <select
+                  className="theme-category-select"
                   value={editFrequency}
                   onChange={(e) => {
                     const freq = e.target.value;
@@ -1985,16 +1996,16 @@ export function HabitsView({
                     borderRadius: '10px',
                     background: '#1a2030',
                     border: '1px solid rgba(255, 255, 255, 0.15)',
-                    color: '#fff',
+                    color: 'var(--tpl-ink)',
                     fontSize: '0.9rem'
                   }}
                 >
-                  <option value="daily">Todos os dias (Diário)</option>
-                  <option value="weekdays">Dias de semana (Seg-Sex - 5x/sem)</option>
-                  <option value="times_per_week">N vezes por semana (Personalizado)</option>
-                  <option value="weekly">1 vez por semana (Semanal)</option>
-                  <option value="fortnightly">01 vez por quinzena</option>
-                  <option value="monthly">01 vez por mês</option>
+                  <option value="daily" style={themeCategoryOptionStyle}>Todos os dias (Diário)</option>
+                  <option value="weekdays" style={themeCategoryOptionStyle}>Dias de semana (Seg-Sex - 5x/sem)</option>
+                  <option value="times_per_week" style={themeCategoryOptionStyle}>N vezes por semana (Personalizado)</option>
+                  <option value="weekly" style={themeCategoryOptionStyle}>1 vez por semana (Semanal)</option>
+                  <option value="fortnightly" style={themeCategoryOptionStyle}>01 vez por quinzena</option>
+                  <option value="monthly" style={themeCategoryOptionStyle}>01 vez por mês</option>
                 </select>
               </div>
 

@@ -12,8 +12,13 @@ const fieldStyle = {
   borderRadius: '10px',
   background: '#1a2030',
   border: '1px solid rgba(255, 255, 255, 0.15)',
-  color: '#fff',
+  color: 'var(--tpl-ink)',
   fontSize: '0.9rem'
+};
+
+const themeCategoryOptionStyle = {
+  color: 'var(--tpl-ink)',
+  backgroundColor: 'var(--tpl-card)'
 };
 
 const labelStyle = {
@@ -35,12 +40,13 @@ export function ActivityScaleFields({
       <div style={{ flex: 1 }}>
         <label style={labelStyle}>Prioridade</label>
         <select
+          className="theme-category-select"
           value={priority}
           onChange={(e) => onPriorityChange(e.target.value)}
           style={fieldStyle}
         >
           {PRIORITY_KEYS.map((key) => (
-            <option key={key} value={key}>
+            <option key={key} value={key} style={themeCategoryOptionStyle}>
               {PRIORITY_META[key].label}
             </option>
           ))}
@@ -49,12 +55,13 @@ export function ActivityScaleFields({
       <div style={{ flex: 1 }}>
         <label style={labelStyle}>Dificuldade</label>
         <select
+          className="theme-category-select"
           value={difficulty}
           onChange={(e) => onDifficultyChange(e.target.value)}
           style={fieldStyle}
         >
           {DIFFICULTY_KEYS.map((key) => (
-            <option key={key} value={key}>
+            <option key={key} value={key} style={themeCategoryOptionStyle}>
               {DIFFICULTY_REWARDS[key].optionLabel}
             </option>
           ))}
