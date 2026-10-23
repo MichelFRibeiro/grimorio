@@ -115,8 +115,8 @@ function AguErrorNotebook({ plan, todayStr, onAdd, onReview, onDelete }) {
         }}
         style={{ display: 'grid', gap: '8px', marginBottom: '14px' }}
       >
-        <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="O que você errou" style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.25)', color: '#fff' }} />
-        <input value={link} onChange={(event) => setLink(event.target.value)} placeholder="Link da questão (opcional)" style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.25)', color: '#fff' }} />
+        <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="O que você errou" style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.25)', color: 'var(--tpl-ink)' }} />
+        <input value={link} onChange={(event) => setLink(event.target.value)} placeholder="Link da questão (opcional)" style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.25)', color: 'var(--tpl-ink)' }} />
         <select value={subjectId} onChange={(event) => setSubjectId(event.target.value)} style={{ padding: '8px 10px', borderRadius: '8px' }}>
           <option value="">Matéria</option>
           {AGU_SUBJECTS.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
@@ -227,7 +227,7 @@ const fieldStyle = {
   borderRadius: '8px',
   border: '1px solid rgba(255,255,255,0.12)',
   background: 'rgba(0,0,0,0.25)',
-  color: '#f8fafc'
+  color: 'var(--tpl-ink)'
 };
 
 function StudyTimeCard({ studyTime, liveMinutes = 0 }) {
@@ -1311,7 +1311,7 @@ const inputStyle = {
   borderRadius: '10px',
   background: '#1a2030',
   border: '1px solid rgba(245, 158, 11, 0.35)',
-  color: '#fff',
+  color: 'var(--tpl-ink)',
   fontSize: '1rem',
   fontWeight: 800,
   fontFamily: 'var(--font-mono)'
