@@ -40,14 +40,21 @@ import { getSaoPauloDateStr } from '../utils/timeUtils';
 import { confirmLongDuration, secondsToDurationMinutes } from '../utils/activityDuration';
 import { buildScriptureHomeostasisVictory } from '../utils/homeostasis';
 
+/* #fff junto de background entra no remap de "rótulo de botão" e a fonte
+   fica escura no fundo escuro. O token do tema não entra nesse seletor. */
 const fieldStyle = {
   width: '100%',
   padding: '10px 12px',
   borderRadius: '10px',
   background: '#1a2030',
   border: '1px solid rgba(255, 255, 255, 0.14)',
-  color: '#fff',
+  color: 'var(--tpl-ink)',
   fontSize: '0.92rem'
+};
+
+const scriptureOptionStyle = {
+  color: 'var(--tpl-ink)',
+  backgroundColor: 'var(--tpl-card)'
 };
 
 function normalizedQuoteSpan(passage, endVerse) {
@@ -73,7 +80,7 @@ function PassageFields({ label, bookId, chapter, verse, onChange, accent = '#fbb
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <select value={bookId} onChange={(e) => onChange({ bookId: e.target.value, chapter: 1, verse: 1 })} style={{ ...fieldStyle, flex: 2 }}>
           {BIBLE_BOOKS.map((item) => (
-            <option key={item.id} value={item.id}>{item.name}</option>
+            <option key={item.id} value={item.id} style={scriptureOptionStyle}>{item.name}</option>
           ))}
         </select>
         <select
@@ -82,7 +89,7 @@ function PassageFields({ label, bookId, chapter, verse, onChange, accent = '#fbb
           style={{ ...fieldStyle, flex: 1 }}
           aria-label={`${label} capítulo`}
         >
-          {Array.from({ length: chapters }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
+          {Array.from({ length: chapters }, (_, i) => i + 1).map((n) => <option key={n} value={n} style={scriptureOptionStyle}>{n}</option>)}
         </select>
         <select
           value={verse}
@@ -90,7 +97,7 @@ function PassageFields({ label, bookId, chapter, verse, onChange, accent = '#fbb
           style={{ ...fieldStyle, flex: 1 }}
           aria-label={`${label} versículo`}
         >
-          {Array.from({ length: verses }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
+          {Array.from({ length: verses }, (_, i) => i + 1).map((n) => <option key={n} value={n} style={scriptureOptionStyle}>{n}</option>)}
         </select>
       </div>
     </div>
@@ -549,7 +556,7 @@ export function ScriptureView({
                     style={{ ...fieldStyle, marginTop: '6px' }}
                   >
                     {Array.from({ length: Math.max(0, verseCount(getBibleBook(quotePassage.bookId), quotePassage.chapter) - quotePassage.verse + 1) }, (_, i) => quotePassage.verse + i).map((n) => (
-                      <option key={n} value={n}>{n === quotePassage.verse ? `${n} (só este)` : n}</option>
+                      <option key={n} value={n} style={scriptureOptionStyle}>{n === quotePassage.verse ? `${n} (só este)` : n}</option>
                     ))}
                   </select>
                 </label>
@@ -785,7 +792,7 @@ function SessionEditor({ session, onCancel, onSave }) {
                 <label style={{ minWidth: 'min(100%, 120px)', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 800 }}>Até o versículo
                   <select value={item.endVerse || item.verse} onChange={(event) => updateQuote(item.id, { endVerse: Number(event.target.value) })} style={{ ...fieldStyle, marginTop: '6px' }}>
                     {Array.from({ length: Math.max(0, verseCount(getBibleBook(item.bookId), item.chapter) - item.verse + 1) }, (_, i) => item.verse + i).map((n) => (
-                      <option key={n} value={n}>{n}</option>
+                      <option key={n} value={n} style={scriptureOptionStyle}>{n}</option>
                     ))}
                   </select>
                 </label>
@@ -835,7 +842,7 @@ function QuoteEditor({ quote, onCancel, onSave }) {
           <label style={{ minWidth: 'min(100%, 120px)', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 800 }}>Até o versículo
             <select value={endVerse} onChange={(event) => setEndVerse(Number(event.target.value))} style={{ ...fieldStyle, marginTop: '6px' }}>
               {Array.from({ length: Math.max(0, verseCount(getBibleBook(passage.bookId), passage.chapter) - passage.verse + 1) }, (_, i) => passage.verse + i).map((n) => (
-                <option key={n} value={n}>{n}</option>
+                <option key={n} value={n} style={scriptureOptionStyle}>{n}</option>
               ))}
             </select>
           </label>
