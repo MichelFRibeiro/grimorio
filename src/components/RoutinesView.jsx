@@ -110,6 +110,21 @@ const fieldStyle = {
   fontSize: '0.95rem'
 };
 
+/* O popup nativo herda #fff do campo e abre claro, com a fonte clara em cima.
+   Fundo chapado escuro + token do tema: o token não entra no remap de botão
+   e acompanha claro/escuro. */
+const routineOptionStyle = {
+  color: 'var(--tpl-ink)',
+  backgroundColor: 'var(--tpl-card, #131722)'
+};
+
+const routineSelectStyle = {
+  ...fieldStyle,
+  flex: 1,
+  background: '#1a2030',
+  color: 'var(--tpl-ink, #f8fafc)'
+};
+
 const labelStyle = {
   display: 'block',
   fontSize: '0.8rem',
@@ -1014,10 +1029,10 @@ export function RoutinesView({
             <div>
               <label style={labelStyle}>Adicionar ritual</label>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <select value={picker} onChange={(event) => setPicker(event.target.value)} style={{ ...fieldStyle, flex: 1 }}>
-                  <option value="">Escolha um ritual</option>
+                <select value={picker} onChange={(event) => setPicker(event.target.value)} className="routine-step-select theme-category-select" style={routineSelectStyle}>
+                  <option value="" style={routineOptionStyle}>Escolha um ritual</option>
                   {available.map(habit => (
-                    <option key={habit.id} value={habit.id}>{habit.title}</option>
+                    <option key={habit.id} value={habit.id} style={routineOptionStyle}>{habit.title}</option>
                   ))}
                 </select>
                 <button type="button" onClick={addStep} disabled={!picker} style={{ ...iconBtn, width: '42px' }}>
@@ -1028,10 +1043,10 @@ export function RoutinesView({
             <div>
               <label style={labelStyle}>Adicionar sub-rotina</label>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <select value={routinePicker} onChange={(event) => setRoutinePicker(event.target.value)} style={{ ...fieldStyle, flex: 1 }}>
-                  <option value="">{otherRoutines.length ? 'Escolha uma rotina' : 'Nenhuma outra rotina ainda'}</option>
+                <select value={routinePicker} onChange={(event) => setRoutinePicker(event.target.value)} className="routine-step-select theme-category-select" style={routineSelectStyle}>
+                  <option value="" style={routineOptionStyle}>{otherRoutines.length ? 'Escolha uma rotina' : 'Nenhuma outra rotina ainda'}</option>
                   {selectableRoutines.map(item => (
-                    <option key={item.id} value={item.id}>
+                    <option key={item.id} value={item.id} style={routineOptionStyle}>
                       {item.title} ({item.progress?.total || 0} rituais)
                     </option>
                   ))}
@@ -1053,10 +1068,10 @@ export function RoutinesView({
             <div>
               <label style={labelStyle}>Adicionar atividade</label>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <select value={activityPicker} onChange={(event) => setActivityPicker(event.target.value)} style={{ ...fieldStyle, flex: 1 }}>
-                  <option value="">Escolha uma atividade</option>
+                <select value={activityPicker} onChange={(event) => setActivityPicker(event.target.value)} className="routine-step-select theme-category-select" style={routineSelectStyle}>
+                  <option value="" style={routineOptionStyle}>Escolha uma atividade</option>
                   {availableActivities.map(item => (
-                    <option key={item.id} value={item.id}>{item.label} · {activityHint(item)}</option>
+                    <option key={item.id} value={item.id} style={routineOptionStyle}>{item.label} · {activityHint(item)}</option>
                   ))}
                 </select>
                 <button type="button" onClick={addActivityStep} disabled={!activityPicker} style={{ ...iconBtn, width: '42px' }} title="Adicionar atividade">

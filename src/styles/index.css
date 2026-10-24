@@ -107,6 +107,20 @@ select.theme-category-select {
   color: var(--tpl-ink) !important;
 }
 
+/* Modal de rotina: o popup nativo abre claro e a fonte clara some.
+   Especificidade acima da regra de tema (`html[data-theme] select`) para o
+   fundo do controle e da lista seguir o cartão — escuro nos temas escuros. */
+html[data-theme] select.routine-step-select,
+html[data-theme] select.routine-step-select option,
+html[data-theme] select.routine-step-select option:checked {
+  color: var(--tpl-ink, #f8fafc) !important;
+  background-color: var(--tpl-card, #131722) !important;
+}
+
+html[data-theme] select.routine-step-select option:checked {
+  background-color: var(--bg-card-active, var(--tpl-card, #222a3f)) !important;
+}
+
 select.mission-category-select option,
 select.mission-category-select option:checked,
 select.theme-category-select option,
