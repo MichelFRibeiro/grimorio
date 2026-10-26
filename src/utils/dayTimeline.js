@@ -119,11 +119,38 @@ function makeEvent(partial) {
   };
 }
 
+/**
+ * O ledger, quando recebe só a data (`logDate`), grava o instante como
+ * 15:00 UTC — meio-dia em São Paulo — para o dia civil bater. Não é a hora
+ * em que a pessoa marcou. O id `log-<epoch>-…` guarda esse momento.
+ */
+const LEDGER_NOON = /T15:00:00(?:\.000)?Z$/;
+
+function isLedgerNoon(value) {
+  return typeof value === 'string' && LEDGER_NOON.test(value);
+}
+
+function instantFromLogId(id) {
+  const match = /^log-(\d{13,})-/.exec(String(id || ''));
+  if (!match) return null;
+  const ms = Number(match[1]);
+  if (!Number.isFinite(ms)) return null;
+  const date = new Date(ms);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function logClock(log, todayStr) {
+  const fromId = timeOnDay(instantFromLogId(log?.id), todayStr);
+  if (isLedgerNoon(log?.timestamp)) return fromId;
+  return timeOnDay(log?.timestamp, todayStr) || fromId;
+}
+
 function indexLogs(logs, todayStr) {
   const byKey = new Map();
   asList(logs).forEach((log) => {
-    if (!log || log.date !== todayStr || !log.type || !log.entityId || !log.timestamp) return;
-    const at = timeOnDay(log.timestamp, todayStr);
+    if (!log || log.date !== todayStr || !log.type || !log.entityId) return;
+    const at = logClock(log, todayStr);
     if (!at) return;
     const key = `${log.type}|${log.entityId}`;
     const prev = byKey.get(key);
@@ -177,7 +204,8 @@ function collectHabits(source, todayStr, logs, settings) {
       title: habit.title || 'Ritual',
       detail: joinDetail(['Ritual', count > 0 ? String(count) : '', durationDetail(minutes), clip(note)]),
       minutes,
-      at: logTime(logs, 'habit_complete', habit.id)
+      at: timeOnDay(instantFromLogId(habit.rewardLogs?.[todayStr]), todayStr)
+        || logTime(logs, 'habit_complete', habit.id)
     })];
   });
 }

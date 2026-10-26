@@ -318,6 +318,45 @@ function run() {
   assert.ok(ids(hidden).includes('questions:ex-agu'), 'sem AGU, a questão do bloco continua visível');
   assert.ok(ids(hidden).includes('quest:q-hoje'));
 
+  const noon = `${TODAY}T15:00:00.000Z`;
+  const markedAt = Date.parse(at('09:42'));
+  const recovered = buildDayTimeline({
+    habits: [
+      {
+        id: 'h-lei',
+        title: 'Lei Seca',
+        history: [TODAY],
+        rewardLogs: { [TODAY]: `log-${markedAt}-abc` }
+      },
+      {
+        id: 'h-falso',
+        title: 'Sem hora real',
+        history: [TODAY],
+        rewardLogs: { [TODAY]: 'log-antigo' }
+      }
+    ],
+    actionLogs: [
+      {
+        id: `log-${markedAt}-abc`,
+        type: 'habit_complete',
+        entityId: 'h-lei',
+        date: TODAY,
+        timestamp: noon
+      },
+      {
+        id: 'log-antigo',
+        type: 'habit_complete',
+        entityId: 'h-falso',
+        date: TODAY,
+        timestamp: noon
+      }
+    ]
+  }, TODAY);
+  const lei = recovered.events.find((item) => item.id === 'habit:h-lei');
+  const falso = recovered.events.find((item) => item.id === 'habit:h-falso');
+  assert.equal(lei.timeLabel, '09:42', 'meio-dia do ledger não é a hora do ritual');
+  assert.equal(falso.timeLabel, '', 'sem epoch no id, não inventa 12:00');
+
   const boundary = buildDayTimeline({
     journalEntries: [{
       id: 'j-limite',
