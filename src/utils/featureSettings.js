@@ -26,6 +26,12 @@ export const FEATURE_SETTINGS = [
     group: 'Painel'
   },
   {
+    id: 'dayTimeline',
+    label: 'Linha do tempo do dia',
+    description: 'O que foi feito hoje, na ordem do dia. Desligar só esconde; os registros continuam.',
+    group: 'Painel'
+  },
+  {
     id: 'today',
     label: 'Hoje',
     tab: 'today',

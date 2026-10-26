@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { BossRaid } from './components/BossRaid';
 import { DailyVictoriesCard } from './components/DailyVictoriesCard';
 import { HomeRoutineCard } from './components/HomeRoutineCard';
+import { HomeTimelineCard } from './components/HomeTimelineCard';
 import { NextActionCard } from './components/NextActionCard';
 import { LevelUpModal } from './components/LevelUpModal';
 import { DestinyChestModal } from './components/DestinyChestModal';
@@ -687,6 +688,16 @@ export function App() {
             }}
           />
         </Suspense>
+      )}
+
+      {featureOn('dayTimeline') && (
+        <HomeTimelineCard
+          source={data}
+          todayStr={todayStr}
+          featureSettings={featureSettings}
+          onOpenTab={openTab}
+          playClick={playClick}
+        />
       )}
 
       {/* Boss Raid Banner */}
