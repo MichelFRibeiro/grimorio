@@ -788,6 +788,8 @@ const primaryButton = (disabled) => ({
   padding: '10px 14px',
   borderRadius: '12px',
   background: disabled ? 'rgba(45, 212, 191, 0.25)' : ACCENT,
+  // Tinta escura pareada com o menta #2dd4bf. Não trocar por #fff: o fundo
+  // não é remapeado e texto claro fica ilegível.
   color: '#042f2e',
   border: 'none',
   cursor: disabled ? 'not-allowed' : 'pointer',

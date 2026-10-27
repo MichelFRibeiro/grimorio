@@ -284,9 +284,11 @@ for (const [tema, dados] of Object.entries(TEMAS)) {
   //    seletor para ganhar de qualquer regra de cor de um atributo só.
   lines.push('', '/* --- rotulo de botao de FUNDO FORTE (chapado ou gradiente de destaque) ---' + ' */');
   // Botão cujo fundo é uma cor chapada ou um gradiente de destaque: o rótulo
-  // explícito do JSX (#000, #111, #0f172a ou #fff) tem de vir do TEMA, porque
-  // o fundo também foi remapeado. Sem isso, #fff continuava claro num fundo
-  // que clareou (Lousa/Atlas) ou #0f172a virava claro sobre botão claro.
+  // explícito do JSX (#000, #111, #0f172a, #fff, #052e16 ou #022c22) tem de
+  // vir do TEMA, porque o fundo também foi remapeado. Sem isso, #fff
+  // continuava claro num fundo que clareou (Lousa/Atlas) ou #0f172a virava
+  // claro sobre botão claro. #042f2e fica de fora: o menta #2dd4bf não é
+  // remapeado, e a regra seguinte devolve a tinta escura original.
   //
   // NÃO se aplica a botão de véu ("rgba(255,255,255,0.06)"): ali o fundo é
   // transparente e o texto herda o contraste do cartão — forçar a cor de
@@ -301,12 +303,26 @@ for (const [tema, dados] of Object.entries(TEMAS)) {
     'color: rgb(17, 24, 39)', 'color: rgb(15, 23, 42)',
     'color: rgb(255, 255, 255)', 'color: rgb(248, 250, 252)'
   ];
+  // Tinta escura que o JSX usa SÓ como rótulo de botão colorido (#052e16 no
+  // verde, #022c22 no gradiente esmeralda). O papel "escuro" a clareava
+  // sozinha e o rótulo sumia no fundo que o tema também clareou.
+  rotulos.push('color: rgb(5, 46, 22)', 'color: rgb(2, 44, 34)');
   for (const marcador of rotulos) {
     rule(somenteFundoForte(`${scope} [style*="${marcador}"][style*="background"]`),
       `color: ${dados.papelContraste} !important;`);
     rule(somenteFundoForte(`${scope} [style*="${marcador}"][style*="background"][style*="border-color"]`),
       `color: ${dados.papelContraste} !important;`);
   }
+
+  // #042f2e é a tinta do "Registrar tomada" sobre o menta chapado #2dd4bf.
+  // Esse fundo entra via constante (ACCENT), então não é remapeado e continua
+  // verde-claro em todos os temas. O papel "escuro" clareava o rótulo e
+  // deixava branco sobre menta. A tinta volta ao par original — dois
+  // atributos para vencer a regra de cor de um atributo só. Não entra em
+  // rotulos: papelContraste no Atlas é creme, e creme sobre menta não se lê.
+  lines.push('', '/* --- rotulo sobre menta chapado (fundo nao remapeado) --- */');
+  rule(`${scope} [style*="color: rgb(4, 47, 46)"][style*="background: rgb(45, 212, 191)"]`,
+    'color: #042f2e !important;');
 
   const out = lines.join('\n') + '\n';
   const file = path.join(OUT_DIR, tema, 'overrides.css');
