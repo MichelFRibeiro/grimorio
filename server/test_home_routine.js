@@ -118,6 +118,37 @@ function assertModel() {
   ];
   const nestedSnapshot = buildHomeRoutine(nested, habits, today, 'a');
   assert.equal(nestedSnapshot.progress.total, 2);
+
+  // 2026-03-24 é terça. Seg/Qua/Sex em dia (segunda feita) não entra na conta.
+  const tuesday = '2026-03-24';
+  const scheduledHabits = [
+    {
+      id: 'sei',
+      title: 'Limpar SEI',
+      frequency: 'times_per_week',
+      targetTimesPerWeek: 3,
+      weekDays: [1, 3, 5],
+      history: ['2026-03-23']
+    },
+    { id: 'agua', title: 'Água', frequency: 'daily', history: [] }
+  ];
+  const scheduledRoutines = [{
+    id: 'expediente',
+    title: 'Expediente',
+    steps: [{ kind: 'habit', habitId: 'sei' }, { kind: 'habit', habitId: 'agua' }]
+  }];
+  const offDay = buildHomeRoutine(scheduledRoutines, scheduledHabits, tuesday, 'expediente');
+  assert.equal(offDay.progress.total, 1);
+  assert.equal(offDay.progress.resting, 1);
+  assert.equal(offDay.steps[0].expectedToday, false);
+  assert.equal(offDay.next.habitId, 'agua');
+  assert.equal(offDay.completeToday, false);
+  const lateHome = buildHomeRoutine(scheduledRoutines, [
+    { ...scheduledHabits[0], history: [] },
+    scheduledHabits[1]
+  ], tuesday, 'expediente');
+  assert.equal(lateHome.steps[0].expectedToday, true, 'atraso da segunda volta a esperar o ritual na terça');
+  assert.equal(lateHome.next.habitId, 'sei');
   assert.equal(nestedSnapshot.steps[0].kind, 'routine');
   assert.equal(nestedSnapshot.steps[0].progress.done, 1);
 

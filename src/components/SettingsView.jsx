@@ -31,7 +31,9 @@ function RoutineChoice({ routine, selected, disabled, onPick }) {
             ? 'A tela inicial fica sem o quadro da rotina'
             : progress.total
               ? `${progress.done} de ${progress.total} passos feitos hoje`
-              : 'Rotina ainda sem passos'}
+              : progress.resting
+                ? 'Nada previsto para hoje'
+                : 'Rotina ainda sem passos'}
         </span>
       </span>
     </button>

@@ -10,11 +10,14 @@ import http from 'http';
 import {
   MAX_ROUTINE_NESTING,
   ROUTINE_CYCLE_ERROR,
+  nextRoutineLeaf,
+  resolveRoutineSteps,
+  routineDayProgress,
   sanitizeRoutines,
   routineLinkError
 } from '../src/utils/routines.js';
 import { routineActivitySnapshot } from '../src/utils/routineActivities.js';
-import { getSaoPauloDateStr } from './timeUtils.js';
+import { addDaysToDateStr, getSaoPauloDateStr } from './timeUtils.js';
 
 const PORT = Number(process.env.TEST_PORT || process.env.PORT);
 let authToken = null;
@@ -124,8 +127,126 @@ function assertModel() {
   assert.equal(reviewed['supplement-review'].tab, 'supplements');
 }
 
+function assertSchedule() {
+  const tuesday = '2026-03-24';
+  const wednesday = '2026-03-25';
+  const thursday = '2026-03-26';
+  const saturday = '2026-03-28';
+  const sei = {
+    id: 'sei',
+    title: 'Limpar SEI',
+    frequency: 'times_per_week',
+    targetTimesPerWeek: 3,
+    weekDays: [1, 3, 5],
+    history: ['2026-03-23']
+  };
+  const agua = { id: 'agua', title: 'Água', frequency: 'daily', history: [] };
+  const routine = {
+    id: 'manha',
+    title: 'Manhã',
+    steps: [
+      { kind: 'habit', habitId: 'sei' },
+      { kind: 'habit', habitId: 'agua' },
+      { kind: 'activity', activityId: 'journal' }
+    ]
+  };
+
+  const onTrack = resolveRoutineSteps(routine, [sei, agua], tuesday);
+  assert.equal(onTrack[0].expectedToday, false, 'terça em dia não espera o ritual de Seg/Qua/Sex');
+  assert.equal(onTrack[1].expectedToday, true, 'ritual diário continua esperado');
+  assert.equal(onTrack[2].expectedToday, true, 'atividade não tem agenda e continua esperada');
+  const onTrackProgress = routineDayProgress(onTrack);
+  assert.equal(onTrackProgress.total, 2, 'o ritual fora do dia sai da conta');
+  assert.equal(onTrackProgress.resting, 1);
+  assert.equal(onTrackProgress.complete, false);
+  assert.equal(nextRoutineLeaf(onTrack).habitId, 'agua', 'o próximo passo pula o ritual que não é de hoje');
+
+  const late = resolveRoutineSteps(routine, [{ ...sei, history: [] }, agua], tuesday);
+  assert.equal(late[0].expectedToday, true, 'terça espera o ritual se a segunda foi perdida');
+  assert.equal(routineDayProgress(late).total, 3);
+
+  const scheduled = resolveRoutineSteps(routine, [sei, agua], wednesday);
+  assert.equal(scheduled[0].expectedToday, true, 'quarta prevista entra mesmo em dia');
+
+  const doneOnDay = resolveRoutineSteps(routine, [{
+    ...sei,
+    history: ['2026-03-23', wednesday]
+  }, { ...agua, history: [wednesday] }], wednesday);
+  assert.equal(doneOnDay[0].expectedToday, true, 'feito no dia previsto continua na conta, como feito');
+  assert.equal(doneOnDay[0].doneToday, true);
+  assert.equal(routineDayProgress(doneOnDay).done, 2);
+  assert.equal(routineDayProgress(doneOnDay).complete, false, 'falta a atividade');
+
+  const catchUp = resolveRoutineSteps(routine, [{
+    ...sei,
+    history: ['2026-03-23', '2026-03-25']
+  }, agua], saturday);
+  assert.equal(catchUp[0].expectedToday, true, 'sábado recupera a sexta perdida');
+
+  const quotaMet = resolveRoutineSteps(routine, [{
+    ...sei,
+    history: ['2026-03-23', '2026-03-25', '2026-03-27']
+  }, { ...agua, history: [saturday] }], saturday);
+  assert.equal(quotaMet[0].expectedToday, false, 'meta 3/3 já batida não volta no sábado');
+  assert.equal(routineDayProgress(quotaMet).complete, false, 'ainda falta a atividade');
+  const quotaWithoutActivity = resolveRoutineSteps({
+    ...routine,
+    steps: routine.steps.filter(step => step.activityId !== 'journal')
+  }, [{
+    ...sei,
+    history: ['2026-03-23', '2026-03-25', '2026-03-27']
+  }, { ...agua, history: [saturday] }], saturday);
+  assert.equal(routineDayProgress(quotaWithoutActivity).complete, true, 'só o diário feito basta quando o 3x/sem já fechou');
+
+  const flexible = resolveRoutineSteps(routine, [{
+    id: 'sei',
+    title: 'Limpar SEI',
+    frequency: 'times_per_week',
+    targetTimesPerWeek: 3,
+    history: []
+  }, agua], tuesday);
+  assert.equal(flexible[0].expectedToday, true, '3x/sem sem dias previstos continua devido qualquer dia');
+
+  const weeklyOff = resolveRoutineSteps({
+    id: 'sem',
+    title: 'Semana',
+    steps: [{ kind: 'habit', habitId: 'sem' }]
+  }, [{ id: 'sem', title: 'Revisão', frequency: 'weekly', weekDays: [3], history: [] }], tuesday);
+  assert.equal(weeklyOff[0].expectedToday, false, 'semanal de quarta não entra na terça');
+
+  const weeklyLate = resolveRoutineSteps({
+    id: 'sem',
+    title: 'Semana',
+    steps: [{ kind: 'habit', habitId: 'sem' }]
+  }, [{ id: 'sem', title: 'Revisão', frequency: 'weekly', weekDays: [3], history: [] }], thursday);
+  assert.equal(weeklyLate[0].expectedToday, true, 'semanal de quarta entra na quinta se atrasou');
+
+  const weekend = resolveRoutineSteps({
+    id: 'util',
+    title: 'Útil',
+    steps: [{ kind: 'habit', habitId: 'util' }]
+  }, [{ id: 'util', title: 'Expediente', frequency: 'weekdays', history: [] }], saturday);
+  assert.equal(weekend[0].expectedToday, false, 'dias úteis não entram no sábado');
+
+  const child = {
+    id: 'filho',
+    title: 'SEI',
+    steps: [{ kind: 'habit', habitId: 'sei' }]
+  };
+  const parent = {
+    id: 'pai',
+    title: 'Dia',
+    steps: [{ kind: 'routine', routineId: 'filho' }, { kind: 'habit', habitId: 'agua' }]
+  };
+  const nested = resolveRoutineSteps(parent, [sei, agua], tuesday, [child, parent]);
+  assert.equal(nested[0].expectedToday, false, 'sub-rotina só com ritual fora do dia não é esperada');
+  assert.equal(routineDayProgress(nested).total, 1);
+  assert.equal(nextRoutineLeaf(nested).habitId, 'agua');
+}
+
 async function run() {
   assertModel();
+  assertSchedule();
   const server = await startTestServer();
   try {
     const guest = await request('/api/auth/guest', { method: 'POST' }, {});
@@ -480,6 +601,75 @@ async function run() {
     assert.equal(reviewDone.steps.find(step => step.activityId === 'supplement-review').doneToday, true);
     assert.equal(reviewDone.completeToday, true);
     assert.equal(reviewDone.nextActivityId, null);
+
+    const today = getSaoPauloDateStr();
+    const todayDow = new Date(`${today}T12:00:00Z`).getUTCDay();
+    const monday = addDaysToDateStr(today, (todayDow === 0 ? -6 : 1) - todayDow);
+    const dateOfWeekday = (dow) => addDaysToDateStr(monday, dow === 0 ? 6 : dow - 1);
+    const otherDays = [1, 2, 3, 4, 5, 6, 0].filter(dow => dow !== todayDow);
+    const scheduledDays = otherDays.slice(0, 2);
+    const sei = await request('/api/habits', { method: 'POST' }, {
+      title: 'Limpar SEI',
+      frequency: 'times_per_week',
+      weekDays: scheduledDays
+    });
+    const aguaDia = await request('/api/habits', { method: 'POST' }, {
+      title: 'Água do dia',
+      frequency: 'daily'
+    });
+    assert.equal(sei.status, 200, sei.data?.error);
+    assert.equal(aguaDia.status, 200, aguaDia.data?.error);
+    const seiId = sei.data.habit.id;
+    const aguaDiaId = aguaDia.data.habit.id;
+    for (const dow of scheduledDays) {
+      const date = dateOfWeekday(dow);
+      if (date >= today) continue;
+      const marked = await request(`/api/habits/${seiId}/toggle`, { method: 'POST' }, { date });
+      assert.equal(marked.status, 200, marked.data?.error);
+      assert.equal(marked.data.done, true);
+    }
+
+    const expediente = await request('/api/routines', { method: 'POST' }, {
+      title: 'Expediente',
+      steps: [{ habitId: seiId }, { habitId: aguaDiaId }]
+    });
+    assert.equal(expediente.status, 200, expediente.data?.error);
+    assert.equal(expediente.data.routine.steps[0].expectedToday, false, 'ritual em dia, fora do dia previsto, não é esperado');
+    assert.equal(expediente.data.routine.progress.total, 1);
+    assert.equal(expediente.data.routine.progress.resting, 1);
+    assert.equal(expediente.data.routine.nextHabitId, aguaDiaId);
+    assert.equal(expediente.data.routine.completeToday, false);
+
+    const aguaFeita = await request(`/api/routines/${expediente.data.routine.id}/advance`, { method: 'POST' }, {
+      habitId: aguaDiaId
+    });
+    assert.equal(aguaFeita.status, 200, aguaFeita.data?.error);
+    assert.equal(aguaFeita.data.completeToday, true, 'a rotina fecha sem o ritual que não é de hoje');
+
+    const planned = await request(`/api/routines/${expediente.data.routine.id}/plan`, { method: 'POST' }, {});
+    assert.equal(planned.status, 200, planned.data?.error);
+    const conquered = await request(`/api/routines/${expediente.data.routine.id}/complete`, { method: 'POST' }, {});
+    assert.equal(conquered.status, 200, conquered.data?.error);
+
+    const earlier = otherDays.find(dow => dateOfWeekday(dow) < today);
+    if (earlier != null) {
+      const arquivo = await request('/api/habits', { method: 'POST' }, {
+        title: 'Arquivo',
+        frequency: 'times_per_week',
+        weekDays: [earlier]
+      });
+      assert.equal(arquivo.status, 200, arquivo.data?.error);
+      const atraso = await request('/api/routines', { method: 'POST' }, {
+        title: 'Atraso',
+        steps: [{ habitId: arquivo.data.habit.id }, { habitId: aguaDiaId }]
+      });
+      assert.equal(atraso.status, 200, atraso.data?.error);
+      assert.equal(atraso.data.routine.steps[0].expectedToday, true, 'dia previsto já passado continua esperado');
+      assert.equal(atraso.data.routine.nextHabitId, arquivo.data.habit.id);
+      assert.equal(atraso.data.routine.completeToday, false);
+      assert.equal(atraso.data.routine.progress.total, 2);
+      assert.equal(atraso.data.routine.progress.done, 1);
+    }
 
     console.log('Rotinas: sequência guiada e sub-rotinas ok');
   } finally {

@@ -64,7 +64,7 @@ export function routineDaySnapshot(routine, habits, routines, dateStr, activitie
     // Rituais inteiros (sub-rotinas incluídas), sem repetição — o que a
     // execução da rotina reconhece como "feito" no dia.
     habitIds: collectRoutineHabitIds(resolved),
-    pending: present.filter(step => !step.doneToday)
+    pending: present.filter(step => step.expectedToday !== false && !step.doneToday)
   };
 }
 
@@ -115,10 +115,12 @@ function describeHomeStep(step, todayStr) {
       icon: step.routine?.icon || 'ListOrdered',
       missing: !!step.missing,
       doneToday: !!step.doneToday,
+      expectedToday: step.expectedToday !== false,
       progress: {
         total: progress.total || 0,
         done: progress.done || 0,
         missing: progress.missing || 0,
+        resting: progress.resting || 0,
         complete: !!progress.complete
       },
       steps: (step.steps || []).map(child => describeHomeStep(child, todayStr))
@@ -133,7 +135,8 @@ function describeHomeStep(step, todayStr) {
       tab: step.tab || '',
       rule: step.rule || '',
       missing: !!step.missing,
-      doneToday: step.missing ? false : !!step.doneToday
+      doneToday: step.missing ? false : !!step.doneToday,
+      expectedToday: step.missing ? false : step.expectedToday !== false
     };
   }
   const history = Array.isArray(step.habit?.history) ? step.habit.history : [];
@@ -144,7 +147,8 @@ function describeHomeStep(step, todayStr) {
     icon: step.habit?.icon || null,
     tracking: step.habit?.tracking || null,
     missing: !!step.missing,
-    doneToday: step.missing ? false : !!(step.doneToday || (todayStr && history.includes(todayStr)))
+    doneToday: step.missing ? false : !!(step.doneToday || (todayStr && history.includes(todayStr))),
+    expectedToday: step.missing ? false : step.expectedToday !== false
   };
 }
 
@@ -155,6 +159,9 @@ function describeHomeStep(step, todayStr) {
 export function routineVictoryGate(routine, snapshot) {
   if (!routine) return { canComplete: false, reason: 'Rotina não encontrada.' };
   if (!snapshot || !snapshot.progress?.total) {
+    if (snapshot?.progress?.resting) {
+      return { canComplete: false, reason: 'Nenhum passo desta rotina está previsto para hoje.' };
+    }
     return { canComplete: false, reason: 'Esta rotina não tem passos válidos para hoje.' };
   }
   const { total, done } = snapshot.progress;

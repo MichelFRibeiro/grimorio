@@ -94,6 +94,7 @@ function decorateResolvedStep(step) {
       description: child?.description || '',
       missing: !!step.missing,
       doneToday: !!step.doneToday,
+      expectedToday: step.expectedToday !== false,
       progress: step.progress || routineDayProgress(step.steps),
       ...nextPointers(next),
       steps: (step.steps || []).map(decorateResolvedStep)
@@ -112,7 +113,8 @@ function decorateResolvedStep(step) {
       count: step.count || 0,
       detail: step.detail || '',
       missing: !!step.missing,
-      doneToday: !!step.doneToday
+      doneToday: !!step.doneToday,
+      expectedToday: step.expectedToday !== false
     };
   }
   return {
@@ -128,6 +130,7 @@ function decorateResolvedStep(step) {
     description: step.habit?.description || '',
     missing: !!step.missing,
     doneToday: !!step.doneToday,
+    expectedToday: step.expectedToday !== false,
     currentStreak: step.habit?.currentStreak || 0
   };
 }
@@ -294,9 +297,10 @@ export function removeHabitFromRoutines(db, habitId) {
 //
 // Planejar não paga nada: o registro é uma vaga manual do dia (uma das 3),
 // com `source: 'routine'` e o `routineId`. Conquistar paga como uma vitória
-// comum (+ XP e moedas), mas só depois que o SERVIDOR confere que todos os
-// passos da rotina foram cumpridos hoje — rituais marcados e atividades
-// (Biblioteca, Escrituras, AGU, Diário, Review) reconhecidas.
+// comum (+ XP e moedas), mas só depois que o SERVIDOR confere que os passos
+// previstos para hoje foram cumpridos. Ritual fora do dia, e que não está
+// atrasado, não entra na conta. Atividades (Biblioteca, Escrituras, AGU,
+// Diário, Review) continuam reconhecidas no dia.
 // Desmarcar um ritual depois não estorna a vitória sozinho: reabrir a vitória
 // é ato explícito. Excluir a rotina leva junto as vitórias dela que ainda não
 // foram conquistadas; as conquistadas continuam no histórico (foram feitas).
@@ -333,6 +337,7 @@ export function routineVictorySnapshot(db, routineId, date = getSaoPauloDateStr(
     total: snapshot.progress.total,
     done: snapshot.progress.done,
     missing: snapshot.progress.missing,
+    resting: snapshot.progress.resting || 0,
     complete: snapshot.progress.complete,
     live: date === getSaoPauloDateStr()
   };
@@ -415,7 +420,11 @@ export async function completeRoutineVictory(db, routineId, { date = getSaoPaulo
   const snap = routineVictorySnapshot(db, routineId, date);
   if (snap.error) return snap;
   if (!snap.live) return fail('Só é possível registrar a vitória no próprio dia planejado.');
-  if (!snap.total) return fail('Esta rotina não tem passos válidos para reconhecer no dia.');
+  if (!snap.total) {
+    return fail(snap.resting
+      ? 'Nenhum passo desta rotina está previsto para hoje.'
+      : 'Esta rotina não tem passos válidos para reconhecer no dia.');
+  }
   if (!snap.complete) {
     return fail(`Faltam ${snap.total - snap.done} de ${snap.total} passos da rotina para hoje.`);
   }

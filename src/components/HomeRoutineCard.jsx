@@ -56,6 +56,7 @@ function StepRow({ step, depth, onOpenActivity }) {
       ? ListOrdered
       : null;
   const done = !step.missing && !!step.doneToday;
+  const resting = !step.missing && step.expectedToday === false && !done;
   const label = step.missing
     ? (step.kind === 'routine' ? 'Sub-rotina excluída' : 'Passo excluído')
     : step.title;
@@ -71,7 +72,7 @@ function StepRow({ step, depth, onOpenActivity }) {
         gap: '8px',
         marginLeft: depth ? `${depth * 18}px` : 0,
         padding: '5px 0',
-        opacity: step.missing ? 0.55 : 1,
+        opacity: step.missing || resting ? 0.55 : 1,
         minWidth: 0
       }}
     >
@@ -104,8 +105,9 @@ function StepRow({ step, depth, onOpenActivity }) {
         }}
       >
         {label}
+        {resting ? <span style={{ color: '#64748b', fontWeight: 500 }}> · não previsto hoje</span> : null}
         {hint ? <span style={{ color: '#64748b', fontWeight: 500 }}> · {hint}</span> : null}
-        {progress ? (
+        {progress && !resting ? (
           <span style={{ color: '#64748b', fontWeight: 600 }}> · {progress.done}/{progress.total}</span>
         ) : null}
       </span>
@@ -272,6 +274,7 @@ export function HomeRoutineCard({
   const progress = routine?.progress || chosen.progress || { total: 0, done: 0 };
   const total = progress.total || 0;
   const done = progress.done || 0;
+  const restingCount = progress.resting || 0;
   const completeToday = total > 0 && done >= total;
   const next = routine?.next || null;
   const rows = routine ? flattenSteps(routine.steps) : [];
@@ -279,7 +282,11 @@ export function HomeRoutineCard({
 
   const planDisabledReason = manualVictoriesFull(dailyVictories, todayStr)
     ? 'As 3 vagas de vitórias de hoje já estão ocupadas.'
-    : (!total ? 'Esta rotina não tem passos válidos.' : '');
+    : (!total
+      ? (restingCount
+        ? 'Nenhum passo desta rotina está previsto para hoje.'
+        : 'Esta rotina não tem passos válidos.')
+      : '');
 
   const run = async (mode) => {
     if (busy) return;
@@ -470,7 +477,7 @@ export function HomeRoutineCard({
                   whiteSpace: 'nowrap'
                 }}
               >
-                {total ? `${done}/${total}` : 'sem passos'}
+                {total ? `${done}/${total}` : (restingCount ? 'nada hoje' : 'sem passos')}
               </span>
               {completeToday ? (
                 <span
@@ -573,7 +580,7 @@ export function HomeRoutineCard({
           />
         </div>
         <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
-          {done} de {total} hoje
+          {total ? `${done} de ${total} hoje` : (restingCount ? 'nada previsto hoje' : `${done} de ${total} hoje`)}
         </span>
       </div> : null}
 

@@ -7,8 +7,14 @@
  *
  * Uma sub-rotina é referência, não cópia. Ciclo é recusado.
  * No máximo MAX_ROUTINE_NESTING elos.
+ *
+ * Ritual com dia previsto (N vezes por semana, semanal, dias úteis,
+ * quinzena, mês) só entra na conta de hoje se for o dia marcado ou se
+ * estiver atrasado no período. Fora disso ele continua visível na
+ * sequência, mas não bloqueia o próximo passo nem a conclusão.
  */
 
+import { getHabitDueStatus } from './habitFrequency.js';
 import {
   isActivityStep,
   isRoutineActivityId,
@@ -304,8 +310,25 @@ function classifyIncomingStep(step) {
 }
 
 /**
+ * O ritual entra na conta de hoje?
+ * Sem data, a pergunta é estrutural (a rotina tem o passo?) e a resposta é sim.
+ * Com data, vale a mesma régua da lista de rituais: devido hoje, ou já feito
+ * hoje porque era o dia previsto ou o atraso do período.
+ */
+export function habitExpectedToday(habit, todayStr) {
+  if (!habit || !todayStr) return true;
+  const status = getHabitDueStatus(habit, null, todayStr, todayStr);
+  if (status.due) return true;
+  if (!status.completedToday) return false;
+  const history = (Array.isArray(habit.history) ? habit.history : []).filter(day => day !== todayStr);
+  const before = getHabitDueStatus({ ...habit, history }, null, todayStr, todayStr);
+  return !!before.due;
+}
+
+/**
  * Passos na ordem, com o ritual ou a sub-rotina resolvidos.
  * Ritual excluído, sub-rotina excluída ou ciclo viram passo ausente.
+ * `expectedToday` falso: o ritual fica na sequência, mas não é obrigação de hoje.
  */
 export function resolveRoutineSteps(routine, habits = [], todayStr = '', routines = [], seen = null, activities = null) {
   const trail = new Set(seen || []);
@@ -332,7 +355,8 @@ export function resolveRoutineSteps(routine, habits = [], todayStr = '', routine
           steps: [],
           missing: true,
           doneToday: false,
-          progress: { total: 0, done: 0, missing: 1, complete: false }
+          expectedToday: false,
+          progress: { total: 0, done: 0, missing: 1, resting: 0, complete: false }
         };
       }
       const children = resolveRoutineSteps(child, habits, todayStr, routines, trail, activities);
@@ -346,6 +370,7 @@ export function resolveRoutineSteps(routine, habits = [], todayStr = '', routine
         steps: children,
         missing: false,
         doneToday: progress.complete,
+        expectedToday: progress.total > 0,
         progress
       };
     }
@@ -366,7 +391,8 @@ export function resolveRoutineSteps(routine, habits = [], todayStr = '', routine
         count: status?.count || 0,
         detail: status?.detail || '',
         missing: !meta,
-        doneToday: !!status?.done
+        doneToday: !!status?.done,
+        expectedToday: !!meta
       };
     }
 
@@ -379,7 +405,8 @@ export function resolveRoutineSteps(routine, habits = [], todayStr = '', routine
       note: step.note || '',
       habit,
       missing: !habit,
-      doneToday: !!(todayStr && habit && history.includes(todayStr))
+      doneToday: !!(todayStr && habit && history.includes(todayStr)),
+      expectedToday: habit ? habitExpectedToday(habit, todayStr) : false
     };
   });
 }
@@ -393,7 +420,7 @@ export function flattenRoutineLeaves(resolvedSteps, seenHabits = new Set(), seen
   for (const step of resolvedSteps || []) {
     if (isRoutineStep(step)) {
       if (step.missing) {
-        leaves.push({ kind: 'habit', habitId: '', missing: true, doneToday: false });
+        leaves.push({ kind: 'habit', habitId: '', missing: true, doneToday: false, expectedToday: false });
         continue;
       }
       if (step.routineId && seenRoutines.has(step.routineId)) continue;
@@ -478,7 +505,7 @@ export function collectRoutineHabitIds(steps, seen = new Set(), acc = []) {
 }
 
 function isPendingLeaf(step) {
-  if (!step || step.missing || step.doneToday) return false;
+  if (!step || step.missing || step.doneToday || step.expectedToday === false) return false;
   if (isActivityStep(step)) return !!step.activityId;
   return !!step.habitId && !isRoutineStep(step);
 }
@@ -495,12 +522,16 @@ export function nextRoutineLeaf(resolvedSteps) {
 export function routineDayProgress(resolvedSteps) {
   const leaves = flattenRoutineLeaves(resolvedSteps);
   const present = leaves.filter(step => routineLeafKey(step));
-  const done = present.filter(step => step.doneToday).length;
+  // Passo sem a marca (resolução antiga) continua na conta. Só sai quem
+  // a frequência já declarou fora do dia e em dia no período.
+  const expected = present.filter(step => step.expectedToday !== false);
+  const done = expected.filter(step => step.doneToday).length;
   return {
-    total: present.length,
+    total: expected.length,
     done,
     missing: leaves.filter(step => step?.missing).length,
-    complete: present.length > 0 && done === present.length
+    resting: present.length - expected.length,
+    complete: expected.length > 0 && done === expected.length
   };
 }
 

@@ -252,6 +252,7 @@ function RoutineStepList({
           const containsNext = stepContainsLeaf(step, nextLeafKey);
           const childDone = step.progress?.done || 0;
           const childTotal = step.progress?.total || 0;
+          const resting = !step.missing && step.expectedToday === false && !step.doneToday;
           return (
             <li
               key={`${routine.id}-${path}-rt-${step.routineId}`}
@@ -260,7 +261,7 @@ function RoutineStepList({
                 borderRadius: '10px',
                 background: containsNext ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255,255,255,0.03)',
                 border: containsNext ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
-                opacity: step.missing ? 0.55 : 1
+                opacity: step.missing || resting ? 0.55 : 1
               }}
             >
               <button
@@ -293,7 +294,7 @@ function RoutineStepList({
                   color: step.doneToday ? '#34d399' : '#cbd5e1',
                   flex: '0 0 auto'
                 }}>
-                  {step.doneToday ? <Check size={13} /> : index + 1}
+                  {step.doneToday ? <Check size={13} /> : (resting ? '–' : index + 1)}
                 </span>
                 <Layers size={14} color={ACCENT} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -303,7 +304,9 @@ function RoutineStepList({
                   <div style={{ color: '#94a3b8', fontSize: '0.72rem', marginTop: '2px' }}>
                     {step.missing
                       ? 'Tire este passo ao editar a rotina.'
-                      : `sub-rotina · ${childDone} de ${childTotal}${step.note ? ` · ${step.note}` : ''}`}
+                      : resting
+                        ? `não previsto hoje${step.note ? ` · ${step.note}` : ''}`
+                        : `sub-rotina · ${childDone} de ${childTotal}${step.note ? ` · ${step.note}` : ''}`}
                   </div>
                 </div>
                 {containsNext ? <span style={{ fontSize: '0.72rem', fontWeight: 800, color: ACCENT }}>agora</span> : null}
@@ -383,6 +386,7 @@ function RoutineStepList({
         const isNext = routineLeafKey(step) === nextLeafKey;
         const habit = habitById.get(step.habitId);
         const band = step.missing ? '' : habitBandHint(habit);
+        const resting = !step.missing && step.expectedToday === false && !step.doneToday;
         return (
           <li
             key={`${routine.id}-${path}-${step.habitId}`}
@@ -395,7 +399,7 @@ function RoutineStepList({
               borderRadius: '10px',
               background: isNext ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255,255,255,0.03)',
               border: isNext ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
-              opacity: step.missing ? 0.55 : 1,
+              opacity: step.missing || resting ? 0.55 : 1,
               cursor: step.missing ? 'default' : 'pointer'
             }}
           >
@@ -410,7 +414,7 @@ function RoutineStepList({
               background: step.doneToday ? 'rgba(52, 211, 153, 0.2)' : 'rgba(255,255,255,0.06)',
               color: step.doneToday ? '#34d399' : '#cbd5e1'
             }}>
-              {step.doneToday ? <Check size={13} /> : index + 1}
+              {step.doneToday ? <Check size={13} /> : (resting ? '–' : index + 1)}
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.9rem' }}>
@@ -420,7 +424,7 @@ function RoutineStepList({
                 <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
                   {step.missing
                     ? 'Tire este passo ao editar a rotina.'
-                    : `${getFrequencyLabel(habit || step)}${step.note ? ` · ${step.note}` : ''}`}
+                    : `${getFrequencyLabel(habit || step)}${resting ? ' · não previsto hoje' : ''}${step.note ? ` · ${step.note}` : ''}`}
                 </span>
                 {!step.missing && (
                   <button
@@ -799,6 +803,14 @@ export function RoutinesView({
           {routines.map(routine => {
             const total = routine.progress?.total || 0;
             const done = routine.progress?.done || 0;
+            const restingCount = routine.progress?.resting || 0;
+            const todayCount = routine.completeToday
+              ? 'concluída'
+              : total
+                ? `${done} de ${total}`
+                : restingCount
+                  ? 'nada previsto hoje'
+                  : `${done} de ${total}`;
             const ratio = total ? Math.round((done / total) * 100) : 0;
             const nextLeafKey = routine.nextActivityId
               ? `activity:${routine.nextActivityId}`
@@ -864,7 +876,7 @@ export function RoutinesView({
                       ) : null}
                       {!expanded ? (
                         <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700 }}>
-                          {routine.completeToday ? 'concluída' : `${done} de ${total}`}
+                          {todayCount}
                         </span>
                       ) : null}
                     </button>
@@ -953,7 +965,13 @@ export function RoutinesView({
                   <div style={{ width: `${ratio}%`, height: '100%', background: routine.completeToday ? '#34d399' : ACCENT }} />
                 </div>
                 <p style={{ margin: '0 0 12px', fontSize: '0.78rem', color: routine.completeToday ? '#34d399' : '#94a3b8', fontWeight: 700 }}>
-                  {routine.completeToday ? 'Sequência de hoje concluída' : `${done} de ${total} hoje`}
+                  {routine.completeToday
+                    ? 'Sequência de hoje concluída'
+                    : total
+                      ? `${done} de ${total} hoje`
+                      : restingCount
+                        ? 'Nada previsto para hoje'
+                        : `${done} de ${total} hoje`}
                   {subCount ? ` · ${subCount} sub-rotina${subCount === 1 ? '' : 's'}` : ''}
                   {` · hoje ${todayLabel || '0 min'} · total ${totalLabel || '0 min'}`}
                 </p>
