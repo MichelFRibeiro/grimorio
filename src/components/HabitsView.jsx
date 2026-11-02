@@ -27,6 +27,7 @@ import { ConfirmModal } from './ConfirmModal';
 import { ActivityContextFields } from './ActivityContextFields';
 import { ActivityScaleFields, PriorityBadge } from './ActivityScaleFields';
 import { ActivityTimerBox } from './ActivityTimerBox';
+import { FocusMusicButton } from './FocusMusicButton';
 import { getSaoPauloDateStr, getHabitWeeklyStats, getCurrentWeekDays, addDaysToDateStr } from '../utils/timeUtils';
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, inferDifficultyFromRewards, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
@@ -1223,6 +1224,7 @@ export function HabitsView({
                       >
                         <Trash2 size={15} />
                       </button>
+                      {!isDoneToday && <FocusMusicButton inline />}
                     </div>
                   </div>
 
@@ -2667,6 +2669,8 @@ export function HabitsView({
             style={{ position: 'fixed', inset: 0, background: 'rgba(2, 6, 23, 0.78)', zIndex: 50, display: 'grid', placeItems: 'center', padding: '20px' }}
             onClick={closeCountPrompt}
           >
+            <div className="focus-music-host" style={{ width: 'min(420px, 100%)' }} onClick={(event) => event.stopPropagation()}>
+            <FocusMusicButton />
             <form
               className="glass-panel"
               onClick={(event) => event.stopPropagation()}
@@ -2674,7 +2678,7 @@ export function HabitsView({
                 event.preventDefault();
                 confirmCountPrompt();
               }}
-              style={{ width: 'min(420px, 100%)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}
+              style={{ width: '100%', padding: '20px 52px 20px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}
             >
               <h3 style={{ margin: 0, color: '#f8fafc' }}>{habit?.title || 'Ritual'}</h3>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -2711,6 +2715,7 @@ export function HabitsView({
                 <button type="submit" style={{ padding: '8px 14px', borderRadius: '10px', border: 'none', background: '#38bdf8', color: '#0f172a', fontWeight: 800, cursor: 'pointer' }}>Registrar</button>
               </div>
             </form>
+            </div>
           </div>
         );
       })()}
@@ -2722,6 +2727,8 @@ export function HabitsView({
             style={{ position: 'fixed', inset: 0, background: 'rgba(2, 6, 23, 0.78)', zIndex: 50, display: 'grid', placeItems: 'center', padding: '20px' }}
             onClick={closeNotePrompt}
           >
+            <div className="focus-music-host" style={{ width: 'min(420px, 100%)' }} onClick={(event) => event.stopPropagation()}>
+            <FocusMusicButton />
             <form
               className="glass-panel"
               onClick={(event) => event.stopPropagation()}
@@ -2729,7 +2736,7 @@ export function HabitsView({
                 event.preventDefault();
                 confirmNotePrompt();
               }}
-              style={{ width: 'min(420px, 100%)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}
+              style={{ width: '100%', padding: '20px 52px 20px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}
             >
               <h3 style={{ margin: 0, color: '#f8fafc' }}>{habit?.title || 'Ritual'}</h3>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -2749,6 +2756,7 @@ export function HabitsView({
                 <button type="submit" style={{ padding: '8px 14px', borderRadius: '10px', border: 'none', background: '#38bdf8', color: '#0f172a', fontWeight: 800, cursor: 'pointer' }}>Registrar</button>
               </div>
             </form>
+            </div>
           </div>
         );
       })()}

@@ -24,6 +24,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { FocusMusicButton } from './FocusMusicButton';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import { confirmLongDuration } from '../utils/activityDuration';
 import { useStopwatch, formatTimer } from '../hooks/useStopwatch';
@@ -857,6 +858,8 @@ export function QuestionsView({
             padding: '16px'
           }}
         >
+          <div className="focus-music-host" style={{ maxWidth: '620px' }}>
+          <FocusMusicButton />
           <div
             className="glass-panel modal-sheet"
             style={{
@@ -864,7 +867,7 @@ export function QuestionsView({
               width: '100%',
               maxHeight: '90vh',
               overflowY: 'auto',
-              padding: '28px',
+              padding: '28px 56px 28px 28px',
               border: '1px solid rgba(245, 158, 11, 0.4)',
               borderRadius: '20px'
             }}
@@ -1268,6 +1271,7 @@ export function QuestionsView({
               </div>
 
             </form>
+          </div>
           </div>
         </div>
       )}

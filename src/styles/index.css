@@ -209,6 +209,41 @@ img, video, canvas {
   -webkit-overflow-scrolling: touch;
 }
 
+.focus-music-host {
+  position: relative;
+  width: 100%;
+}
+
+.focus-music-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: rgba(8, 12, 22, 0.88);
+  color: #e2e8f0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.focus-music-btn[aria-pressed="true"] {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.9);
+  background: rgba(56, 189, 248, 0.2);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35);
+}
+
+.focus-music-btn.is-inline {
+  position: static;
+}
+
 .confirm-modal-actions {
   display: flex;
   justify-content: flex-end;

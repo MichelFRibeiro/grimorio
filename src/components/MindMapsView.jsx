@@ -33,6 +33,7 @@ import {
   Braces
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { FocusMusicButton } from './FocusMusicButton';
 import { MindMapIcon, MindMapMediaPicker, MindMapThumb, collectUsedMindMapImages } from './MindMapMedia';
 import { useStopwatch, formatTimer } from '../hooks/useStopwatch';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
@@ -2736,6 +2737,7 @@ export function MindMapsView({
               {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
               {fullscreen ? 'Sair' : 'Tela cheia'}
             </button>
+            <FocusMusicButton inline />
           </div>
         </div>
 

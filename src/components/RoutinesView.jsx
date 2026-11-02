@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { ActivityTimerBox } from './ActivityTimerBox';
+import { FocusMusicButton } from './FocusMusicButton';
 import { getFrequencyLabel } from '../utils/habitFrequency';
 import { MAX_DURATION_MINUTES, MAX_HABIT_COUNT, MAX_HABIT_NOTE_LENGTH, confirmLongDuration, formatDurationLabel, getHabitDurationForDate, getHabitNoteForDate, secondsToDurationMinutes, sumDurationMap } from '../utils/activityDuration';
 import { consumeActivityTimerMinutes } from '../utils/liveActivityTimers';
@@ -1179,10 +1180,12 @@ export function RoutinesView({
             }}
             onClick={closeStep}
           >
+            <div className="focus-music-host" style={{ width: 'min(480px, 100%)' }} onClick={(event) => event.stopPropagation()}>
+            <FocusMusicButton />
             <div
               className="glass-panel"
               onClick={(event) => event.stopPropagation()}
-              style={{ width: 'min(480px, 100%)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}
+              style={{ width: '100%', padding: '20px 52px 20px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}
             >
               <div>
                 <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700 }}>
@@ -1344,6 +1347,7 @@ export function RoutinesView({
                   </button>
                 )}
               </div>
+            </div>
             </div>
           </div>
         );

@@ -15,6 +15,7 @@ import {
   History
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { FocusMusicButton } from './FocusMusicButton';
 import { useStopwatch, formatTimer } from '../hooks/useStopwatch';
 import { ScriptureLoadChart } from './ReadingLoadChart';
 import { PlanHomeostasisVictoryButton } from './PlanHomeostasisVictoryButton';
@@ -522,7 +523,9 @@ export function ScriptureView({
           onMouseDown={(event) => event.stopPropagation()}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
         >
-          <form onSubmit={saveSession} onMouseDown={(event) => event.stopPropagation()} className="glass-panel modal-sheet" style={{ width: 'min(820px, 100%)', maxHeight: '92vh', overflowY: 'auto', padding: '24px', borderRadius: '18px' }}>
+          <div className="focus-music-host" style={{ width: 'min(820px, 100%)' }} onMouseDown={(event) => event.stopPropagation()}>
+          <FocusMusicButton />
+          <form onSubmit={saveSession} onMouseDown={(event) => event.stopPropagation()} className="glass-panel modal-sheet" style={{ width: '100%', maxHeight: '92vh', overflowY: 'auto', padding: '24px 52px 24px 24px', borderRadius: '18px' }}>
             <h3 className="font-cinzel" style={{ color: '#f8fafc', marginBottom: '12px' }}>Sessão de Escritura</h3>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderRadius: '12px', background: 'rgba(0,0,0,0.35)', marginBottom: '14px' }}>
               <strong style={{ color: '#fbbf24', fontSize: '1.6rem', fontFamily: 'var(--font-mono)' }}>{formatTimer(timer.seconds)}</strong>
@@ -595,6 +598,7 @@ export function ScriptureView({
               <button type="submit" style={{ padding: '10px 16px', borderRadius: '10px', border: 'none', background: '#fbbf24', color: '#111', fontWeight: 800, cursor: 'pointer' }}><Plus size={14} /> Salvar sessão</button>
             </div>
           </form>
+          </div>
         </div>
       )}
 

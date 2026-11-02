@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { formatFullAbntCitation } from '../utils/abntFormatter';
 import { ConfirmModal } from './ConfirmModal';
+import { FocusMusicButton } from './FocusMusicButton';
 import { useStopwatch, formatTimer } from '../hooks/useStopwatch';
 import {
   readLiveReadingSession,
@@ -1817,6 +1818,8 @@ export function BooksView({
             padding: '16px'
           }}
         >
+          <div className="focus-music-host" style={{ maxWidth: '780px' }}>
+          <FocusMusicButton />
           <div
             className="glass-panel modal-sheet"
             style={{
@@ -1824,7 +1827,7 @@ export function BooksView({
               width: '100%',
               maxHeight: '92vh',
               overflowY: 'auto',
-              padding: '28px',
+              padding: '28px 56px 28px 28px',
               border: '1px solid rgba(16, 185, 129, 0.4)',
               borderRadius: '20px'
             }}
@@ -2200,6 +2203,7 @@ export function BooksView({
                 </button>
               </div>
             </form>
+          </div>
           </div>
         </div>
       )}

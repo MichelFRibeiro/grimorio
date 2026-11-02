@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NotebookPen, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { ActivityTimerBox } from './ActivityTimerBox';
+import { FocusMusicButton } from './FocusMusicButton';
 import { ConfirmModal } from './ConfirmModal';
 import { confirmLongDuration, formatDurationLabel } from '../utils/activityDuration';
 import {
@@ -261,9 +262,12 @@ export function JournalView({ entries = [], onSave, onDelete }) {
               required
             />
           </label>
-          <div className="journal-editing">
-            {form.id ? `Editando ${formatJournalDate(form.date) || 'esta página'}` : 'Página nova'}
-            {dirty && <em>rascunho neste navegador</em>}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+            <div className="journal-editing">
+              {form.id ? `Editando ${formatJournalDate(form.date) || 'esta página'}` : 'Página nova'}
+              {dirty && <em>rascunho neste navegador</em>}
+            </div>
+            <FocusMusicButton inline />
           </div>
         </div>
 

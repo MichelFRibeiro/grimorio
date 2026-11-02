@@ -24,6 +24,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { FocusMusicButton } from './FocusMusicButton';
 import { ActivityTimerBox } from './ActivityTimerBox';
 import { consumeActivityTimerMinutes, peekActivityTimerMinutes, getActivityTimerSnapshot, subscribeActivityTimers } from '../utils/liveActivityTimers';
 import { elapsedMsFrom, formatStudyDuration, parseDurationMinutes, confirmLongDuration } from '../utils/activityDuration';
@@ -830,11 +831,13 @@ export function AguCampaignView({
           }}
           onClick={closeLog}
         >
+          <div className="focus-music-host" style={{ maxWidth: '440px' }} onClick={(e) => e.stopPropagation()}>
+          <FocusMusicButton />
           <form
             onSubmit={submitLog}
             className="glass-panel modal-sheet"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '440px', width: '100%', padding: '24px', border: '1px solid rgba(245,158,11,0.4)', borderRadius: '20px' }}
+            style={{ maxWidth: '440px', width: '100%', padding: '24px 52px 24px 24px', border: '1px solid rgba(245,158,11,0.4)', borderRadius: '20px' }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
               <div>
@@ -896,6 +899,7 @@ export function AguCampaignView({
               </button>
             </div>
           </form>
+          </div>
         </div>
       )}
 
@@ -1012,6 +1016,7 @@ function AguBlockCard({ block, index = 0, aguPlan, onToggle, onLog, onSetDuratio
               Qconcursos
             </a>
           )}
+          <FocusMusicButton inline />
         </div>
       </div>
       <BlockNote note={block.note} />

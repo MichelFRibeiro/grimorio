@@ -24,6 +24,7 @@ import { ConfirmModal } from './ConfirmModal';
 import { ActivityContextFields } from './ActivityContextFields';
 import { ActivityScaleFields, PriorityBadge } from './ActivityScaleFields';
 import { ActivityTimerBox } from './ActivityTimerBox';
+import { FocusMusicButton } from './FocusMusicButton';
 import { getSaoPauloDateStr } from '../utils/timeUtils';
 import { defaultLocationForCategory, fieldsToTimeWindow, getLocationMeta, windowToFields } from '../utils/locations';
 import { DEFAULT_DIFFICULTY, DEFAULT_PRIORITY, getPriorityMeta, normalizeDifficulty, normalizePriority } from '../utils/activityScale';
@@ -877,6 +878,7 @@ export function QuestsView({
                       >
                         <Trash2 size={16} />
                       </button>
+                      {!quest.completed && <FocusMusicButton inline />}
                     </div>
                   </div>
 

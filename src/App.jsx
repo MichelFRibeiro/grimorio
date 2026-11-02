@@ -19,6 +19,7 @@ import { applyTheme, normalizeTheme, useTheme } from './utils/theme';
 import { getHabitDueStatus } from './utils/habitFrequency';
 import { getHabitWeeklyStats } from './utils/timeUtils';
 import { useFocusPlayer } from './hooks/useFocusPlayer';
+import { FocusPlayerProvider } from './components/FocusMusicButton';
 import { getSaoPauloDateStr, addDaysToDateStr, getSaoPauloDayOfWeek } from './utils/timeUtils';
 import { summarizePlan, getAguStudyLoadSeries } from './utils/aguCycle';
 import { getReadingLoadSeries, getScriptureLoadSeries } from './utils/homeostasis';
@@ -623,6 +624,7 @@ export function App() {
   const visibleTabs = tabs.filter((tab) => isTabEnabled(featureSettings, tab.id));
 
   return (
+    <FocusPlayerProvider player={focusPlayer} enabled={focusEnabled}>
     <div className="app-shell">
       
       {/* Top Header */}
@@ -1205,5 +1207,6 @@ export function App() {
       </Suspense>
 
     </div>
+    </FocusPlayerProvider>
   );
 }

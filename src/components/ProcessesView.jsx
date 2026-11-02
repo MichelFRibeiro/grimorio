@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Layers, CheckCircle2, Zap, Sparkles, Trash2, ArrowUpRight, FileCheck, Check, MessageSquare, AlertCircle, Clock, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import { FocusMusicButton } from './FocusMusicButton';
 import { getSaoPauloNowDateTimeLocal } from '../utils/timeUtils';
 
 const formatStepDateTime = (timestamp) => {
@@ -511,12 +512,14 @@ export function ProcessesView({ processes, processSteps, questCategories = [], r
             padding: '16px'
           }}
         >
+          <div className="focus-music-host" style={{ maxWidth: '480px' }}>
+          <FocusMusicButton />
           <div
             className="glass-panel modal-sheet"
             style={{
               maxWidth: '480px',
               width: '100%',
-              padding: '28px',
+              padding: '28px 56px 28px 28px',
               border: '1px solid rgba(6, 182, 212, 0.4)',
               borderRadius: '20px'
             }}
@@ -636,6 +639,7 @@ export function ProcessesView({ processes, processSteps, questCategories = [], r
                 </button>
               </div>
             </form>
+          </div>
           </div>
         </div>
       )}
